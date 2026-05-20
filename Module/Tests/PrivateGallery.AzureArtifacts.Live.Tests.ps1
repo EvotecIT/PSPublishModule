@@ -1,5 +1,33 @@
 $liveEnabled = $env:PSPUBLISHMODULE_AZDO_LIVE -eq '1'
 
+function Add-AzureArtifactsLiveEvidenceItem {
+    param(
+        [Parameter(Mandatory)]
+        [hashtable] $Item
+    )
+
+    $path = $env:PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        return
+    }
+
+    $items = @()
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        $raw = Get-Content -LiteralPath $path -Raw
+        if (-not [string]::IsNullOrWhiteSpace($raw)) {
+            $items = @($raw | ConvertFrom-Json)
+        }
+    }
+
+    $items += [pscustomobject] $Item
+    $directory = Split-Path -Path $path -Parent
+    if (-not [string]::IsNullOrWhiteSpace($directory) -and -not (Test-Path -LiteralPath $directory)) {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+
+    $items | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $path -Encoding UTF8
+}
+
 Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifacts' {
     BeforeAll {
         if (-not $liveEnabled) {
@@ -85,6 +113,21 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
 
         $update = Update-PrivateModule -ProfileName $profileName -Name $moduleName -InstallPrerequisites -ErrorAction Stop
         $update | Should -Not -BeNullOrEmpty
+
+        Add-AzureArtifactsLiveEvidenceItem @{
+            Name                             = 'OnboardingInstallUpdate'
+            Succeeded                        = $true
+            ProfileName                      = $profileName
+            ManagedProfileImported           = $onboarding.ProfileWritten
+            ConnectAttempted                 = $onboarding.ConnectAttempted
+            AccessProbePerformed             = $onboarding.Connection.AccessProbePerformed
+            AccessProbeSucceeded             = $onboarding.Connection.AccessProbeSucceeded
+            BootstrapModeUsed                = [string] $onboarding.Connection.BootstrapModeUsed
+            PublishConfigurationUri          = $publish.Configuration.Repository.Uri
+            PublishConfigurationHasCredential = $null -ne $publish.Configuration.Repository.Credential
+            InstallResultReturned            = $null -ne $install
+            UpdateResultReturned             = $null -ne $update
+        }
     }
 
     It 'publishes a supplied NuGet package using an Entra-backed Azure Artifacts profile' -Skip:(-not $liveEnabled -or $env:PSPUBLISHMODULE_AZDO_PUBLISH_LIVE -ne '1' -or [string]::IsNullOrWhiteSpace($env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH)) {
@@ -133,5 +176,16 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         $result.Source | Should -Match '^https://pkgs\.dev\.azure\.com/'
         $result.Pushed | Should -Contain ([IO.Path]::GetFullPath($publishPackagePath))
         $result.Failed | Should -BeNullOrEmpty
+
+        Add-AzureArtifactsLiveEvidenceItem @{
+            Name                 = 'PublishPackage'
+            Succeeded            = $true
+            ProfileName          = $profileName
+            AccessProbeSucceeded = $onboarding.Connection.AccessProbeSucceeded
+            PackageName          = [IO.Path]::GetFileName($publishPackagePath)
+            Source               = $result.Source
+            PushedPackageNames   = @($result.Pushed | ForEach-Object { [IO.Path]::GetFileName($_) })
+            FailedCount          = if ($null -eq $result.Failed) { 0 } else { @($result.Failed).Count }
+        }
     }
 }

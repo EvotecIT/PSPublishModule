@@ -76,10 +76,12 @@ $envNames = @(
     'PSPUBLISHMODULE_AZDO_PROFILE_NAME',
     'PSPUBLISHMODULE_AZDO_PUBLISH_LIVE',
     'PSPUBLISHMODULE_AZDO_PACKAGE_PATH',
+    'PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH',
     'PSPUBLISHMODULE_TEST_MANIFEST_PATH',
     'POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH'
 )
 $previous = @{}
+$evidenceDataPath = $null
 
 foreach ($name in $envNames) {
     $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
@@ -110,6 +112,13 @@ try {
         $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH = (Resolve-Path -LiteralPath $ModuleManifestPath).Path
     } else {
         Remove-Item Env:\PSPUBLISHMODULE_TEST_MANIFEST_PATH -ErrorAction SilentlyContinue
+    }
+
+    if ($PSBoundParameters.ContainsKey('EvidenceFile') -and -not [string]::IsNullOrWhiteSpace($EvidenceFile)) {
+        $evidenceDataPath = Join-Path ([IO.Path]::GetTempPath()) ("PSPublishModule.PrivateGallery.LiveEvidence." + [guid]::NewGuid().ToString('N') + ".json")
+        $env:PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH = $evidenceDataPath
+    } else {
+        Remove-Item Env:\PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH -ErrorAction SilentlyContinue
     }
 
     $pesterParameters = @{
@@ -173,6 +182,15 @@ try {
     }
 
     if ($PSBoundParameters.ContainsKey('EvidenceFile') -and -not [string]::IsNullOrWhiteSpace($EvidenceFile)) {
+        $validationItems = @()
+        if (-not [string]::IsNullOrWhiteSpace($evidenceDataPath) -and (Test-Path -LiteralPath $evidenceDataPath -PathType Leaf)) {
+            $rawEvidenceItems = Get-Content -LiteralPath $evidenceDataPath -Raw
+            if (-not [string]::IsNullOrWhiteSpace($rawEvidenceItems)) {
+                $parsedEvidenceItems = $rawEvidenceItems | ConvertFrom-Json
+                $validationItems = @($parsedEvidenceItems)
+            }
+        }
+
         $evidenceDirectory = Split-Path -Path $EvidenceFile -Parent
         if (-not [string]::IsNullOrWhiteSpace($evidenceDirectory) -and -not (Test-Path -LiteralPath $evidenceDirectory)) {
             New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
@@ -190,6 +208,7 @@ try {
             ProfileName          = $ProfileName
             PublishPackageSupplied = $PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)
             PublishPackageName   = if ($PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) { [IO.Path]::GetFileName($PublishPackagePath) } else { $null }
+            ValidationItems      = $validationItems
             Pester               = [ordered]@{
                 Result               = $resultText
                 TotalCount           = $totalCount
@@ -219,5 +238,9 @@ try {
         } else {
             [Environment]::SetEnvironmentVariable($name, [string] $previous[$name], 'Process')
         }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($evidenceDataPath) -and (Test-Path -LiteralPath $evidenceDataPath -PathType Leaf)) {
+        Remove-Item -LiteralPath $evidenceDataPath -Force -ErrorAction SilentlyContinue
     }
 }

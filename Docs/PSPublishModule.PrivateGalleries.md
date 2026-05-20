@@ -202,8 +202,10 @@ restores the caller's environment, including any existing
 Pester reports failed tests so release operators get a non-zero script outcome
 instead of a false-green live validation. `-EvidenceFile` writes a non-secret
 JSON evidence summary with the provider, organization, project, feed, module,
-profile name, publish opt-in state, Pester counts, and optional result-file
-metadata. To run the harness directly, set:
+profile name, publish opt-in state, Pester counts, optional result-file
+metadata, and sanitized live assertion details such as access probe success,
+credential-free publish configuration, install/update execution, and optional
+package-push evidence. To run the harness directly, set:
 
 ```powershell
 $env:PSPUBLISHMODULE_AZDO_LIVE = '1'

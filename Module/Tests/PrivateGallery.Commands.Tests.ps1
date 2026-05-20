@@ -77,6 +77,27 @@ Describe 'Private gallery command metadata' {
             $env:PSPUBLISHMODULE_AZDO_FEED | Should -Be 'Modules'
             $env:PSPUBLISHMODULE_AZDO_MODULE_NAME | Should -Be 'ModuleA'
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = 'mutated-by-live-test'
+            $env:PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH | Should -Not -BeNullOrEmpty
+
+            @(
+                [ordered]@{
+                    Name                              = 'OnboardingInstallUpdate'
+                    Succeeded                         = $true
+                    ProfileName                       = 'LiveAzureArtifacts'
+                    AccessProbeSucceeded              = $true
+                    PublishConfigurationHasCredential = $false
+                    InstallResultReturned             = $true
+                    UpdateResultReturned              = $true
+                },
+                [ordered]@{
+                    Name                 = 'PublishPackage'
+                    Succeeded            = $true
+                    ProfileName          = 'LiveAzureArtifacts'
+                    AccessProbeSucceeded = $true
+                    PackageName          = 'Company.Tools.1.2.3.nupkg'
+                    FailedCount          = 0
+                }
+            ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $env:PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH -Encoding UTF8
 
             [pscustomobject]@{
                 FailedCount = 0
@@ -102,6 +123,15 @@ Describe 'Private gallery command metadata' {
             $evidence.ProfileName | Should -Be 'LiveAzureArtifacts'
             $evidence.PublishPackageSupplied | Should -BeTrue
             $evidence.PublishPackageName | Should -Be 'Company.Tools.1.2.3.nupkg'
+            $evidence.ValidationItems.Count | Should -Be 2
+            $evidence.ValidationItems[0].Name | Should -Be 'OnboardingInstallUpdate'
+            $evidence.ValidationItems[0].AccessProbeSucceeded | Should -BeTrue
+            $evidence.ValidationItems[0].PublishConfigurationHasCredential | Should -BeFalse
+            $evidence.ValidationItems[0].InstallResultReturned | Should -BeTrue
+            $evidence.ValidationItems[0].UpdateResultReturned | Should -BeTrue
+            $evidence.ValidationItems[1].Name | Should -Be 'PublishPackage'
+            $evidence.ValidationItems[1].PackageName | Should -Be 'Company.Tools.1.2.3.nupkg'
+            $evidence.ValidationItems[1].FailedCount | Should -Be 0
             $evidence.Pester.TotalCount | Should -Be 2
             $evidence.Pester.PassedCount | Should -Be 2
             $evidence.Pester.FailedCount | Should -Be 0
