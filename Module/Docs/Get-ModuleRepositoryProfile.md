@@ -11,7 +11,7 @@ Gets saved private module repository profiles.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Get-ModuleRepositoryProfile [[-Name] <string>] [<CommonParameters>]
+Get-ModuleRepositoryProfile [[-Name] <string>] [-Scope <ModuleRepositoryProfileScope>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -47,6 +47,22 @@ Possible values:
 
 Required: False
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope to read. The default reads user profiles first, then machine-wide profiles.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: User, Machine, All
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True

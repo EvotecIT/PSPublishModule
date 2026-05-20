@@ -4,7 +4,10 @@ namespace PSPublishModule;
 
 internal static class ModuleRepositoryProfileResultMapper
 {
-    internal static ModuleRepositoryProfileResult ToCmdletResult(ModuleRepositoryProfile profile, string profileStorePath)
+    internal static ModuleRepositoryProfileResult ToCmdletResult(
+        ModuleRepositoryProfile profile,
+        string profileStorePath,
+        ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.User)
     {
         return new ModuleRepositoryProfileResult
         {
@@ -20,6 +23,7 @@ internal static class ModuleRepositoryProfileResultMapper
             Priority = profile.Priority,
             AuthenticationMode = profile.AuthenticationMode,
             ProfileStorePath = profileStorePath,
+            Scope = scope,
             CreatedAtUtc = profile.CreatedAtUtc,
             UpdatedAtUtc = profile.UpdatedAtUtc
         };

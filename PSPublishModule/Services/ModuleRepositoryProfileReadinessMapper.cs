@@ -10,7 +10,8 @@ internal static class ModuleRepositoryProfileReadinessMapper
     internal static ModuleRepositoryProfileReadinessResult ToCmdletResult(
         ModuleRepositoryProfile profile,
         string profileStorePath,
-        BootstrapPrerequisiteStatus status)
+        BootstrapPrerequisiteStatus status,
+        ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.User)
     {
         if (profile is null) throw new ArgumentNullException(nameof(profile));
 
@@ -44,6 +45,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
             Priority = profile.Priority,
             AuthenticationMode = profile.AuthenticationMode,
             ProfileStorePath = profileStorePath,
+            Scope = scope,
             PSResourceGetAvailable = status.PSResourceGetAvailable,
             PSResourceGetVersion = status.PSResourceGetVersion,
             PSResourceGetMeetsMinimumVersion = status.PSResourceGetMeetsMinimumVersion,
@@ -64,7 +66,10 @@ internal static class ModuleRepositoryProfileReadinessMapper
         };
     }
 
-    internal static ModuleRepositoryProfileReadinessResult ToMissingProfileResult(string name, string profileStorePath)
+    internal static ModuleRepositoryProfileReadinessResult ToMissingProfileResult(
+        string name,
+        string profileStorePath,
+        ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.User)
     {
         var normalizedName = string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim();
         var messages = new List<string>(1)
@@ -77,6 +82,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
             Name = normalizedName,
             ProfileFound = false,
             ProfileStorePath = profileStorePath,
+            Scope = scope,
             ReadinessMessages = messages.ToArray()
         };
     }

@@ -1,3 +1,4 @@
+using System;
 using System.Management.Automation;
 using PowerForge;
 
@@ -37,10 +38,17 @@ public sealed class RemoveModuleRepositoryProfileCommand : PSCmdlet
     [Parameter]
     public SwitchParameter PassThru { get; set; }
 
+    /// <summary>Profile store scope to remove from.</summary>
+    [Parameter]
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.User;
+
     /// <summary>Removes the profile.</summary>
     protected override void ProcessRecord()
     {
-        var store = new ModuleRepositoryProfileStore();
+        if (Scope == ModuleRepositoryProfileScope.All)
+            throw new ArgumentException("Remove-ModuleRepositoryProfile requires User or Machine scope.", nameof(Scope));
+
+        var store = new ModuleRepositoryProfileStore(Scope);
         var normalizedName = ModuleRepositoryProfileStore.NormalizeName(Name);
 
         if (!ShouldProcess(normalizedName, "Remove module repository profile"))

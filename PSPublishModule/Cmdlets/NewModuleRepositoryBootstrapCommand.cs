@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -53,11 +54,20 @@ public sealed class NewModuleRepositoryBootstrapCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Force { get; set; }
 
+    /// <summary>Profile store scope to read. The default reads user profiles first, then machine-wide profiles.</summary>
+    [Parameter]
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.All;
+
     /// <summary>Creates the bootstrap package.</summary>
     protected override void ProcessRecord()
     {
-        var store = new ModuleRepositoryProfileStore();
-        var profiles = store.GetProfiles(ProfileName);
+        var profiles = ProfileName is null || ProfileName.Length == 0
+            ? ModuleRepositoryProfileStore.GetStores(Scope)
+                .SelectMany(store => store.GetProfiles())
+                .ToArray()
+            : ProfileName
+                .Select(name => ModuleRepositoryProfileCommandSupport.ResolveRequired(name, Scope))
+                .ToArray();
         var resolvedOutputDirectory = SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
         if (!ShouldProcess(resolvedOutputDirectory, $"Create private gallery bootstrap package for {profiles.Length} profile(s)"))
             return;

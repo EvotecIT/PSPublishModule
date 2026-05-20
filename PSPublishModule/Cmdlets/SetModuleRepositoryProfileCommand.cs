@@ -1,3 +1,4 @@
+using System;
 using System.Management.Automation;
 using PowerForge;
 
@@ -78,10 +79,17 @@ public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
     [Parameter]
     public int? Priority { get; set; }
 
+    /// <summary>Profile store scope to write. Use Machine from an elevated/admin deployment to share non-secret feed settings with all users.</summary>
+    [Parameter]
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.User;
+
     /// <summary>Saves the profile.</summary>
     protected override void ProcessRecord()
     {
-        var store = new ModuleRepositoryProfileStore();
+        if (Scope == ModuleRepositoryProfileScope.All)
+            throw new ArgumentException("Set-ModuleRepositoryProfile requires User or Machine scope.", nameof(Scope));
+
+        var store = new ModuleRepositoryProfileStore(Scope);
         var profile = ModuleRepositoryProfileStore.Normalize(new ModuleRepositoryProfile
         {
             Name = Name,
@@ -101,6 +109,6 @@ public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
             return;
 
         var saved = store.SaveProfile(profile);
-        WriteObject(ModuleRepositoryProfileResultMapper.ToCmdletResult(saved, store.Path));
+        WriteObject(ModuleRepositoryProfileResultMapper.ToCmdletResult(saved, store.Path, store.Scope));
     }
 }

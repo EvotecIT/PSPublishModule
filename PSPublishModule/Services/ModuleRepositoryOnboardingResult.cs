@@ -28,6 +28,9 @@ public sealed class ModuleRepositoryOnboardingResult
     /// <summary>Profile storage path used by PSPublishModule.</summary>
     public string ProfileStorePath { get; set; } = string.Empty;
 
+    /// <summary>Profile storage scope used by PSPublishModule.</summary>
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.User;
+
     /// <summary>Imported profile file path when onboarding from a managed profile file.</summary>
     public string? ImportedFromPath { get; set; }
 

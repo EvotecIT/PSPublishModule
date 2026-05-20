@@ -11,7 +11,7 @@ Creates or updates a saved private module repository profile.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Set-ModuleRepositoryProfile [-Name] <string> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-ModuleRepositoryProfile [-Name] <string> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -158,6 +158,22 @@ Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Repository
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope to write. Use Machine from an elevated/admin deployment to share non-secret feed settings with all users.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: User, Machine, All
 
 Required: False
 Position: named

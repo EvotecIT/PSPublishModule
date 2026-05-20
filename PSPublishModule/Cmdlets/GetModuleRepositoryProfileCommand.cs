@@ -34,30 +34,38 @@ public sealed class GetModuleRepositoryProfileCommand : PSCmdlet
     [Alias("ProfileName")]
     public string? Name { get; set; }
 
+    /// <summary>Profile store scope to read. The default reads user profiles first, then machine-wide profiles.</summary>
+    [Parameter]
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.All;
+
     /// <summary>Gets saved profiles.</summary>
     protected override void ProcessRecord()
     {
-        var store = new ModuleRepositoryProfileStore();
+        var stores = ModuleRepositoryProfileStore.GetStores(Scope);
         if (string.IsNullOrWhiteSpace(Name))
         {
-            var profiles = store.GetProfiles()
-                .Select(profile => ModuleRepositoryProfileResultMapper.ToCmdletResult(profile, store.Path))
+            var profiles = stores
+                .SelectMany(store => store.GetProfiles()
+                    .Select(profile => ModuleRepositoryProfileResultMapper.ToCmdletResult(profile, store.Path, store.Scope)))
                 .ToArray();
             WriteObject(profiles, enumerateCollection: true);
             return;
         }
 
-        var profile = store.GetProfile(Name!);
-        if (profile is null)
+        foreach (var store in stores)
         {
-            WriteError(new ErrorRecord(
-                new InvalidOperationException($"Module repository profile '{Name}' was not found."),
-                "ModuleRepositoryProfileNotFound",
-                ErrorCategory.ObjectNotFound,
-                Name));
-            return;
+            var profile = store.GetProfile(Name!);
+            if (profile is not null)
+            {
+                WriteObject(ModuleRepositoryProfileResultMapper.ToCmdletResult(profile, store.Path, store.Scope));
+                return;
+            }
         }
 
-        WriteObject(ModuleRepositoryProfileResultMapper.ToCmdletResult(profile, store.Path));
+        WriteError(new ErrorRecord(
+            new InvalidOperationException($"Module repository profile '{Name}' was not found."),
+            "ModuleRepositoryProfileNotFound",
+            ErrorCategory.ObjectNotFound,
+            Name));
     }
 }

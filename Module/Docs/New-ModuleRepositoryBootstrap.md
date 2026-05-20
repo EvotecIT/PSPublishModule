@@ -11,7 +11,7 @@ Creates a managed workstation bootstrap package for private module repository on
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ModuleRepositoryBootstrap [[-ProfileName] <string[]>] [-OutputDirectory] <string> [-ScriptName <string>] [-ProfileFileName <string>] [-InstallModule <string[]>] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-ModuleRepositoryBootstrap [[-ProfileName] <string[]>] [-OutputDirectory] <string> [-ScriptName <string>] [-ProfileFileName <string>] [-InstallModule <string[]>] [-Force] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -106,6 +106,22 @@ Possible values:
 
 Required: False
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope to read. The default reads user profiles first, then machine-wide profiles.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: User, Machine, All
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True

@@ -35,30 +35,39 @@ public sealed class TestModuleRepositoryProfileCommand : PSCmdlet
     [Alias("Name", "Profile")]
     public string? ProfileName { get; set; }
 
+    /// <summary>Profile store scope to test. The default reads user profiles first, then machine-wide profiles.</summary>
+    [Parameter]
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.All;
+
     /// <summary>Runs the readiness test.</summary>
     protected override void ProcessRecord()
     {
-        var store = new ModuleRepositoryProfileStore();
+        var stores = ModuleRepositoryProfileStore.GetStores(Scope);
         var host = new CmdletPrivateGalleryHost(this);
         var service = new PrivateGalleryService(host);
         var status = service.GetBootstrapPrerequisiteStatus();
 
         if (string.IsNullOrWhiteSpace(ProfileName))
         {
-            var results = store.GetProfiles()
-                .Select(profile => ModuleRepositoryProfileReadinessMapper.ToCmdletResult(profile, store.Path, status))
+            var results = stores
+                .SelectMany(store => store.GetProfiles()
+                    .Select(profile => ModuleRepositoryProfileReadinessMapper.ToCmdletResult(profile, store.Path, status, store.Scope)))
                 .ToArray();
             WriteObject(results, enumerateCollection: true);
             return;
         }
 
-        var profile = store.GetProfile(ProfileName!);
-        if (profile is null)
+        foreach (var store in stores)
         {
-            WriteObject(ModuleRepositoryProfileReadinessMapper.ToMissingProfileResult(ProfileName!, store.Path));
-            return;
+            var profile = store.GetProfile(ProfileName!);
+            if (profile is not null)
+            {
+                WriteObject(ModuleRepositoryProfileReadinessMapper.ToCmdletResult(profile, store.Path, status, store.Scope));
+                return;
+            }
         }
 
-        WriteObject(ModuleRepositoryProfileReadinessMapper.ToCmdletResult(profile, store.Path, status));
+        var primaryStore = stores.First();
+        WriteObject(ModuleRepositoryProfileReadinessMapper.ToMissingProfileResult(ProfileName!, primaryStore.Path, primaryStore.Scope));
     }
 }

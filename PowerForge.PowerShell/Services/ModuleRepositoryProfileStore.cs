@@ -11,18 +11,35 @@ internal sealed class ModuleRepositoryProfileStore
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private readonly string _path;
+    private readonly ModuleRepositoryProfileScope _scope;
 
     public ModuleRepositoryProfileStore()
-        : this(null)
+        : this(null, ModuleRepositoryProfileScope.User)
     {
     }
 
     public ModuleRepositoryProfileStore(string? path)
+        : this(path, ModuleRepositoryProfileScope.User)
     {
-        _path = string.IsNullOrWhiteSpace(path) ? GetDefaultPath() : System.IO.Path.GetFullPath(path!);
+    }
+
+    public ModuleRepositoryProfileStore(ModuleRepositoryProfileScope scope)
+        : this(null, scope)
+    {
+    }
+
+    public ModuleRepositoryProfileStore(string? path, ModuleRepositoryProfileScope scope)
+    {
+        if (scope == ModuleRepositoryProfileScope.All)
+            throw new ArgumentException("A concrete profile store scope is required.", nameof(scope));
+
+        _scope = scope;
+        _path = string.IsNullOrWhiteSpace(path) ? GetDefaultPath(scope) : System.IO.Path.GetFullPath(path!);
     }
 
     public string Path => _path;
+
+    public ModuleRepositoryProfileScope Scope => _scope;
 
     public ModuleRepositoryProfile[] GetProfiles()
         => ReadDocument().Profiles
@@ -255,13 +272,36 @@ internal sealed class ModuleRepositoryProfileStore
         File.WriteAllText(path, json);
     }
 
-    private static string GetDefaultPath()
+    internal static ModuleRepositoryProfileStore[] GetStores(ModuleRepositoryProfileScope scope)
     {
-        var overridePath = Environment.GetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH");
+        return scope switch
+        {
+            ModuleRepositoryProfileScope.User => new[] { new ModuleRepositoryProfileStore(ModuleRepositoryProfileScope.User) },
+            ModuleRepositoryProfileScope.Machine => new[] { new ModuleRepositoryProfileStore(ModuleRepositoryProfileScope.Machine) },
+            ModuleRepositoryProfileScope.All => new[]
+            {
+                new ModuleRepositoryProfileStore(ModuleRepositoryProfileScope.User),
+                new ModuleRepositoryProfileStore(ModuleRepositoryProfileScope.Machine)
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, null)
+        };
+    }
+
+    internal static string GetDefaultPath(ModuleRepositoryProfileScope scope)
+    {
+        if (scope == ModuleRepositoryProfileScope.All)
+            throw new ArgumentException("A concrete profile store scope is required.", nameof(scope));
+
+        var overrideVariable = scope == ModuleRepositoryProfileScope.Machine
+            ? "POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH"
+            : "POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH";
+        var overridePath = Environment.GetEnvironmentVariable(overrideVariable);
         if (!string.IsNullOrWhiteSpace(overridePath))
             return System.IO.Path.GetFullPath(overridePath!);
 
-        var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var root = Environment.GetFolderPath(scope == ModuleRepositoryProfileScope.Machine
+            ? Environment.SpecialFolder.CommonApplicationData
+            : Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrWhiteSpace(root))
         {
             root = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

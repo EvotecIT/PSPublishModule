@@ -11,7 +11,7 @@ Tests saved private module repository profiles and local authentication prerequi
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Test-ModuleRepositoryProfile [[-ProfileName] <string>] [<CommonParameters>]
+Test-ModuleRepositoryProfile [[-ProfileName] <string>] [-Scope <ModuleRepositoryProfileScope>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -48,6 +48,22 @@ Possible values:
 
 Required: False
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope to test. The default reads user profiles first, then machine-wide profiles.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: User, Machine, All
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True

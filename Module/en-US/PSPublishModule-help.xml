@@ -1531,6 +1531,23 @@ PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session ca
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope to export.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -1578,6 +1595,23 @@ PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session ca
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Profile store scope to export.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -2035,6 +2069,23 @@ Azure Artifacts feed identity, bootstrap mode, and profile store path before con
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope to read. The default reads user profiles first, then machine-wide profiles.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -2046,6 +2097,23 @@ Azure Artifacts feed identity, bootstrap mode, and profile store path before con
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Profile store scope to read. The default reads user profiles first, then machine-wide profiles.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -3217,6 +3285,23 @@ Provider.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope to write. Use Machine from an elevated/admin deployment to share non-secret feed settings with all users.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -3240,6 +3325,23 @@ Provider.</maml:para>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Profile store scope to write. Use Machine from an elevated/admin deployment to share non-secret feed settings with all users.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -3376,6 +3478,23 @@ authenticated access through the selected bootstrap mode.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope. Existing profiles default to user-then-machine lookup; profile creation/import defaults to the current user's store unless Machine is specified.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipConnect</maml:name>
           <maml:description>
             <maml:para>Save/import/test the profile but do not register, connect, or probe the repository.</maml:para>
@@ -3482,6 +3601,23 @@ authenticated access through the selected bootstrap mode.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope. Existing profiles default to user-then-machine lookup; profile creation/import defaults to the current user's store unless Machine is specified.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -3661,6 +3797,23 @@ authenticated access through the selected bootstrap mode.</maml:para>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope. Existing profiles default to user-then-machine lookup; profile creation/import defaults to the current user's store unless Machine is specified.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -3894,6 +4047,23 @@ authenticated access through the selected bootstrap mode.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Profile store scope. Existing profiles default to user-then-machine lookup; profile creation/import defaults to the current user's store unless Machine is specified.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -28728,6 +28898,23 @@ Credential Provider session caches.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope to read. The default reads user profiles first, then machine-wide profiles.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ScriptName</maml:name>
           <maml:description>
             <maml:para>Generated bootstrap script file name.</maml:para>
@@ -28798,6 +28985,23 @@ Credential Provider session caches.</maml:para>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Profile store scope to read. The default reads user profiles first, then machine-wide profiles.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -31359,6 +31563,23 @@ repository and does not clear Azure Artifacts Credential Provider token caches.<
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope to remove from.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -31382,6 +31603,23 @@ repository and does not clear Azure Artifacts Credential Provider token caches.<
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Profile store scope to remove from.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -32476,6 +32714,23 @@ Credential Provider so Entra ID/MFA is handled by the provider instead of storin
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope to write. Use Machine from an elevated/admin deployment to share non-secret feed settings with all users.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Registration strategy saved in the profile. Defaults to PSResourceGet for Entra-first Azure Artifacts use.</maml:para>
@@ -32608,6 +32863,23 @@ Credential Provider so Entra ID/MFA is handled by the provider instead of storin
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Profile store scope to write. Use Machine from an elevated/admin deployment to share non-secret feed settings with all users.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -33091,6 +33363,23 @@ Artifacts Credential Provider prerequisites are ready for Entra-first module ins
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Profile store scope to test. The default reads user profiles first, then machine-wide profiles.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -33102,6 +33391,23 @@ Artifacts Credential Provider prerequisites are ready for Entra-first module ins
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Profile store scope to test. The default reads user profiles first, then machine-wide profiles.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

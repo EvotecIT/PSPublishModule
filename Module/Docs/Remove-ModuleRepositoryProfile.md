@@ -11,7 +11,7 @@ Removes a saved private module repository profile.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Remove-ModuleRepositoryProfile [-Name] <string> [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Remove-ModuleRepositoryProfile [-Name] <string> [-PassThru] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -60,6 +60,22 @@ Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope to remove from.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: User, Machine, All
 
 Required: False
 Position: named

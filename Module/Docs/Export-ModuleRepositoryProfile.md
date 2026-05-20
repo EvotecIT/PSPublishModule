@@ -11,7 +11,7 @@ Exports saved private module repository profiles to a non-secret JSON file.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Export-ModuleRepositoryProfile [[-Name] <string[]>] [-Path] <string> [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Export-ModuleRepositoryProfile [[-Name] <string[]>] [-Path] <string> [-Force] [-PassThru] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -96,6 +96,22 @@ Possible values:
 
 Required: True
 Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope to export.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: User, Machine, All
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True

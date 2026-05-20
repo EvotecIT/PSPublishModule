@@ -34,6 +34,7 @@ Describe 'Private gallery command metadata' {
         $script:PrivateGalleryProfileRoot = Join-Path ([IO.Path]::GetTempPath()) ("PSPublishModule.PrivateGallery.Tests." + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:PrivateGalleryProfileRoot -Force | Out-Null
         $script:PrivateGalleryProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'profiles.json'
+        $script:PrivateGalleryMachineProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'machine-profiles.json'
         $script:PrivateGalleryLiveValidationRunnerPath = Join-Path $PSScriptRoot 'Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1'
         $script:PrivateGalleryLiveEvidenceSummaryPath = Join-Path $PSScriptRoot 'Convert-PrivateGalleryLiveEvidenceToMarkdown.ps1'
         $script:PrivateGalleryGitHubConfigurationPath = Join-Path $PSScriptRoot 'Test-PrivateGalleryGitHubLiveValidationConfiguration.ps1'
@@ -42,10 +43,12 @@ Describe 'Private gallery command metadata' {
         $script:PrivateGalleryLiveValidationWorkflowPath = Join-Path $script:PrivateGalleryRepositoryRoot '.github\workflows\private-gallery-live-validation.yml'
         $script:PrivateGalleryBuildWorkflowPath = Join-Path $script:PrivateGalleryRepositoryRoot '.github\workflows\BuildModule.yml'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
+        $env:POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH = $script:PrivateGalleryMachineProfilePath
     }
 
     AfterAll {
         Remove-Item Env:\POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH -ErrorAction SilentlyContinue
+        Remove-Item Env:\POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH -ErrorAction SilentlyContinue
         if ($script:PrivateGalleryProfileRoot -and (Test-Path -LiteralPath $script:PrivateGalleryProfileRoot)) {
             Remove-Item -LiteralPath $script:PrivateGalleryProfileRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
@@ -558,12 +561,15 @@ Describe 'Private gallery command metadata' {
         $profile.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
         $profile.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
         $profile.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
+        $profile.Parameters.Keys | Should -Contain 'Scope'
 
         $exportProfile = $module.ExportedCmdlets['Export-ModuleRepositoryProfile']
         $exportProfile.Parameters['Name'].Aliases | Should -Contain 'ProfileName'
+        $exportProfile.Parameters.Keys | Should -Contain 'Scope'
 
         $importProfile = $module.ExportedCmdlets['Import-ModuleRepositoryProfile']
         $importProfile.Parameters.Keys | Should -Contain 'Overwrite'
+        $importProfile.Parameters.Keys | Should -Contain 'Scope'
 
         $initialize = $module.ExportedCmdlets['Initialize-ModuleRepository']
         $initialize.ParameterSets.Name | Should -Contain 'Profile'
@@ -577,14 +583,17 @@ Describe 'Private gallery command metadata' {
         $initialize.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
         $initialize.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $initialize.Parameters.Keys | Should -Contain 'SkipConnect'
+        $initialize.Parameters.Keys | Should -Contain 'Scope'
 
         $bootstrap = $module.ExportedCmdlets['New-ModuleRepositoryBootstrap']
         $bootstrap.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
         $bootstrap.Parameters['InstallModule'].Aliases | Should -Contain 'ModuleName'
+        $bootstrap.Parameters.Keys | Should -Contain 'Scope'
 
         $testProfile = $module.ExportedCmdlets['Test-ModuleRepositoryProfile']
         $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
         $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
+        $testProfile.Parameters.Keys | Should -Contain 'Scope'
 
         $publishPackage = $module.ExportedCmdlets['Publish-NugetPackage']
         $publishPackage.ParameterSets.Name | Should -Contain 'Profile'
@@ -601,6 +610,32 @@ Describe 'Private gallery command metadata' {
         $profile.BootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
         Test-Path -LiteralPath $script:PrivateGalleryProfilePath | Should -BeTrue
+    }
+
+    It 'resolves machine-wide profiles for other users without sharing credentials' {
+        Set-ModuleRepositoryProfile -Name 'CompanyMachine' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -Scope Machine | Out-Null
+
+        Test-Path -LiteralPath $script:PrivateGalleryMachineProfilePath | Should -BeTrue
+        Test-Path -LiteralPath $script:PrivateGalleryProfilePath | Should -BeTrue
+
+        $profile = Get-ModuleRepositoryProfile -Name 'CompanyMachine'
+        $profile.Name | Should -Be 'CompanyMachine'
+        $profile.Scope | Should -Be ([PowerForge.ModuleRepositoryProfileScope]::Machine)
+        $profile.ProfileStorePath | Should -Be $script:PrivateGalleryMachineProfilePath
+        $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
+
+        $readiness = Test-ModuleRepositoryProfile -ProfileName 'CompanyMachine'
+        $readiness.ProfileFound | Should -BeTrue
+        $readiness.Scope | Should -Be ([PowerForge.ModuleRepositoryProfileScope]::Machine)
+        $readiness.ProfileStorePath | Should -Be $script:PrivateGalleryMachineProfilePath
+
+        $userProfile = Set-ModuleRepositoryProfile -Name 'CompanyMachine' -AzureDevOpsOrganization 'fabrikam' -AzureArtifactsFeed 'UserModules'
+        $userProfile.Scope | Should -Be ([PowerForge.ModuleRepositoryProfileScope]::User)
+
+        $resolved = Get-ModuleRepositoryProfile -Name 'CompanyMachine'
+        $resolved.Scope | Should -Be ([PowerForge.ModuleRepositoryProfileScope]::User)
+        $resolved.AzureDevOpsOrganization | Should -Be 'fabrikam'
+        $resolved.ProfileStorePath | Should -Be $script:PrivateGalleryProfilePath
     }
 
     It 'exports and imports non-secret managed profile files' {

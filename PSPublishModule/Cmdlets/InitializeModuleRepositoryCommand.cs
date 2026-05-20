@@ -129,28 +129,33 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     [Parameter]
     public SwitchParameter SkipConnect { get; set; }
 
+    /// <summary>Profile store scope. Existing profiles default to user-then-machine lookup; profile creation/import defaults to the current user's store unless Machine is specified.</summary>
+    [Parameter]
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.User;
+
     /// <summary>Runs the onboarding workflow.</summary>
     protected override void ProcessRecord()
     {
-        var store = new ModuleRepositoryProfileStore();
         var host = new CmdletPrivateGalleryHost(this);
         var service = new PrivateGalleryService(host);
-        var profileWriteState = ResolveProfiles(store, out var importedFromPath);
+        var profileWriteState = ResolveProfiles(out var importedFromPath);
         var prerequisiteStatus = service.GetBootstrapPrerequisiteStatus();
 
         foreach (var state in profileWriteState)
         {
             var readiness = ModuleRepositoryProfileReadinessMapper.ToCmdletResult(
                 state.Profile,
-                store.Path,
-                prerequisiteStatus);
-            var profileResult = ModuleRepositoryProfileResultMapper.ToCmdletResult(state.Profile, store.Path);
+                state.Store.Path,
+                prerequisiteStatus,
+                state.Store.Scope);
+            var profileResult = ModuleRepositoryProfileResultMapper.ToCmdletResult(state.Profile, state.Store.Path, state.Store.Scope);
             var result = new ModuleRepositoryOnboardingResult
             {
                 ProfileName = state.Profile.Name,
                 ProfileFound = true,
                 ProfileWritten = state.Written,
-                ProfileStorePath = store.Path,
+                ProfileStorePath = state.Store.Path,
+                Scope = state.Store.Scope,
                 ImportedFromPath = importedFromPath,
                 Profile = profileResult,
                 Readiness = readiness,
@@ -185,15 +190,22 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
         }
     }
 
-    private ProfileWriteState[] ResolveProfiles(ModuleRepositoryProfileStore store, out string? importedFromPath)
+    private ProfileWriteState[] ResolveProfiles(out string? importedFromPath)
     {
         importedFromPath = null;
+        var scopeWasBound = MyInvocation.BoundParameters.ContainsKey(nameof(Scope));
 
         if (ParameterSetName == ParameterSetProfile)
         {
-            var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName!);
-            return new[] { new ProfileWriteState(profile, written: false) };
+            var resolvedScope = scopeWasBound ? Scope : ModuleRepositoryProfileScope.All;
+            var resolved = ModuleRepositoryProfileCommandSupport.ResolveRequiredWithStore(ProfileName!, resolvedScope);
+            return new[] { new ProfileWriteState(resolved.Profile, resolved.Store, written: false) };
         }
+
+        if (Scope == ModuleRepositoryProfileScope.All)
+            throw new ArgumentException("Initialize-ModuleRepository requires User or Machine scope when creating or importing profiles.", nameof(Scope));
+
+        var store = new ModuleRepositoryProfileStore(Scope);
 
         if (ParameterSetName == ParameterSetAzureArtifacts)
         {
@@ -213,10 +225,10 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             });
 
             if (!ShouldProcess(profile.Name, "Save and initialize module repository profile"))
-                return new[] { new ProfileWriteState(profile, written: false) };
+                return new[] { new ProfileWriteState(profile, store, written: false) };
 
             var saved = store.SaveProfile(profile);
-            return new[] { new ProfileWriteState(saved, written: true) };
+            return new[] { new ProfileWriteState(saved, store, written: true) };
         }
 
         var resolvedPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path!);
@@ -237,10 +249,10 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             return Array.Empty<ProfileWriteState>();
 
         if (!ShouldProcess(store.Path, $"Import and initialize {profiles.Length} module repository profile(s) from '{resolvedPath}'"))
-            return profiles.Select(static profile => new ProfileWriteState(profile, written: false)).ToArray();
+            return profiles.Select(profile => new ProfileWriteState(profile, store, written: false)).ToArray();
 
         var imported = store.ImportProfiles(profiles, Overwrite);
-        return imported.Select(static profile => new ProfileWriteState(profile, written: true)).ToArray();
+        return imported.Select(profile => new ProfileWriteState(profile, store, written: true)).ToArray();
     }
 
     private PowerForge.ModuleRepositoryRegistrationResult ConnectProfile(
@@ -327,13 +339,15 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
 
     private readonly struct ProfileWriteState
     {
-        internal ProfileWriteState(ModuleRepositoryProfile profile, bool written)
+        internal ProfileWriteState(ModuleRepositoryProfile profile, ModuleRepositoryProfileStore store, bool written)
         {
             Profile = profile;
+            Store = store;
             Written = written;
         }
 
         internal ModuleRepositoryProfile Profile { get; }
+        internal ModuleRepositoryProfileStore Store { get; }
         internal bool Written { get; }
     }
 }

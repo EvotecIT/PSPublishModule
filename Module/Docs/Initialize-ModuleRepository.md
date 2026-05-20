@@ -11,17 +11,17 @@ Performs one-command enterprise onboarding for a private module repository profi
 ## SYNTAX
 ### Profile (Default)
 ```powershell
-Initialize-ModuleRepository [-ProfileName] <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-SkipConnect] [-WhatIf] [-Confirm] [<CommonParameters>]
+Initialize-ModuleRepository [-ProfileName] <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-SkipConnect] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Import
 ```powershell
-Initialize-ModuleRepository [-Path] <string> [-ProfileName <string>] [-Overwrite] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-SkipConnect] [-WhatIf] [-Confirm] [<CommonParameters>]
+Initialize-ModuleRepository [-Path] <string> [-ProfileName <string>] [-Overwrite] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-SkipConnect] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### AzureArtifacts
 ```powershell
-Initialize-ModuleRepository [-ProfileName] <string> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-SkipConnect] [-WhatIf] [-Confirm] [<CommonParameters>]
+Initialize-ModuleRepository [-ProfileName] <string> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-SkipConnect] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -287,6 +287,22 @@ Type: String
 Parameter Sets: AzureArtifacts
 Aliases: Repository
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope. Existing profiles default to user-then-machine lookup; profile creation/import defaults to the current user's store unless Machine is specified.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: Profile, Import, AzureArtifacts
+Aliases: None
+Possible values: User, Machine, All
 
 Required: False
 Position: named

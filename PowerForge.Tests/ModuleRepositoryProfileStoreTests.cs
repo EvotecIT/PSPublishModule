@@ -191,6 +191,43 @@ public sealed class ModuleRepositoryProfileStoreTests
         }
     }
 
+    [Fact]
+    public void GetStores_AllReturnsUserThenMachineStores()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var userPath = Path.Combine(root, "user", "profiles.json");
+        var machinePath = Path.Combine(root, "machine", "profiles.json");
+        var previousUserPath = Environment.GetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH");
+        var previousMachinePath = Environment.GetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", userPath);
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH", machinePath);
+
+            var stores = ModuleRepositoryProfileStore.GetStores(ModuleRepositoryProfileScope.All);
+
+            Assert.Collection(
+                stores,
+                user =>
+                {
+                    Assert.Equal(ModuleRepositoryProfileScope.User, user.Scope);
+                    Assert.Equal(Path.GetFullPath(userPath), user.Path);
+                },
+                machine =>
+                {
+                    Assert.Equal(ModuleRepositoryProfileScope.Machine, machine.Scope);
+                    Assert.Equal(Path.GetFullPath(machinePath), machine.Path);
+                });
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", previousUserPath);
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH", previousMachinePath);
+            TryDelete(root);
+        }
+    }
+
     private static string CreateTempFilePath()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

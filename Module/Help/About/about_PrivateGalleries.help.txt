@@ -44,8 +44,17 @@ LONG DESCRIPTION
 
         %LOCALAPPDATA%\PowerForge\PrivateGalleries\profiles.json
 
+    Machine-wide profile data is stored under the machine common application data folder:
+
+        %ProgramData%\PowerForge\PrivateGalleries\profiles.json
+
+    Commands that consume a profile read user profiles first and then machine-wide profiles. This lets desktop
+    support register feed metadata once for all users without sharing credentials. Each user still authenticates as
+    themselves through the Azure Artifacts Credential Provider and Entra/MFA.
+
     Set POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH when tests, managed desktop rollout tooling, or ephemeral build
-    agents need to redirect profile storage.
+    agents need to redirect user profile storage. Set POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH to redirect
+    the machine-wide profile store for tests or managed deployment tooling.
 
     ENTERPRISE ROLLOUT CHECKLIST
 
@@ -57,7 +66,8 @@ LONG DESCRIPTION
         3. Use Initialize-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet at the version
            required by the selected bootstrap mode and install the Azure Artifacts Credential Provider on Windows
            workstations. Pre-install the credential provider on non-Windows systems with Microsoft's installer.
-        4. Create the local feed profile once with Set-ModuleRepositoryProfile.
+        4. Create the feed profile once with Set-ModuleRepositoryProfile. Use -Scope Machine from an elevated/admin
+           deployment when the same non-secret feed definition should be visible to all users on the workstation.
         5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and ask users or
            desktop support to run Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite
            -InstallPrerequisites once. This imports or refreshes the profile, registers the repository, probes
@@ -110,6 +120,17 @@ LONG DESCRIPTION
     deploy the JSON file with Intune, GPO, configuration management, or a bootstrap script:
 
         Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
+
+    For a machine-wide profile installed once by desktop support or software distribution, import or create it with
+    -Scope Machine:
+
+        Import-ModuleRepositoryProfile -Path .\Company.profile.json -Scope Machine -Overwrite
+        Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules -Scope Machine
+
+    After that, any user on the workstation can run Install-PrivateModule -ProfileName Company -Name ModuleA.
+    PSPublishModule reads the shared profile, but Azure Artifacts authentication remains per-user. If that user has
+    no cached session yet, or the session expired, the normal install/update access probe can invoke the Azure
+    Artifacts Credential Provider so the user signs in with their own Entra ID/MFA.
 
     For a deployable one-folder workstation package, use:
 

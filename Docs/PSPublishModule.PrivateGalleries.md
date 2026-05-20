@@ -31,8 +31,11 @@ wrapper and leave identity/session ownership with Microsoft tooling:
    bootstrap mode and install the Azure Artifacts Credential Provider on Windows
    workstations. On non-Windows systems, pre-install the credential provider
    with the official Microsoft installer before onboarding.
-4. Create the local profile once with `Set-ModuleRepositoryProfile`. The profile
-   contains feed identity only; it does not contain PATs, passwords, or tokens.
+4. Create the profile once with `Set-ModuleRepositoryProfile`. Use the default
+   user scope for one-user machines, or `-Scope Machine` from an elevated/admin
+   deployment when the same non-secret feed definition should be visible to all
+   users on the workstation. The profile contains feed identity only; it does
+   not contain PATs, passwords, or tokens.
 5. For managed rollout, export the non-secret profile with
    `Export-ModuleRepositoryProfile` and ask users or desktop support to run
    `Initialize-ModuleRepository -Path <profile.json> -ProfileName <name>
@@ -70,10 +73,12 @@ Install-PrivateModule -ProfileName Company -Name ModuleA
 Update-PrivateModule -ProfileName Company -Name ModuleA
 ```
 
-If you distribute a pre-created profile file, redirect the profile store with
-`POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH` or place `profiles.json` in the
-default profile store. Keep that file non-secret and user-writable only when
-users should be allowed to edit profile definitions.
+If you distribute a pre-created profile file, redirect the user profile store
+with `POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH`, redirect the machine profile
+store with `POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH`, or place
+`profiles.json` in the default user or machine profile store. Keep that file
+non-secret and user-writable only when users should be allowed to edit profile
+definitions.
 
 Create a profile once:
 
@@ -124,8 +129,25 @@ Profiles are stored under the current user's local application data folder:
 %LOCALAPPDATA%\PowerForge\PrivateGalleries\profiles.json
 ```
 
-Set `POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH` to redirect profile storage in
-tests, automation, or managed desktop rollouts.
+Machine-wide profiles are stored under the machine common application data
+folder:
+
+```text
+%ProgramData%\PowerForge\PrivateGalleries\profiles.json
+```
+
+Commands that consume a profile, such as `Install-PrivateModule -ProfileName
+Company`, `Update-PrivateModule`, `Connect-ModuleRepository`,
+`Initialize-ModuleRepository`, `New-ConfigurationPublish`, and
+`Publish-NugetPackage`, resolve user profiles first and then machine-wide
+profiles. This lets desktop support register feed metadata once for everyone
+without sharing anyone's token cache. Each user still authenticates as
+themselves through the Azure Artifacts Credential Provider and Entra/MFA.
+
+Set `POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH` to redirect user profile
+storage in tests or automation. Set
+`POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH` to redirect the machine-wide
+store for tests or managed desktop deployment tooling.
 
 Profiles intentionally do not store PATs, passwords, or Entra tokens. For Azure
 Artifacts, prefer the default profile settings:
@@ -148,6 +170,22 @@ that JSON file with Intune, GPO, configuration management, or a bootstrap script
 Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -SkipConnect
 Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
 ```
+
+For a machine-wide profile installed once by desktop support or software
+distribution, import or create it with `-Scope Machine`:
+
+```powershell
+Import-ModuleRepositoryProfile -Path .\Company.profile.json -Scope Machine -Overwrite
+# or
+Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules -Scope Machine
+```
+
+After that, any user on the workstation can run `Install-PrivateModule
+-ProfileName Company -Name ModuleA`. PSPublishModule reads the shared profile,
+but Azure Artifacts authentication remains per-user. If that user has no cached
+session yet, or the session expired, the normal install/update access probe can
+invoke the Azure Artifacts Credential Provider so the user signs in with their
+own Entra ID/MFA.
 
 On the target workstation, import or refresh the profile and connect in one
 step:

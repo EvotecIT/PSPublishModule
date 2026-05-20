@@ -72,6 +72,9 @@ public sealed class ModuleRepositoryProfileReadinessResult
     /// <summary>Profile storage path used by PSPublishModule.</summary>
     public string ProfileStorePath { get; set; } = string.Empty;
 
+    /// <summary>Profile storage scope used by PSPublishModule.</summary>
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.User;
+
     /// <summary>Whether PSResourceGet is available locally.</summary>
     public bool PSResourceGetAvailable { get; set; }
 

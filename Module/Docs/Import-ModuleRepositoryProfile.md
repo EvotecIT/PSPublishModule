@@ -11,7 +11,7 @@ Imports private module repository profiles from a non-secret JSON file.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Import-ModuleRepositoryProfile [-Path] <string> [-Overwrite] [-WhatIf] [-Confirm] [<CommonParameters>]
+Import-ModuleRepositoryProfile [-Path] <string> [-Overwrite] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -65,6 +65,22 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope to write. Use Machine from an elevated/admin deployment to share non-secret feed settings with all users.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: User, Machine, All
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True

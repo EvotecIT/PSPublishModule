@@ -44,6 +44,9 @@ public sealed class ModuleRepositoryProfileResult
     /// <summary>Profile storage path.</summary>
     public string ProfileStorePath { get; set; } = string.Empty;
 
+    /// <summary>Profile storage scope.</summary>
+    public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.User;
+
     /// <summary>Profile creation timestamp in UTC.</summary>
     public DateTimeOffset CreatedAtUtc { get; set; }
 
