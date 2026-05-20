@@ -137,6 +137,15 @@ function Get-ValidationItemValue {
     return $null
 }
 
+function Ensure-ZipArchiveType {
+    try {
+        [void] [System.IO.Compression.ZipArchive]
+        return
+    } catch {
+        Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
+    }
+}
+
 function New-DisposableNuGetPackage {
     param(
         [Parameter(Mandatory)]
@@ -152,6 +161,8 @@ function New-DisposableNuGetPackage {
     if (-not (Test-Path -LiteralPath $OutputDirectory)) {
         New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
     }
+
+    Ensure-ZipArchiveType
 
     $packagePath = Join-Path $OutputDirectory "$PackageId.$PackageVersion.nupkg"
     $nuspec = @"
