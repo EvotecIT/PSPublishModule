@@ -123,6 +123,7 @@ PRODUCTION READINESS EVIDENCE
 
 Before calling a feed ready for users, prove:
 
+- Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 succeeds against the real feed/module.
 - Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite -InstallPrerequisites
 succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True.
 - Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit

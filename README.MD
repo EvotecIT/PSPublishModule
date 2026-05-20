@@ -58,7 +58,7 @@ New-ConfigurationPublish -ProfileName Company -Enabled
 Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
 ```
 
-See [Docs\PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md) and `Get-Help about_PrivateGalleries` for the rollout checklist, PAT fallback guidance, and live Azure Artifacts validation steps.
+See [Docs\PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md) and `Get-Help about_PrivateGalleries` for the rollout checklist, PAT fallback guidance, and live Azure Artifacts validation helper.
 
 ## PowerForge Studio
 

@@ -34,6 +34,7 @@ Describe 'Private gallery command metadata' {
         $script:PrivateGalleryProfileRoot = Join-Path ([IO.Path]::GetTempPath()) ("PSPublishModule.PrivateGallery.Tests." + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:PrivateGalleryProfileRoot -Force | Out-Null
         $script:PrivateGalleryProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'profiles.json'
+        $script:PrivateGalleryLiveValidationRunnerPath = Join-Path $PSScriptRoot 'Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
     }
 
@@ -42,6 +43,14 @@ Describe 'Private gallery command metadata' {
         if ($script:PrivateGalleryProfileRoot -and (Test-Path -LiteralPath $script:PrivateGalleryProfileRoot)) {
             Remove-Item -LiteralPath $script:PrivateGalleryProfileRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
+    }
+
+    It 'keeps the Azure Artifacts live validation runner parseable' {
+        $tokens = $null
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile($script:PrivateGalleryLiveValidationRunnerPath, [ref] $tokens, [ref] $errors) | Out-Null
+
+        $errors | Should -BeNullOrEmpty
     }
 
     It 'exposes the private gallery wrapper cmdlets' {

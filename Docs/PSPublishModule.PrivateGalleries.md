@@ -186,6 +186,19 @@ explicitly enabled. Use it against a real Azure Artifacts feed that contains at
 least one module the current user may install/update:
 
 ```powershell
+.\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 `
+    -Organization contoso `
+    -Project Platform `
+    -Feed Modules `
+    -ModuleName ModuleA `
+    -OutputFile .\private-gallery-live.xml
+```
+
+The helper sets the required environment variables for the current process,
+runs the Pester harness, optionally writes an NUnit/JUnit result file, and then
+restores the caller's environment. To run the harness directly, set:
+
+```powershell
 $env:PSPUBLISHMODULE_AZDO_LIVE = '1'
 $env:PSPUBLISHMODULE_AZDO_ORGANIZATION = 'contoso'
 $env:PSPUBLISHMODULE_AZDO_PROJECT = 'Platform'
@@ -219,8 +232,11 @@ This mutates the target feed, so it is intentionally not part of the default
 live smoke:
 
 ```powershell
-$env:PSPUBLISHMODULE_AZDO_PUBLISH_LIVE = '1'
-$env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH = 'C:\Temp\Company.Tools.1.0.0.nupkg'
-
-Invoke-Pester -Path .\Module\Tests\PrivateGallery.AzureArtifacts.Live.Tests.ps1 -Tag Live -Output Detailed
+.\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 `
+    -Organization contoso `
+    -Project Platform `
+    -Feed Modules `
+    -ModuleName ModuleA `
+    -PublishPackagePath 'C:\Temp\Company.Tools.1.0.0.nupkg' `
+    -OutputFile .\private-gallery-live-publish.xml
 ```
