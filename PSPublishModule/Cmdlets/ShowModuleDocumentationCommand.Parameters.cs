@@ -18,6 +18,7 @@ public sealed partial class ShowModuleDocumentationCommand
     public PSModuleInfo? Module { get; set; }
 
     /// <summary>Exact version to select when multiple module versions are installed.</summary>
+    [Parameter(ParameterSetName = "ByName")]
     public Version? RequiredVersion { get; set; }
 
     /// <summary>Direct path to a documentation folder containing README/CHANGELOG/etc.</summary>

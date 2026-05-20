@@ -12,10 +12,10 @@ namespace PSPublishModule;
 /// The destination is flattened (no Module/Version subfolders).
 /// </summary>
 /// <example>
-///   <summary>Copy all files from Internals\Scripts to a tools folder</summary>
+///   <summary>Copy PowerShell scripts from Internals\Scripts to a tools folder</summary>
 ///   <prefix>PS&gt; </prefix>
 ///   <code>Install-ModuleScript -Name EFAdminManager -Path 'C:\Tools' -Verbose</code>
-///   <para>Copies every file under Internals\Scripts recursively into C:\Tools, preserving subfolders. Shows each copied file.</para>
+///   <para>Copies PowerShell script files under Internals\Scripts recursively into C:\Tools, preserving subfolders. Shows each copied file.</para>
 /// </example>
 /// <example>
 ///   <summary>Copy only specific scripts, unblocking and overwriting</summary>
@@ -55,7 +55,7 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
     [Parameter]
     public string ScriptsRelativePath { get; set; } = System.IO.Path.Combine("Internals", "Scripts");
 
-    /// <summary>Wildcard include filters (relative to the scripts folder). Defaults to '*' (all files).</summary>
+    /// <summary>Wildcard include filters (relative to the scripts folder). Defaults to '*.ps1'.</summary>
     [Parameter]
     public string[]? Include { get; set; }
 
@@ -93,25 +93,29 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
             throw new DirectoryNotFoundException($"Module base path not found for '{moduleName}'.");
 
         // Determine Internals/Scripts path
-        var scriptsRoot = FindScriptsFolder(moduleBase, ScriptsRelativePath);
+        var scriptsRoot = FindScriptsFolder(
+            moduleBase,
+            ScriptsRelativePath,
+            MyInvocation.BoundParameters.ContainsKey(nameof(ScriptsRelativePath)),
+            this);
         if (scriptsRoot == null)
             throw new DirectoryNotFoundException($"Scripts folder '{ScriptsRelativePath}' not found under '{moduleBase}'.");
 
         var dest = PathHelper.Normalize(Path);
         PathHelper.EnsureDirectory(dest);
 
-        var includes = (Include == null || Include.Length == 0) ? new[] { "*" } : Include;
+        var includes = (Include == null || Include.Length == 0) ? new[] { "*.ps1" } : Include;
         var excludes = Exclude ?? Array.Empty<string>();
 
         WriteVerbose($"Scanning scripts root: {scriptsRoot}");
         WriteVerbose($"Include: {string.Join(", ", includes)}; Exclude: {(excludes.Length>0?string.Join(", ", excludes):"<none>")}");
 
-        // Fast path: default include (*.ps1) with no excludes → use filesystem filter
+        // Fast path: default include (*.ps1) with no excludes -> use filesystem filter
         var files = new System.Collections.Generic.List<string>();
         bool defaultAllOnly = (Include == null || Include.Length == 0) && (Exclude == null || Exclude.Length == 0);
         if (defaultAllOnly)
         {
-            files.AddRange(Directory.GetFiles(scriptsRoot, "*", SearchOption.AllDirectories));
+            files.AddRange(Directory.GetFiles(scriptsRoot, "*.ps1", SearchOption.AllDirectories));
         }
         else
         {
@@ -170,6 +174,10 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
 
             if (ShouldProcess(target, exists ? "Overwrite script" : "Copy script"))
             {
+                if (exists && Force)
+                {
+                    try { File.SetAttributes(target, FileAttributes.Normal); } catch { /* ignore */ }
+                }
                 File.Copy(file, target, overwrite: true);
                 if (Force)
                 {
@@ -188,19 +196,30 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
         }
     }
 
-    private static string? FindScriptsFolder(string moduleBase, string relative)
+    private static string? FindScriptsFolder(string moduleBase, string relative, bool explicitRelativePath, PSCmdlet cmdlet)
     {
-        // Try manifest-defined InternalsPath when available
         var internals = System.IO.Path.Combine(moduleBase, "Internals");
         var manifest = Directory.GetFiles(moduleBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
-        if (!string.IsNullOrEmpty(manifest))
+        if (!string.IsNullOrEmpty(manifest) && !explicitRelativePath)
         {
             try
             {
-                // (Test-ModuleManifest).PrivateData.PSData.Delivery.InternalsPath
-                // If present, prefer that location
-                // We call PowerShell to evaluate the manifest hashtable
-                // Note: we cannot access cmdlet here; keep it simple and fallback to default
+                var deliveryValue = cmdlet.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifest).FirstOrDefault();
+                var delivery = deliveryValue == null ? null : PSObject.AsPSObject(deliveryValue);
+                var scriptsPath = GetDeliveryString(delivery, "ScriptsPath");
+                if (!string.IsNullOrWhiteSpace(scriptsPath))
+                {
+                    var scriptsCandidate = System.IO.Path.Combine(moduleBase, scriptsPath!);
+                    if (Directory.Exists(scriptsCandidate)) return scriptsCandidate;
+                }
+
+                var internalsPath = GetDeliveryString(delivery, "InternalsPath");
+                if (!string.IsNullOrWhiteSpace(internalsPath))
+                {
+                    internals = System.IO.Path.Combine(moduleBase, internalsPath!);
+                    var scriptsCandidate = System.IO.Path.Combine(internals, "Scripts");
+                    if (Directory.Exists(scriptsCandidate)) return scriptsCandidate;
+                }
             }
             catch { /* ignore */ }
         }
@@ -214,6 +233,37 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
         var alt = System.IO.Path.Combine(moduleBase, "Scripts");
         if (Directory.Exists(alt)) return alt;
         return null;
+    }
+
+    private static string? GetDeliveryString(PSObject? delivery, string name)
+    {
+        if (delivery == null) return null;
+        if (delivery.BaseObject is System.Collections.IDictionary dictionary)
+        {
+            foreach (System.Collections.DictionaryEntry entry in dictionary)
+            {
+                if (entry.Key != null && string.Equals(entry.Key.ToString(), name, StringComparison.OrdinalIgnoreCase))
+                {
+                    var dictionaryValue = entry.Value?.ToString();
+                    if (!string.IsNullOrWhiteSpace(dictionaryValue)) return dictionaryValue;
+                }
+            }
+        }
+
+        try
+        {
+            var direct = delivery.Properties[name]?.Value?.ToString();
+            if (!string.IsNullOrWhiteSpace(direct)) return direct;
+        }
+        catch { /* ignore */ }
+
+        try
+        {
+            var prop = delivery.Properties.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+            var value = prop?.Value?.ToString();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch { return null; }
     }
 
     private static bool MatchesAny(string fullPath, string root, string[] patterns)

@@ -68,15 +68,14 @@ internal static class TokenStore
     {
         try
         {
-#if NETFRAMEWORK
-            // DPAPI available under .NET Framework (Windows PowerShell)
             var bytes = Encoding.UTF8.GetBytes(value);
-            var prot = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
-            return Convert.ToBase64String(prot);
-#else
-            // net8.0: avoid Windows-only APIs to keep cross-platform build; fallback to Base64
-            return Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
-#endif
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                var prot = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+                return Convert.ToBase64String(prot);
+            }
+
+            return Convert.ToBase64String(bytes);
         }
         catch { return Convert.ToBase64String(Encoding.UTF8.GetBytes(value)); }
     }
@@ -87,13 +86,20 @@ internal static class TokenStore
         try
         {
             var data = Convert.FromBase64String(protectedValue);
-#if NETFRAMEWORK
-            var clear = ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser);
-            return Encoding.UTF8.GetString(clear);
-#else
-            // net8.0: treat as base64-encoded clear text
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                try
+                {
+                    var clear = ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser);
+                    return Encoding.UTF8.GetString(clear);
+                }
+                catch
+                {
+                    // Backward compatibility for tokens saved by early net8 builds as base64 text.
+                }
+            }
+
             return Encoding.UTF8.GetString(data);
-#endif
         }
         catch { return null; }
     }

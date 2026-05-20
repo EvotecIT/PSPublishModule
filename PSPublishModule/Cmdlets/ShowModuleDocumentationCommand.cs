@@ -110,9 +110,10 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
                 {
                     titleName = (pso.Properties["Name"]?.Value ?? pso.Properties["ModuleName"]?.Value)?.ToString();
                     titleVersion = pso.Properties["Version"]?.Value?.ToString();
-                    delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPathUsed).FirstOrDefault() as PSObject;
+                    delivery = AsPsObject(this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPathUsed).FirstOrDefault());
+                    repository = AsPsObject(this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Repository").Invoke(manifestPathUsed).FirstOrDefault());
                     projectUri = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.ProjectUri").Invoke(manifestCandidates[0]).FirstOrDefault()?.ToString();
-                    var internalsRel = delivery?.Properties["InternalsPath"]?.Value as string ?? "Internals";
+                    var internalsRel = GetPsObjectString(delivery, "InternalsPath") ?? "Internals";
                     var cand = Path.Combine(rootBase, internalsRel);
                     internalsBase = Directory.Exists(cand) ? cand : null;
                 }
@@ -154,10 +155,10 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             if (!string.IsNullOrEmpty(manifestPath))
             {
                 manifestPathUsed = manifestPath;
-                delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPathUsed).FirstOrDefault() as PSObject;
-                repository = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Repository").Invoke(manifestPathUsed).FirstOrDefault() as PSObject;
+                delivery = AsPsObject(this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPathUsed).FirstOrDefault());
+                repository = AsPsObject(this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Repository").Invoke(manifestPathUsed).FirstOrDefault());
                 projectUri = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.ProjectUri").Invoke(manifestPathUsed).FirstOrDefault()?.ToString();
-                var internalsRel = delivery?.Properties["InternalsPath"]?.Value as string ?? "Internals";
+                var internalsRel = GetPsObjectString(delivery, "InternalsPath") ?? "Internals";
                 var cand = Path.Combine(rootBase, internalsRel);
                 internalsBase = Directory.Exists(cand) ? cand : null;
             }
@@ -218,7 +219,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
 
         // (-List removed; HTML viewer renders the full page.)
 
-        // Fast mode maps to all skip flags
+        // Fast mode maps to local-only, dependency-free and command-free rendering.
         if (Fast.IsPresent) { SkipDependencies = true; SkipCommands = true; }
 
         WriteVerbose("Resolving module and manifest...");
@@ -347,7 +348,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         // Verbose: remote repository intent and inputs (without leaking secrets)
         // Legacy mapping (one-time warnings could be added here)
         bool legacyRepoPaths  = (RepositoryPaths != null && RepositoryPaths.Length > 0);
-        bool wantsRemote = Online.IsPresent || legacyRepoPaths;
+        bool wantsRemote = !Fast.IsPresent && (Online.IsPresent || legacyRepoPaths);
         if (wantsRemote)
         {
             if (string.IsNullOrWhiteSpace(projectUri))
@@ -476,6 +477,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         }
         switch ((ExamplesLayout ?? "ProseFirst").ToLowerInvariant())
         {
+            case "mamldefault": meta.ExamplesLayout = PowerForge.ExamplesLayout.MamlDefault; break;
             case "prosefirst": meta.ExamplesLayout = PowerForge.ExamplesLayout.ProseFirst; break;
             case "allascode": meta.ExamplesLayout = PowerForge.ExamplesLayout.AllAsCode; break;
             default:           meta.ExamplesLayout = PowerForge.ExamplesLayout.ProseFirst; break;
@@ -511,5 +513,39 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             yield break;
         }
         yield return value;
+    }
+
+    private static PSObject? AsPsObject(object? value)
+        => value == null ? null : PSObject.AsPSObject(value);
+
+    private static string? GetPsObjectString(PSObject? value, string name)
+    {
+        if (value == null) return null;
+        if (value.BaseObject is System.Collections.IDictionary dictionary)
+        {
+            foreach (System.Collections.DictionaryEntry entry in dictionary)
+            {
+                if (entry.Key != null && string.Equals(entry.Key.ToString(), name, StringComparison.OrdinalIgnoreCase))
+                {
+                    var dictionaryValue = entry.Value?.ToString();
+                    if (!string.IsNullOrWhiteSpace(dictionaryValue)) return dictionaryValue;
+                }
+            }
+        }
+
+        try
+        {
+            var direct = value.Properties[name]?.Value?.ToString();
+            if (!string.IsNullOrWhiteSpace(direct)) return direct;
+        }
+        catch { /* ignore */ }
+
+        try
+        {
+            var prop = value.Properties.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+            var propValue = prop?.Value?.ToString();
+            return string.IsNullOrWhiteSpace(propValue) ? null : propValue;
+        }
+        catch { return null; }
     }
 }
