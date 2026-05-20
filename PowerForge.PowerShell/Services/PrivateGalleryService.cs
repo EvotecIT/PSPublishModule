@@ -573,15 +573,35 @@ internal sealed class PrivateGalleryService
         arguments.Add(registration.PSResourceGetUri);
         arguments.Add("-F");
         arguments.Add("Json");
+        arguments.Add("-C");
+        arguments.Add("True");
 
-        var result = runner.RunAsync(
-            new ProcessRunRequest(
-                fileName,
-                Environment.CurrentDirectory,
-                arguments,
-                timeout ?? GetCredentialProviderSessionPrimeTimeout(),
-                captureOutput: false,
-                captureError: false)).GetAwaiter().GetResult();
+        var effectiveTimeout = timeout ?? GetCredentialProviderSessionPrimeTimeout();
+        var previousDeviceFlowTimeout = Environment.GetEnvironmentVariable("NUGET_CREDENTIALPROVIDER_VSTS_DEVICEFLOWTIMEOUTSECONDS");
+        if (string.IsNullOrWhiteSpace(previousDeviceFlowTimeout))
+        {
+            Environment.SetEnvironmentVariable(
+                "NUGET_CREDENTIALPROVIDER_VSTS_DEVICEFLOWTIMEOUTSECONDS",
+                Math.Ceiling(effectiveTimeout.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        ProcessRunResult result;
+        try
+        {
+            result = runner.RunAsync(
+                new ProcessRunRequest(
+                    fileName,
+                    Environment.CurrentDirectory,
+                    arguments,
+                    effectiveTimeout,
+                    captureOutput: false,
+                    captureError: false)).GetAwaiter().GetResult();
+        }
+        finally
+        {
+            if (string.IsNullOrWhiteSpace(previousDeviceFlowTimeout))
+                Environment.SetEnvironmentVariable("NUGET_CREDENTIALPROVIDER_VSTS_DEVICEFLOWTIMEOUTSECONDS", null);
+        }
 
         if (result.Succeeded)
         {
