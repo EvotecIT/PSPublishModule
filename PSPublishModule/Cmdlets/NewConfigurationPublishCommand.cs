@@ -29,7 +29,7 @@ namespace PSPublishModule;
 /// </example>
 /// <example>
 /// <summary>Publish to Azure Artifacts (private feed preset)</summary>
-/// <code>New-ConfigurationPublish -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -RepositoryCredentialUserName 'user@contoso.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\azdo.pat" -Enabled</code>
+/// <code>New-ConfigurationPublish -ProfileName 'Company' -Enabled</code>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationPublish", DefaultParameterSetName = "ApiFromFile")]
 public sealed class NewConfigurationPublishCommand : PSCmdlet
@@ -50,6 +50,12 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Azure Artifacts feed name for the private gallery preset.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "AzureArtifacts")]
     public string AzureArtifactsFeed { get; set; } = string.Empty;
+
+    /// <summary>Saved private gallery profile name for Azure Artifacts publishing.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = "Profile")]
+    [Alias("Profile")]
+    [ValidateNotNullOrEmpty]
+    public string ProfileName { get; set; } = string.Empty;
 
     /// <summary>API key to be used for publishing in clear text in a file.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
@@ -143,6 +149,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
     public SwitchParameter Enabled { get; set; }
 
     /// <summary>Override tag name used for GitHub publishing.</summary>
@@ -154,12 +161,14 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
     public SwitchParameter Force { get; set; }
 
     /// <summary>Optional ID of the artefact used for publishing.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
     public string? ID { get; set; }
 
     /// <summary>Publish GitHub release as a release even if module prerelease is set.</summary>
@@ -181,24 +190,55 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Emits publish configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
+        var parameterSetName = ParameterSetName;
+        var type = Type;
+        var azureDevOpsOrganization = AzureDevOpsOrganization;
+        var azureDevOpsProject = AzureDevOpsProject;
+        var azureArtifactsFeed = AzureArtifactsFeed;
+        var repositoryName = RepositoryName;
+        var tool = Tool;
+        var repositoryTrusted = RepositoryTrusted;
+        var repositoryPriority = RepositoryPriority;
+        var repositoryApiVersion = RepositoryApiVersion;
+
+        if (ParameterSetName == "Profile")
+        {
+            var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+            parameterSetName = "AzureArtifacts";
+            type = PowerForge.PublishDestination.PowerShellGallery;
+            azureDevOpsOrganization = profile.AzureDevOpsOrganization;
+            azureDevOpsProject = profile.AzureDevOpsProject;
+            azureArtifactsFeed = profile.AzureArtifactsFeed;
+            repositoryName = profile.RepositoryName;
+            tool = profile.Tool switch
+            {
+                PowerForge.RepositoryRegistrationTool.PSResourceGet => PowerForge.PublishTool.PSResourceGet,
+                PowerForge.RepositoryRegistrationTool.PowerShellGet => PowerForge.PublishTool.PowerShellGet,
+                _ => PowerForge.PublishTool.Auto
+            };
+            repositoryTrusted = profile.Trusted;
+            repositoryPriority = profile.Priority;
+            repositoryApiVersion = PowerForge.RepositoryApiVersion.V3;
+        }
+
         var settings = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
         {
-            ParameterSetName = ParameterSetName,
-            Type = Type,
-            AzureDevOpsOrganization = AzureDevOpsOrganization,
-            AzureDevOpsProject = AzureDevOpsProject,
-            AzureArtifactsFeed = AzureArtifactsFeed,
+            ParameterSetName = parameterSetName,
+            Type = type,
+            AzureDevOpsOrganization = azureDevOpsOrganization,
+            AzureDevOpsProject = azureDevOpsProject,
+            AzureArtifactsFeed = azureArtifactsFeed,
             FilePath = FilePath,
             ApiKey = ApiKey,
             UserName = UserName,
-            RepositoryName = RepositoryName,
-            Tool = Tool,
+            RepositoryName = repositoryName,
+            Tool = tool,
             RepositoryUri = RepositoryUri,
             RepositorySourceUri = RepositorySourceUri,
             RepositoryPublishUri = RepositoryPublishUri,
-            RepositoryTrusted = RepositoryTrusted,
-            RepositoryPriority = RepositoryPriority,
-            RepositoryApiVersion = RepositoryApiVersion,
+            RepositoryTrusted = repositoryTrusted,
+            RepositoryPriority = repositoryPriority,
+            RepositoryApiVersion = repositoryApiVersion,
             EnsureRepositoryRegistered = EnsureRepositoryRegistered,
             UnregisterRepositoryAfterPublish = UnregisterRepositoryAfterPublish.IsPresent,
             RepositoryCredentialUserName = RepositoryCredentialUserName,

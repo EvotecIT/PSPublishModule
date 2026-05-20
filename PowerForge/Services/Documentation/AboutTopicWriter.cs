@@ -34,43 +34,9 @@ internal sealed class AboutTopicWriter
         var aboutOutDir = Path.Combine(fullDocs, "About");
         Directory.CreateDirectory(aboutOutDir);
 
-        var selected = new Dictionary<string, AboutTopicCandidate>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in aboutFiles)
-        {
-            AboutTopicMarkdownResult converted;
-            try { converted = ConvertSourceFile(file); }
-            catch { continue; }
-            if (string.IsNullOrWhiteSpace(converted.TopicName) || string.IsNullOrWhiteSpace(converted.Markdown))
-                continue;
-
-            var topic = converted.TopicName.Trim();
-            var candidate = new AboutTopicCandidate(
-                topic,
-                converted.Markdown,
-                converted.ShortDescription,
-                file,
-                GetSourcePriority(file));
-
-            if (!selected.TryGetValue(topic, out var existing))
-            {
-                selected[topic] = candidate;
-                continue;
-            }
-
-            // Prefer higher-priority source types when topic names are duplicated.
-            if (candidate.SourcePriority > existing.SourcePriority)
-            {
-                selected[topic] = candidate;
-                continue;
-            }
-
-            if (candidate.SourcePriority < existing.SourcePriority)
-                continue;
-
-            // Deterministic tie-breaker for same file type.
-            if (string.Compare(candidate.SourcePath, existing.SourcePath, StringComparison.OrdinalIgnoreCase) < 0)
-                selected[topic] = candidate;
-        }
+        var selected = SelectAboutTopics(aboutFiles)
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Value.Markdown))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
 
         var written = new List<AboutTopicInfo>();
         foreach (var topic in selected.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
@@ -83,6 +49,53 @@ internal sealed class AboutTopicWriter
         }
 
         WriteIndexFile(aboutOutDir, written);
+        return new AboutTopicWriteResult(written.ToArray());
+    }
+
+    public AboutTopicWriteResult WriteExternalHelpFiles(
+        string stagingPath,
+        string culturePath,
+        IEnumerable<string>? additionalSourcePaths = null)
+    {
+        if (string.IsNullOrWhiteSpace(stagingPath)) throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
+        if (string.IsNullOrWhiteSpace(culturePath)) throw new ArgumentException("CulturePath is required.", nameof(culturePath));
+
+        var fullStaging = Path.GetFullPath(stagingPath.Trim().Trim('"'));
+        var fullCulturePath = Path.GetFullPath(culturePath.Trim().Trim('"'));
+
+        if (!Directory.Exists(fullStaging)) return new AboutTopicWriteResult(Array.Empty<AboutTopicInfo>());
+
+        var roots = ResolveSourceRoots(fullStaging, additionalSourcePaths);
+        var aboutFiles = roots
+            .SelectMany(EnumerateAboutTopicFiles)
+            .Where(file => !IsUnderDirectory(file, fullCulturePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var selected = SelectAboutTopics(aboutFiles);
+
+        Directory.CreateDirectory(fullCulturePath);
+
+        var expectedFiles = selected.Values
+            .Select(candidate => Path.GetFileName(Path.Combine(fullCulturePath, SanitizeFileName(candidate.TopicName) + ".help.txt")))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var stale in Directory.EnumerateFiles(fullCulturePath, "about_*.help.txt", SearchOption.TopDirectoryOnly))
+        {
+            if (!expectedFiles.Contains(Path.GetFileName(stale)))
+                File.Delete(stale);
+        }
+
+        if (selected.Count == 0) return new AboutTopicWriteResult(Array.Empty<AboutTopicInfo>());
+
+        var written = new List<AboutTopicInfo>();
+        foreach (var topic in selected.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+        {
+            var candidate = selected[topic];
+            var outPath = Path.Combine(fullCulturePath, SanitizeFileName(candidate.TopicName) + ".help.txt");
+            File.WriteAllText(outPath, candidate.HelpText, Utf8NoBom);
+            written.Add(new AboutTopicInfo(candidate.TopicName, outPath, candidate.ShortDescription));
+        }
+
         return new AboutTopicWriteResult(written.ToArray());
     }
 
@@ -125,6 +138,51 @@ internal sealed class AboutTopicWriter
         foreach (var f in SafeEnum("about_*.txt")) yield return f;
         foreach (var f in SafeEnum("about_*.md")) yield return f;
         foreach (var f in SafeEnum("about_*.markdown")) yield return f;
+    }
+
+    private static Dictionary<string, AboutTopicCandidate> SelectAboutTopics(IEnumerable<string> aboutFiles)
+    {
+        var selected = new Dictionary<string, AboutTopicCandidate>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in aboutFiles)
+        {
+            AboutTopicMarkdownResult converted;
+            try { converted = ConvertSourceFile(file); }
+            catch { continue; }
+            if (string.IsNullOrWhiteSpace(converted.TopicName))
+                continue;
+            if (string.IsNullOrWhiteSpace(converted.Markdown) || string.IsNullOrWhiteSpace(converted.HelpText))
+                continue;
+
+            var topic = converted.TopicName.Trim();
+            var candidate = new AboutTopicCandidate(
+                topic,
+                converted.Markdown,
+                converted.HelpText,
+                converted.ShortDescription,
+                file,
+                GetSourcePriority(file));
+
+            if (!selected.TryGetValue(topic, out var existing))
+            {
+                selected[topic] = candidate;
+                continue;
+            }
+
+            if (candidate.SourcePriority > existing.SourcePriority)
+            {
+                selected[topic] = candidate;
+                continue;
+            }
+
+            if (candidate.SourcePriority < existing.SourcePriority)
+                continue;
+
+            if (string.Compare(candidate.SourcePath, existing.SourcePath, StringComparison.OrdinalIgnoreCase) < 0)
+                selected[topic] = candidate;
+        }
+
+        return selected;
     }
 
     private static void WriteIndexFile(string aboutOutDir, IReadOnlyCollection<AboutTopicInfo> topics)
@@ -186,20 +244,34 @@ internal sealed class AboutTopicWriter
         if (path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) return 100;
         return 0;
     }
+
+    private static bool IsUnderDirectory(string path, string directory)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(directory))
+            return false;
+
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullDirectory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return fullPath.StartsWith(fullDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               fullPath.StartsWith(fullDirectory + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(fullPath, fullDirectory, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 internal sealed class AboutTopicCandidate
 {
     public string TopicName { get; }
     public string Markdown { get; }
+    public string HelpText { get; }
     public string? ShortDescription { get; }
     public string SourcePath { get; }
     public int SourcePriority { get; }
 
-    public AboutTopicCandidate(string topicName, string markdown, string? shortDescription, string sourcePath, int sourcePriority)
+    public AboutTopicCandidate(string topicName, string markdown, string helpText, string? shortDescription, string sourcePath, int sourcePriority)
     {
         TopicName = topicName ?? string.Empty;
         Markdown = markdown ?? string.Empty;
+        HelpText = helpText ?? string.Empty;
         ShortDescription = shortDescription;
         SourcePath = sourcePath ?? string.Empty;
         SourcePriority = sourcePriority;
@@ -275,7 +347,8 @@ internal static class AboutTopicMarkdown
             }
         }
 
-        return new AboutTopicMarkdownResult(topic, sb.ToString(), shortDesc);
+        var helpText = string.Join(Environment.NewLine, SplitLines(content)).TrimEnd() + Environment.NewLine;
+        return new AboutTopicMarkdownResult(topic, sb.ToString(), helpText, shortDesc);
     }
 
     public static AboutTopicMarkdownResult ConvertMarkdown(string fileStem, string content)
@@ -283,7 +356,7 @@ internal static class AboutTopicMarkdown
         var topic = NormalizeTopicFromStem(fileStem);
         var markdown = (content ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n").Trim('\n');
         if (string.IsNullOrWhiteSpace(markdown))
-            return new AboutTopicMarkdownResult(topic, string.Empty, null);
+            return new AboutTopicMarkdownResult(topic, string.Empty, string.Empty, null);
 
         var lines = markdown.Split('\n');
         var shortDescription = lines
@@ -298,7 +371,72 @@ internal static class AboutTopicMarkdown
             markdown = sb.ToString().TrimEnd('\r', '\n');
         }
 
-        return new AboutTopicMarkdownResult(topic, markdown.Replace("\n", Environment.NewLine), shortDescription);
+        var helpText = ConvertMarkdownToHelpText(topic, markdown);
+        return new AboutTopicMarkdownResult(topic, markdown.Replace("\n", Environment.NewLine), helpText, shortDescription);
+    }
+
+    private static string ConvertMarkdownToHelpText(string topic, string markdown)
+    {
+        var lines = SplitLines(RemoveYamlFrontMatter(markdown));
+        var output = new List<string>();
+        var wroteTopic = false;
+
+        foreach (var raw in lines)
+        {
+            var line = raw ?? string.Empty;
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal))
+                continue;
+
+            if (trimmed.StartsWith("#", StringComparison.Ordinal))
+            {
+                var heading = trimmed.TrimStart('#').Trim();
+                if (string.IsNullOrWhiteSpace(heading))
+                    continue;
+
+                if (!wroteTopic)
+                {
+                    output.Add("TOPIC");
+                    output.Add(heading);
+                    output.Add(string.Empty);
+                    wroteTopic = true;
+                }
+                else
+                {
+                    output.Add(heading.ToUpperInvariant());
+                }
+
+                continue;
+            }
+
+            output.Add(line);
+        }
+
+        if (!wroteTopic)
+        {
+            output.Insert(0, string.Empty);
+            output.Insert(0, topic);
+            output.Insert(0, "TOPIC");
+        }
+
+        while (output.Count > 0 && string.IsNullOrWhiteSpace(output[output.Count - 1]))
+            output.RemoveAt(output.Count - 1);
+
+        return string.Join(Environment.NewLine, output) + Environment.NewLine;
+    }
+
+    private static string RemoveYamlFrontMatter(string markdown)
+    {
+        var normalized = (markdown ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n");
+        if (!normalized.StartsWith("---\n", StringComparison.Ordinal))
+            return normalized;
+
+        var end = normalized.IndexOf("\n---", 4, StringComparison.Ordinal);
+        if (end < 0)
+            return normalized;
+
+        var contentStart = normalized.IndexOf('\n', end + 1);
+        return contentStart < 0 ? string.Empty : normalized.Substring(contentStart + 1);
     }
 
     private static string? ExtractTopicName(List<AboutSection> sections)
@@ -420,12 +558,14 @@ internal sealed class AboutTopicMarkdownResult
 {
     public string TopicName { get; }
     public string Markdown { get; }
+    public string HelpText { get; }
     public string? ShortDescription { get; }
 
-    public AboutTopicMarkdownResult(string topicName, string markdown, string? shortDescription)
+    public AboutTopicMarkdownResult(string topicName, string markdown, string helpText, string? shortDescription)
     {
         TopicName = topicName ?? string.Empty;
         Markdown = markdown ?? string.Empty;
+        HelpText = helpText ?? string.Empty;
         ShortDescription = shortDescription;
     }
 }

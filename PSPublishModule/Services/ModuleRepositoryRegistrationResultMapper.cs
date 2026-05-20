@@ -46,7 +46,12 @@ internal static class ModuleRepositoryRegistrationResultMapper
             AccessProbePerformed = result.AccessProbePerformed,
             AccessProbeSucceeded = result.AccessProbeSucceeded,
             AccessProbeTool = result.AccessProbeTool,
-            AccessProbeMessage = result.AccessProbeMessage
+            AccessProbeMessage = result.AccessProbeMessage,
+            CredentialProviderSessionPrimeAttempted = result.CredentialProviderSessionPrimeAttempted,
+            CredentialProviderSessionPrimeSucceeded = result.CredentialProviderSessionPrimeSucceeded,
+            CredentialProviderSessionPrimeSkipped = result.CredentialProviderSessionPrimeSkipped,
+            CredentialProviderSessionPrimePath = result.CredentialProviderSessionPrimePath,
+            CredentialProviderSessionPrimeMessage = result.CredentialProviderSessionPrimeMessage
         };
     }
 }

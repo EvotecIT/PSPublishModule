@@ -1,0 +1,267 @@
+TOPIC
+    about_PrivateGalleries
+
+SHORT DESCRIPTION
+    Explains the enterprise private gallery profile flow for Azure Artifacts and PSPublishModule.
+
+LONG DESCRIPTION
+    PSPublishModule supports an Entra-first private gallery workflow for Azure Artifacts feeds.
+    The intended enterprise flow is:
+
+        1. Save or import non-secret feed settings in a local PSPublishModule profile.
+        2. Let Microsoft.PowerShell.PSResourceGet and the Azure Artifacts Credential Provider own Entra ID, MFA,
+           device login, and token/session caching.
+        3. Use Initialize-ModuleRepository as the one-command workstation onboarding entry point.
+        4. Use the saved profile for install, update, and publish configuration commands.
+
+    Profiles are created with Initialize-ModuleRepository or Set-ModuleRepositoryProfile. A profile stores feed
+    identity and local behavior:
+
+        - Azure DevOps organization
+        - optional Azure DevOps project
+        - Azure Artifacts feed
+        - local repository name
+        - preferred repository tool
+        - bootstrap mode
+        - repository trust and priority settings
+
+    Profiles intentionally do not store PATs, passwords, or Entra tokens. The default Azure Artifacts profile uses:
+
+        Tool           = PSResourceGet
+        BootstrapMode  = ExistingSession
+        Authentication = AzureArtifactsCredentialProvider
+
+    When PSResourceGet registration supports it, PSPublishModule configures Azure Artifacts repositories with
+    CredentialProvider = AzArtifacts. Older PSResourceGet versions fall back to their built-in Azure Artifacts URL
+    detection.
+    Install-prerequisite flows honor the selected bootstrap mode. For the default ExistingSession profile, they
+    upgrade PSResourceGet to the ExistingSession-capable line before installing or refreshing the Azure Artifacts
+    Credential Provider.
+
+    PROFILE STORAGE
+
+    Profile data is stored under the current user's local application data folder:
+
+        %LOCALAPPDATA%\PowerForge\PrivateGalleries\profiles.json
+
+    Machine-wide profile data is stored under the machine common application data folder:
+
+        %ProgramData%\PowerForge\PrivateGalleries\profiles.json
+
+    Commands that consume a profile read user profiles first and then machine-wide profiles. This lets desktop
+    support register feed metadata once for all users without sharing credentials. Each user still authenticates as
+    themselves through the Azure Artifacts Credential Provider and Entra/MFA.
+
+    Set POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH when tests, managed desktop rollout tooling, or ephemeral build
+    agents need to redirect user profile storage. Set POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH to redirect
+    the machine-wide profile store for tests or managed deployment tooling.
+
+    ENTERPRISE ROLLOUT CHECKLIST
+
+    For a managed workstation estate, keep PSPublishModule as the wrapper and leave identity/session ownership with
+    Microsoft tooling:
+
+        1. Publish PSPublishModule through the approved bootstrap channel users already trust.
+        2. Grant Azure DevOps feed access through Entra ID groups. Do not create PATs by default.
+        3. Use Initialize-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet at the version
+           required by the selected bootstrap mode and install the Azure Artifacts Credential Provider on Windows
+           workstations. Pre-install the credential provider on non-Windows systems with Microsoft's installer.
+        4. Create the feed profile once with Set-ModuleRepositoryProfile. Use -Scope Machine from an elevated/admin
+           deployment when the same non-secret feed definition should be visible to all users on the workstation.
+        5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and ask users or
+           desktop support to run Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite
+           -InstallPrerequisites once. This imports or refreshes the profile, registers the repository, probes
+           access, and, when the first ExistingSession probe cannot use a cached token, invokes the Azure Artifacts
+           Credential Provider interactively so the user can complete Entra/MFA and cache a session token.
+        6. If the profile is already deployed into the profile store, use
+           Initialize-ModuleRepository -ProfileName <name> -InstallPrerequisites instead. Add -SkipConnect when you
+           only want profile/readiness output without repository registration or probing.
+        7. Keep Set-ModuleRepositoryProfile, Test-ModuleRepositoryProfile, and Connect-ModuleRepository available as
+           the advanced/manual flow for admins, diagnostics, and constrained rollouts.
+        8. Standardize user commands around Install-PrivateModule -ProfileName <name> and
+           Update-PrivateModule -ProfileName <name>. These commands refresh repository registration and perform the
+           same access probe/session-prime step before install/update, so an expired Azure Artifacts Credential
+           Provider session can be renewed from the normal day-to-day command in an interactive shell.
+        9. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
+           Publish-NugetPackage -ProfileName <name> -InstallPrerequisites so publishing and consuming resolve the
+           same feed and can bootstrap the same Azure Artifacts credential-provider path.
+        10. Run the opt-in live Pester flow against a real feed/module before announcing the feed as production-ready.
+
+    RECOMMENDED WORKSTATION FLOW
+
+    Create and connect a profile directly:
+
+        Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+
+    Import a managed profile file and connect the workstation:
+
+        Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
+
+    Use Test-ModuleRepositoryProfile and Connect-ModuleRepository directly when separate readiness and
+    connection/probe steps are desired. The readiness object includes RecommendedOnboardingCommand for the managed
+    one-command path and RecommendedConnectCommand for the lower-level connection step.
+
+    Install or update modules:
+
+        Install-PrivateModule -ProfileName Company -Name ModuleA, ModuleB -InstallPrerequisites
+        Update-PrivateModule -ProfileName Company -Name ModuleA, ModuleB
+
+    Use the same profile in publish configuration:
+
+        New-ConfigurationPublish -ProfileName Company -Enabled
+
+    Direct NuGet package pushes can also resolve the feed from the profile:
+
+        Publish-NugetPackage -Path .\artifacts -ProfileName Company -InstallPrerequisites -SkipDuplicate
+
+    MANAGED PROFILE DEPLOYMENT
+
+    Profile files are configuration, not credentials. An administrator can create the profile once, export it, and
+    deploy the JSON file with Intune, GPO, configuration management, or a bootstrap script:
+
+        Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
+
+    For a machine-wide profile installed once by desktop support or software distribution, import or create it with
+    -Scope Machine:
+
+        Import-ModuleRepositoryProfile -Path .\Company.profile.json -Scope Machine -Overwrite
+        Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules -Scope Machine
+
+    After that, any user on the workstation can run Install-PrivateModule -ProfileName Company -Name ModuleA.
+    PSPublishModule reads the shared profile, but Azure Artifacts authentication remains per-user. If that user has
+    no cached session yet, or the session expired, the normal install/update access probe can invoke the Azure
+    Artifacts Credential Provider so the user signs in with their own Entra ID/MFA.
+
+    For a deployable one-folder workstation package, use:
+
+        New-ModuleRepositoryBootstrap -ProfileName Company -OutputDirectory .\CompanyGalleryBootstrap -InstallModule ModuleA, ModuleB -Force
+
+    The generated package contains profiles.json and Initialize-PrivateGallery.ps1. The script imports PSPublishModule
+    when needed, imports the bundled profile, installs missing private-gallery prerequisites unless
+    -SkipInstallPrerequisites is used, connects with Initialize-ModuleRepository, and can install approved modules
+    through Install-PrivateModule -ProfileName <name>. The package remains non-secret: it contains feed identity and
+    bootstrap commands only, not PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session caches.
+
+    On the target workstation, import or refresh the profile and connect in one step:
+
+        Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
+
+    The imported profile still does not contain PATs, passwords, or tokens. If the user has not signed in before,
+    Initialize-ModuleRepository and Connect-ModuleRepository can prime the Azure Artifacts Credential Provider
+    session for the feed URI. PSResourceGet calls the provider non-interactively after that, so the explicit priming
+    step is what gives managed workstation onboarding a real Entra/MFA prompt/cache path.
+
+    Install-PrivateModule -ProfileName <name> and Update-PrivateModule -ProfileName <name> also perform this access
+    probe/session-prime step before installing or updating modules. If the cached session expired after onboarding,
+    or a different user receives the same non-secret profile, the first normal install/update command can invoke the
+    Azure Artifacts Credential Provider again and then continue once Entra/MFA succeeds.
+
+    PRODUCTION READINESS EVIDENCE
+
+    Before calling a feed ready for users, prove:
+
+        - Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 succeeds against the real feed/module
+          and writes a non-secret evidence JSON file with -EvidenceFile. The evidence should include bootstrap package
+          generation, non-secret package contents, bootstrap script execution, the access probe,
+          credential-free publish configuration, install/update, and optional package-push checks.
+          Missing or incomplete required evidence details make the helper fail so the JSON cannot look successful
+          while omitting the proof operators need. For package-push proof, use -GenerateDisposablePackage or pass
+          a prebuilt disposable package with -PublishPackagePath.
+        - The manual GitHub Actions workflow named Private Gallery Live Validation succeeds on a runner that owns
+          the enterprise Azure Artifacts credential-provider policy. Prefer runnerLabels = ["self-hosted","windows"]
+          or another approved self-hosted runner because hosted runners usually cannot prove cached Entra-backed
+          feed access. For managed repository defaults, define GitHub variables once and leave matching manual
+          inputs blank during dispatch:
+              PSPUBLISHMODULE_AZDO_ORGANIZATION
+              PSPUBLISHMODULE_AZDO_PROJECT
+              PSPUBLISHMODULE_AZDO_FEED
+              PSPUBLISHMODULE_AZDO_MODULE_NAME
+              PSPUBLISHMODULE_AZDO_PROFILE_NAME
+              PSPUBLISHMODULE_AZDO_RUNNER_LABELS
+              PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_NAME
+              PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_VERSION
+          Workflow inputs override variables when both are provided. For unattended validation, configure the Azure
+          Artifacts Credential Provider with
+          ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS for access-token based automation or
+          ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS for managed identity/service-principal based automation. Do
+          not put those secrets in PSPublishModule profiles. The included workflows pass through these GitHub
+          secrets when present:
+              PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS -> ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS
+              PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS -> ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS
+              PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS -> VSS_NUGET_EXTERNAL_FEED_ENDPOINTS
+          The evidence JSON and step summary report only whether each unattended credential-provider endpoint
+          variable was configured, never the secret value. The workflow writes a non-secret run summary and uploads
+          the XML/evidence JSON artifacts for release records.
+        - Before dispatching a live run, check the repository configuration without printing any secret values:
+              .\Module\Tests\Test-PrivateGalleryGitHubLiveValidationConfiguration.ps1 `
+                  -Repository EvotecIT/PSPublishModule `
+                  -RequireUnattendedCredentialProviderSecret `
+                  -Markdown
+          Use -NoFail for a report-only inventory. Without -NoFail, the helper fails when required variables are
+          missing or, when -RequireUnattendedCredentialProviderSecret is used, when none of the supported Azure
+          Artifacts Credential Provider secret names is present. The Markdown output includes suggested gh variable
+          set, gh secret set, and gh workflow run command shapes with placeholders so operators can move from inventory
+          to a live run without putting secret material in profiles, logs, or docs.
+        - Before the new standalone workflow exists on the default branch, dispatch the existing Test & Build Module
+          workflow against the feature branch with privateGalleryLiveValidation = true. That gated job uses the same
+          helper, summary, and artifact path and does not run during normal push or pull request builds.
+        - Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite -InstallPrerequisites
+          succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True. If no cached token
+          existed before the first probe, Connection.CredentialProviderSessionPrimeAttempted shows whether
+          PSPublishModule invoked the provider to prime the Entra-backed session before retrying.
+        - Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit
+          credential parameters.
+        - Update-PrivateModule -ProfileName <name> -Name <known module> succeeds for an installed private module.
+        - New-ConfigurationPublish -ProfileName <name> -Enabled produces an Azure Artifacts v3 URI and no stored
+          credential.
+        - Publish-NugetPackage -ProfileName <name> succeeds for a disposable package when package-push validation
+          is intentionally enabled with -GenerateDisposablePackage or -PublishPackagePath.
+
+    PAT FALLBACK
+
+    PAT/basic credential parameters remain available for legacy or constrained environments, but they are not the
+    preferred enterprise path. Prefer the Azure Artifacts Credential Provider whenever Azure DevOps Services and
+    workstation policy allow it.
+
+    OTHER PRIVATE FEEDS
+
+    The profile model is provider-shaped, but the only managed provider implemented today is Azure Artifacts.
+    JFrog and generic NuGet v3 feeds should be added as explicit providers/adapters with their own credential
+    policy instead of overloading Azure Artifacts behavior.
+
+EXAMPLES
+    PS> Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+
+    Saves an Entra-first Azure Artifacts profile named Company, installs missing prerequisites if needed, registers
+    the repository, and validates authenticated feed access.
+
+    PS> Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
+
+    Imports or refreshes a managed profile file, then registers and probes the repository.
+
+    PS> Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+
+    Runs the lower-level connection/probe step for an already saved profile.
+
+    PS> Test-ModuleRepositoryProfile -ProfileName Company
+
+    Checks saved profile and local prerequisite readiness without changing repository registrations.
+
+    PS> Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
+
+    Exports the non-secret Company profile for managed rollout.
+
+    PS> Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
+
+    Imports or refreshes managed profile settings on a workstation without connecting.
+
+    PS> Install-PrivateModule -ProfileName Company -Name ModuleA -InstallPrerequisites
+
+    Installs ModuleA from the saved private gallery profile.
+
+    PS> Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
+
+    Pushes local NuGet packages to the saved Azure Artifacts feed using credential-provider authentication.
+
+NOTES
+    This file is source content for generated module documentation.

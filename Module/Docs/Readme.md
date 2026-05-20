@@ -22,11 +22,17 @@ Exports a code-signing certificate to DER format for NuGet.org registration.
 ### [Export-ConfigurationProject](Export-ConfigurationProject.md)
 Exports a PowerShell-authored project release object to JSON.
 
+### [Export-ModuleRepositoryProfile](Export-ModuleRepositoryProfile.md)
+Exports saved private module repository profiles to a non-secret JSON file.
+
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
 
 ### [Get-ModuleInformation](Get-ModuleInformation.md)
 Gets module manifest information from a project directory.
+
+### [Get-ModuleRepositoryProfile](Get-ModuleRepositoryProfile.md)
+Gets saved private module repository profiles.
 
 ### [Get-ModuleTestFailures](Get-ModuleTestFailures.md)
 Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.
@@ -45,6 +51,12 @@ Retrieves project version information from .csproj, .psd1, and build scripts.
 
 ### [Import-ConfigurationProject](Import-ConfigurationProject.md)
 Imports a PowerShell-authored project release object from JSON.
+
+### [Import-ModuleRepositoryProfile](Import-ModuleRepositoryProfile.md)
+Imports private module repository profiles from a non-secret JSON file.
+
+### [Initialize-ModuleRepository](Initialize-ModuleRepository.md)
+Performs one-command enterprise onboarding for a private module repository profile.
 
 ### [Install-PrivateModule](Install-PrivateModule.md)
 Installs one or more modules from a private repository, optionally bootstrapping Azure Artifacts registration first.
@@ -211,6 +223,9 @@ Scaffolds a starter powerforge.dotnetpublish.json configuration file.
 ### [New-ModuleAboutTopic](New-ModuleAboutTopic.md)
 Creates an about_*.help.txt template source file for module documentation.
 
+### [New-ModuleRepositoryBootstrap](New-ModuleRepositoryBootstrap.md)
+Creates a managed workstation bootstrap package for private module repository onboarding.
+
 ### [New-PowerForgeReleaseConfig](New-PowerForgeReleaseConfig.md)
 Scaffolds a starter unified release.json configuration file.
 
@@ -232,17 +247,26 @@ Registers an Azure Artifacts feed as a private PowerShell module repository for 
 ### [Remove-Comments](Remove-Comments.md)
 Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.
 
+### [Remove-ModuleRepositoryProfile](Remove-ModuleRepositoryProfile.md)
+Removes a saved private module repository profile.
+
 ### [Remove-ProjectFiles](Remove-ProjectFiles.md)
 Removes specific files and folders from a project directory with safety features.
 
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
 Creates a new release for the given GitHub repository and optionally uploads assets.
 
+### [Set-ModuleRepositoryProfile](Set-ModuleRepositoryProfile.md)
+Creates or updates a saved private module repository profile.
+
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
 Updates version numbers across multiple project files.
 
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
+
+### [Test-ModuleRepositoryProfile](Test-ModuleRepositoryProfile.md)
+Tests saved private module repository profiles and local authentication prerequisites.
 
 ### [Update-ModuleRepository](Update-ModuleRepository.md)
 Refreshes or repairs an Azure Artifacts private PowerShell module repository registration.
@@ -254,3 +278,4 @@ Updates one or more modules from a private repository, optionally refreshing Azu
 
 ### [about_ModuleDependencies](About/about_ModuleDependencies.md)
 
+### [about_PrivateGalleries](About/about_PrivateGalleries.md)

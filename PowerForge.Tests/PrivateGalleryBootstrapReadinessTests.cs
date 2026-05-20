@@ -46,6 +46,32 @@ public sealed class PrivateGalleryBootstrapReadinessTests
     }
 
     [Fact]
+    public void PSResourceGetClient_EnsureRepositoryRegistered_ConfiguresAzureArtifactsCredentialProvider()
+    {
+        string? scriptText = null;
+        var client = new PSResourceGetClient(
+            new StubPowerShellRunner(request =>
+            {
+                scriptText = File.ReadAllText(request.ScriptPath!);
+                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::1", string.Empty, "pwsh.exe");
+            }),
+            new NullLogger());
+
+        var created = client.EnsureRepositoryRegistered(
+            "Company",
+            "https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json",
+            trusted: true,
+            priority: null,
+            apiVersion: RepositoryApiVersion.V3);
+
+        Assert.True(created);
+        Assert.NotNull(scriptText);
+        Assert.Contains("CredentialProvider", scriptText, StringComparison.Ordinal);
+        Assert.Contains("AzArtifacts", scriptText, StringComparison.Ordinal);
+        Assert.Contains("pkgs\\.dev\\.azure\\.com", scriptText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PowerShellGetClient_IsAvailable_ReturnsFalse_WhenToolIsMissing()
     {
         var error = Convert.ToBase64String(Encoding.UTF8.GetBytes("PowerShellGet not available."));
@@ -97,16 +123,21 @@ public sealed class PrivateGalleryBootstrapReadinessTests
 
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
-        private readonly PowerShellRunResult _result;
+        private readonly Func<PowerShellRunRequest, PowerShellRunResult> _run;
 
         public StubPowerShellRunner(PowerShellRunResult result)
         {
-            _result = result;
+            _run = _ => result;
+        }
+
+        public StubPowerShellRunner(Func<PowerShellRunRequest, PowerShellRunResult> run)
+        {
+            _run = run;
         }
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
-            return _result;
+            return _run(request);
         }
     }
 }

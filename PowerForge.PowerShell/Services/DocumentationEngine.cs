@@ -220,6 +220,8 @@ public sealed class DocumentationEngine
                 try
                 {
                     externalHelpFile = mamlWriter.WriteExternalHelpFile(extracted, moduleName, externalHelpDir, fileName);
+                    if (buildDocumentation.IncludeAboutTopics)
+                        new AboutTopicWriter().WriteExternalHelpFiles(stagingPath, externalHelpDir, buildDocumentation.AboutTopicsSourcePath);
                     SafeDone(externalHelpStep);
                 }
                 catch (Exception ex)

@@ -19,8 +19,8 @@ namespace PSPublishModule;
 /// <code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'</code>
 /// </example>
 /// <example>
-/// <summary>Register an Azure Artifacts repository and install modules in one command</summary>
-/// <code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential</code>
+/// <summary>Install modules from a saved Azure Artifacts profile</summary>
+/// <code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -ProfileName 'Company' -InstallPrerequisites</code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Install, "PrivateModule", DefaultParameterSetName = ParameterSetRepository, SupportsShouldProcess = true)]
 [OutputType(typeof(ModuleDependencyInstallResult))]
@@ -28,6 +28,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
 {
     private const string ParameterSetRepository = "Repository";
     private const string ParameterSetAzureArtifacts = "AzureArtifacts";
+    private const string ParameterSetProfile = "Profile";
 
     /// <summary>Module names to install.</summary>
     [Parameter(Mandatory = true, Position = 0)]
@@ -39,6 +40,12 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetRepository)]
     [ValidateNotNullOrEmpty]
     public string Repository { get; set; } = string.Empty;
+
+    /// <summary>Saved repository profile name.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetProfile)]
+    [Alias("Profile")]
+    [ValidateNotNullOrEmpty]
+    public string ProfileName { get; set; } = string.Empty;
 
     /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
@@ -102,8 +109,9 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     [Alias("Interactive")]
     public SwitchParameter PromptForCredential { get; set; }
 
-    /// <summary>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration.</summary>
+    /// <summary>Installs missing private-gallery prerequisites before automatic registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetProfile)]
     public SwitchParameter InstallPrerequisites { get; set; }
 
     /// <summary>Includes prerelease versions when supported by the selected installer.</summary>
@@ -117,6 +125,31 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     /// <summary>Executes the install workflow.</summary>
     protected override void ProcessRecord()
     {
+        var useAzureArtifacts = ParameterSetName == ParameterSetAzureArtifacts || ParameterSetName == ParameterSetProfile;
+        var provider = Provider;
+        var organization = AzureDevOpsOrganization;
+        var project = AzureDevOpsProject;
+        var feed = AzureArtifactsFeed;
+        var repositoryName = ParameterSetName == ParameterSetAzureArtifacts ? (RepositoryName ?? string.Empty) : Repository;
+        var tool = Tool;
+        var bootstrapMode = BootstrapMode;
+        var trusted = Trusted;
+        var priority = Priority;
+
+        if (ParameterSetName == ParameterSetProfile)
+        {
+            var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+            provider = profile.Provider;
+            organization = profile.AzureDevOpsOrganization;
+            project = profile.AzureDevOpsProject;
+            feed = profile.AzureArtifactsFeed;
+            repositoryName = profile.RepositoryName;
+            tool = profile.Tool;
+            bootstrapMode = profile.BootstrapMode;
+            trusted = profile.Trusted;
+            priority = profile.Priority;
+        }
+
         var host = new CmdletPrivateGalleryHost(this);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var result = new PrivateModuleWorkflowService(host, new PrivateGalleryService(host), logger).Execute(
@@ -124,16 +157,17 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
             {
                 Operation = PrivateModuleWorkflowOperation.Install,
                 ModuleNames = Name,
-                UseAzureArtifacts = ParameterSetName == ParameterSetAzureArtifacts,
-                RepositoryName = ParameterSetName == ParameterSetAzureArtifacts ? (RepositoryName ?? string.Empty) : Repository,
-                Provider = Provider,
-                AzureDevOpsOrganization = AzureDevOpsOrganization,
-                AzureDevOpsProject = AzureDevOpsProject,
-                AzureArtifactsFeed = AzureArtifactsFeed,
-                Tool = Tool,
-                BootstrapMode = BootstrapMode,
-                Trusted = Trusted,
-                Priority = Priority,
+                UseAzureArtifacts = useAzureArtifacts,
+                ProfileName = ParameterSetName == ParameterSetProfile ? ProfileName : null,
+                RepositoryName = repositoryName,
+                Provider = provider,
+                AzureDevOpsOrganization = organization,
+                AzureDevOpsProject = project,
+                AzureArtifactsFeed = feed,
+                Tool = tool,
+                BootstrapMode = bootstrapMode,
+                Trusted = trusted,
+                Priority = priority,
                 CredentialUserName = CredentialUserName,
                 CredentialSecret = CredentialSecret,
                 CredentialSecretFilePath = CredentialSecretFilePath,

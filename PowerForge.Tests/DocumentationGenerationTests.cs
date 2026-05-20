@@ -302,6 +302,85 @@ SHORT DESCRIPTION
     }
 
     [Fact]
+    public void AboutTopicWriter_CopiesAboutTopicsToExternalHelpCultureFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-about-external-help-" + Guid.NewGuid().ToString("N"));
+        var staging = Path.Combine(root, "staging");
+        var extra = Path.Combine(root, "Help", "About");
+        var culture = Path.Combine(staging, "en-US");
+        Directory.CreateDirectory(staging);
+        Directory.CreateDirectory(extra);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(extra, "about_PrivateGalleries.help.txt"), """
+TOPIC
+    about_PrivateGalleries
+
+SHORT DESCRIPTION
+    Private gallery flow.
+""");
+
+            var result = new AboutTopicWriter().WriteExternalHelpFiles(staging, culture, new[] { Path.Combine("..", "Help", "About") });
+
+            Assert.Single(result.Topics);
+            var helpPath = Path.Combine(culture, "about_PrivateGalleries.help.txt");
+            Assert.True(File.Exists(helpPath));
+            Assert.Contains("Private gallery flow.", File.ReadAllText(helpPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void AboutTopicWriter_ExternalHelpConvertsMarkdownAndRemovesStaleFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-about-external-markdown-" + Guid.NewGuid().ToString("N"));
+        var staging = Path.Combine(root, "staging");
+        var culture = Path.Combine(staging, "en-US");
+        Directory.CreateDirectory(staging);
+        Directory.CreateDirectory(culture);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(staging, "about_MarkdownOnly.md"), """
+---
+topic: about_MarkdownOnly
+---
+# about_MarkdownOnly
+
+Markdown body.
+""");
+            File.WriteAllText(Path.Combine(culture, "about_Stale.help.txt"), "stale");
+
+            var result = new AboutTopicWriter().WriteExternalHelpFiles(staging, culture);
+
+            Assert.Single(result.Topics);
+            var helpPath = Path.Combine(culture, "about_MarkdownOnly.help.txt");
+            var helpText = File.ReadAllText(helpPath);
+            Assert.Contains("TOPIC", helpText);
+            Assert.Contains("about_MarkdownOnly", helpText);
+            Assert.Contains("Markdown body.", helpText);
+            Assert.DoesNotContain("---", helpText);
+            Assert.False(File.Exists(Path.Combine(culture, "about_Stale.help.txt")));
+
+            File.Delete(Path.Combine(staging, "about_MarkdownOnly.md"));
+            result = new AboutTopicWriter().WriteExternalHelpFiles(staging, culture);
+
+            Assert.Empty(result.Topics);
+            Assert.False(File.Exists(helpPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void AboutTopicWriter_SupportsMarkdownSources_AndPriorityRules()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-about-markdown-" + Guid.NewGuid().ToString("N"));

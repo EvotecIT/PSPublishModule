@@ -47,10 +47,38 @@ internal sealed class ModuleRepositoryRegistrationResult
     public bool AccessProbeSucceeded { get; set; }
     public string? AccessProbeTool { get; set; }
     public string? AccessProbeMessage { get; set; }
+    public bool CredentialProviderSessionPrimeAttempted { get; set; }
+    public bool CredentialProviderSessionPrimeSucceeded { get; set; }
+    public bool CredentialProviderSessionPrimeSkipped { get; set; }
+    public string? CredentialProviderSessionPrimePath { get; set; }
+    public string? CredentialProviderSessionPrimeMessage { get; set; }
 
     public bool ExistingSessionBootstrapReady => PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
     public bool CredentialPromptBootstrapReady => (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion) || PowerShellGetAvailable;
-    public bool InstallPrerequisitesRecommended => !PSResourceGetAvailable || !PSResourceGetMeetsMinimumVersion || !AzureArtifactsCredentialProviderDetected;
+    public bool InstallPrerequisitesRecommended
+    {
+        get
+        {
+            var status = new BootstrapPrerequisiteStatus(
+                PSResourceGetAvailable,
+                PSResourceGetVersion,
+                PSResourceGetMeetsMinimumVersion,
+                PSResourceGetSupportsExistingSessionBootstrap,
+                null,
+                PowerShellGetAvailable,
+                PowerShellGetVersion,
+                null,
+                new AzureArtifactsCredentialProviderDetectionResult
+                {
+                    IsDetected = AzureArtifactsCredentialProviderDetected,
+                    Paths = AzureArtifactsCredentialProviderPaths,
+                    Version = AzureArtifactsCredentialProviderVersion
+                },
+                ReadinessMessages);
+
+            return PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, BootstrapModeRequested, ToolRequested);
+        }
+    }
     public PrivateGalleryBootstrapMode RecommendedBootstrapMode
         => ExistingSessionBootstrapReady ? PrivateGalleryBootstrapMode.ExistingSession
             : CredentialPromptBootstrapReady ? PrivateGalleryBootstrapMode.CredentialPrompt

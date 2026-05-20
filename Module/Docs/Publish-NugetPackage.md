@@ -9,9 +9,14 @@ schema: 2.0.0
 Pushes NuGet packages to a feed using dotnet nuget push.
 
 ## SYNTAX
-### __AllParameterSets
+### Source (Default)
 ```powershell
 Publish-NugetPackage -Path <string[]> -ApiKey <string> [-Source <string>] [-SkipDuplicate] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### Profile
+```powershell
+Publish-NugetPackage -Path <string[]> -ProfileName <string> [-ApiKey <string>] [-InstallPrerequisites] [-SkipDuplicate] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -35,18 +40,41 @@ PS> Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https:/
 
 Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).
 
+### EXAMPLE 3
+```powershell
+PS> Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -InstallPrerequisites -SkipDuplicate
+```
+
+Resolves the Azure Artifacts NuGet v3 source from the saved profile, installs missing credential-provider prerequisites when requested, and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.
+
 ## PARAMETERS
 
 ### -ApiKey
-API key used to authenticate against the NuGet feed.
+API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Source, Profile
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InstallPrerequisites
+Installs missing private-gallery prerequisites before profile-backed Azure Artifacts package publishing.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Profile
+Aliases: None
+Possible values:
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -58,9 +86,25 @@ Directory to search for NuGet packages.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Source, Profile
 Aliases: None
-Possible values: 
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProfileName
+Saved private gallery profile name for Azure Artifacts package publishing.
+
+```yaml
+Type: String
+Parameter Sets: Profile
+Aliases: Profile
+Possible values:
 
 Required: True
 Position: named
@@ -75,9 +119,9 @@ This makes repeated publishing runs idempotent when the package already exists.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Source, Profile
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -91,9 +135,9 @@ NuGet feed URL.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Source
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -116,4 +160,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-
