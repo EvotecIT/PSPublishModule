@@ -164,7 +164,7 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
                 Messages = BuildProfileMessages(state, readiness).ToArray()
             };
 
-            if (SkipConnect.IsPresent)
+            if (SkipConnect.IsPresent || !state.ShouldConnect)
             {
                 result.ConnectSkipped = true;
                 result.Succeeded = readiness.ProfileFound;
@@ -175,6 +175,13 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             result.ConnectAttempted = true;
             var connection = ConnectProfile(service, host, state.Profile);
             result.Connection = ModuleRepositoryRegistrationResultMapper.ToCmdletResult(connection);
+            var refreshedStatus = service.GetBootstrapPrerequisiteStatus();
+            var refreshedReadiness = ModuleRepositoryProfileReadinessMapper.ToCmdletResult(
+                state.Profile,
+                state.Store.Path,
+                refreshedStatus,
+                state.Store.Scope);
+            result.Readiness = refreshedReadiness;
             result.ConnectSkipped = !connection.RegistrationPerformed;
             result.Succeeded = connection.RegistrationPerformed
                 ? connection.AccessProbeSucceeded
@@ -182,6 +189,7 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             result.Messages = result.Messages
                 .Concat(connection.Messages)
                 .Concat(connection.PrerequisiteInstallMessages)
+                .Concat(refreshedReadiness.ReadinessMessages)
                 .Where(static message => !string.IsNullOrWhiteSpace(message))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
@@ -199,7 +207,7 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
         {
             var resolvedScope = scopeWasBound ? Scope : ModuleRepositoryProfileScope.All;
             var resolved = ModuleRepositoryProfileCommandSupport.ResolveRequiredWithStore(ProfileName!, resolvedScope);
-            return new[] { new ProfileWriteState(resolved.Profile, resolved.Store, written: false) };
+            return new[] { new ProfileWriteState(resolved.Profile, resolved.Store, written: false, shouldConnect: true) };
         }
 
         if (Scope == ModuleRepositoryProfileScope.All)
@@ -225,10 +233,10 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             });
 
             if (!ShouldProcess(profile.Name, "Save and initialize module repository profile"))
-                return new[] { new ProfileWriteState(profile, store, written: false) };
+                return new[] { new ProfileWriteState(profile, store, written: false, shouldConnect: false) };
 
             var saved = store.SaveProfile(profile);
-            return new[] { new ProfileWriteState(saved, store, written: true) };
+            return new[] { new ProfileWriteState(saved, store, written: true, shouldConnect: true) };
         }
 
         var resolvedPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path!);
@@ -249,10 +257,10 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             return Array.Empty<ProfileWriteState>();
 
         if (!ShouldProcess(store.Path, $"Import and initialize {profiles.Length} module repository profile(s) from '{resolvedPath}'"))
-            return profiles.Select(profile => new ProfileWriteState(profile, store, written: false)).ToArray();
+            return profiles.Select(profile => new ProfileWriteState(profile, store, written: false, shouldConnect: false)).ToArray();
 
         var imported = store.ImportProfiles(profiles, Overwrite);
-        return imported.Select(profile => new ProfileWriteState(profile, store, written: true)).ToArray();
+        return imported.Select(profile => new ProfileWriteState(profile, store, written: true, shouldConnect: true)).ToArray();
     }
 
     private PowerForge.ModuleRepositoryRegistrationResult ConnectProfile(
@@ -339,15 +347,17 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
 
     private readonly struct ProfileWriteState
     {
-        internal ProfileWriteState(ModuleRepositoryProfile profile, ModuleRepositoryProfileStore store, bool written)
+        internal ProfileWriteState(ModuleRepositoryProfile profile, ModuleRepositoryProfileStore store, bool written, bool shouldConnect)
         {
             Profile = profile;
             Store = store;
             Written = written;
+            ShouldConnect = shouldConnect;
         }
 
         internal ModuleRepositoryProfile Profile { get; }
         internal ModuleRepositoryProfileStore Store { get; }
         internal bool Written { get; }
+        internal bool ShouldConnect { get; }
     }
 }

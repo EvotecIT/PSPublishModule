@@ -1,28 +1,74 @@
+function script:Get-PrivateGalleryTestBinaryModulePath {
+    $releaseRoot = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'PSPublishModule\bin\Release'
+    if (-not (Test-Path -LiteralPath $releaseRoot -PathType Container)) {
+        return $null
+    }
+
+    $candidateFrameworks = Get-ChildItem -LiteralPath $releaseRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object {
+            if ($PSVersionTable.PSEdition -eq 'Desktop') {
+                $_.Name -eq 'net472'
+            } else {
+                $_.Name -match '^net\d'
+            }
+        } |
+        Sort-Object -Property Name -Descending
+
+    foreach ($framework in $candidateFrameworks) {
+        $path = Join-Path -Path $framework.FullName -ChildPath 'PSPublishModule.dll'
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            return $path
+        }
+    }
+
+    return $null
+}
+
+function script:Import-PrivateGalleryTestModule {
+    param(
+        [Parameter(Mandatory)]
+        [string] $ModuleManifest
+    )
+
+    if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH -and (Test-Path -LiteralPath $ModuleManifest -PathType Leaf)) {
+        return Import-Module $ModuleManifest -Force -PassThru -ErrorAction Stop
+    }
+
+    $loadedModule = Get-Module PSPublishModule -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($loadedModule) {
+        return $loadedModule
+    }
+
+    $manifestBinary = Join-Path -Path (Join-Path -Path (Split-Path -Path $ModuleManifest -Parent) -ChildPath 'Lib') -ChildPath 'PSPublishModule.dll'
+    if ((Test-Path -LiteralPath $ModuleManifest -PathType Leaf) -and
+        (Test-Path -LiteralPath $manifestBinary -PathType Leaf)) {
+        try {
+            return Import-Module $ModuleManifest -Force -PassThru -ErrorAction Stop
+        } catch {
+            $script:PrivateGalleryManifestImportError = $_
+        }
+    }
+
+    $binaryModule = Get-PrivateGalleryTestBinaryModulePath
+    if ($binaryModule) {
+        try {
+            return Import-Module $binaryModule -Force -PassThru -ErrorAction Stop
+        } catch {
+            if ($script:PrivateGalleryManifestImportError) {
+                throw $script:PrivateGalleryManifestImportError
+            }
+
+            return Import-Module $ModuleManifest -Force -PassThru -ErrorAction Stop
+        }
+    }
+
+    return Import-Module $ModuleManifest -Force -PassThru -ErrorAction Stop
+}
+
 Describe 'Private gallery command metadata' {
     BeforeAll {
         $moduleManifest = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
-        $tfm = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'net472' } else { 'net8.0' }
-        $binaryModule = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "../../PSPublishModule/bin/Release/$tfm") -ChildPath 'PSPublishModule.dll'
-
-        if (Test-Path -LiteralPath $binaryModule) {
-            try {
-                $script:PrivateGalleryTestModule = Import-Module $binaryModule -Force -PassThru -ErrorAction Stop
-            } catch {
-                $script:PrivateGalleryTestModule = Import-Module $moduleManifest -Force -PassThru -ErrorAction Stop
-            }
-        } else {
-            $loadedModule = Get-Module PSPublishModule -ErrorAction SilentlyContinue
-            if ($loadedModule) {
-                $script:PrivateGalleryTestModule = $loadedModule
-            } else {
-                $existingCommand = Get-Command Connect-ModuleRepository -ErrorAction SilentlyContinue
-                if ($existingCommand -and $existingCommand.Module) {
-                    $script:PrivateGalleryTestModule = $existingCommand.Module
-                } else {
-                    $script:PrivateGalleryTestModule = Import-Module $moduleManifest -Force -PassThru -ErrorAction Stop
-                }
-            }
-        }
+        $script:PrivateGalleryTestModule = Import-PrivateGalleryTestModule -ModuleManifest $moduleManifest
 
         $command = Get-Command Connect-ModuleRepository -ErrorAction Stop
         $script:PrivateGalleryTestAssembly = if ($script:PrivateGalleryTestModule.ImplementingAssembly) {
@@ -813,12 +859,10 @@ Describe 'Private gallery command metadata' {
         $result | Should -Not -BeNullOrEmpty
         $result.ProfileName | Should -Be 'CompanyWhatIf'
         $result.ProfileWritten | Should -BeFalse
-        $result.ConnectAttempted | Should -BeTrue
+        $result.ConnectAttempted | Should -BeFalse
         $result.ConnectSkipped | Should -BeTrue
         $result.Succeeded | Should -BeTrue
-        $result.Connection | Should -Not -BeNullOrEmpty
-        $result.Connection.RegistrationPerformed | Should -BeFalse
-        $result.Connection.AccessProbePerformed | Should -BeFalse
+        $result.Connection | Should -BeNullOrEmpty
         Get-ModuleRepositoryProfile -Name 'CompanyWhatIf' -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
     }
 
@@ -993,6 +1037,7 @@ Describe 'Private gallery command metadata' {
         $type.GetProperty('PSResourceGetSupportsExistingSessionBootstrap').SetValue($result, $false)
         $result.PowerShellGetAvailable = $true
         $result.AzureArtifactsCredentialProviderDetected = $false
+        $result.ToolRequested = [PowerForge.RepositoryRegistrationTool]::PSResourceGet
         $installPrerequisitesRecommended = $type.GetProperty('InstallPrerequisitesRecommended').GetValue($result)
 
         $installPrerequisitesRecommended | Should -BeTrue

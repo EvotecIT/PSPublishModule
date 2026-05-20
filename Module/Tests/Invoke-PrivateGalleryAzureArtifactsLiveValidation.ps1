@@ -388,7 +388,10 @@ try {
                     if (-not (Test-ValidationItemSucceeded -Item $publishEvidence -PropertyName 'AccessProbeSucceeded')) {
                         $evidenceValidationErrors += "Validation item 'PublishPackage' did not prove AccessProbeSucceeded = true."
                     }
-                    if ([int] (Get-ValidationItemValue -Item $publishEvidence -PropertyName 'FailedCount') -ne 0) {
+                    $publishFailedCount = Get-ValidationItemValue -Item $publishEvidence -PropertyName 'FailedCount'
+                    if ($null -eq $publishFailedCount) {
+                        $evidenceValidationErrors += "Validation item 'PublishPackage' did not record FailedCount."
+                    } elseif ([int] $publishFailedCount -ne 0) {
                         $evidenceValidationErrors += "Validation item 'PublishPackage' did not prove FailedCount = 0."
                     }
 

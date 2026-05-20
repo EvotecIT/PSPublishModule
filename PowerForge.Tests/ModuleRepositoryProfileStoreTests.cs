@@ -120,6 +120,43 @@ public sealed class ModuleRepositoryProfileStoreTests
     }
 
     [Fact]
+    public void GetProfiles_RecoversFromMalformedStoreJson()
+    {
+        var path = CreateTempFilePath();
+        try
+        {
+            File.WriteAllText(path, "{ malformed");
+            var store = new ModuleRepositoryProfileStore(path);
+
+            var profiles = store.GetProfiles();
+
+            Assert.Empty(profiles);
+        }
+        finally
+        {
+            TryDelete(Path.GetDirectoryName(path));
+        }
+    }
+
+    [Fact]
+    public void ReadProfilesFile_HandlesNullProfilesArray()
+    {
+        var path = CreateTempFilePath();
+        try
+        {
+            File.WriteAllText(path, """{"version":1,"profiles":null}""");
+
+            var profiles = ModuleRepositoryProfileStore.ReadProfilesFile(path);
+
+            Assert.Empty(profiles);
+        }
+        finally
+        {
+            TryDelete(Path.GetDirectoryName(path));
+        }
+    }
+
+    [Fact]
     public void ImportProfiles_RejectsExistingProfileWithoutOverwrite()
     {
         var path = CreateTempFilePath();
@@ -184,6 +221,42 @@ public sealed class ModuleRepositoryProfileStoreTests
             Assert.NotNull(profile);
             Assert.Equal("Modules2", profile!.AzureArtifactsFeed);
             Assert.Equal("Modules2", profile.RepositoryName);
+        }
+        finally
+        {
+            TryDelete(Path.GetDirectoryName(path));
+        }
+    }
+
+    [Fact]
+    public void ImportProfiles_ReturnsUniqueProfilesWhenOverwriteInputContainsDuplicates()
+    {
+        var path = CreateTempFilePath();
+        try
+        {
+            var store = new ModuleRepositoryProfileStore(path);
+
+            var imported = store.ImportProfiles(
+                new[]
+                {
+                    new ModuleRepositoryProfile
+                    {
+                        Name = "Company",
+                        AzureDevOpsOrganization = "contoso",
+                        AzureArtifactsFeed = "Modules"
+                    },
+                    new ModuleRepositoryProfile
+                    {
+                        Name = "company",
+                        AzureDevOpsOrganization = "contoso",
+                        AzureArtifactsFeed = "Modules2"
+                    }
+                },
+                overwrite: true);
+
+            Assert.Single(imported);
+            Assert.Single(store.GetProfiles());
+            Assert.Equal("Modules2", store.GetProfile("Company")!.AzureArtifactsFeed);
         }
         finally
         {

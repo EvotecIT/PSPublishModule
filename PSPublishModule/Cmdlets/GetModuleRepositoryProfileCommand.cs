@@ -41,17 +41,19 @@ public sealed class GetModuleRepositoryProfileCommand : PSCmdlet
     /// <summary>Gets saved profiles.</summary>
     protected override void ProcessRecord()
     {
-        var stores = ModuleRepositoryProfileStore.GetStores(Scope);
         if (string.IsNullOrWhiteSpace(Name))
         {
-            var profiles = stores
-                .SelectMany(store => store.GetProfiles()
-                    .Select(profile => ModuleRepositoryProfileResultMapper.ToCmdletResult(profile, store.Path, store.Scope)))
+            var profiles = ModuleRepositoryProfileCommandSupport.GetUniqueProfilesWithStores(Scope)
+                .Select(resolved => ModuleRepositoryProfileResultMapper.ToCmdletResult(
+                    resolved.Profile,
+                    resolved.Store.Path,
+                    resolved.Store.Scope))
                 .ToArray();
             WriteObject(profiles, enumerateCollection: true);
             return;
         }
 
+        var stores = ModuleRepositoryProfileStore.GetStores(Scope);
         foreach (var store in stores)
         {
             var profile = store.GetProfile(Name!);

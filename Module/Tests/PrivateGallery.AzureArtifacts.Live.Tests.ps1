@@ -26,6 +26,81 @@ function Add-AzureArtifactsLiveEvidenceItem {
     $items | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $path -Encoding UTF8
 }
 
+function script:Get-AzureArtifactsLiveTestBinaryModulePath {
+    $releaseRoot = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'PSPublishModule\bin\Release'
+    if (-not (Test-Path -LiteralPath $releaseRoot -PathType Container)) {
+        return $null
+    }
+
+    $candidateFrameworks = Get-ChildItem -LiteralPath $releaseRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object {
+            if ($PSVersionTable.PSEdition -eq 'Desktop') {
+                $_.Name -eq 'net472'
+            } else {
+                $_.Name -match '^net\d'
+            }
+        } |
+        Sort-Object -Property Name -Descending
+
+    foreach ($framework in $candidateFrameworks) {
+        $path = Join-Path -Path $framework.FullName -ChildPath 'PSPublishModule.dll'
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            return $path
+        }
+    }
+
+    return $null
+}
+
+function script:Import-AzureArtifactsLiveTestModule {
+    param(
+        [Parameter(Mandatory)]
+        [string] $ModuleManifest
+    )
+
+    if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH -and (Test-Path -LiteralPath $ModuleManifest -PathType Leaf)) {
+        Import-Module $ModuleManifest -Force -ErrorAction Stop
+        return
+    }
+
+    $loadedModule = Get-Module PSPublishModule -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($loadedModule) {
+        return
+    }
+
+    $manifestBinary = Join-Path -Path (Join-Path -Path (Split-Path -Path $ModuleManifest -Parent) -ChildPath 'Lib') -ChildPath 'PSPublishModule.dll'
+    if ((Test-Path -LiteralPath $ModuleManifest -PathType Leaf) -and
+        (Test-Path -LiteralPath $manifestBinary -PathType Leaf)) {
+        try {
+            Import-Module $ModuleManifest -Force -ErrorAction Stop
+            return
+        } catch {
+            $script:AzureArtifactsLiveManifestImportError = $_
+        }
+    }
+
+    $binaryModule = Get-AzureArtifactsLiveTestBinaryModulePath
+    if ($binaryModule) {
+        try {
+            Import-Module $binaryModule -Force -ErrorAction Stop
+            return
+        } catch {
+            if ($script:AzureArtifactsLiveManifestImportError) {
+                throw $script:AzureArtifactsLiveManifestImportError
+            }
+
+            Import-Module $ModuleManifest -Force -ErrorAction Stop
+            return
+        }
+    }
+
+    if ($script:AzureArtifactsLiveManifestImportError) {
+        throw $script:AzureArtifactsLiveManifestImportError
+    }
+
+    Import-Module $ModuleManifest -Force -ErrorAction Stop
+}
+
 Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifacts' {
     BeforeAll {
         if ([Environment]::GetEnvironmentVariable('PSPUBLISHMODULE_AZDO_LIVE') -ne '1') {
@@ -33,14 +108,7 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         }
 
         $moduleManifest = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
-        $tfm = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'net472' } else { 'net8.0' }
-        $binaryModule = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "../../PSPublishModule/bin/Release/$tfm") -ChildPath 'PSPublishModule.dll'
-
-        if (Test-Path -LiteralPath $binaryModule) {
-            Import-Module $binaryModule -Force -ErrorAction Stop
-        } else {
-            Import-Module $moduleManifest -Force -ErrorAction Stop
-        }
+        Import-AzureArtifactsLiveTestModule -ModuleManifest $moduleManifest
 
         $script:LiveProfileRoot = Join-Path ([IO.Path]::GetTempPath()) ("PSPublishModule.PrivateGallery.Live." + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:LiveProfileRoot -Force | Out-Null

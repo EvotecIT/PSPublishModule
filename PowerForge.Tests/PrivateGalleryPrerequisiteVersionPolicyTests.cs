@@ -33,8 +33,11 @@ public sealed class PrivateGalleryPrerequisiteVersionPolicyTests
             credentialProviderDetected: true);
 
         Assert.True(PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, PrivateGalleryBootstrapMode.ExistingSession));
-        Assert.True(PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, PrivateGalleryBootstrapMode.Auto));
+        Assert.False(PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, PrivateGalleryBootstrapMode.Auto));
         Assert.False(PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, PrivateGalleryBootstrapMode.CredentialPrompt));
+        Assert.True(PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, PrivateGalleryBootstrapMode.ExistingSession, RepositoryRegistrationTool.PSResourceGet));
+        Assert.False(PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, PrivateGalleryBootstrapMode.Auto, RepositoryRegistrationTool.PSResourceGet));
+        Assert.False(PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, PrivateGalleryBootstrapMode.Auto, RepositoryRegistrationTool.PowerShellGet));
     }
 
     [Fact]

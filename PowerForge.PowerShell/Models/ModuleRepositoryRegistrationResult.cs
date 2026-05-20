@@ -76,7 +76,7 @@ internal sealed class ModuleRepositoryRegistrationResult
                 },
                 ReadinessMessages);
 
-            return PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, BootstrapModeRequested);
+            return PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, BootstrapModeRequested, ToolRequested);
         }
     }
     public PrivateGalleryBootstrapMode RecommendedBootstrapMode

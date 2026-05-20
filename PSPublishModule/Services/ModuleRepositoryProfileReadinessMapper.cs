@@ -25,7 +25,8 @@ internal static class ModuleRepositoryProfileReadinessMapper
         var credentialPromptReady = PrivateGalleryVersionPolicy.IsCredentialPromptBootstrapReady(status);
         var installPrerequisitesRecommended = PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(
             status,
-            profile.BootstrapMode);
+            profile.BootstrapMode,
+            profile.Tool);
 
         return new ModuleRepositoryProfileReadinessResult
         {

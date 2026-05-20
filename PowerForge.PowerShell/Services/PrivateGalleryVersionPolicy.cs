@@ -43,21 +43,46 @@ internal static class PrivateGalleryVersionPolicy
     }
 
     internal static bool ShouldInstallPrerequisitesForBootstrap(BootstrapPrerequisiteStatus status, PrivateGalleryBootstrapMode bootstrapMode)
-    {
-        if (!status.PSResourceGetAvailable ||
-            !status.PSResourceGetMeetsMinimumVersion ||
-            !status.CredentialProviderDetection.IsDetected)
-        {
-            return true;
-        }
+        => ShouldInstallPrerequisitesForBootstrap(status, bootstrapMode, RepositoryRegistrationTool.Auto);
 
-        return RequiresExistingSessionBootstrap(bootstrapMode) &&
-               !status.PSResourceGetSupportsExistingSessionBootstrap;
+    internal static bool ShouldInstallPrerequisitesForBootstrap(
+        BootstrapPrerequisiteStatus status,
+        PrivateGalleryBootstrapMode bootstrapMode,
+        RepositoryRegistrationTool tool)
+    {
+        var psResourceGetReady = IsPSResourceGetBootstrapReady(status, bootstrapMode);
+        var powerShellGetReady = IsPowerShellGetBootstrapReady(status, bootstrapMode);
+
+        return tool switch
+        {
+            RepositoryRegistrationTool.PSResourceGet => !psResourceGetReady,
+            RepositoryRegistrationTool.PowerShellGet => !powerShellGetReady,
+            RepositoryRegistrationTool.Both => !psResourceGetReady || !powerShellGetReady,
+            _ => !psResourceGetReady && !powerShellGetReady
+        };
     }
 
     internal static bool RequiresExistingSessionBootstrap(PrivateGalleryBootstrapMode bootstrapMode)
-        => bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession ||
-           bootstrapMode == PrivateGalleryBootstrapMode.Auto;
+        => bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession;
+
+    internal static bool IsPSResourceGetBootstrapReady(BootstrapPrerequisiteStatus status, PrivateGalleryBootstrapMode bootstrapMode)
+    {
+        if (bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession)
+            return IsExistingSessionBootstrapReady(status);
+        if (bootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
+            return status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion;
+
+        return IsExistingSessionBootstrapReady(status) ||
+               (status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion);
+    }
+
+    internal static bool IsPowerShellGetBootstrapReady(BootstrapPrerequisiteStatus status, PrivateGalleryBootstrapMode bootstrapMode)
+    {
+        if (bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession)
+            return false;
+
+        return status.PowerShellGetAvailable;
+    }
 
     internal static string SelectAccessProbeTool(ModuleRepositoryRegistrationResult registration, RepositoryCredential? credential)
     {

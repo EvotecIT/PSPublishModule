@@ -149,12 +149,28 @@ public sealed class ModuleRepositoryRegistrationResult
 
     /// <summary>Whether the repository bootstrap recommendation should include prerequisite installation.</summary>
     public bool InstallPrerequisitesRecommended
-        => !PSResourceGetAvailable ||
-           !PSResourceGetMeetsMinimumVersion ||
-           !AzureArtifactsCredentialProviderDetected ||
-           ((BootstrapModeRequested == PrivateGalleryBootstrapMode.ExistingSession ||
-             BootstrapModeRequested == PrivateGalleryBootstrapMode.Auto) &&
-            !PSResourceGetSupportsExistingSessionBootstrap);
+    {
+        get
+        {
+            var psResourceGetReady = BootstrapModeRequested switch
+            {
+                PrivateGalleryBootstrapMode.ExistingSession => ExistingSessionBootstrapReady,
+                PrivateGalleryBootstrapMode.CredentialPrompt => PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion,
+                _ => ExistingSessionBootstrapReady || (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion)
+            };
+            var powerShellGetReady = BootstrapModeRequested == PrivateGalleryBootstrapMode.ExistingSession
+                ? false
+                : PowerShellGetAvailable;
+
+            return ToolRequested switch
+            {
+                RepositoryRegistrationTool.PSResourceGet => !psResourceGetReady,
+                RepositoryRegistrationTool.PowerShellGet => !powerShellGetReady,
+                RepositoryRegistrationTool.Both => !psResourceGetReady || !powerShellGetReady,
+                _ => !psResourceGetReady && !powerShellGetReady
+            };
+        }
+    }
 
     /// <summary>Suggested bootstrap mode based on detected prerequisites.</summary>
     public PrivateGalleryBootstrapMode RecommendedBootstrapMode

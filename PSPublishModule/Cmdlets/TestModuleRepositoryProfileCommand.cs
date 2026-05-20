@@ -42,21 +42,24 @@ public sealed class TestModuleRepositoryProfileCommand : PSCmdlet
     /// <summary>Runs the readiness test.</summary>
     protected override void ProcessRecord()
     {
-        var stores = ModuleRepositoryProfileStore.GetStores(Scope);
         var host = new CmdletPrivateGalleryHost(this);
         var service = new PrivateGalleryService(host);
         var status = service.GetBootstrapPrerequisiteStatus();
 
         if (string.IsNullOrWhiteSpace(ProfileName))
         {
-            var results = stores
-                .SelectMany(store => store.GetProfiles()
-                    .Select(profile => ModuleRepositoryProfileReadinessMapper.ToCmdletResult(profile, store.Path, status, store.Scope)))
+            var results = ModuleRepositoryProfileCommandSupport.GetUniqueProfilesWithStores(Scope)
+                .Select(resolved => ModuleRepositoryProfileReadinessMapper.ToCmdletResult(
+                    resolved.Profile,
+                    resolved.Store.Path,
+                    status,
+                    resolved.Store.Scope))
                 .ToArray();
             WriteObject(results, enumerateCollection: true);
             return;
         }
 
+        var stores = ModuleRepositoryProfileStore.GetStores(Scope);
         foreach (var store in stores)
         {
             var profile = store.GetProfile(ProfileName!);

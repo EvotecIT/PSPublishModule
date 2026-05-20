@@ -21,12 +21,24 @@ public sealed class ModuleRepositoryProfileReadinessResult
         {
             if (!ProfileFound)
                 return false;
-            if (BootstrapMode == PrivateGalleryBootstrapMode.ExistingSession)
-                return ExistingSessionBootstrapReady;
-            if (BootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
-                return CredentialPromptBootstrapReady;
 
-            return ExistingSessionBootstrapReady || CredentialPromptBootstrapReady;
+            var psResourceGetReady = BootstrapMode switch
+            {
+                PrivateGalleryBootstrapMode.ExistingSession => ExistingSessionBootstrapReady,
+                PrivateGalleryBootstrapMode.CredentialPrompt => PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion,
+                _ => ExistingSessionBootstrapReady || (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion)
+            };
+            var powerShellGetReady = BootstrapMode == PrivateGalleryBootstrapMode.ExistingSession
+                ? false
+                : PowerShellGetAvailable;
+
+            return Tool switch
+            {
+                RepositoryRegistrationTool.PSResourceGet => psResourceGetReady,
+                RepositoryRegistrationTool.PowerShellGet => powerShellGetReady,
+                RepositoryRegistrationTool.Both => psResourceGetReady && powerShellGetReady,
+                _ => psResourceGetReady || powerShellGetReady
+            };
         }
     }
 

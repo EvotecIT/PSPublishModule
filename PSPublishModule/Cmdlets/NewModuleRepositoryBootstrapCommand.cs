@@ -62,12 +62,10 @@ public sealed class NewModuleRepositoryBootstrapCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var profiles = ProfileName is null || ProfileName.Length == 0
-            ? ModuleRepositoryProfileStore.GetStores(Scope)
-                .SelectMany(store => store.GetProfiles())
+            ? ModuleRepositoryProfileCommandSupport.GetUniqueProfilesWithStores(Scope)
+                .Select(resolved => resolved.Profile)
                 .ToArray()
-            : ProfileName
-                .Select(name => ModuleRepositoryProfileCommandSupport.ResolveRequired(name, Scope))
-                .ToArray();
+            : ModuleRepositoryProfileCommandSupport.ResolveUniqueProfiles(ProfileName, Scope);
         var resolvedOutputDirectory = SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
         if (!ShouldProcess(resolvedOutputDirectory, $"Create private gallery bootstrap package for {profiles.Length} profile(s)"))
             return;

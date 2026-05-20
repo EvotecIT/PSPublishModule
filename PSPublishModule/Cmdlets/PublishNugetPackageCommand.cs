@@ -52,6 +52,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     /// <summary>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetSource)]
     [Parameter(ParameterSetName = ParameterSetProfile)]
+    [ValidateNotNullOrEmpty]
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>NuGet feed URL.</summary>

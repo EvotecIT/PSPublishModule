@@ -92,7 +92,9 @@ internal sealed class ModuleRepositoryProfileStore
             .Where(existing => !string.Equals(existing.Name, normalized.Name, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        var existing = document.Profiles.FirstOrDefault(existing => string.Equals(existing.Name, normalized.Name, StringComparison.OrdinalIgnoreCase));
+        var existing = document.Profiles
+            .Where(static existing => existing is not null && !string.IsNullOrWhiteSpace(existing.Name))
+            .FirstOrDefault(existing => string.Equals(existing.Name, normalized.Name, StringComparison.OrdinalIgnoreCase));
         var now = DateTimeOffset.UtcNow;
         normalized.CreatedAtUtc = existing?.CreatedAtUtc == default ? now : existing?.CreatedAtUtc ?? now;
         normalized.UpdatedAtUtc = now;
@@ -110,11 +112,14 @@ internal sealed class ModuleRepositoryProfileStore
     {
         var normalizedName = NormalizeName(name);
         var document = ReadDocument();
-        var kept = document.Profiles
+        var existing = document.Profiles
+            .Where(static profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Name))
+            .ToArray();
+        var kept = existing
             .Where(profile => !string.Equals(profile.Name, normalizedName, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-        if (kept.Length == document.Profiles.Length)
+        if (kept.Length == existing.Length)
             return false;
 
         document.Profiles = kept;
@@ -140,7 +145,7 @@ internal sealed class ModuleRepositoryProfileStore
             .Select(Normalize)
             .ToList();
 
-        var imported = new List<ModuleRepositoryProfile>(normalizedProfiles.Length);
+        var imported = new Dictionary<string, ModuleRepositoryProfile>(StringComparer.OrdinalIgnoreCase);
         var now = DateTimeOffset.UtcNow;
         foreach (var profile in normalizedProfiles)
         {
@@ -156,7 +161,7 @@ internal sealed class ModuleRepositoryProfileStore
                 : profile.CreatedAtUtc;
             profile.UpdatedAtUtc = now;
             existingProfiles.Add(profile);
-            imported.Add(profile);
+            imported[profile.Name] = profile;
         }
 
         document.Profiles = existingProfiles
@@ -164,7 +169,7 @@ internal sealed class ModuleRepositoryProfileStore
             .ToArray();
 
         WriteDocument(document);
-        return imported
+        return imported.Values
             .OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -199,7 +204,7 @@ internal sealed class ModuleRepositoryProfileStore
         if (string.IsNullOrWhiteSpace(json))
             return Array.Empty<ModuleRepositoryProfile>();
 
-        var document = JsonSerializer.Deserialize<ModuleRepositoryProfileDocument>(json, JsonOptions) ?? new ModuleRepositoryProfileDocument();
+        var document = NormalizeDocument(JsonSerializer.Deserialize<ModuleRepositoryProfileDocument>(json, JsonOptions));
         return document.Profiles
             .Where(static profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Name))
             .Select(Normalize)
@@ -256,7 +261,21 @@ internal sealed class ModuleRepositoryProfileStore
         if (string.IsNullOrWhiteSpace(json))
             return new ModuleRepositoryProfileDocument();
 
-        return JsonSerializer.Deserialize<ModuleRepositoryProfileDocument>(json, JsonOptions) ?? new ModuleRepositoryProfileDocument();
+        try
+        {
+            return NormalizeDocument(JsonSerializer.Deserialize<ModuleRepositoryProfileDocument>(json, JsonOptions));
+        }
+        catch (JsonException)
+        {
+            return new ModuleRepositoryProfileDocument();
+        }
+    }
+
+    private static ModuleRepositoryProfileDocument NormalizeDocument(ModuleRepositoryProfileDocument? document)
+    {
+        document ??= new ModuleRepositoryProfileDocument();
+        document.Profiles ??= Array.Empty<ModuleRepositoryProfile>();
+        return document;
     }
 
     private void WriteDocument(ModuleRepositoryProfileDocument document)
