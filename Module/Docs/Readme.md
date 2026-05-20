@@ -223,6 +223,9 @@ Scaffolds a starter powerforge.dotnetpublish.json configuration file.
 ### [New-ModuleAboutTopic](New-ModuleAboutTopic.md)
 Creates an about_*.help.txt template source file for module documentation.
 
+### [New-ModuleRepositoryBootstrap](New-ModuleRepositoryBootstrap.md)
+Creates a managed workstation bootstrap package for private module repository onboarding.
+
 ### [New-PowerForgeReleaseConfig](New-PowerForgeReleaseConfig.md)
 Scaffolds a starter unified release.json configuration file.
 

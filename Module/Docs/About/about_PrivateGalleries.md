@@ -114,6 +114,16 @@ deploy the JSON file with Intune, GPO, configuration management, or a bootstrap 
 
 Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
 
+For a deployable one-folder workstation package, use:
+
+New-ModuleRepositoryBootstrap -ProfileName Company -OutputDirectory .\CompanyGalleryBootstrap -InstallModule ModuleA, ModuleB -Force
+
+The generated package contains profiles.json and Initialize-PrivateGallery.ps1. The script imports PSPublishModule
+when needed, imports the bundled profile, installs missing private-gallery prerequisites unless
+-SkipInstallPrerequisites is used, connects with Initialize-ModuleRepository, and can install approved modules
+through Install-PrivateModule -ProfileName <name>. The package remains non-secret: it contains feed identity and
+bootstrap commands only, not PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session caches.
+
 On the target workstation, import or refresh the profile and connect in one step:
 
 Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites

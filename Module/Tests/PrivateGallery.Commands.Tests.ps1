@@ -38,6 +38,7 @@ Describe 'Private gallery command metadata' {
         $script:PrivateGalleryLiveEvidenceSummaryPath = Join-Path $PSScriptRoot 'Convert-PrivateGalleryLiveEvidenceToMarkdown.ps1'
         $script:PrivateGalleryGitHubConfigurationPath = Join-Path $PSScriptRoot 'Test-PrivateGalleryGitHubLiveValidationConfiguration.ps1'
         $script:PrivateGalleryRepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+        $script:PrivateGalleryManifestPath = Join-Path (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path 'PSPublishModule.psd1'
         $script:PrivateGalleryLiveValidationWorkflowPath = Join-Path $script:PrivateGalleryRepositoryRoot '.github\workflows\private-gallery-live-validation.yml'
         $script:PrivateGalleryBuildWorkflowPath = Join-Path $script:PrivateGalleryRepositoryRoot '.github\workflows\BuildModule.yml'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
@@ -459,12 +460,21 @@ Describe 'Private gallery command metadata' {
         $module.ExportedCmdlets.Keys | Should -Contain 'Get-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Import-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Initialize-ModuleRepository'
+        $module.ExportedCmdlets.Keys | Should -Contain 'New-ModuleRepositoryBootstrap'
         $module.ExportedCmdlets.Keys | Should -Contain 'Set-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Remove-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Test-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Update-PrivateModule'
         $module.ExportedCmdlets.Keys | Should -Contain 'Update-ModuleRepository'
         $module.ExportedCmdlets.Keys | Should -Contain 'Publish-NugetPackage'
+
+        $manifest = Get-Content -LiteralPath $script:PrivateGalleryManifestPath -Raw
+        $manifest | Should -Match "'New-ModuleRepositoryBootstrap'"
+        $manifest | Should -Match "'New-GalleryBootstrap'"
+        $manifest | Should -Match "'Initialize-Gallery'"
+        $manifest | Should -Match "'Export-GalleryProfile'"
+        $manifest | Should -Match "'Import-GalleryProfile'"
+        $manifest | Should -Match "'Test-GalleryProfile'"
     }
 
     It 'keeps install/update wrapper parameter sets intact' {
@@ -541,6 +551,10 @@ Describe 'Private gallery command metadata' {
         $initialize.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $initialize.Parameters.Keys | Should -Contain 'SkipConnect'
 
+        $bootstrap = $module.ExportedCmdlets['New-ModuleRepositoryBootstrap']
+        $bootstrap.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
+        $bootstrap.Parameters['InstallModule'].Aliases | Should -Contain 'ModuleName'
+
         $testProfile = $module.ExportedCmdlets['Test-ModuleRepositoryProfile']
         $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
         $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
@@ -586,6 +600,75 @@ Describe 'Private gallery command metadata' {
         $profile.AzureDevOpsProject | Should -Be 'Platform'
         $profile.AzureArtifactsFeed | Should -Be 'Modules'
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
+    }
+
+    It 'creates non-secret managed workstation bootstrap packages' {
+        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        $outputDirectory = Join-Path $script:PrivateGalleryProfileRoot 'bootstrap'
+
+        $package = New-ModuleRepositoryBootstrap -ProfileName 'Company' -OutputDirectory $outputDirectory -InstallModule 'ModuleA' -Force
+
+        $package | Should -Not -BeNullOrEmpty
+        $package.ProfileNames | Should -Contain 'Company'
+        $package.InstallModules | Should -Contain 'ModuleA'
+        $package.ContainsSecrets | Should -BeFalse
+        $package.RecommendedCommand | Should -Be ".\Initialize-PrivateGallery.ps1 -ProfileName 'Company'"
+        Test-Path -LiteralPath $package.ProfilePath -PathType Leaf | Should -BeTrue
+        Test-Path -LiteralPath $package.ScriptPath -PathType Leaf | Should -BeTrue
+
+        $profileJson = Get-Content -LiteralPath $package.ProfilePath -Raw
+        $profileJson | Should -Match '"Name": "Company"'
+        $profileJson | Should -Not -Match '"Secret"'
+        $profileJson | Should -Not -Match '"Password"'
+        $profileJson | Should -Not -Match '"Token"'
+
+        $tokens = $null
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile($package.ScriptPath, [ref] $tokens, [ref] $errors) | Out-Null
+        $errors | Should -BeNullOrEmpty
+
+        $global:BootstrapInitializeArguments = $null
+        $global:BootstrapInstallArguments = $null
+        function global:Initialize-ModuleRepository {
+            param(
+                [string] $Path,
+                [string] $ProfileName,
+                [switch] $Overwrite,
+                [switch] $InstallPrerequisites,
+                [switch] $SkipConnect
+            )
+
+            $global:BootstrapInitializeArguments = $PSBoundParameters
+            [pscustomobject]@{ ProfileName = $ProfileName }
+        }
+
+        function global:Install-PrivateModule {
+            param(
+                [string] $ProfileName,
+                [string[]] $Name,
+                [switch] $InstallPrerequisites
+            )
+
+            $global:BootstrapInstallArguments = $PSBoundParameters
+            [pscustomobject]@{ ProfileName = $ProfileName; Name = $Name }
+        }
+
+        try {
+            & $package.ScriptPath -SkipInstallPrerequisites | Out-Null
+
+            $global:BootstrapInitializeArguments.Path | Should -Be $package.ProfilePath
+            $global:BootstrapInitializeArguments.ProfileName | Should -Be 'Company'
+            $global:BootstrapInitializeArguments.Overwrite.IsPresent | Should -BeTrue
+            $global:BootstrapInitializeArguments.ContainsKey('InstallPrerequisites') | Should -BeFalse
+            $global:BootstrapInstallArguments.ProfileName | Should -Be 'Company'
+            $global:BootstrapInstallArguments.Name | Should -Contain 'ModuleA'
+            $global:BootstrapInstallArguments.InstallPrerequisites.IsPresent | Should -BeFalse
+        } finally {
+            Remove-Item Function:\Initialize-ModuleRepository -ErrorAction SilentlyContinue
+            Remove-Item Function:\Install-PrivateModule -ErrorAction SilentlyContinue
+            Remove-Variable -Name BootstrapInitializeArguments -Scope Global -ErrorAction SilentlyContinue
+            Remove-Variable -Name BootstrapInstallArguments -Scope Global -ErrorAction SilentlyContinue
+        }
     }
 
     It 'requires overwrite when importing an existing managed profile' {
