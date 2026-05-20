@@ -122,8 +122,8 @@ PRODUCTION READINESS EVIDENCE
 
 Before calling a feed ready for users, prove:
 
-- Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites succeeds and reports
-AccessProbeSucceeded = True.
+- Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite -InstallPrerequisites
+succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True.
 - Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit
 credential parameters.
 - Update-PrivateModule -ProfileName <name> -Name <known module> succeeds for an installed private module.

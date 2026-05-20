@@ -63,10 +63,18 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         $profile.Name | Should -Be $profileName
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
 
-        $connection = Connect-ModuleRepository -ProfileName $profileName -InstallPrerequisites -ErrorAction Stop
-        $connection.AccessProbePerformed | Should -BeTrue
-        $connection.AccessProbeSucceeded | Should -BeTrue
-        $connection.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
+        $profileFile = Join-Path $script:LiveProfileRoot "$profileName.profile.json"
+        Export-ModuleRepositoryProfile -Name $profileName -Path $profileFile -Force | Out-Null
+        Remove-ModuleRepositoryProfile -Name $profileName
+
+        $onboarding = Initialize-ModuleRepository -Path $profileFile -ProfileName $profileName -Overwrite -InstallPrerequisites -ErrorAction Stop
+        $onboarding.Succeeded | Should -BeTrue
+        $onboarding.ProfileWritten | Should -BeTrue
+        $onboarding.ConnectAttempted | Should -BeTrue
+        $onboarding.Connection | Should -Not -BeNullOrEmpty
+        $onboarding.Connection.AccessProbePerformed | Should -BeTrue
+        $onboarding.Connection.AccessProbeSucceeded | Should -BeTrue
+        $onboarding.Connection.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
 
         $publish = New-ConfigurationPublish -ProfileName $profileName -Enabled
         $publish.Configuration.Repository.Uri | Should -Match '^https://pkgs\.dev\.azure\.com/'
@@ -114,8 +122,9 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         $publishPackagePath = Join-Path $packageRoot ([IO.Path]::GetFileName($packagePath))
         Copy-Item -LiteralPath $packagePath -Destination $publishPackagePath -Force
 
-        Set-ModuleRepositoryProfile @setProfile | Out-Null
-        Connect-ModuleRepository -ProfileName $profileName -InstallPrerequisites -ErrorAction Stop | Out-Null
+        $onboarding = Initialize-ModuleRepository @setProfile -InstallPrerequisites -ErrorAction Stop
+        $onboarding.Succeeded | Should -BeTrue
+        $onboarding.Connection.AccessProbeSucceeded | Should -BeTrue
 
         $result = Publish-NugetPackage -Path $packageRoot -ProfileName $profileName -SkipDuplicate -ErrorAction Stop
 

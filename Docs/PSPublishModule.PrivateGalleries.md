@@ -193,15 +193,16 @@ $env:PSPUBLISHMODULE_AZDO_MODULE_NAME = 'ModuleA'
 Invoke-Pester -Path .\Module\Tests\PrivateGallery.AzureArtifacts.Live.Tests.ps1 -Output Detailed
 ```
 
-The live test creates a temporary profile store, saves an Entra-first profile,
-runs `Connect-ModuleRepository`, verifies profile-backed publish configuration,
-then calls `Install-PrivateModule` and `Update-PrivateModule` through the saved
-profile.
+The live test creates a temporary profile store, exports a non-secret managed
+profile file, imports/connects it with `Initialize-ModuleRepository`, verifies
+profile-backed publish configuration, then calls `Install-PrivateModule` and
+`Update-PrivateModule` through the saved profile.
 
 Recommended production-readiness evidence:
 
-- `Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites` succeeds
-  on a clean user workstation and reports `AccessProbeSucceeded = True`.
+- `Initialize-ModuleRepository -Path <profile.json> -ProfileName <name>
+  -Overwrite -InstallPrerequisites` succeeds on a clean user workstation and
+  reports `Connection.AccessProbeSucceeded = True`.
 - `Install-PrivateModule -ProfileName <name> -Name <known module>` succeeds with
   no PAT or explicit credential parameters.
 - `Update-PrivateModule -ProfileName <name> -Name <known module>` succeeds for

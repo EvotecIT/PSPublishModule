@@ -233,6 +233,26 @@ Describe 'Private gallery command metadata' {
         $profile.AzureArtifactsFeed | Should -Be 'Modules'
     }
 
+    It 'initializes a managed profile file with WhatIf without writing or probing' {
+        Set-ModuleRepositoryProfile -Name 'CompanyWhatIf' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        $exportPath = Join-Path $script:PrivateGalleryProfileRoot 'CompanyWhatIf.profile.json'
+        Export-ModuleRepositoryProfile -Name 'CompanyWhatIf' -Path $exportPath -Force
+        Remove-ModuleRepositoryProfile -Name 'CompanyWhatIf'
+
+        $result = Initialize-ModuleRepository -Path $exportPath -ProfileName 'CompanyWhatIf' -Overwrite -InstallPrerequisites -WhatIf -WarningAction SilentlyContinue
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.ProfileName | Should -Be 'CompanyWhatIf'
+        $result.ProfileWritten | Should -BeFalse
+        $result.ConnectAttempted | Should -BeTrue
+        $result.ConnectSkipped | Should -BeTrue
+        $result.Succeeded | Should -BeTrue
+        $result.Connection | Should -Not -BeNullOrEmpty
+        $result.Connection.RegistrationPerformed | Should -BeFalse
+        $result.Connection.AccessProbePerformed | Should -BeFalse
+        Get-ModuleRepositoryProfile -Name 'CompanyWhatIf' -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+    }
+
     It 'tests saved profile readiness without registering repositories' {
         Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
 
