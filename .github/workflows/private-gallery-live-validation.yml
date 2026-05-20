@@ -124,6 +124,52 @@ jobs:
 
           .\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 @arguments
 
+      - name: Summarize live validation evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $evidencePath = Join-Path $PWD 'live-validation-output\private-gallery-live.evidence.json'
+          if ([string]::IsNullOrWhiteSpace($env:GITHUB_STEP_SUMMARY)) {
+              return
+          }
+
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '### Private Gallery Live Validation'
+          if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) {
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ''
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'No evidence JSON was written. Check the validation step log.'
+              return
+          }
+
+          $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ''
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Field | Value |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| --- | --- |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Organization | $($evidence.Organization) |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Project | $($evidence.Project) |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Feed | $($evidence.Feed) |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Module | $($evidence.ModuleName) |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Profile | $($evidence.ProfileName) |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Pester result | $($evidence.PesterResult) |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Passed / Failed / Skipped | $($evidence.PassedCount) / $($evidence.FailedCount) / $($evidence.SkippedCount) |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Publish proof enabled | $($evidence.PublishValidationEnabled) |"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Generated disposable package | $($evidence.GeneratedDisposablePackage) |"
+
+          $items = @($evidence.ValidationItems)
+          if ($items.Count -gt 0) {
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ''
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| Validation item | Succeeded | Details |"
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| --- | --- | --- |"
+              foreach ($item in $items) {
+                  $details = @()
+                  if ($null -ne $item.AccessProbeSucceeded) { $details += "AccessProbe=$($item.AccessProbeSucceeded)" }
+                  if ($null -ne $item.InstallResultReturned) { $details += "Install=$($item.InstallResultReturned)" }
+                  if ($null -ne $item.UpdateResultReturned) { $details += "Update=$($item.UpdateResultReturned)" }
+                  if ($null -ne $item.PushedPackageNames) { $details += "PushedPackages=$(@($item.PushedPackageNames).Count)" }
+                  if ($null -ne $item.FailedCount) { $details += "FailedPackages=$($item.FailedCount)" }
+                  Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "| $($item.Name) | $($item.Succeeded) | $($details -join ', ') |"
+              }
+          }
+
       - name: Upload live validation evidence
         if: always()
         uses: actions/upload-artifact@v4

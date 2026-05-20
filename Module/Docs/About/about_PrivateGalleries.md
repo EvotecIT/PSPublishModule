@@ -133,7 +133,8 @@ a prebuilt disposable package with -PublishPackagePath.
 - The manual GitHub Actions workflow named Private Gallery Live Validation succeeds on a runner that owns
 the enterprise Azure Artifacts credential-provider policy. Prefer runnerLabels = ["self-hosted","windows"]
 or another approved self-hosted runner because hosted runners usually cannot prove interactive or cached
-Entra-backed feed access.
+Entra-backed feed access. The workflow writes a non-secret run summary and uploads the XML/evidence JSON
+artifacts for release records.
 - Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite -InstallPrerequisites
 succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True.
 - Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit

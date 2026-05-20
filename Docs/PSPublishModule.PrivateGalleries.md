@@ -228,8 +228,9 @@ Prefer a self-hosted Windows runner that is allowed to use the Azure Artifacts
 Credential Provider and complete the Entra-backed sign-in/session flow for the
 target feed. Hosted runners generally do not have the interactive or cached
 enterprise identity context needed to prove the Entra-first path. The workflow
-uploads `private-gallery-live.xml` and `private-gallery-live.evidence.json` as
-the `private-gallery-live-validation` artifact.
+adds a non-secret run summary from the evidence JSON and uploads
+`private-gallery-live.xml` and `private-gallery-live.evidence.json` as the
+`private-gallery-live-validation` artifact.
 
 To run the harness directly, set:
 

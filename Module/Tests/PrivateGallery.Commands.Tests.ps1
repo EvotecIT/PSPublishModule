@@ -35,6 +35,7 @@ Describe 'Private gallery command metadata' {
         New-Item -ItemType Directory -Path $script:PrivateGalleryProfileRoot -Force | Out-Null
         $script:PrivateGalleryProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'profiles.json'
         $script:PrivateGalleryLiveValidationRunnerPath = Join-Path $PSScriptRoot 'Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1'
+        $script:PrivateGalleryLiveValidationWorkflowPath = Join-Path (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path '.github\workflows\private-gallery-live-validation.yml'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
     }
 
@@ -51,6 +52,21 @@ Describe 'Private gallery command metadata' {
         [System.Management.Automation.Language.Parser]::ParseFile($script:PrivateGalleryLiveValidationRunnerPath, [ref] $tokens, [ref] $errors) | Out-Null
 
         $errors | Should -BeNullOrEmpty
+    }
+
+    It 'ships a manual Azure Artifacts live validation workflow' {
+        Test-Path -LiteralPath $script:PrivateGalleryLiveValidationWorkflowPath -PathType Leaf | Should -BeTrue
+
+        $workflow = Get-Content -LiteralPath $script:PrivateGalleryLiveValidationWorkflowPath -Raw
+        $workflow | Should -Match 'name:\s+Private Gallery Live Validation'
+        $workflow | Should -Match 'workflow_dispatch:'
+        $workflow | Should -Match 'runnerLabels:'
+        $workflow | Should -Match 'runs-on:\s+\$\{\{\s*fromJSON\(inputs\.runnerLabels\)\s*\}\}'
+        $workflow | Should -Match 'Invoke-PrivateGalleryAzureArtifactsLiveValidation\.ps1'
+        $workflow | Should -Match 'GenerateDisposablePackage'
+        $workflow | Should -Match 'private-gallery-live\.evidence\.json'
+        $workflow | Should -Match 'GITHUB_STEP_SUMMARY'
+        $workflow | Should -Match 'actions/upload-artifact@v4'
     }
 
     It 'restores the caller profile path after the Azure Artifacts live validation runner' {
