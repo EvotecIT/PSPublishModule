@@ -1514,6 +1514,12 @@ public sealed class PowerForgeInstallerAuthoringTests
                 "CompanyFolderName": "TestimoX",
                 "InstallDirectoryName": "Monitoring",
                 "PayloadComponentGroupId": "ProductFiles",
+                "ExitLaunch": {
+                  "Enabled": true,
+                  "Text": "Open TestimoX Monitoring",
+                  "Target": "http://127.0.0.1:9000/",
+                  "Condition": "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed"
+                },
                 "Inputs": [
                   {
                     "Id": "LicenseKey",
@@ -1613,6 +1619,10 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Equal("MonitoringDataDirSearch", dataDir.RegistrySearch!.Id);
         Assert.Single(authoring.Dialogs);
         Assert.Single(authoring.Directories);
+        Assert.NotNull(authoring.ExitLaunch);
+        Assert.True(authoring.ExitLaunch!.Enabled);
+        Assert.Equal("Open TestimoX Monitoring", authoring.ExitLaunch.Text);
+        Assert.Equal("http://127.0.0.1:9000/", authoring.ExitLaunch.Target);
 
         var service = Assert.IsType<PowerForgeInstallerServiceComponent>(authoring.Components[0]);
         Assert.Equal("TestimoX.Monitoring", service.ServiceName);
@@ -1627,6 +1637,25 @@ public sealed class PowerForgeInstallerAuthoringTests
         var serialized = JsonSerializer.Serialize(authoring.Components[2], options);
         Assert.Contains("\"Type\":\"RegistryValue\"", serialized, StringComparison.Ordinal);
         Assert.Contains("\"ValueProperty\":\"LICENSE_KEY\"", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DotNetPublishSchema_AllowsInstallerExitLaunch()
+    {
+        using var schema = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(ResolveRepositoryRoot(), "Schemas", "powerforge.dotnetpublish.schema.json")));
+
+        var definitions = schema.RootElement.GetProperty("$defs");
+        Assert.True(definitions.TryGetProperty("PowerForgeInstallerExitLaunch", out _));
+
+        var exitLaunch = definitions
+            .GetProperty("PowerForgeInstallerDefinition")
+            .GetProperty("properties")
+            .GetProperty("ExitLaunch");
+        Assert.Contains(
+            exitLaunch.GetProperty("anyOf").EnumerateArray(),
+            option => option.TryGetProperty("$ref", out var reference) &&
+                string.Equals(reference.GetString(), "#/$defs/PowerForgeInstallerExitLaunch", StringComparison.Ordinal));
     }
 
     private static PowerForgeInstallerDefinition CreateMonitoringInstaller()
@@ -1770,6 +1799,22 @@ public sealed class PowerForgeInstallerAuthoringTests
         });
 
         return definition;
+    }
+
+    private static string ResolveRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate repository root.");
     }
 
     private static PowerForgeInstallerDefinition CreateMonitoringCompileInstaller(string payloadRoot)
