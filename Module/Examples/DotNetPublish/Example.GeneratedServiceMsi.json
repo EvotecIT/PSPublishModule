@@ -49,6 +49,14 @@
         "CompanyFolderName": "Evotec",
         "InstallDirectoryName": "My Service",
         "PayloadComponentGroupId": "ProductFiles",
+        "ExitLaunch": {
+          "Enabled": true,
+          "Text": "Open My Service",
+          "Target": "http://127.0.0.1:9000/"
+        },
+        "LicenseAgreement": {
+          "Path": "Installer\\My.Service\\License.rtf"
+        },
         "Inputs": [
           {
             "Id": "LicenseKey",

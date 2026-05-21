@@ -55,7 +55,7 @@ Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
 ## Notes
 
 - `Example.ServiceMsi.json` expects a WiX installer project (`*.wixproj`).
-- `Example.GeneratedServiceMsi.json` uses `Installers[].Authoring` to generate `Product.wxs` and a WiX SDK project during `msi.build`; use `Type` on each authoring component (`File`, `Folder`, `RemoveFolder`, `Service`, `RegistryValue`, `Shortcut`).
+- `Example.GeneratedServiceMsi.json` uses `Installers[].Authoring` to generate `Product.wxs` and a WiX SDK project during `msi.build`; use `Type` on each authoring component (`File`, `Folder`, `RemoveFolder`, `Service`, `RegistryValue`, `Shortcut`). It also shows typed finish-page launch and RTF license agreement authoring through `ExitLaunch` and `LicenseAgreement`.
 - `Example.RebuildState.json` is aimed at preserve/restore deployments and service-aware rebuild flows.
 - `Example.PortableBundleMsi.json` shows how to use `Bundles`, include sidecar targets, and build an MSI from the composed bundle instead of the raw publish output.
 - `Example.PackageBundleMsi.json` is the starter for TierBridge-style packages: composed service/CLI payload, shipped PowerShell module, generated scripts, ZIP, and MSI from the bundle.

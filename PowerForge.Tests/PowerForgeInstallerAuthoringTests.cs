@@ -1713,6 +1713,28 @@ public sealed class PowerForgeInstallerAuthoringTests
                 string.Equals(reference.GetString(), "#/$defs/PowerForgeInstallerLicenseAgreement", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void DotNetPublishExample_UsesTypedGeneratedInstallerLaunchAndLicense()
+    {
+        using var example = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            ResolveRepositoryRoot(),
+            "Module",
+            "Examples",
+            "DotNetPublish",
+            "Example.GeneratedServiceMsi.json")));
+
+        var authoring = example.RootElement
+            .GetProperty("Installers")[0]
+            .GetProperty("Authoring");
+        var exitLaunch = authoring.GetProperty("ExitLaunch");
+        Assert.True(exitLaunch.GetProperty("Enabled").GetBoolean());
+        Assert.Equal("Open My Service", exitLaunch.GetProperty("Text").GetString());
+        Assert.Equal("http://127.0.0.1:9000/", exitLaunch.GetProperty("Target").GetString());
+
+        var licenseAgreement = authoring.GetProperty("LicenseAgreement");
+        Assert.Equal(@"Installer\My.Service\License.rtf", licenseAgreement.GetProperty("Path").GetString());
+    }
+
     private static PowerForgeInstallerDefinition CreateMonitoringInstaller()
     {
         var definition = new PowerForgeInstallerDefinition
