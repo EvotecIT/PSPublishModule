@@ -34,14 +34,6 @@ public sealed partial class ShowModuleDocumentationCommand
     [Parameter] public SwitchParameter PreferInternals { get; set; }
     /// <summary>Open the chosen document in the default shell handler instead of rendering to console.</summary>
     [Parameter] public SwitchParameter Open { get; set; }
-    /// <summary>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</summary>
-    [Parameter]
-    [ValidateSet("Auto","Spectre","System")]
-    public string JsonRenderer { get; set; } = "Auto";
-    /// <summary>Default language for unlabeled code fences (Auto, PowerShell, Json, None).</summary>
-    [Parameter]
-    [ValidateSet("Auto","PowerShell","Json","None")]
-    public string DefaultCodeLanguage { get; set; } = "Auto";
     /// <summary>Heading rulers style. <c>H1AndH2</c> draws rules for H1/H2, <c>H1</c> for H1 only, <c>None</c> disables.</summary>
     [Parameter]
     [ValidateSet("None","H1","H1AndH2")]

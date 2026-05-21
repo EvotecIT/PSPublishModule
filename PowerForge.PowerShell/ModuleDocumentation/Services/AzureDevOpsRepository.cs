@@ -64,7 +64,7 @@ internal sealed class AzureDevOpsRepository : IRepoClient
         try
         {
             using var c = CreateClient();
-            var url = $"https://dev.azure.com/{_organization}/{_project}/_apis/git/repositories/{_repository}/items?path=/{Uri.EscapeDataString(path.TrimStart('/'))}&version={Uri.EscapeDataString(branch ?? "main")}&includeContent=true&api-version=7.1-preview.1";
+            var url = $"https://dev.azure.com/{_organization}/{_project}/_apis/git/repositories/{_repository}/items?path=/{Uri.EscapeDataString(path.TrimStart('/'))}&{BuildBranchQuery(branch)}&includeContent=true&api-version=7.1-preview.1";
             var resp = c.GetAsync(url).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode) return null;
             var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -85,7 +85,7 @@ internal sealed class AzureDevOpsRepository : IRepoClient
         try
         {
             using var c = CreateClient();
-            var url = $"https://dev.azure.com/{_organization}/{_project}/_apis/git/repositories/{_repository}/items?scopePath=/{Uri.EscapeDataString(path.Trim('/'))}&recursionLevel=OneLevel&includeContentMetadata=true&version={Uri.EscapeDataString(branch ?? "main")}&api-version=7.1-preview.1";
+            var url = $"https://dev.azure.com/{_organization}/{_project}/_apis/git/repositories/{_repository}/items?scopePath=/{Uri.EscapeDataString(path.Trim('/'))}&recursionLevel=OneLevel&includeContentMetadata=true&{BuildBranchQuery(branch)}&api-version=7.1-preview.1";
             var resp = c.GetAsync(url).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode) return result;
             var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -114,5 +114,14 @@ internal sealed class AzureDevOpsRepository : IRepoClient
     {
         // Azure DevOps Git repos don't expose Releases like GitHub; return empty to allow caller fallback.
         return new List<RepoRelease>();
+    }
+
+    private static string BuildBranchQuery(string? branch)
+    {
+        var value = string.IsNullOrWhiteSpace(branch) ? "main" : branch!.Trim();
+        if (value.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase))
+            value = value.Substring("refs/heads/".Length);
+
+        return $"versionDescriptor.version={Uri.EscapeDataString(value)}&versionDescriptor.versionType=branch";
     }
 }

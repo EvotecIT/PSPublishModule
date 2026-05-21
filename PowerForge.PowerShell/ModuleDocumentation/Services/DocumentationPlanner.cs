@@ -412,12 +412,10 @@ internal sealed partial class DocumentationPlanner
                         token2 = TokenStore.GetToken(info2.Host) ?? string.Empty;
                     }
                     var client2 = RepoClientFactory.Create(info2, token2);
-                    if (client2 != null)
+                    if (client2 != null && (req.RepositoryPaths == null || req.RepositoryPaths.Length == 0))
                     {
                         string branch2 = string.IsNullOrWhiteSpace(req.RepositoryBranch) ? client2.GetDefaultBranch() : req.RepositoryBranch!;
-                        var roots = (req.RepositoryPaths != null && req.RepositoryPaths.Length > 0)
-                            ? req.RepositoryPaths
-                            : new [] { "docs", "Docs" };
+                        var roots = new[] { "docs", "Docs" };
 
                         var collected = new List<(string Name, string Path)>();
                         foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -613,10 +611,13 @@ internal sealed partial class DocumentationPlanner
                 var parsedReleases = ParseChangelogReleases(changelogContent!);
                 if (parsedReleases.Count > 0 && !string.IsNullOrWhiteSpace(req.ProjectUri))
                 {
-                    var repoReleases = GetNormalizedRepoReleases(req, clientOverride);
-                    if (repoReleases.Count > 0)
+                    if (req.Online || clientOverride != null)
                     {
-                        parsedReleases = MergeReleaseMetadata(parsedReleases, repoReleases);
+                        var repoReleases = GetNormalizedRepoReleases(req, clientOverride);
+                        if (repoReleases.Count > 0)
+                        {
+                            parsedReleases = MergeReleaseMetadata(parsedReleases, repoReleases);
+                        }
                     }
                     parsedReleases = NormalizeRepoReleases(parsedReleases, req.ProjectUri);
                 }
@@ -633,7 +634,7 @@ internal sealed partial class DocumentationPlanner
                 }
             }
             // If changelog not present, try repo releases API
-            if (res.Items.All(i => !string.Equals(i.Kind, "RELEASES", StringComparison.OrdinalIgnoreCase)) && !string.IsNullOrWhiteSpace(req.ProjectUri))
+            if ((req.Online || clientOverride != null) && res.Items.All(i => !string.Equals(i.Kind, "RELEASES", StringComparison.OrdinalIgnoreCase)) && !string.IsNullOrWhiteSpace(req.ProjectUri))
             {
                 try
                 {

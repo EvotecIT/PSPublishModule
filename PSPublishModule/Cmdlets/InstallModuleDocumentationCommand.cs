@@ -64,7 +64,7 @@ public sealed partial class InstallModuleDocumentationCommand : PSCmdlet
         PSObject modulePso;
         if (Module != null)
         {
-            modulePso = PSObject.AsPSObject(Module);
+            modulePso = resolver.Resolve(Module.Name, PSObject.AsPSObject(Module), RequiredVersion);
         }
         else
         {

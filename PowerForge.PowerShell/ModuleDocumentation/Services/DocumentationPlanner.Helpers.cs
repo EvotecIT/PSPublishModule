@@ -236,7 +236,7 @@ internal sealed partial class DocumentationPlanner
 
     private static List<RepoRelease> GetNormalizedRepoReleases(Request req, IRepoClient? clientOverride = null)
     {
-        if (string.IsNullOrWhiteSpace(req.ProjectUri))
+        if (string.IsNullOrWhiteSpace(req.ProjectUri) || (!req.Online && clientOverride is null))
             return new List<RepoRelease>();
 
         var client = clientOverride;

@@ -59,23 +59,6 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
-        var pref = JsonRendererPreference.Auto;
-        switch ((JsonRenderer ?? "Auto").ToLowerInvariant())
-        {
-            case "spectre": pref = JsonRendererPreference.Spectre; break;
-            case "system":  pref = JsonRendererPreference.System;  break;
-            default:         pref = JsonRendererPreference.Auto;    break;
-        }
-        string? defLang = null;
-            switch ((DefaultCodeLanguage ?? "Auto").ToLowerInvariant())
-            {
-            case "powershell": defLang = "powershell"; break;
-            case "json":       defLang = "json";       break;
-            case "none":       defLang = "";           break; // keep empty
-            default:            defLang = null;          break; // auto
-        }
-        // Renderer currently supports JsonRenderer + Default language only
-        var renderer = new Renderer(pref, defLang);
         var finder   = new DocumentationFinder(this);
         string rootBase;
         string? internalsBase;
