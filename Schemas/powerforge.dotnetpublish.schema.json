@@ -232,6 +232,14 @@
         "Condition": { "type": "string", "minLength": 1 }
       }
     },
+    "PowerForgeInstallerLicenseAgreement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Path": { "type": "string", "minLength": 1 }
+      }
+    },
     "PowerForgeInstallerDirectorySegment": {
       "type": "object",
       "additionalProperties": false,
@@ -437,6 +445,7 @@
           "items": { "$ref": "#/$defs/PowerForgeInstallerDialog" }
         },
         "ExitLaunch": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerExitLaunch" }, { "type": "null" }] },
+        "LicenseAgreement": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerLicenseAgreement" }, { "type": "null" }] },
         "Directories": {
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerDirectoryTree" }

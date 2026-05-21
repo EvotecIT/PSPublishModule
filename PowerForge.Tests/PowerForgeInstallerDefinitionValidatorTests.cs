@@ -34,6 +34,18 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
     }
 
     [Fact]
+    public void Validate_RejectsEnabledLicenseAgreementWithoutPath()
+    {
+        var definition = CreateValidDefinition();
+        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("Path", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_RejectsLowercasePublicMsiProperties()
     {
         var definition = CreateValidDefinition();

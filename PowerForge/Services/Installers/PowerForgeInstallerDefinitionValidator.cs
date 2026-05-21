@@ -41,6 +41,8 @@ internal static class PowerForgeInstallerDefinitionValidator
             Require(exitLaunch.Target, nameof(definition.ExitLaunch.Target));
             Require(exitLaunch.Condition, nameof(definition.ExitLaunch.Condition));
         }
+        if (definition.LicenseAgreement is { Enabled: true } licenseAgreement)
+            Require(licenseAgreement.Path, nameof(definition.LicenseAgreement.Path));
 
         EnsureUnique(
             definition.Inputs.Select(input => input.Id),

@@ -287,6 +287,10 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Text = "Open app",
                 Target = "http://127.0.0.1:9000/"
             };
+            authoring.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
+            {
+                Path = "Build/App-License.rtf"
+            };
             authoring.Inputs.Add(new PowerForgeInstallerInput
             {
                 Id = "LicenseKey",
@@ -318,6 +322,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.NotNull(installerPlan.Authoring!.ExitLaunch);
             Assert.Equal("Open app", installerPlan.Authoring.ExitLaunch!.Text);
             Assert.Equal("http://127.0.0.1:9000/", installerPlan.Authoring.ExitLaunch.Target);
+            Assert.NotNull(installerPlan.Authoring.LicenseAgreement);
+            Assert.Equal("Build/App-License.rtf", installerPlan.Authoring.LicenseAgreement!.Path);
             var input = Assert.Single(installerPlan.Authoring!.Inputs);
             Assert.True(input.Required);
             Assert.Equal("Enter a license key before continuing.", input.RequiredMessage);

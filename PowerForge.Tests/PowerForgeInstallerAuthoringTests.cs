@@ -161,6 +161,25 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_ModelsLicenseAgreementRtfVariable()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
+        {
+            Path = @"Build\Installer\SyncSE-License.rtf"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Root!.Attribute(XNamespace.Xmlns + "ui"));
+        Assert.NotNull(doc.Descendants(Wix + "WixVariable").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "WixUILicenseRtf" &&
+            (string?)e.Attribute("Value") == @"Build\Installer\SyncSE-License.rtf"));
+        Assert.NotNull(doc.Descendants(Wix + "UI").SingleOrDefault());
+    }
+
+    [Fact]
     public void EmitSource_UsesUniqueScriptServiceActionIdsForLongComponentNames()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
@@ -1334,6 +1353,26 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitProjectFile_IncludesUiExtensionForLicenseAgreement()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
+        {
+            Path = @"Build\Installer\SyncSE-License.rtf"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitProjectFile(
+            definition,
+            new PowerForgeWixInstallerProjectOptions { SourceFile = "Generated.wxs" });
+        var doc = XDocument.Parse(xml);
+
+        Assert.DoesNotContain(doc.Descendants("PackageReference"), e =>
+            (string?)e.Attribute("Include") == "WixToolset.Util.wixext");
+        Assert.NotNull(doc.Descendants("PackageReference").SingleOrDefault(e =>
+            (string?)e.Attribute("Include") == "WixToolset.UI.wixext"));
+    }
+
+    [Fact]
     public void PrepareWorkspace_WritesGeneratedSourceAndProject()
     {
         var root = CreateTempDirectory();
@@ -1520,6 +1559,9 @@ public sealed class PowerForgeInstallerAuthoringTests
                   "Target": "http://127.0.0.1:9000/",
                   "Condition": "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed"
                 },
+                "LicenseAgreement": {
+                  "Path": "Build\\Installer\\TestimoX-Monitoring-License.rtf"
+                },
                 "Inputs": [
                   {
                     "Id": "LicenseKey",
@@ -1623,6 +1665,9 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.True(authoring.ExitLaunch!.Enabled);
         Assert.Equal("Open TestimoX Monitoring", authoring.ExitLaunch.Text);
         Assert.Equal("http://127.0.0.1:9000/", authoring.ExitLaunch.Target);
+        Assert.NotNull(authoring.LicenseAgreement);
+        Assert.True(authoring.LicenseAgreement!.Enabled);
+        Assert.Equal(@"Build\Installer\TestimoX-Monitoring-License.rtf", authoring.LicenseAgreement.Path);
 
         var service = Assert.IsType<PowerForgeInstallerServiceComponent>(authoring.Components[0]);
         Assert.Equal("TestimoX.Monitoring", service.ServiceName);
@@ -1647,6 +1692,7 @@ public sealed class PowerForgeInstallerAuthoringTests
 
         var definitions = schema.RootElement.GetProperty("$defs");
         Assert.True(definitions.TryGetProperty("PowerForgeInstallerExitLaunch", out _));
+        Assert.True(definitions.TryGetProperty("PowerForgeInstallerLicenseAgreement", out _));
 
         var exitLaunch = definitions
             .GetProperty("PowerForgeInstallerDefinition")
@@ -1656,6 +1702,15 @@ public sealed class PowerForgeInstallerAuthoringTests
             exitLaunch.GetProperty("anyOf").EnumerateArray(),
             option => option.TryGetProperty("$ref", out var reference) &&
                 string.Equals(reference.GetString(), "#/$defs/PowerForgeInstallerExitLaunch", StringComparison.Ordinal));
+
+        var licenseAgreement = definitions
+            .GetProperty("PowerForgeInstallerDefinition")
+            .GetProperty("properties")
+            .GetProperty("LicenseAgreement");
+        Assert.Contains(
+            licenseAgreement.GetProperty("anyOf").EnumerateArray(),
+            option => option.TryGetProperty("$ref", out var reference) &&
+                string.Equals(reference.GetString(), "#/$defs/PowerForgeInstallerLicenseAgreement", StringComparison.Ordinal));
     }
 
     private static PowerForgeInstallerDefinition CreateMonitoringInstaller()
