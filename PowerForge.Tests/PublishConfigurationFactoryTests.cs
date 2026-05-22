@@ -191,4 +191,24 @@ public sealed class PublishConfigurationFactoryTests
 
         Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Create_allows_github_publish_repository_named_mar()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.GitHub,
+            ApiKey = "token",
+            UserName = "EvotecIT",
+            RepositoryName = "MAR",
+            Enabled = true
+        });
+
+        Assert.Equal(PublishDestination.GitHub, segment.Configuration.Destination);
+        Assert.Equal("MAR", segment.Configuration.RepositoryName);
+        Assert.True(segment.Configuration.Enabled);
+    }
 }

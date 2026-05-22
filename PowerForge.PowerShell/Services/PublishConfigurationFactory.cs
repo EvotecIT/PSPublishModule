@@ -50,6 +50,7 @@ internal sealed class PublishConfigurationFactory
             throw new ArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.", nameof(request));
 
         if (!isAzureArtifacts &&
+            destination == PublishDestination.PowerShellGallery &&
             request.Enabled &&
             IsMicrosoftArtifactRegistryPublishTarget(request))
         {
