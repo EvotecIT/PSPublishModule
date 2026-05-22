@@ -736,8 +736,12 @@ internal static partial class Program
             return RepositoryApiVersion.V2;
         if (v.Equals("v3", StringComparison.OrdinalIgnoreCase) || v.Equals("3", StringComparison.OrdinalIgnoreCase))
             return RepositoryApiVersion.V3;
+        if (v.Equals("containerregistry", StringComparison.OrdinalIgnoreCase) ||
+            v.Equals("container-registry", StringComparison.OrdinalIgnoreCase) ||
+            v.Equals("acr", StringComparison.OrdinalIgnoreCase))
+            return RepositoryApiVersion.ContainerRegistry;
 
-        throw new InvalidOperationException($"Invalid value for --repo-api-version: '{value}'. Expected: auto|v2|v3.");
+        throw new InvalidOperationException($"Invalid value for --repo-api-version: '{value}'. Expected: auto|v2|v3|containerregistry.");
     }
 
     static bool IsJsonOutput(string[] argv)

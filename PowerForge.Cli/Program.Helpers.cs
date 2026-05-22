@@ -50,7 +50,7 @@ internal static partial class Program
       powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
       powerforge publish --path <Path> [--repo <Repo>] [--tool auto|psresourceget|powershellget] [--apikey <Key>] [--nupkg]
                        [--destination <Path>] [--skip-dependencies-check] [--skip-manifest-validate]
-                       [--repo-uri <Uri>] [--repo-source-uri <Uri>] [--repo-publish-uri <Uri>] [--repo-priority <N>] [--repo-api-version auto|v2|v3]
+                       [--repo-uri <Uri>] [--repo-source-uri <Uri>] [--repo-publish-uri <Uri>] [--repo-priority <N>] [--repo-api-version auto|v2|v3|containerregistry]
                        [--repo-trusted|--repo-untrusted] [--repo-ensure|--no-repo-ensure] [--repo-unregister-after-use]
                        [--repo-credential-username <User>] [--repo-credential-secret <Secret>] [--repo-credential-secret-file <Path>]
       powerforge github artifacts prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>]
