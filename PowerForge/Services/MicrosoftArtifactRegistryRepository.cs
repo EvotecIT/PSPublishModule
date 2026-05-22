@@ -14,4 +14,8 @@ public static class MicrosoftArtifactRegistryRepository
     /// <summary>Returns true when the repository name represents the default Microsoft Artifact Registry registration.</summary>
     public static bool IsDefaultName(string? name)
         => string.Equals(name?.Trim(), DefaultName, System.StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Returns true when the URI points at the Microsoft Artifact Registry endpoint.</summary>
+    public static bool IsDefaultUri(string? uri)
+        => string.Equals(uri?.Trim().TrimEnd('/'), DefaultUri, System.StringComparison.OrdinalIgnoreCase);
 }

@@ -155,4 +155,40 @@ public sealed class PublishConfigurationFactoryTests
 
         Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Create_rejects_enabled_mar_publish_by_repository_name_without_uri()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "unused",
+            RepositoryName = "MAR",
+            Enabled = true
+        }));
+
+        Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Create_rejects_enabled_mar_publish_by_repository_uri_with_custom_name()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "unused",
+            RepositoryName = "MicrosoftPackages",
+            RepositoryUri = "https://mcr.microsoft.com/",
+            RepositoryApiVersion = RepositoryApiVersion.ContainerRegistry,
+            Enabled = true
+        }));
+
+        Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

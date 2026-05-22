@@ -452,9 +452,9 @@ internal sealed class PrivateGalleryService
         var messages = new List<string>(4);
         var runner = new PowerShellRunner();
         var logger = new PrivateGalleryHostLogger(_host);
-        var requiredPSResourceGetVersion = PrivateGalleryVersionPolicy.RequiresExistingSessionBootstrap(bootstrapMode)
-            ? MinimumPSResourceGetExistingSessionVersion
-            : MinimumPSResourceGetVersion;
+        var requiredPSResourceGetVersion = GetRequiredPSResourceGetVersion(
+            bootstrapMode,
+            includeAzureArtifactsCredentialProvider);
 
         if (!initialStatus.PSResourceGetAvailable ||
             !PrivateGalleryVersionPolicy.VersionMeetsMinimum(initialStatus.PSResourceGetVersion, requiredPSResourceGetVersion) ||
@@ -524,6 +524,14 @@ internal sealed class PrivateGalleryService
             messages.Where(static message => !string.IsNullOrWhiteSpace(message)).Distinct(StringComparer.Ordinal).ToArray(),
             finalStatus);
     }
+
+    internal static string GetRequiredPSResourceGetVersion(
+        PrivateGalleryBootstrapMode bootstrapMode,
+        bool includeAzureArtifactsCredentialProvider)
+        => includeAzureArtifactsCredentialProvider &&
+           PrivateGalleryVersionPolicy.RequiresExistingSessionBootstrap(bootstrapMode)
+            ? MinimumPSResourceGetExistingSessionVersion
+            : MinimumPSResourceGetVersion;
 
     public RepositoryAccessProbeResult ProbeRepositoryAccess(ModuleRepositoryRegistrationResult registration, RepositoryCredential? credential)
     {

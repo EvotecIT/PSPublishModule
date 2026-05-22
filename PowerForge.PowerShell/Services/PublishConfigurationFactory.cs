@@ -49,6 +49,13 @@ internal sealed class PublishConfigurationFactory
         if (isAzureArtifacts && anyRepositoryUriProvided)
             throw new ArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.", nameof(request));
 
+        if (!isAzureArtifacts &&
+            request.Enabled &&
+            IsMicrosoftArtifactRegistryPublishTarget(request))
+        {
+            throw new ArgumentException("Microsoft Artifact Registry is read-only. Do not enable publishing to MAR; use it only as a dependency/discovery source.", nameof(request));
+        }
+
         if (!isAzureArtifacts && anyRepositoryUriProvided)
         {
             var resolvedRepositoryName = request.RepositoryName?.Trim();
@@ -56,8 +63,6 @@ internal sealed class PublishConfigurationFactory
                 throw new ArgumentException("RepositoryName is required when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.", nameof(request));
             if (string.Equals(resolvedRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("RepositoryName cannot be 'PSGallery' when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.", nameof(request));
-            if (MicrosoftArtifactRegistryRepository.IsDefaultName(resolvedRepositoryName) && request.Enabled)
-                throw new ArgumentException("Microsoft Artifact Registry is read-only. Do not enable publishing to repository 'MAR'; use it only as a dependency/discovery source.", nameof(request));
         }
 
         var hasRepoCredentialSecret = !string.IsNullOrWhiteSpace(repositorySecret);
@@ -151,4 +156,10 @@ internal sealed class PublishConfigurationFactory
 
         return string.Empty;
     }
+
+    private static bool IsMicrosoftArtifactRegistryPublishTarget(PublishConfigurationRequest request)
+        => MicrosoftArtifactRegistryRepository.IsDefaultName(request.RepositoryName) ||
+           MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryUri) ||
+           MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositorySourceUri) ||
+           MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryPublishUri);
 }

@@ -96,6 +96,7 @@ public sealed class PrivateGalleryBootstrapReadinessTests
         Assert.NotNull(scriptText);
         Assert.Contains("ContainsKey('MAR')", scriptText, StringComparison.Ordinal);
         Assert.Contains("MicrosoftArtifactRegistry", scriptText, StringComparison.Ordinal);
+        Assert.Contains("$marSetParams.Uri = $Uri", scriptText, StringComparison.Ordinal);
     }
 
     [Fact]

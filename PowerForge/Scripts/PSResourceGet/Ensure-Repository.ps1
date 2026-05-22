@@ -69,8 +69,10 @@ try {
       Set-PSResourceRepository @commonParams | Out-Null
     }
   } elseif ($isMicrosoftArtifactRegistry) {
+    $marSetParams = $commonParams.Clone()
+    $marSetParams.Uri = $Uri
     if ($existing) {
-      Set-PSResourceRepository @commonParams | Out-Null
+      Set-PSResourceRepository @marSetParams | Out-Null
     } else {
       $created = $true
       $registerCommand = Get-Command -Name 'Register-PSResourceRepository' -ErrorAction Stop
@@ -79,13 +81,13 @@ try {
         if ($TrustedFlag -eq '1') { $marParams.Trusted = $true }
         if (-not [string]::IsNullOrWhiteSpace($Priority)) { $marParams.Priority = [int]$Priority }
         Register-PSResourceRepository @marParams | Out-Null
-        Set-PSResourceRepository @commonParams | Out-Null
+        Set-PSResourceRepository @marSetParams | Out-Null
       } elseif ($registerCommand.Parameters.ContainsKey('MicrosoftArtifactRegistry')) {
         $marParams = @{ MicrosoftArtifactRegistry = $true; Force = $true; ErrorAction = 'Stop' }
         if ($TrustedFlag -eq '1') { $marParams.Trusted = $true }
         if (-not [string]::IsNullOrWhiteSpace($Priority)) { $marParams.Priority = [int]$Priority }
         Register-PSResourceRepository @marParams | Out-Null
-        Set-PSResourceRepository @commonParams | Out-Null
+        Set-PSResourceRepository @marSetParams | Out-Null
       } else {
         $params = $commonParams.Clone()
         $params.Uri = $Uri

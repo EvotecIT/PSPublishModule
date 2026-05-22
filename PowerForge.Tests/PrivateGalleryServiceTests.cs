@@ -76,6 +76,26 @@ public sealed class PrivateGalleryServiceTests
         Assert.Equal("Register-ModuleRepository -MicrosoftArtifactRegistry", result.RecommendedBootstrapCommand);
     }
 
+    [Fact]
+    public void GetRequiredPSResourceGetVersion_UsesGeneralMinimumWhenAzureCredentialProviderIsNotRequired()
+    {
+        var requiredVersion = PrivateGalleryService.GetRequiredPSResourceGetVersion(
+            PrivateGalleryBootstrapMode.ExistingSession,
+            includeAzureArtifactsCredentialProvider: false);
+
+        Assert.Equal("1.1.1", requiredVersion);
+    }
+
+    [Fact]
+    public void GetRequiredPSResourceGetVersion_UsesExistingSessionMinimumForAzureArtifacts()
+    {
+        var requiredVersion = PrivateGalleryService.GetRequiredPSResourceGetVersion(
+            PrivateGalleryBootstrapMode.ExistingSession,
+            includeAzureArtifactsCredentialProvider: true);
+
+        Assert.Equal("1.2.0", requiredVersion);
+    }
+
     private sealed class FakePrivateGalleryHost : IPrivateGalleryHost
     {
         private readonly bool _shouldProcess;
