@@ -10,7 +10,6 @@ internal static class ModuleBootstrapperGenerator
 {
     // net8.0 is the default modern PowerShell LTS baseline when the module build does not declare a Core TFM.
     private const string DefaultAssemblyLoadContextTargetFramework = "net8.0";
-    private static readonly UTF8Encoding Utf8Bom = new(encoderShouldEmitUTF8Identifier: true);
     private static readonly TimeSpan AssemblyLoadContextLoaderBuildTimeout = TimeSpan.FromMinutes(10);
 
     internal static void Generate(
@@ -108,14 +107,7 @@ internal static class ModuleBootstrapperGenerator
     private static void WritePowerShellFile(string path, string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, NormalizeCrLf(content), Utf8Bom);
-    }
-
-    private static string NormalizeCrLf(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return string.Empty;
-        // Ensure deterministic CRLF output for Windows PowerShell.
-        return text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+        GeneratedTextNormalizer.WriteUtf8Bom(path, content);
     }
 
     private static string BuildLibrariesScript(

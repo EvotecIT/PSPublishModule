@@ -34,7 +34,7 @@ Optional grouping label.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -50,7 +50,7 @@ Project identifier used by targets and installers.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -66,7 +66,7 @@ Path to project file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -89,4 +89,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

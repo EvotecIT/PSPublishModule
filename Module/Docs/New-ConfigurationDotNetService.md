@@ -35,7 +35,7 @@ Optional service arguments.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -51,7 +51,7 @@ Optional config bootstrap rules.
 Type: DotNetPublishConfigBootstrapRule[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -67,7 +67,7 @@ Description text.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -83,7 +83,7 @@ Display name.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -99,7 +99,7 @@ Executable path relative to output.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -115,7 +115,7 @@ Generates Install-Service.ps1.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -131,7 +131,7 @@ Generates Run-Once.ps1.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -147,7 +147,7 @@ Generates Uninstall-Service.ps1.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -163,7 +163,7 @@ Optional lifecycle settings.
 Type: DotNetPublishServiceLifecycleOptions
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -179,7 +179,7 @@ Optional recovery settings.
 Type: DotNetPublishServiceRecoveryOptions
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -195,7 +195,7 @@ Service name.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -218,4 +218,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

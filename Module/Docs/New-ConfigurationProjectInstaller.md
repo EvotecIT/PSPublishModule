@@ -34,7 +34,7 @@ Optional framework filter.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Framework
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -50,7 +50,7 @@ When set, prepares from the raw publish output instead of an auto-generated port
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -82,7 +82,7 @@ Optional WiX DirectoryRef identifier for generated harvest output.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -98,7 +98,7 @@ Installer identifier.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -114,7 +114,7 @@ Path to the installer project file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -130,7 +130,7 @@ Optional installer-specific MSBuild properties.
 Type: Hashtable
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -146,7 +146,7 @@ Optional runtime filter.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Runtime
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -178,7 +178,7 @@ Name of the source target.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -201,4 +201,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

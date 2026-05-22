@@ -34,7 +34,7 @@ Optional workspace validation config path.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -50,7 +50,7 @@ Optional features to disable.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -66,7 +66,7 @@ Optional features to enable.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -82,7 +82,7 @@ Optional workspace validation profile.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -98,7 +98,7 @@ When set, disables workspace validation by default for this object.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -121,4 +121,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

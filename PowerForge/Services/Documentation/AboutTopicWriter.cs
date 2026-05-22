@@ -8,8 +8,6 @@ namespace PowerForge;
 
 internal sealed class AboutTopicWriter
 {
-    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-
     public AboutTopicWriteResult Write(
         string stagingPath,
         string docsPath,
@@ -43,7 +41,7 @@ internal sealed class AboutTopicWriter
         {
             var candidate = selected[topic];
             var outPath = Path.Combine(aboutOutDir, SanitizeFileName(candidate.TopicName) + ".md");
-            File.WriteAllText(outPath, candidate.Markdown, Utf8NoBom);
+            GeneratedTextNormalizer.WriteUtf8NoBom(outPath, candidate.Markdown);
 
             written.Add(new AboutTopicInfo(candidate.TopicName, outPath, candidate.ShortDescription));
         }
@@ -92,7 +90,7 @@ internal sealed class AboutTopicWriter
         {
             var candidate = selected[topic];
             var outPath = Path.Combine(fullCulturePath, SanitizeFileName(candidate.TopicName) + ".help.txt");
-            File.WriteAllText(outPath, candidate.HelpText, Utf8NoBom);
+            GeneratedTextNormalizer.WriteUtf8NoBom(outPath, candidate.HelpText);
             written.Add(new AboutTopicInfo(candidate.TopicName, outPath, candidate.ShortDescription));
         }
 
@@ -208,7 +206,7 @@ internal sealed class AboutTopicWriter
         }
 
         sb.AppendLine();
-        File.WriteAllText(indexPath, sb.ToString(), Utf8NoBom);
+        GeneratedTextNormalizer.WriteUtf8NoBom(indexPath, sb.ToString());
     }
 
     private static string SanitizeFileName(string name)
@@ -347,7 +345,7 @@ internal static class AboutTopicMarkdown
             }
         }
 
-        var helpText = string.Join(Environment.NewLine, SplitLines(content)).TrimEnd() + Environment.NewLine;
+        var helpText = GeneratedTextNormalizer.Normalize(string.Join("\n", SplitLines(content)));
         return new AboutTopicMarkdownResult(topic, sb.ToString(), helpText, shortDesc);
     }
 
@@ -372,7 +370,7 @@ internal static class AboutTopicMarkdown
         }
 
         var helpText = ConvertMarkdownToHelpText(topic, markdown);
-        return new AboutTopicMarkdownResult(topic, markdown.Replace("\n", Environment.NewLine), helpText, shortDescription);
+        return new AboutTopicMarkdownResult(topic, GeneratedTextNormalizer.Normalize(markdown), helpText, shortDescription);
     }
 
     private static string ConvertMarkdownToHelpText(string topic, string markdown)
@@ -422,7 +420,7 @@ internal static class AboutTopicMarkdown
         while (output.Count > 0 && string.IsNullOrWhiteSpace(output[output.Count - 1]))
             output.RemoveAt(output.Count - 1);
 
-        return string.Join(Environment.NewLine, output) + Environment.NewLine;
+        return GeneratedTextNormalizer.Normalize(string.Join("\n", output));
     }
 
     private static string RemoveYamlFrontMatter(string markdown)

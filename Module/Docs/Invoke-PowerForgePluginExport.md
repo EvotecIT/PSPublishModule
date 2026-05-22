@@ -44,7 +44,7 @@ directory and its parents for standard PowerForge plugin config names.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -76,7 +76,7 @@ Sets host exit code: 0 on success, 1 on failure.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -92,7 +92,7 @@ Optional plugin group filter. When omitted, all catalog entries are selected.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Groups
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -108,7 +108,7 @@ Keeps symbol files in exported plugin folders.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -124,7 +124,7 @@ Optional output root override for exported plugin folders.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -140,7 +140,7 @@ Builds and emits the resolved export plan without executing dotnet publish.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -156,7 +156,7 @@ Optional preferred framework override used when a catalog entry targets multiple
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Framework
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -172,7 +172,7 @@ Optional project root override for resolving plugin project paths.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -195,4 +195,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

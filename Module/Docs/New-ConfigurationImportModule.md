@@ -42,7 +42,7 @@ Indicates whether to import required modules from the manifest.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -58,7 +58,7 @@ Indicates whether to import the current module itself.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -74,7 +74,7 @@ Reorders RequiredModules using a conflict-aware heuristic before manifest refres
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -90,7 +90,7 @@ Skips required-module and self-module binary conflict advisories during import v
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -106,7 +106,7 @@ Skips binary dependency preflight before importing the built module.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -129,4 +129,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

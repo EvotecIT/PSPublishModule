@@ -48,7 +48,7 @@ Directory where backups should be stored (optional).
 Type: String
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -64,7 +64,7 @@ Create backup copies of items before deletion.
 Type: SwitchParameter
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -96,7 +96,7 @@ Directory names to completely exclude from processing.
 Type: String[]
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -112,7 +112,7 @@ Patterns to exclude from deletion.
 Type: String[]
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -128,7 +128,7 @@ File/folder patterns to include for deletion when using the Custom parameter set
 Type: String[]
 Parameter Sets: Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -144,7 +144,7 @@ Suppress console output and use verbose/warning streams instead.
 Type: SwitchParameter
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -160,7 +160,7 @@ Maximum recursion depth. Default is unlimited (-1).
 Type: Int32
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -176,7 +176,7 @@ Return detailed results.
 Type: SwitchParameter
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -192,7 +192,7 @@ Path to the project directory to clean.
 Type: String
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -224,7 +224,7 @@ Process subdirectories recursively. Defaults to true unless explicitly specified
 Type: SwitchParameter
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -240,7 +240,7 @@ Number of retry attempts for each deletion.
 Type: Int32
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -256,7 +256,7 @@ Display progress information during cleanup.
 Type: SwitchParameter
 Parameter Sets: ProjectType, Custom
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -279,4 +279,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

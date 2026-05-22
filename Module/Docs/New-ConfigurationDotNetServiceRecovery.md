@@ -34,7 +34,7 @@ Applies recovery actions for non-crash failures.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -50,7 +50,7 @@ Enables applying recovery policy.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -82,7 +82,7 @@ Failure reset period in seconds.
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -98,7 +98,7 @@ Restart delay in seconds.
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -121,4 +121,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

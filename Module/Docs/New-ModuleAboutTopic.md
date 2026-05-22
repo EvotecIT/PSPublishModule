@@ -47,7 +47,7 @@ Overwrite existing file if it already exists.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -79,7 +79,7 @@ Output directory for the source file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Path
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -95,7 +95,7 @@ Returns the created file path.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -111,7 +111,7 @@ Optional short description seed for the generated template.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -127,7 +127,7 @@ Topic name. The about_ prefix is added automatically when missing.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: 0
@@ -150,4 +150,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

@@ -43,7 +43,7 @@ Automatically fix encoding and line ending issues during build.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -59,7 +59,7 @@ Check for files missing final newlines.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -75,7 +75,7 @@ Check for files with mixed line endings.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -91,7 +91,7 @@ Create backup files before applying automatic fixes.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -107,7 +107,7 @@ Enable file consistency checking during build.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -123,7 +123,7 @@ Per-path encoding overrides (patterns mapped to encodings).
 Type: Hashtable
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -139,7 +139,7 @@ Directory names to exclude from consistency analysis.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -155,7 +155,7 @@ File patterns to exclude from consistency analysis.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -171,7 +171,7 @@ Export detailed consistency report to the artifacts directory.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -187,7 +187,7 @@ Fail the build if consistency issues are found.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -203,7 +203,7 @@ Custom include patterns (override default project kind patterns).
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -219,7 +219,7 @@ Per-path line ending overrides (patterns mapped to line endings).
 Type: Hashtable
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -235,7 +235,7 @@ Maximum percentage of files that can have consistency issues. Default is 5.
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -251,7 +251,7 @@ Project kind used to derive default include patterns.
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -267,7 +267,7 @@ Custom filename for the consistency report.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -331,7 +331,7 @@ Severity for consistency issues (overrides FailOnInconsistency when specified).
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -347,7 +347,7 @@ Legacy switch. When set, applies encoding/line-ending consistency fixes to the p
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -370,4 +370,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

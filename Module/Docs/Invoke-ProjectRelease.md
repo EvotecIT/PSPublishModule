@@ -34,7 +34,7 @@ Optional release checksums output path override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -50,7 +50,7 @@ Sets host exit code: 0 on success, 1 on failure.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -66,7 +66,7 @@ Optional framework filter.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Framework
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -82,7 +82,7 @@ Optional installer MSBuild property overrides in Name=Value form.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -98,7 +98,7 @@ Keeps symbol files for tool/app artefacts.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -114,7 +114,7 @@ Optional release manifest output path override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -130,7 +130,7 @@ Optional output root override for tool/app assets.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -146,7 +146,7 @@ Builds the release plan without executing steps.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -162,7 +162,7 @@ PowerShell-authored project/release object.
 Type: ConfigurationProject
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -178,7 +178,7 @@ Enables tool/app GitHub release publishing for this run.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -194,7 +194,7 @@ Optional runtime filter.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Runtime, Rid
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -210,7 +210,7 @@ Enables signing for tool/app outputs when supported by the project object.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -226,7 +226,7 @@ Optional signing CSP override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -242,7 +242,7 @@ Optional signing description override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -258,7 +258,7 @@ Optional signing key container override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -274,7 +274,7 @@ Optional policy when signing fails.
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -290,7 +290,7 @@ Optional policy when the configured signing tool is missing.
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -306,7 +306,7 @@ Optional signing profile override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -322,7 +322,7 @@ Optional signing certificate subject name override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -338,7 +338,7 @@ Optional signing thumbprint override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -354,7 +354,7 @@ Optional signing timestamp URL override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -370,7 +370,7 @@ Optional signing tool path override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -386,7 +386,7 @@ Optional signing URL override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -402,7 +402,7 @@ Disables build operations for the tool/app publish flow.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -418,7 +418,7 @@ Skips top-level release checksums generation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -434,7 +434,7 @@ Disables restore operations for the tool/app publish flow.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -466,7 +466,7 @@ Skips workspace validation defined by the project object.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -482,7 +482,7 @@ Optional staged release root override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -514,7 +514,7 @@ Optional target-name filter.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Targets
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -546,7 +546,7 @@ Validates configuration through plan-only execution.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -562,7 +562,7 @@ Optional workspace validation config override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -578,7 +578,7 @@ Optional workspace feature disable list override.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -594,7 +594,7 @@ Optional workspace feature enable list override.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -610,7 +610,7 @@ Optional workspace validation profile override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -633,4 +633,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

@@ -34,7 +34,7 @@ Overwrites an existing file.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: Overwrite
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -50,7 +50,7 @@ Output JSON path.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Path
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -66,7 +66,7 @@ Project configuration object to export.
 Type: ConfigurationProject
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -89,4 +89,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

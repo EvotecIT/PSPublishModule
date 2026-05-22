@@ -11,17 +11,17 @@ Provides a way to configure publishing to PowerShell Gallery, GitHub, or private
 ## SYNTAX
 ### ApiFromFile (Default)
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> -FilePath <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> -FilePath <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [<CommonParameters>]
 ```
 
 ### ApiKey
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [<CommonParameters>]
 ```
 
 ### AzureArtifacts
 ```powershell
-New-ConfigurationPublish -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-Force] [-ID <string>] [<CommonParameters>]
+New-ConfigurationPublish -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [<CommonParameters>]
 ```
 
 ### Profile
@@ -462,6 +462,22 @@ Accept wildcard characters: True
 
 ### -UnregisterRepositoryAfterPublish
 When set, unregisters the repository after publish if it was created by this run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UseAsDependencyVersionSource
+Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.
 
 ```yaml
 Type: SwitchParameter

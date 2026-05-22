@@ -43,7 +43,7 @@ Overrides aliases to export in the module manifest.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -59,7 +59,7 @@ Identifies the module author.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -75,7 +75,7 @@ Overrides cmdlets to export in the module manifest.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -91,7 +91,7 @@ Identifies the company or vendor who created the module.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -107,7 +107,7 @@ Specifies the module's compatible PowerShell editions.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -123,7 +123,7 @@ Specifies a copyright statement for the module.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -139,7 +139,7 @@ Describes the module at a high level.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -155,7 +155,7 @@ Specifies the minimum version of the Microsoft .NET Framework that the module re
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -171,7 +171,7 @@ Specifies formatting files (.ps1xml) that run when the module is imported.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -187,7 +187,7 @@ Overrides functions to export in the module manifest.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -203,7 +203,7 @@ Specifies a unique identifier for the module.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -219,7 +219,7 @@ Specifies the URI for the module's icon.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -235,7 +235,7 @@ Specifies the URI for the module's license.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -251,7 +251,7 @@ Specifies the version of the module.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -267,7 +267,7 @@ Specifies the minimum version of PowerShell this module requires.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -283,7 +283,7 @@ Specifies the prerelease tag for the module.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: PrereleaseTag
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -299,7 +299,7 @@ Specifies the URI for the module's project page.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -315,7 +315,7 @@ When set, indicates the module requires explicit user license acceptance (PowerS
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -331,7 +331,7 @@ Specifies tags for the module.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -354,4 +354,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

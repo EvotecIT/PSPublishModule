@@ -41,7 +41,7 @@ Build configuration (default: Release).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -57,7 +57,7 @@ Overwrite existing config file.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: Overwrite
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -73,7 +73,7 @@ Optional framework override (for example net10.0).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -89,7 +89,7 @@ Omits the $schema property from generated JSON.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -105,7 +105,7 @@ Output config path (default: powerforge.dotnetpublish.json).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Path, ConfigPath
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -121,7 +121,7 @@ Returns detailed scaffold metadata instead of only config path.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -137,7 +137,7 @@ Optional path to a specific project file. When omitted, the first matching .cspr
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Project
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -153,7 +153,7 @@ Project root used to resolve relative paths.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -169,7 +169,7 @@ Optional runtime identifiers override.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -201,7 +201,7 @@ Optional target name override. Defaults to project file name.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -225,4 +225,3 @@ PowerForge.DotNetPublishConfigScaffoldResult`
 ## RELATED LINKS
 
 - None
-

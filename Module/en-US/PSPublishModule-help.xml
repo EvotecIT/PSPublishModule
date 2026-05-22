@@ -23324,6 +23324,24 @@ ApprovedModule is merge-only.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VersionSource</maml:name>
+          <maml:description>
+            <maml:para>Source used when resolving Auto/Latest version values.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleDependencyVersionSource</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Installed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSGallery</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PublishRepository</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleDependencyVersionSource</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -23407,6 +23425,24 @@ ApprovedModule is merge-only.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>VersionSource</maml:name>
+        <maml:description>
+          <maml:para>Source used when resolving Auto/Latest version values.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleDependencyVersionSource</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Installed</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PSGallery</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PublishRepository</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleDependencyVersionSource</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -26006,6 +26042,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseAsDependencyVersionSource</maml:name>
+          <maml:description>
+            <maml:para>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UserName</maml:name>
           <maml:description>
             <maml:para>GitHub username (required for GitHub publishing).</maml:para>
@@ -26287,6 +26335,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseAsDependencyVersionSource</maml:name>
+          <maml:description>
+            <maml:para>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UserName</maml:name>
           <maml:description>
             <maml:para>GitHub username (required for GitHub publishing).</maml:para>
@@ -26495,6 +26555,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <maml:name>UnregisterRepositoryAfterPublish</maml:name>
           <maml:description>
             <maml:para>When set, unregisters the repository after publish if it was created by this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseAsDependencyVersionSource</maml:name>
+          <maml:description>
+            <maml:para>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -26875,6 +26947,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <maml:name>UnregisterRepositoryAfterPublish</maml:name>
         <maml:description>
           <maml:para>When set, unregisters the repository after publish if it was created by this run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UseAsDependencyVersionSource</maml:name>
+        <maml:description>
+          <maml:para>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

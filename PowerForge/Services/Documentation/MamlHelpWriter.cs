@@ -40,6 +40,7 @@ internal sealed class MamlHelpWriter
             Indent = true,
             Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             OmitXmlDeclaration = false,
+            NewLineChars = "\r\n",
             NewLineHandling = NewLineHandling.Entitize
         };
 
@@ -61,7 +62,7 @@ internal sealed class MamlHelpWriter
             writer.WriteEndDocument();
         }
 
-        NormalizeFileToCrLf(path);
+        NormalizeGeneratedTextFile(path);
         return path;
     }
 
@@ -481,19 +482,19 @@ internal sealed class MamlHelpWriter
         return (commandName.Substring(0, idx), commandName.Substring(idx + 1));
     }
 
-    private static string Coalesce(string? primary, string? secondary)    
+    private static string Coalesce(string? primary, string? secondary)
     {
         if (primary is not null && !string.IsNullOrWhiteSpace(primary)) return primary.Trim();
         return secondary?.Trim() ?? string.Empty;
     }
 
-    private static void NormalizeFileToCrLf(string path)
+    private static void NormalizeGeneratedTextFile(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return;
 
         var text = File.ReadAllText(path, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+        var normalized = GeneratedTextNormalizer.Normalize(text);
         if (string.Equals(text, normalized, StringComparison.Ordinal))
             return;
 

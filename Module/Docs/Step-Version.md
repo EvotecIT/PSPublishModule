@@ -52,7 +52,7 @@ When set, returns a typed result instead of only the version string.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -68,7 +68,7 @@ Expected version (exact or pattern like 0.1.X).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -84,7 +84,7 @@ Optional local PSD1 path used to resolve current version.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -100,7 +100,7 @@ Optional module name used to resolve current version from PSGallery.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -124,4 +124,3 @@ PowerForge.ModuleVersionStepResult`
 ## RELATED LINKS
 
 - None
-

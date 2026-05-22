@@ -117,7 +117,7 @@ internal sealed class MarkdownDocumentBuilder
         }
 
         builder.Append(_body);
-        return builder.ToString();
+        return GeneratedTextNormalizer.Normalize(builder.ToString());
     }
 
     private static string Normalize(string text)

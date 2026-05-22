@@ -34,7 +34,7 @@ Path to the JSON configuration file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: ConfigPath, FilePath, JsonPath
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -57,4 +57,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

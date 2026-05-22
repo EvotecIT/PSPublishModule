@@ -48,7 +48,7 @@ A PFX file to use for signing (mutually exclusive with -LocalStore/-Thumbprint).
 Type: String
 Parameter Sets: PFX
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -64,7 +64,7 @@ One or more path substrings to exclude from signing.
 Type: String[]
 Parameter Sets: Store, PFX
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -96,7 +96,7 @@ File patterns to include during signing. Default: scripts only.
 Type: String[]
 Parameter Sets: Store, PFX
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -144,7 +144,7 @@ Root directory containing files to sign.
 Type: String
 Parameter Sets: Store, PFX
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -160,7 +160,7 @@ Certificate thumbprint to select a single certificate from the chosen store.
 Type: String
 Parameter Sets: Store
 Aliases: CertificateThumbprint
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -176,7 +176,7 @@ RFC3161 timestamp server URL. Default: http://timestamp.digicert.com.
 Type: String
 Parameter Sets: Store, PFX
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -199,4 +199,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

@@ -47,7 +47,7 @@ Allows DotNetPublish-backed manifest/report paths to resolve outside the configu
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -63,7 +63,7 @@ Allows DotNetPublish-backed outputs to resolve outside the configured project ro
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -79,7 +79,7 @@ Optional release checksums output path override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -96,7 +96,7 @@ and parent directories for standard release config file names.
 Type: String
 Parameter Sets: Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -128,7 +128,7 @@ Sets host exit code: 0 on success, 1 on failure.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -160,7 +160,7 @@ Optional framework filter.
 Type: String[]
 Parameter Sets: Config, Project
 Aliases: Framework
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -176,7 +176,7 @@ Optional installer MSBuild property overrides in Name=Value form.
 Type: String[]
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -192,7 +192,7 @@ Keeps symbol files for tool/app artefacts.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -208,7 +208,7 @@ Optional release manifest output path override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -224,7 +224,7 @@ Skips the dotnet build step inside the native module-release lane.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -240,7 +240,7 @@ Disables signing for the native module-release lane.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -256,7 +256,7 @@ Executes only the module portion of the release.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -272,7 +272,7 @@ Optional prerelease tag override for the native module-release lane.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -288,7 +288,7 @@ Enables signing for the native module-release lane.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -304,7 +304,7 @@ Optional module version override for the native module-release lane.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -320,7 +320,7 @@ Optional output root override for tool/app assets.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -352,7 +352,7 @@ Optional package-signing thumbprint override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -368,7 +368,7 @@ Optional package-signing timestamp URL override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -384,7 +384,7 @@ Executes only the package portion of the release.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -400,7 +400,7 @@ Builds the release plan without executing steps.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -416,7 +416,7 @@ PowerShell-authored project/release object that is translated into the unified r
 Type: ConfigurationProject
 Parameter Sets: Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -432,7 +432,7 @@ Enables NuGet publishing for this run.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -448,7 +448,7 @@ Enables project/package GitHub release publishing for this run.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -464,7 +464,7 @@ Enables tool/app GitHub release publishing for this run.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -480,7 +480,7 @@ Optional runtime filter.
 Type: String[]
 Parameter Sets: Config, Project
 Aliases: Runtime, Rid
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -496,7 +496,7 @@ Enables signing for tool/app outputs when supported by the release config.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -512,7 +512,7 @@ Optional signing CSP override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -528,7 +528,7 @@ Optional signing description override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -544,7 +544,7 @@ Optional signing key container override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -560,7 +560,7 @@ Optional policy when signing fails.
 Type: Nullable`1
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -576,7 +576,7 @@ Optional policy when the configured signing tool is missing.
 Type: Nullable`1
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -592,7 +592,7 @@ Optional signing profile override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -608,7 +608,7 @@ Optional signing certificate subject name override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -624,7 +624,7 @@ Optional signing thumbprint override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -640,7 +640,7 @@ Optional signing timestamp URL override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -656,7 +656,7 @@ Optional signing tool path override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -672,7 +672,7 @@ Optional signing URL override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -688,7 +688,7 @@ Disables build operations for the tool/app publish flow.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -704,7 +704,7 @@ Skips top-level release checksums generation.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -720,7 +720,7 @@ Disables restore operations for the tool/app publish flow.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -752,7 +752,7 @@ Skips workspace validation defined by the release config.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -768,7 +768,7 @@ Optional staged release root override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -800,7 +800,7 @@ Optional target-name filter.
 Type: String[]
 Parameter Sets: Config, Project
 Aliases: Targets
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -832,7 +832,7 @@ Executes only the tool/app portion of the release.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -848,7 +848,7 @@ Validates configuration through plan-only execution.
 Type: SwitchParameter
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -864,7 +864,7 @@ Optional workspace validation config override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -880,7 +880,7 @@ Optional workspace feature disable list override.
 Type: String[]
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -896,7 +896,7 @@ Optional workspace feature enable list override.
 Type: String[]
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -912,7 +912,7 @@ Optional workspace validation profile override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -935,4 +935,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

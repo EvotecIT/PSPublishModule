@@ -11,7 +11,7 @@ Provides a way to configure required, external, or approved modules used in the 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationModule -Name <string[]> [-Type <ModuleDependencyKind>] [-Version <string>] [-MinimumVersion <string>] [-RequiredVersion <string>] [-Guid <string>] [<CommonParameters>]
+New-ConfigurationModule -Name <string[]> [-Type <ModuleDependencyKind>] [-Version <string>] [-MinimumVersion <string>] [-RequiredVersion <string>] [-Guid <string>] [-VersionSource <ModuleDependencyVersionSource>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -84,7 +84,7 @@ onto a specific module identity across repositories.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -101,7 +101,7 @@ version is acceptable.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -118,7 +118,7 @@ module using the same dependency settings.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -135,7 +135,7 @@ exact same version.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -170,7 +170,23 @@ Minimum version of the dependency module (or Auto/Latest). This is treated the s
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -VersionSource
+Source used when resolving Auto/Latest version values.
+
+```yaml
+Type: ModuleDependencyVersionSource
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Auto, Installed, PSGallery, PublishRepository
 
 Required: False
 Position: named
@@ -193,4 +209,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

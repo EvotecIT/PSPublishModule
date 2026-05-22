@@ -42,7 +42,7 @@ API key used with Push.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -59,7 +59,7 @@ directory and its parents for standard PowerForge plugin config names.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -91,7 +91,7 @@ Sets host exit code: 0 on success, 1 on failure.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -107,7 +107,7 @@ Optional package group filter. When omitted, all catalog entries are selected.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Groups
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -123,7 +123,7 @@ Includes symbol packages in the pack output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -139,7 +139,7 @@ Skips the build step when running dotnet pack.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -155,7 +155,7 @@ Optional output root override for packed NuGet packages.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -171,7 +171,7 @@ Optional package version override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -187,7 +187,7 @@ Builds and emits the resolved package plan without executing dotnet pack.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -203,7 +203,7 @@ Optional project root override for resolving plugin project paths.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -219,7 +219,7 @@ Pushes packages after a successful pack run.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -235,7 +235,7 @@ Package source URL or name used with Push.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -251,7 +251,7 @@ Optional package version suffix override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -274,4 +274,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

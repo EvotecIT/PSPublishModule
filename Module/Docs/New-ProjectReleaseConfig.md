@@ -50,7 +50,7 @@ Overwrite an existing config file.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: Overwrite
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -66,7 +66,7 @@ Optional framework override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -82,7 +82,7 @@ Optional release name override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -98,7 +98,7 @@ Output config path (default: Build\project.release.json).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Path, ConfigPath
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -114,7 +114,7 @@ Returns detailed scaffold metadata instead of only the config path.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -130,7 +130,7 @@ Configure the starter file to request a portable bundle by default.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -146,7 +146,7 @@ Optional path to a specific project file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -162,7 +162,7 @@ Project root used to resolve relative paths.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -178,7 +178,7 @@ Optional runtime identifiers override.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Runtime
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -194,7 +194,7 @@ Optional target name override.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -218,4 +218,3 @@ PowerForge.PowerForgeProjectConfigurationScaffoldResult`
 ## RELATED LINKS
 
 - None
-

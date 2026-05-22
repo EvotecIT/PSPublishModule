@@ -73,7 +73,7 @@ Return the failure analysis object for further processing.
 Type: SwitchParameter
 Parameter Sets: Path, TestResults
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -89,7 +89,7 @@ Path to the NUnit XML test results file. If not specified, searches for TestResu
 Type: String
 Parameter Sets: Path
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -105,7 +105,7 @@ Path to the project directory used to locate test results when Path is not speci
 Type: String
 Parameter Sets: Path, TestResults
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -121,7 +121,7 @@ Include successful tests in the output (only applies to Summary format).
 Type: SwitchParameter
 Parameter Sets: Path, TestResults
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -138,7 +138,7 @@ or a precomputed ModuleTestFailureAnalysis.
 Type: Object
 Parameter Sets: TestResults
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -161,4 +161,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

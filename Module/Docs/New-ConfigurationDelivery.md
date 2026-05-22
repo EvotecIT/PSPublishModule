@@ -71,7 +71,7 @@ Optional file-name order for Internals\\Docs when rendering documentation.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -87,7 +87,7 @@ Enables delivery metadata emission.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -103,7 +103,7 @@ When set, generates a public Install-<ModuleName> helper function during build t
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -119,7 +119,7 @@ When set, generates a public Update-<ModuleName> helper function during build th
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -135,7 +135,7 @@ Important links (Title/Url). Accepts legacy hashtable array (@{ Title='..'; Url=
 Type: DeliveryImportantLink[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -151,7 +151,7 @@ Include module root CHANGELOG.* during installation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -167,7 +167,7 @@ Include module root LICENSE.* during installation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -183,7 +183,7 @@ Include module root README.* during installation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -199,7 +199,7 @@ Optional override name for the generated install command. When empty, defaults t
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -215,7 +215,7 @@ Relative path inside the module that contains internal deliverables.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -231,7 +231,7 @@ Relative path (within the module root) to a Markdown/text file to use as Intro c
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -247,7 +247,7 @@ Text lines shown to users after Install-ModuleDocumentation completes.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -280,7 +280,7 @@ Example: Artefacts/**.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -297,7 +297,7 @@ Example: Config/**.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -329,7 +329,7 @@ Optional branch name to use when fetching remote documentation.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -345,7 +345,7 @@ One or more repository-relative paths from which to display remote documentation
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -361,7 +361,7 @@ When set, requests signing for files under InternalsPath using the configured mo
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -377,7 +377,7 @@ Optional override name for the generated update command. When empty, defaults to
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -393,7 +393,7 @@ Relative path (within the module root) to a Markdown/text file to use for Upgrad
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -409,7 +409,7 @@ Text lines with upgrade instructions shown when requested.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -432,4 +432,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

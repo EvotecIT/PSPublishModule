@@ -72,7 +72,7 @@ Auto switch VersionedInstallStrategy to Exact when publishing.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -88,7 +88,7 @@ Base64 string of a PFX containing a code-signing certificate.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -104,7 +104,7 @@ Password for the PFX provided via CertificatePFXPath or CertificatePFXBase64.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -120,7 +120,7 @@ Path to a PFX containing a code-signing certificate.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -136,7 +136,7 @@ Thumbprint of a code-signing certificate from the local cert store.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -152,7 +152,7 @@ Delete target module before build.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -168,7 +168,7 @@ Do not attempt to fix relative paths during merge.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -184,7 +184,7 @@ Keep classes in a separate dot-sourced file instead of merging into the main PSM
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -200,7 +200,7 @@ Keep library-loading code in a separate dot-sourced file.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -216,7 +216,7 @@ Enable build process.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -233,7 +233,7 @@ the build host only; it does not bundle modules into artefacts.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -250,7 +250,7 @@ the secret value embedded directly in scripts.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -267,7 +267,7 @@ CI agents.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -284,7 +284,7 @@ InstallMissingModulesCredentialSecret or InstallMissingModulesCredentialSecretFi
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -301,7 +301,7 @@ re-sync against the repository instead of accepting the current local state.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -318,7 +318,7 @@ repository policy intentionally allow prerelease packages.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -335,7 +335,7 @@ should resolve dependencies from a named private feed or alternate gallery.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -351,7 +351,7 @@ Kill locking processes before install.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -367,7 +367,7 @@ Force killing locking processes before install.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -383,7 +383,7 @@ Use local versioning (bump PSD1 version on each build without querying PSGallery
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -399,7 +399,7 @@ When merging, also include functions from ApprovedModules referenced by the modu
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -415,7 +415,7 @@ Merge module on build (combine Private/Public/Classes/Enums into one PSM1).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -431,7 +431,7 @@ Load the binary module through a custom AssemblyLoadContext on PowerShell Core.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: UseAssemblyLoadContext
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -447,7 +447,7 @@ Assembly simple names whose public types may be exposed as PowerShell type accel
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: AssemblyTypeAcceleratorAssemblies
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -463,7 +463,7 @@ Controls optional type accelerator exposure for dependency types loaded in the m
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: AssemblyTypeAcceleratorMode
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -479,7 +479,7 @@ Fully-qualified dependency type names to expose as PowerShell type accelerators 
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: AssemblyTypeAccelerators
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -495,7 +495,7 @@ Binary module names (DLL file names) to import in the module.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -511,7 +511,7 @@ Disable cmdlet scanning for the binary module.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -527,7 +527,7 @@ Enable binary module documentation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: NETDocumentation, NETBinaryModuleDocumenation
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -559,7 +559,7 @@ Do not copy libraries recursively (legacy option).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -575,7 +575,7 @@ Filters for libraries that should be excluded from build output.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -591,7 +591,7 @@ Exclude main library from build output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -607,7 +607,7 @@ Target frameworks for .NET build.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -623,7 +623,7 @@ Handle 'assembly with same name is already loaded' by wrapping Add-Type logic.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: HandleAssemblyWithSameName
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -639,7 +639,7 @@ Handle runtimes folder when copying libraries.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -655,7 +655,7 @@ Exclude libraries from being loaded by PSM1/Libraries.ps1.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -671,7 +671,7 @@ Add-Type libraries line by line (legacy debugging option).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -687,7 +687,7 @@ Debug DLL merge (legacy setting).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: MergeLibraryDebugging
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -703,7 +703,7 @@ Project name for the .NET project (required when NETProjectPath is provided).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -719,7 +719,7 @@ Path to the .NET project to build (useful when not in Sources folder).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -735,7 +735,7 @@ Enable resolving binary conflicts.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: ResolveBinaryConflicts
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -751,7 +751,7 @@ Project name used when resolving binary conflicts.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: ResolveBinaryConflictsName
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -767,7 +767,7 @@ Search class (legacy option).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -783,7 +783,7 @@ Only regenerate the manifest (PSD1) without rebuilding/merging other artefacts.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -800,7 +800,7 @@ When not explicitly set, this is auto-enabled if any RequiredModules use Auto/La
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -816,7 +816,7 @@ Write library-loading code into a distinct file and reference it via ScriptsToPr
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -832,7 +832,7 @@ Override include patterns passed to the signer.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -848,7 +848,7 @@ Additional path substrings to exclude from signing.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -865,7 +865,7 @@ Use -SignIncludeBinaries:$false to opt out.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -881,7 +881,7 @@ When signing is enabled, include .exe files in signing.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -897,7 +897,7 @@ When signing is enabled, also sign scripts that reside under the Internals folde
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -913,7 +913,7 @@ Enable code-signing for the built module output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -929,7 +929,7 @@ When signing is enabled, overwrite existing signatures (re-sign files).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -945,7 +945,7 @@ Disables built-in replacements done by the module builder.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -962,7 +962,7 @@ This is opt-in and updates the source .csproj file when a project path can be re
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -978,7 +978,7 @@ Export all functions/aliases via wildcard in PSD1.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -994,7 +994,7 @@ How many versions to keep per module when using versioned installs.
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -1010,7 +1010,7 @@ How to handle legacy flat module installs during install.
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -1026,7 +1026,7 @@ Version folders to preserve during install pruning (for example older major vers
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -1042,7 +1042,7 @@ Controls how the module is installed into user Module roots after build.
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -1059,7 +1059,7 @@ reporting hint and does not change the manifest or install anything by itself.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -1082,4 +1082,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

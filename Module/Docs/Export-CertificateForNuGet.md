@@ -48,7 +48,7 @@ The SHA256 hash of the certificate to export.
 Type: String
 Parameter Sets: Sha256
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -64,7 +64,7 @@ The SHA1 thumbprint of the certificate to export.
 Type: String
 Parameter Sets: Thumbprint
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -96,7 +96,7 @@ Output path for the exported .cer file.
 Type: String
 Parameter Sets: Thumbprint, Sha256
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -119,4 +119,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

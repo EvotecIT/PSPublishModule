@@ -483,6 +483,50 @@ Markdown only topic body.
     }
 
     [Fact]
+    public void MarkdownHelpWriter_UsesStableLfAndTrimsEmptyPossibleValues()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-markdown-help-stable-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "DemoModule",
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Get-Demo",
+                        Synopsis = "Gets demo data.",
+                        Parameters = new List<DocumentationParameterHelp>
+                        {
+                            new()
+                            {
+                                Name = "Name",
+                                Type = "String",
+                                ParameterSets = new List<string> { "__AllParameterSets" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", root);
+
+            var text = File.ReadAllText(Path.Combine(root, "Get-Demo.md"));
+            Assert.False(HasIsolatedLf(text), "Markdown help should be normalized to CRLF line endings.");
+            Assert.Contains("Possible values:\r\n\r\nRequired:", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("Possible values: \r\n", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void XmlDocCommentEnricher_SimplifiesCrefTokensInDescriptions()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-cref-" + Guid.NewGuid().ToString("N"));

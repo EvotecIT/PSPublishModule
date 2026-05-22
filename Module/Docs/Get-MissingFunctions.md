@@ -50,7 +50,7 @@ Module names that are allowed sources for pulling inline helper function definit
 Type: String[]
 Parameter Sets: File, Code
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -66,7 +66,7 @@ ScriptBlock to analyze instead of a file. Alias: ScriptBlock.
 Type: ScriptBlock
 Parameter Sets: Code
 Aliases: ScriptBlock
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -82,7 +82,7 @@ Path to a script file to analyze for missing function dependencies. Alias: Path.
 Type: String
 Parameter Sets: File
 Aliases: Path
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -98,7 +98,7 @@ Known function names to treat as already available (exclude from missing list).
 Type: String[]
 Parameter Sets: File, Code
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -114,7 +114,7 @@ Function names to ignore when computing the missing set.
 Type: String[]
 Parameter Sets: File, Code
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -130,7 +130,7 @@ Return only a flattened summary list of functions used (objects with Name/Source
 Type: SwitchParameter
 Parameter Sets: File, Code
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -146,7 +146,7 @@ Return a typed report with Summary, SummaryFiltered, and Functions.
 Type: SwitchParameter
 Parameter Sets: File, Code
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -169,4 +169,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

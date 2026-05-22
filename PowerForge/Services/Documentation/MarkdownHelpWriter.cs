@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text;
 
 namespace PowerForge;
 
@@ -10,8 +9,6 @@ namespace PowerForge;
 /// </summary>
 internal sealed class MarkdownHelpWriter
 {
-    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-
     public void WriteCommandHelpFiles(DocumentationExtractionPayload payload, string moduleName, string docsPath)
     {
         if (payload is null) throw new ArgumentNullException(nameof(payload));
@@ -28,7 +25,7 @@ internal sealed class MarkdownHelpWriter
         {
             var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion);
             var path = Path.Combine(docsPath, $"{cmd.Name.Trim()}.md");
-            File.WriteAllText(path, md, Utf8NoBom);
+            GeneratedTextNormalizer.WriteUtf8NoBom(path, md);
         }
     }
 
@@ -104,7 +101,7 @@ internal sealed class MarkdownHelpWriter
             // best effort
         }
 
-        File.WriteAllText(readmePath, doc.ToString(), Utf8NoBom);
+        GeneratedTextNormalizer.WriteUtf8NoBom(readmePath, doc.ToString());
     }
 
     private static string RenderCommandMarkdown(string moduleName, DocumentationCommandHelp cmd, string? onlineVersion)

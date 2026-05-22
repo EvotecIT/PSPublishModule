@@ -42,7 +42,7 @@ Folder name containing public aliases to export (e.g., 'Public').
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -58,7 +58,7 @@ Paths or patterns to exclude from artefacts (e.g., 'Ignore','Docs','Examples').
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -74,7 +74,7 @@ Folder name containing public functions to export (e.g., 'Public').
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -90,7 +90,7 @@ Folder names to include entirely.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -106,7 +106,7 @@ Scriptblock executed during staging to add custom files/folders.
 Type: ScriptBlock
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -122,7 +122,7 @@ Folder names where PS1 files should be included.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -138,7 +138,7 @@ File patterns from the root to include (e.g., '*.psm1','*.psd1','License*').
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -154,7 +154,7 @@ Advanced include rules. Accepts legacy hashtable (Key=>Values) or IncludeToArray
 Type: IncludeToArrayEntry[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -170,7 +170,7 @@ Relative path to libraries compiled for Core (default 'Lib/Core').
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -186,7 +186,7 @@ Relative path to libraries for classic .NET (default 'Lib/Default').
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -202,7 +202,7 @@ Relative path to libraries for .NET Standard (default 'Lib/Standard').
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -225,4 +225,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

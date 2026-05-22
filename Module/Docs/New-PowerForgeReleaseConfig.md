@@ -58,7 +58,7 @@ Optional path to an existing DotNet publish config file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -74,7 +74,7 @@ Overwrite an existing config file.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: Overwrite
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -90,7 +90,7 @@ Omits the $schema property from generated JSON.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -106,7 +106,7 @@ Output config path (default: Build\release.json).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Path, ConfigPath
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -122,7 +122,7 @@ Optional path to an existing project-build config file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -138,7 +138,7 @@ Returns detailed scaffold metadata instead of only the config path.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -154,7 +154,7 @@ Project root used to resolve relative paths.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -170,7 +170,7 @@ Skips package config discovery.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -186,7 +186,7 @@ Skips tool/app config discovery.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -210,4 +210,3 @@ PowerForge.PowerForgeReleaseConfigScaffoldResult`
 ## RELATED LINKS
 
 - None
-

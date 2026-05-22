@@ -50,7 +50,7 @@ Path to existing DotNet publish JSON config.
 Type: String
 Parameter Sets: Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -66,7 +66,7 @@ Sets host exit code: 0 on success, 1 on failure.
 Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -82,7 +82,7 @@ Optional framework override for selected targets.
 Type: String[]
 Parameter Sets: Settings, Config
 Aliases: Framework
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -98,7 +98,7 @@ Exports JSON config and exits without running the engine.
 Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -114,7 +114,7 @@ Output path for JSON config used with JsonOnly.
 Type: String
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -130,7 +130,7 @@ Disables interactive output mode. Reserved for future UI parity.
 Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -146,7 +146,7 @@ Builds and emits resolved plan without executing steps.
 Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -162,7 +162,7 @@ Optional profile override.
 Type: String
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -178,7 +178,7 @@ Optional project root override used to resolve relative publish inputs and outpu
 Type: String
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -194,7 +194,7 @@ Optional runtime override for selected targets.
 Type: String[]
 Parameter Sets: Settings, Config
 Aliases: Runtime, Rid
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -210,7 +210,7 @@ DSL settings block that emits DotNet publish objects.
 Type: ScriptBlock
 Parameter Sets: Settings
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -226,7 +226,7 @@ Disables build steps for this run.
 Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -242,7 +242,7 @@ Disables restore steps for this run.
 Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -274,7 +274,7 @@ Optional target-name filter override.
 Type: String[]
 Parameter Sets: Settings, Config
 Aliases: Targets
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -290,7 +290,7 @@ Validates configuration by planning only; does not execute run steps.
 Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -314,4 +314,3 @@ PowerForge.DotNetPublishResult`
 ## RELATED LINKS
 
 - None
-
