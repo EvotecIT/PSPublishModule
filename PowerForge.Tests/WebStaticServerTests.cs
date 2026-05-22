@@ -63,6 +63,7 @@ public class WebStaticServerTests
             Assert.Contains("hello fallback", html, StringComparison.OrdinalIgnoreCase);
 
             cts.Cancel();
+            await TryWakeServerAsync(boundPort);
             await serverTask.WaitAsync(TimeSpan.FromSeconds(3));
         }
         finally
@@ -173,6 +174,7 @@ public class WebStaticServerTests
             Assert.DoesNotContain("TOP SECRET", body, StringComparison.OrdinalIgnoreCase);
 
             cts.Cancel();
+            await TryWakeServerAsync(boundPort);
             await serverTask.WaitAsync(TimeSpan.FromSeconds(3));
         }
         finally
@@ -252,6 +254,21 @@ public class WebStaticServerTests
         var portText = listeningLog[start..end];
         Assert.True(int.TryParse(portText, out var port), $"Could not parse port from: {listeningLog}");
         return port;
+    }
+
+    private static async Task TryWakeServerAsync(int port)
+    {
+        try
+        {
+            using var wakeClient = new HttpClient { Timeout = TimeSpan.FromMilliseconds(500) };
+            using var request = new HttpRequestMessage(HttpMethod.Head, $"http://localhost:{port}/");
+            using var _ = await wakeClient.SendAsync(request);
+        }
+        catch
+        {
+            // The listener may already be closed; waking it is only needed on hosts where cancellation
+            // does not immediately interrupt a blocking HttpListener.GetContext call.
+        }
     }
 
     private static async Task<string?> WaitForLogAsync(

@@ -132,7 +132,7 @@ public enum RequiredModulesSource
 }
 
 /// <summary>
-/// API version for NuGet-compatible repository endpoints (v2/v3).
+/// API version for PSResourceGet repository endpoints.
 /// </summary>
 public enum RepositoryApiVersion
 {
@@ -141,7 +141,9 @@ public enum RepositoryApiVersion
     /// <summary>NuGet v2 API.</summary>
     V2,
     /// <summary>NuGet v3 API.</summary>
-    V3
+    V3,
+    /// <summary>OCI/container registry API (Azure Container Registry, Microsoft Artifact Registry).</summary>
+    ContainerRegistry
 }
 
 /// <summary>

@@ -44,9 +44,48 @@ public sealed class PrivateGalleryServiceTests
             "__PowerForgePrivateGalleryConnectionProbe__"));
     }
 
+    [Fact]
+    public void EnsureMicrosoftArtifactRegistryRegistered_ReturnsWhatIfResultWithoutAzureCredentialProvider()
+    {
+        var service = new PrivateGalleryService(new FakePrivateGalleryHost(shouldProcess: false));
+        var status = new BootstrapPrerequisiteStatus(
+            psResourceGetAvailable: true,
+            psResourceGetVersion: "1.2.0",
+            psResourceGetMeetsMinimumVersion: true,
+            psResourceGetSupportsExistingSessionBootstrap: true,
+            psResourceGetMessage: null,
+            powerShellGetAvailable: false,
+            powerShellGetVersion: null,
+            powerShellGetMessage: null,
+            credentialProviderDetection: new AzureArtifactsCredentialProviderDetectionResult(),
+            readinessMessages: Array.Empty<string>());
+
+        var result = service.EnsureMicrosoftArtifactRegistryRegistered(
+            repositoryName: null,
+            tool: RepositoryRegistrationTool.Auto,
+            trusted: true,
+            priority: 10,
+            prerequisiteStatus: status,
+            shouldProcessAction: "Register Microsoft Artifact Registry");
+
+        Assert.Equal("MAR", result.RepositoryName);
+        Assert.Equal("MicrosoftArtifactRegistry", result.Provider);
+        Assert.Equal("https://mcr.microsoft.com", result.PSResourceGetUri);
+        Assert.False(result.RegistrationPerformed);
+        Assert.True(result.InstallPSResourceReady == false);
+        Assert.Equal("Register-ModuleRepository -MicrosoftArtifactRegistry", result.RecommendedBootstrapCommand);
+    }
+
     private sealed class FakePrivateGalleryHost : IPrivateGalleryHost
     {
-        public bool ShouldProcess(string target, string action) => true;
+        private readonly bool _shouldProcess;
+
+        public FakePrivateGalleryHost(bool shouldProcess = true)
+        {
+            _shouldProcess = shouldProcess;
+        }
+
+        public bool ShouldProcess(string target, string action) => _shouldProcess;
 
         public bool IsWhatIfRequested => false;
 

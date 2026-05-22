@@ -19,6 +19,11 @@ Connect-ModuleRepository -AzureDevOpsOrganization <string> -AzureArtifactsFeed <
 Connect-ModuleRepository -ProfileName <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### MicrosoftArtifactRegistry
+```powershell
+Connect-ModuleRepository -MicrosoftArtifactRegistry [-Name <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <int>] [-InstallPrerequisites] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
 This cmdlet is the explicit "connect/login" companion to Register-ModuleRepository. It ensures the
 repository registration exists and then performs a lightweight authenticated probe so callers know whether
@@ -147,15 +152,31 @@ Accept wildcard characters: True
 ```
 
 ### -InstallPrerequisites
-Installs missing private-gallery prerequisites before connecting, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.
+Installs missing private-gallery prerequisites before connecting, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: AzureArtifacts, Profile
+Parameter Sets: AzureArtifacts, Profile, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MicrosoftArtifactRegistry
+Registers and probes Microsoft Artifact Registry as a PSResourceGet repository for Microsoft-owned packages.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -167,7 +188,7 @@ Optional repository name override. Defaults to the feed name.
 
 ```yaml
 Type: String
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: Repository
 Possible values:
 
@@ -183,7 +204,7 @@ Optional PSResourceGet repository priority.
 
 ```yaml
 Type: Nullable`1
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -247,7 +268,7 @@ Registration strategy. Auto prefers PSResourceGet and falls back to PowerShellGe
 
 ```yaml
 Type: RepositoryRegistrationTool
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values: Auto, PSResourceGet, PowerShellGet, Both
 
@@ -263,7 +284,7 @@ When true, marks the repository as trusted.
 
 ```yaml
 Type: Boolean
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 

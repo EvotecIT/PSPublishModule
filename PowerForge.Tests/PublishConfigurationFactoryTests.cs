@@ -113,4 +113,46 @@ public sealed class PublishConfigurationFactoryTests
 
         Assert.Contains("RepositoryName cannot be 'PSGallery'", ex.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Create_allows_container_registry_repository_when_not_publishing()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "unused",
+            RepositoryName = "CompanyAcr",
+            RepositoryUri = "https://contoso.azurecr.io",
+            RepositoryApiVersion = RepositoryApiVersion.ContainerRegistry,
+            Enabled = false,
+            UseAsDependencyVersionSource = true
+        });
+
+        var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
+        Assert.Equal(RepositoryApiVersion.ContainerRegistry, repository.ApiVersion);
+        Assert.Equal("https://contoso.azurecr.io", repository.Uri);
+        Assert.True(segment.Configuration.UseAsDependencyVersionSource);
+    }
+
+    [Fact]
+    public void Create_rejects_enabled_mar_publish_repository()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "unused",
+            RepositoryName = "MAR",
+            RepositoryUri = "https://mcr.microsoft.com",
+            RepositoryApiVersion = RepositoryApiVersion.ContainerRegistry,
+            Enabled = true
+        }));
+
+        Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

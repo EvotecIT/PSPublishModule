@@ -109,7 +109,7 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before connecting, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before connecting, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -241,7 +241,7 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before connecting, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before connecting, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -270,6 +270,87 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="MicrosoftArtifactRegistry">
+        <maml:name>Connect-ModuleRepository</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites before connecting, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MicrosoftArtifactRegistry</maml:name>
+          <maml:description>
+            <maml:para>Registers and probes Microsoft Artifact Registry as a PSResourceGet repository for Microsoft-owned packages.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Repository">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Optional repository name override. Defaults to the feed name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Priority</maml:name>
+          <maml:description>
+            <maml:para>Optional PSResourceGet repository priority.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Registration strategy. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">RepositoryRegistrationTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Both</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>RepositoryRegistrationTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Trusted</maml:name>
+          <maml:description>
+            <maml:para>When true, marks the repository as trusted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -369,9 +450,21 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites before connecting, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before connecting, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MicrosoftArtifactRegistry</maml:name>
+        <maml:description>
+          <maml:para>Registers and probes Microsoft Artifact Registry as a PSResourceGet repository for Microsoft-owned packages.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
           <maml:uri />
@@ -4325,7 +4418,7 @@ the requested modules.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before automatic registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -4489,7 +4582,7 @@ the requested modules.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before automatic registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -4557,6 +4650,123 @@ the requested modules.</maml:para>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository name override when Azure Artifacts details are supplied.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Registration strategy used when Azure Artifacts details are supplied. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">RepositoryRegistrationTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Both</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>RepositoryRegistrationTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Trusted</maml:name>
+          <maml:description>
+            <maml:para>When true, marks the repository as trusted during automatic registration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="MicrosoftArtifactRegistry">
+        <maml:name>Install-PrivateModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Forces reinstall even when a matching version is already present.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MicrosoftArtifactRegistry</maml:name>
+          <maml:description>
+            <maml:para>Installs Microsoft-owned packages from Microsoft Artifact Registry, registering MAR first when needed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Module names to install.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Prerelease</maml:name>
+          <maml:description>
+            <maml:para>Includes prerelease versions when supported by the selected installer.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Priority</maml:name>
+          <maml:description>
+            <maml:para>Optional PSResourceGet repository priority used during automatic registration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -4710,9 +4920,21 @@ the requested modules.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites before automatic registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before automatic registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MicrosoftArtifactRegistry</maml:name>
+        <maml:description>
+          <maml:para>Installs Microsoft-owned packages from Microsoft Artifact Registry, registering MAR first when needed.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
           <maml:uri />
@@ -25881,6 +26103,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">V2</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">V3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ContainerRegistry</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>RepositoryApiVersion</maml:name>
@@ -26174,6 +26397,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">V2</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">V3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ContainerRegistry</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>RepositoryApiVersion</maml:name>
@@ -26455,6 +26679,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">V2</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">V3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ContainerRegistry</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>RepositoryApiVersion</maml:name>
@@ -26795,6 +27020,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">V2</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">V3</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ContainerRegistry</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>RepositoryApiVersion</maml:name>
@@ -30881,7 +31107,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -31013,7 +31239,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -31042,6 +31268,87 @@ Install-PSResource, Install-Module, or both are available for the configured rep
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="MicrosoftArtifactRegistry">
+        <maml:name>Register-ModuleRepository</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites before registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MicrosoftArtifactRegistry</maml:name>
+          <maml:description>
+            <maml:para>Registers Microsoft Artifact Registry as a trusted PSResourceGet repository for Microsoft-owned packages.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Repository">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Optional repository name override. Defaults to the feed name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Priority</maml:name>
+          <maml:description>
+            <maml:para>Optional PSResourceGet repository priority.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Registration strategy. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">RepositoryRegistrationTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Both</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>RepositoryRegistrationTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Trusted</maml:name>
+          <maml:description>
+            <maml:para>When true, marks the repository as trusted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -31141,9 +31448,21 @@ Install-PSResource, Install-Module, or both are available for the configured rep
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites before registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MicrosoftArtifactRegistry</maml:name>
+        <maml:description>
+          <maml:para>Registers Microsoft Artifact Registry as a trusted PSResourceGet repository for Microsoft-owned packages.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
           <maml:uri />
@@ -33648,7 +33967,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -33780,7 +34099,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -33809,6 +34128,87 @@ Install-PSResource, Install-Module, or both are available for the configured rep
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="MicrosoftArtifactRegistry">
+        <maml:name>Update-ModuleRepository</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites before refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MicrosoftArtifactRegistry</maml:name>
+          <maml:description>
+            <maml:para>Refreshes Microsoft Artifact Registry registration for Microsoft-owned packages.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Repository">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Optional repository name override. Defaults to the feed name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Priority</maml:name>
+          <maml:description>
+            <maml:para>Optional PSResourceGet repository priority.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Registration strategy. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">RepositoryRegistrationTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Both</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>RepositoryRegistrationTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Trusted</maml:name>
+          <maml:description>
+            <maml:para>When true, marks the repository as trusted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -33908,9 +34308,21 @@ Install-PSResource, Install-Module, or both are available for the configured rep
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites before refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MicrosoftArtifactRegistry</maml:name>
+        <maml:description>
+          <maml:para>Refreshes Microsoft Artifact Registry registration for Microsoft-owned packages.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
           <maml:uri />
@@ -34186,7 +34598,7 @@ are provided, the repository registration is refreshed before the update is atte
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -34338,7 +34750,7 @@ are provided, the repository registration is refreshed before the update is atte
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -34406,6 +34818,111 @@ are provided, the repository registration is refreshed before the update is atte
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository name override when Azure Artifacts details are supplied.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Registration strategy used when Azure Artifacts details are supplied. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">RepositoryRegistrationTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Both</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>RepositoryRegistrationTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Trusted</maml:name>
+          <maml:description>
+            <maml:para>When true, marks the repository as trusted during automatic registration refresh.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="MicrosoftArtifactRegistry">
+        <maml:name>Update-PrivateModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MicrosoftArtifactRegistry</maml:name>
+          <maml:description>
+            <maml:para>Updates Microsoft-owned packages from Microsoft Artifact Registry, registering MAR first when needed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Module names to update.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Prerelease</maml:name>
+          <maml:description>
+            <maml:para>Includes prerelease versions when supported by the selected installer.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Priority</maml:name>
+          <maml:description>
+            <maml:para>Optional PSResourceGet repository priority used during automatic registration refresh.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -34547,9 +35064,21 @@ are provided, the repository registration is refreshed before the update is atte
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MicrosoftArtifactRegistry</maml:name>
+        <maml:description>
+          <maml:para>Updates Microsoft-owned packages from Microsoft Artifact Registry, registering MAR first when needed.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
           <maml:uri />

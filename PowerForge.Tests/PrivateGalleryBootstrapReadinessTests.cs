@@ -72,6 +72,33 @@ public sealed class PrivateGalleryBootstrapReadinessTests
     }
 
     [Fact]
+    public void PSResourceGetClient_EnsureMicrosoftArtifactRegistryRegistered_UsesContainerRegistry()
+    {
+        PowerShellRunRequest? captured = null;
+        string? scriptText = null;
+        var client = new PSResourceGetClient(
+            new StubPowerShellRunner(request =>
+            {
+                captured = request;
+                scriptText = File.ReadAllText(request.ScriptPath!);
+                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::1", string.Empty, "pwsh.exe");
+            }),
+            new NullLogger());
+
+        var created = client.EnsureMicrosoftArtifactRegistryRegistered(priority: 5);
+
+        Assert.True(created);
+        Assert.NotNull(captured);
+        Assert.Equal("MAR", captured!.Arguments[0]);
+        Assert.Equal("https://mcr.microsoft.com", captured.Arguments[1]);
+        Assert.Equal("5", captured.Arguments[3]);
+        Assert.Equal("ContainerRegistry", captured.Arguments[4]);
+        Assert.NotNull(scriptText);
+        Assert.Contains("ContainsKey('MAR')", scriptText, StringComparison.Ordinal);
+        Assert.Contains("MicrosoftArtifactRegistry", scriptText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PowerShellGetClient_IsAvailable_ReturnsFalse_WhenToolIsMissing()
     {
         var error = Convert.ToBase64String(Encoding.UTF8.GetBytes("PowerShellGet not available."));

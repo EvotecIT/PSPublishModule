@@ -37,7 +37,6 @@ public class MarkdownDocumentBuilderTests
             ```powershell
             Get-Thing
             ```
-            
             """
             .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
             markdown);
@@ -59,7 +58,6 @@ public class MarkdownDocumentBuilderTests
                     Write-Host 'hi'
                 }
             ```
-            
             """
             .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
             markdown);
