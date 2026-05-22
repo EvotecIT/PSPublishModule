@@ -127,10 +127,8 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
 
         if (ParameterSetName == ParameterSetMicrosoftArtifactRegistry)
         {
-            var prerequisites = service.EnsureBootstrapPrerequisites(
-                InstallPrerequisites.IsPresent,
-                PrivateGalleryBootstrapMode.ExistingSession,
-                includeAzureArtifactsCredentialProvider: false);
+            var prerequisites = service.EnsureMicrosoftArtifactRegistryPrerequisites(
+                InstallPrerequisites.IsPresent);
             var marResult = service.EnsureMicrosoftArtifactRegistryRegistered(
                 Name,
                 Tool,

@@ -132,10 +132,8 @@ internal sealed class PrivateModuleWorkflowService
         }
         else if (useMicrosoftArtifactRegistry)
         {
-            var prerequisiteInstall = _privateGalleryService.EnsureBootstrapPrerequisites(
-                request.InstallPrerequisites,
-                PrivateGalleryBootstrapMode.ExistingSession,
-                includeAzureArtifactsCredentialProvider: false);
+            var prerequisiteInstall = _privateGalleryService.EnsureMicrosoftArtifactRegistryPrerequisites(
+                request.InstallPrerequisites);
             var registration = _privateGalleryService.EnsureMicrosoftArtifactRegistryRegistered(
                 request.RepositoryName,
                 request.Tool,

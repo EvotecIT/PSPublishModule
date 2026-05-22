@@ -525,6 +525,12 @@ internal sealed class PrivateGalleryService
             finalStatus);
     }
 
+    public BootstrapPrerequisiteInstallResult EnsureMicrosoftArtifactRegistryPrerequisites(bool installPrerequisites)
+        => EnsureBootstrapPrerequisites(
+            installPrerequisites,
+            PrivateGalleryBootstrapMode.Auto,
+            includeAzureArtifactsCredentialProvider: false);
+
     internal static string GetRequiredPSResourceGetVersion(
         PrivateGalleryBootstrapMode bootstrapMode,
         bool includeAzureArtifactsCredentialProvider)
