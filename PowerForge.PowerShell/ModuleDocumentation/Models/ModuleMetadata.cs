@@ -59,6 +59,8 @@ internal sealed class ModuleInfoModel
     public int HelpTimeoutSeconds { get; set; } = 3;
     /// <summary>Render Get‑Help output as fenced code to preserve monospace formatting.</summary>
     public bool HelpAsCode { get; set; }
+    /// <summary>Render Markdown code fences without syntax tokenization.</summary>
+    public bool DisableTokenizer { get; set; }
     /// <summary>Source for examples: Auto (Raw then Maml), Raw (Out‑String EXAMPLES), or Maml (structured).</summary>
     public ExamplesMode ExamplesMode { get; set; } = ExamplesMode.Auto;
     /// <summary>Selection policy for standard tabs when both Local and Remote exist (PreferLocal/PreferRemote/All).</summary>

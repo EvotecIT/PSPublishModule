@@ -197,6 +197,8 @@ public class DocumentationPlannerTests
         - Release.
         """);
         File.WriteAllText(Path.Combine(root, "SECURITY.md"), "# Security");
+        File.WriteAllText(Path.Combine(root, "Sample.format.ps1xml"), "<Configuration />");
+        File.WriteAllText(Path.Combine(root, "Sample.types.ps1xml"), "<Types />");
 
         var scriptsRoot = Path.Combine(internals, "Scripts");
         Directory.CreateDirectory(scriptsRoot);
@@ -227,6 +229,8 @@ public class DocumentationPlannerTests
         Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "SCRIPT", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "DOC", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "COMMUNITY", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "FORMAT", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "TYPE", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "RELEASES", StringComparison.OrdinalIgnoreCase));
     }
 

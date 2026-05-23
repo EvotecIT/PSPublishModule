@@ -119,7 +119,7 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
         }
         else
         {
-            files = Directory.GetFiles(scriptsRoot, "*", SearchOption.AllDirectories)
+            files = Directory.GetFiles(scriptsRoot, "*.ps1", SearchOption.AllDirectories)
                 .Where(f => MatchesAny(f, scriptsRoot, includes) && !MatchesAny(f, scriptsRoot, excludes))
                 .ToList();
         }

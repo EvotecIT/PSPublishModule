@@ -449,6 +449,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         meta.MaxCommands = MaxCommands;
         meta.HelpTimeoutSeconds = HelpTimeoutSeconds;
         meta.HelpAsCode = HelpAsCode.IsPresent;
+        meta.DisableTokenizer = DisableTokenizer.IsPresent;
         meta.Online = wantsRemote;
         meta.Mode = reqObj.Mode;
         meta.ShowDuplicates = ShowDuplicates.IsPresent;
@@ -471,7 +472,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
 
         // Always export HTML (Word can be added later). If no path provided, write to temp.
         var html = new HtmlExporter();
-        var open = !DoNotShow.IsPresent; // default is to open
+        var open = Open.IsPresent && !DoNotShow.IsPresent;
         WriteVerbose("Rendering HTML...");
         var path = html.Export(meta, finalExportItems, OutputPath, open, s => { if (!string.IsNullOrEmpty(s) && s.StartsWith("[WARN]")) { WriteWarning(s.Substring(6)); } else { WriteVerbose(s); } });
         WriteVerbose($"HTML exported to {path}");

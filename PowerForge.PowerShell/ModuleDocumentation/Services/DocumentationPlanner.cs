@@ -123,7 +123,7 @@ internal sealed partial class DocumentationPlanner
             var client = ResolveRepoClient(req, clientOverride);
             if (client != null)
             {
-                string branch = effectiveRepositoryBranch ?? "main";
+                string branch = effectiveRepositoryBranch ?? client.GetDefaultBranch();
                 bool anyRemote = false;
                 // Extra paths
                 if (includeSupplementalSections && req.RepositoryPaths != null)
@@ -294,39 +294,42 @@ internal sealed partial class DocumentationPlanner
         }
 
         // Formats and Types (local)
-        try
+        if (includeSupplementalSections)
         {
-            var formats = _finder.ResolveFormatFiles((req.RootBase, req.InternalsBase, new DeliveryOptions()), req.FormatsToProcess);
-            foreach (var f in formats)
+            try
             {
-                var content = System.IO.File.ReadAllText(f.FullName);
-                res.Items.Add(new DocumentItem
+                var formats = _finder.ResolveFormatFiles((req.RootBase, req.InternalsBase, new DeliveryOptions()), req.FormatsToProcess);
+                foreach (var f in formats)
                 {
-                    Title = BuildTitle(req, f.Name),
-                    Kind = "FORMAT",
-                    Path = f.FullName,
-                    FileName = f.Name,
-                    Content = RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "text"),
-                    Source = "Local"
-                });
-            }
+                    var content = System.IO.File.ReadAllText(f.FullName);
+                    res.Items.Add(new DocumentItem
+                    {
+                        Title = BuildTitle(req, f.Name),
+                        Kind = "FORMAT",
+                        Path = f.FullName,
+                        FileName = f.Name,
+                        Content = RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "text"),
+                        Source = "Local"
+                    });
+                }
 
-            var types = _finder.ResolveTypesFiles((req.RootBase, req.InternalsBase, new DeliveryOptions()), req.TypesToProcess);
-            foreach (var f in types)
-            {
-                var content = System.IO.File.ReadAllText(f.FullName);
-                res.Items.Add(new DocumentItem
+                var types = _finder.ResolveTypesFiles((req.RootBase, req.InternalsBase, new DeliveryOptions()), req.TypesToProcess);
+                foreach (var f in types)
                 {
-                    Title = BuildTitle(req, f.Name),
-                    Kind = "TYPE",
-                    Path = f.FullName,
-                    FileName = f.Name,
-                    Content = RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "text"),
-                    Source = "Local"
-                });
+                    var content = System.IO.File.ReadAllText(f.FullName);
+                    res.Items.Add(new DocumentItem
+                    {
+                        Title = BuildTitle(req, f.Name),
+                        Kind = "TYPE",
+                        Path = f.FullName,
+                        FileName = f.Name,
+                        Content = RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "text"),
+                        Source = "Local"
+                    });
+                }
             }
+            catch { }
         }
-        catch { }
 
         // Community files (local)
         if (includeSupplementalSections)
@@ -681,16 +684,14 @@ internal sealed partial class DocumentationPlanner
             return req.RepositoryBranch!.Trim();
         }
 
-        if (!req.Online || (string.IsNullOrWhiteSpace(req.ProjectUri) && clientOverride == null))
+        if (!req.Online || clientOverride == null)
         {
             return null;
         }
 
         try
         {
-            var client = ResolveRepoClient(req, clientOverride);
-
-            var branch = client?.GetDefaultBranch();
+            var branch = clientOverride.GetDefaultBranch();
             return string.IsNullOrWhiteSpace(branch) ? null : branch!.Trim();
         }
         catch

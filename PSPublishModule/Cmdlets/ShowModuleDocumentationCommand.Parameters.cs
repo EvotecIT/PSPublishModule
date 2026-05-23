@@ -32,7 +32,7 @@ public sealed partial class ShowModuleDocumentationCommand
     [Parameter] public string? File { get; set; }
     /// <summary>Prefer Internals folder over module root when both contain the same file kind.</summary>
     [Parameter] public SwitchParameter PreferInternals { get; set; }
-    /// <summary>Open the chosen document in the default shell handler instead of rendering to console.</summary>
+    /// <summary>Open the generated HTML in the default shell handler after export.</summary>
     [Parameter] public SwitchParameter Open { get; set; }
     /// <summary>Heading rulers style. <c>H1AndH2</c> draws rules for H1/H2, <c>H1</c> for H1 only, <c>None</c> disables.</summary>
     [Parameter]
@@ -42,7 +42,7 @@ public sealed partial class ShowModuleDocumentationCommand
     [Parameter]
     [Alias("Path","ExportHtmlPath")]
     public string? OutputPath { get; set; }
-    /// <summary>Do not open the generated HTML (default is to open after export).</summary>
+    /// <summary>Do not open the generated HTML after export.</summary>
     [Parameter]
     public SwitchParameter DoNotShow { get; set; }
     /// <summary>Disable code tokenizers and render code fences as plain text.</summary>
@@ -61,7 +61,7 @@ public sealed partial class ShowModuleDocumentationCommand
     /// <summary>Limit the number of commands rendered in the Commands tab. Default 100.</summary>
     [Parameter] public int MaxCommands { get; set; } = 100;
     /// <summary>Per-command Get-Help timeout in seconds. Default 3.</summary>
-    [Parameter] public int HelpTimeoutSeconds { get; set; } = 60;
+    [Parameter] public int HelpTimeoutSeconds { get; set; } = 3;
     /// <summary>Render command help inside fenced code blocks for uniform monospace formatting.</summary>
     [Parameter] public SwitchParameter HelpAsCode { get; set; }
 
