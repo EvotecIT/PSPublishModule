@@ -103,6 +103,9 @@ internal static class RepositoryContentNormalizer
         => RewriteRelativeUris(markdown, rawBaseUri, null);
 
     internal static string RewriteRelativeUris(string markdown, string? rawBaseUri, string? blobBaseUri)
+        => RewriteRelativeUris(markdown, rawBaseUri, blobBaseUri, null);
+
+    internal static string RewriteRelativeUris(string markdown, string? rawBaseUri, string? blobBaseUri, string? documentPath)
     {
         if (string.IsNullOrWhiteSpace(markdown) || string.IsNullOrWhiteSpace(rawBaseUri))
             return markdown ?? string.Empty;
@@ -150,7 +153,7 @@ internal static class RepositoryContentNormalizer
             }
             else
             {
-                builder.Append(SanitizeHtmlLinkAttributes(RewriteHtmlAttributes(RewriteMarkdownLinks(line, resolvedRawBaseUri, resolvedBlobBaseUri), resolvedRawBaseUri, resolvedBlobBaseUri)));
+                builder.Append(SanitizeHtmlLinkAttributes(RewriteHtmlAttributes(RewriteMarkdownLinks(line, resolvedRawBaseUri, resolvedBlobBaseUri, documentPath), resolvedRawBaseUri, resolvedBlobBaseUri, documentPath)));
             }
 
             if (i < lines.Length - 1)
@@ -212,7 +215,7 @@ internal static class RepositoryContentNormalizer
         return $"~~~{normalizedLanguage}\n{content}\n~~~";
     }
 
-    private static string RewriteMarkdownLinks(string text, string rawBaseUri, string? blobBaseUri)
+    private static string RewriteMarkdownLinks(string text, string rawBaseUri, string? blobBaseUri, string? documentPath)
     {
         return MarkdownLinkRegex.Replace(text, match =>
         {
@@ -226,7 +229,7 @@ internal static class RepositoryContentNormalizer
                 var baseUri = !isImage && IsLikelyViewableDocument(url) && !string.IsNullOrWhiteSpace(blobBaseUri)
                     ? blobBaseUri!
                     : rawBaseUri;
-                var absolute = ResolveRelativeUrl(baseUri, url);
+                var absolute = ResolveRelativeUrl(baseUri, url, documentPath);
                 return match.Groups[1].Value + absolute + match.Groups[3].Value;
             }
             catch
@@ -236,7 +239,7 @@ internal static class RepositoryContentNormalizer
         });
     }
 
-    private static string RewriteHtmlAttributes(string text, string rawBaseUri, string? blobBaseUri)
+    private static string RewriteHtmlAttributes(string text, string rawBaseUri, string? blobBaseUri, string? documentPath)
     {
         return HtmlUrlAttributeRegex.Replace(text, match =>
         {
@@ -251,7 +254,7 @@ internal static class RepositoryContentNormalizer
                 var baseUri = isHref && IsLikelyViewableDocument(url) && !string.IsNullOrWhiteSpace(blobBaseUri)
                     ? blobBaseUri!
                     : rawBaseUri;
-                var absolute = ResolveRelativeUrl(baseUri, url);
+                var absolute = ResolveRelativeUrl(baseUri, url, documentPath);
                 return match.Groups["prefix"].Value + match.Groups["quote"].Value + absolute + match.Groups["quote"].Value;
             }
             catch
@@ -269,11 +272,12 @@ internal static class RepositoryContentNormalizer
         return HtmlLinkSafetyAttributeRegex.Replace(text, string.Empty);
     }
 
-    private static string ResolveRelativeUrl(string baseUri, string url)
+    private static string ResolveRelativeUrl(string baseUri, string url, string? documentPath)
     {
+        var resolvedUrl = ResolveAgainstDocumentPath(url, documentPath);
         if (baseUri.Contains("{path}", StringComparison.Ordinal))
         {
-            var normalized = (url ?? string.Empty).Replace('\\', '/').TrimStart('/');
+            var normalized = (resolvedUrl ?? string.Empty).Replace('\\', '/').TrimStart('/');
             var fragment = string.Empty;
             var fragmentIndex = normalized.IndexOf('#');
             if (fragmentIndex >= 0)
@@ -294,7 +298,59 @@ internal static class RepositoryContentNormalizer
             return baseUri.Replace("{path}", encodedPath) + query + fragment;
         }
 
-        return new Uri(new Uri(baseUri, UriKind.Absolute), url).ToString();
+        return new Uri(new Uri(baseUri, UriKind.Absolute), resolvedUrl).ToString();
+    }
+
+    private static string ResolveAgainstDocumentPath(string url, string? documentPath)
+    {
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(documentPath))
+            return url;
+
+        var normalizedDocumentPath = documentPath!.Replace('\\', '/').Trim('/');
+        var slash = normalizedDocumentPath.LastIndexOf('/');
+        if (slash < 0)
+            return url;
+
+        var directory = normalizedDocumentPath.Substring(0, slash);
+        if (string.IsNullOrWhiteSpace(directory))
+            return url;
+
+        var path = url;
+        var fragment = string.Empty;
+        var fragmentIndex = path.IndexOf('#');
+        if (fragmentIndex >= 0)
+        {
+            fragment = path.Substring(fragmentIndex);
+            path = path.Substring(0, fragmentIndex);
+        }
+
+        var query = string.Empty;
+        var queryIndex = path.IndexOf('?');
+        if (queryIndex >= 0)
+        {
+            query = path.Substring(queryIndex);
+            path = path.Substring(0, queryIndex);
+        }
+
+        var segments = new System.Collections.Generic.List<string>(
+            directory.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries));
+
+        foreach (var segment in path.Replace('\\', '/').Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+                continue;
+
+            if (segment == "..")
+            {
+                if (segments.Count > 0)
+                    segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+
+            segments.Add(segment);
+        }
+
+        return string.Join("/", segments) + query + fragment;
     }
 
     private static string EscapeSegment(string value)

@@ -94,6 +94,40 @@ public class DocumentationPlannerTests
     }
 
     [Fact]
+    public void Execute_RemoteRepositoryPath_Rewrites_Links_Relative_To_Source_File()
+    {
+        var root = CreateTempModule(out var internals);
+        var finder = new DocumentationFinder();
+        var planner = new DocumentationPlanner(finder);
+        var client = new FakeRepoClient();
+
+        client.Files["docs/en-US"] = new List<(string Name, string Path)>
+        {
+            ("Guide.md", "docs/en-US/Guide.md")
+        };
+
+        client.Content["docs/en-US/Guide.md"] = """
+        [Setup](../setup.md)
+        ![Image](./images/a.png)
+        """;
+
+        var req = new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            ProjectUri = "https://github.com/StartAutomating/ugit",
+            Online = true,
+            RepositoryPaths = new[] { "docs/en-US" }
+        };
+
+        var res = planner.Execute(req, client);
+
+        var guide = Assert.Single(res.Items, i => string.Equals(i.FileName, "Guide.md", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("https://github.com/StartAutomating/ugit/blob/main/docs/setup.md", guide.Content, StringComparison.Ordinal);
+        Assert.Contains("https://raw.githubusercontent.com/StartAutomating/ugit/main/docs/en-US/images/a.png", guide.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Execute_LocalReadme_Rewrites_Document_Links_To_Blob_And_Assets_To_Raw()
     {
         var root = CreateTempModule(out var internals);
@@ -254,6 +288,32 @@ public class DocumentationPlannerTests
     }
 
     [Fact]
+    public void Execute_LocalInternalsDocs_Rewrites_Links_Relative_To_Source_File()
+    {
+        var root = CreateTempModule(out var internals);
+        var docsRoot = Path.Combine(internals, "Docs");
+        Directory.CreateDirectory(docsRoot);
+        File.WriteAllText(Path.Combine(docsRoot, "Guide.md"), """
+        [Setup](./setup.md)
+        ![Image](./images/a.png)
+        """);
+
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var client = new FakeRepoClient();
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            ProjectUri = "https://github.com/StartAutomating/ugit",
+            Online = true
+        }, client);
+
+        var guide = Assert.Single(res.Items, i => string.Equals(i.Kind, "DOC", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "Guide.md", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("https://github.com/StartAutomating/ugit/blob/main/Internals/Docs/setup.md", guide.Content, StringComparison.Ordinal);
+        Assert.Contains("https://raw.githubusercontent.com/StartAutomating/ugit/main/Internals/Docs/images/a.png", guide.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Execute_FileSelection_Loads_Remote_Single_File()
     {
         var root = CreateTempModule(out var internals);
@@ -261,7 +321,7 @@ public class DocumentationPlannerTests
         client.Content["docs/guide.md"] = """
         # Guide
 
-        [Sibling](docs/sibling.md)
+        [Sibling](sibling.md)
         """;
 
         var planner = new DocumentationPlanner(new DocumentationFinder());

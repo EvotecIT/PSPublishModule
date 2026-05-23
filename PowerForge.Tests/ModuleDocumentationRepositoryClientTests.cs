@@ -9,6 +9,34 @@ namespace PowerForge.Tests;
 public class ModuleDocumentationRepositoryClientTests
 {
     [Fact]
+    public void DocumentationPlanner_Resolves_Environment_Token_For_Repository_Host()
+    {
+        var previousPgGitHub = Environment.GetEnvironmentVariable("PG_GITHUB_TOKEN");
+        var previousGitHub = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        var previousPgAzdo = Environment.GetEnvironmentVariable("PG_AZDO_PAT");
+        var previousAzdo = Environment.GetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("PG_GITHUB_TOKEN", null);
+            Environment.SetEnvironmentVariable("GITHUB_TOKEN", "github-token");
+            Environment.SetEnvironmentVariable("PG_AZDO_PAT", null);
+            Environment.SetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT", "azdo-token");
+
+            Assert.Equal("github-token", DocumentationPlanner.ResolveTokenForTesting(RepoHost.GitHub, null));
+            Assert.Equal("azdo-token", DocumentationPlanner.ResolveTokenForTesting(RepoHost.AzureDevOps, null));
+            Assert.Equal("explicit-token", DocumentationPlanner.ResolveTokenForTesting(RepoHost.AzureDevOps, "explicit-token"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PG_GITHUB_TOKEN", previousPgGitHub);
+            Environment.SetEnvironmentVariable("GITHUB_TOKEN", previousGitHub);
+            Environment.SetEnvironmentVariable("PG_AZDO_PAT", previousPgAzdo);
+            Environment.SetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT", previousAzdo);
+        }
+    }
+
+    [Fact]
     public void GitHubRepository_Encodes_Path_Segments_Without_Escaping_Separators()
     {
         var encoded = GitHubRepository.EncodeContentPathForTesting(@"docs/en US/guide#.md");

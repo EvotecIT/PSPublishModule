@@ -21,13 +21,25 @@ internal sealed partial class DocumentationPlanner
     private FileInfo? _Resolve(Request req, DocumentKind kind)
         => _finder.ResolveDocument((req.RootBase, req.InternalsBase, new DeliveryOptions()), kind, req.PreferInternals);
 
-    private static string ResolveToken(string? explicitToken)
-        => explicitToken
-           ?? Environment.GetEnvironmentVariable("PG_GITHUB_TOKEN")
-           ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN")
-           ?? Environment.GetEnvironmentVariable("PG_AZDO_PAT")
-           ?? Environment.GetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT")
-           ?? string.Empty;
+    private static string ResolveToken(RepoHost host, string? explicitToken)
+    {
+        if (!string.IsNullOrEmpty(explicitToken))
+            return explicitToken!;
+
+        return host switch
+        {
+            RepoHost.GitHub => Environment.GetEnvironmentVariable("PG_GITHUB_TOKEN")
+                               ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN")
+                               ?? string.Empty,
+            RepoHost.AzureDevOps => Environment.GetEnvironmentVariable("PG_AZDO_PAT")
+                                    ?? Environment.GetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT")
+                                    ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
+    internal static string ResolveTokenForTesting(RepoHost host, string? explicitToken)
+        => ResolveToken(host, explicitToken);
 
     private static IRepoClient? ResolveRepoClient(Request req, IRepoClient? clientOverride)
     {
@@ -38,7 +50,7 @@ internal sealed partial class DocumentationPlanner
             return null;
 
         var info = RepoUrlParser.Parse(req.ProjectUri!);
-        var token = ResolveToken(req.RepositoryToken);
+        var token = ResolveToken(info.Host, req.RepositoryToken);
         if (string.IsNullOrEmpty(token))
             token = TokenStore.GetToken(info.Host) ?? string.Empty;
 
@@ -80,6 +92,29 @@ internal sealed partial class DocumentationPlanner
     private static DocumentItem MakeContentItem(Request req, string name, string content)
         => new DocumentItem { Title = BuildTitle(req, name), Kind = "FILE", Content = content };
 
+    private static string? GetRepositoryRelativePath(Request req, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(path!);
+            var root = Path.GetFullPath(req.RootBase ?? string.Empty)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+
+            if (fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                return fullPath.Substring(root.Length).Replace('\\', '/');
+        }
+        catch
+        {
+            // Fall back to the file name below when paths cannot be normalized.
+        }
+
+        return Path.GetFileName(path);
+    }
+
     private static DocumentItem? TryCreateRemoteSingleFileItem(Request req, IRepoClient client, string branch)
     {
         if (string.IsNullOrWhiteSpace(req.SingleFile))
@@ -97,7 +132,8 @@ internal sealed partial class DocumentationPlanner
         var normalizedContent = RepositoryContentNormalizer.RewriteRelativeUris(
             content!,
             RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch),
-            RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch));
+            RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch),
+            remotePath);
 
         return new DocumentItem
         {
