@@ -157,20 +157,22 @@ public sealed class PublishConfigurationFactoryTests
     }
 
     [Fact]
-    public void Create_rejects_enabled_mar_publish_by_repository_name_without_uri()
+    public void Create_allows_repository_named_mar_without_verified_mar_uri()
     {
         var factory = new PublishConfigurationFactory();
 
-        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        var segment = factory.Create(new PublishConfigurationRequest
         {
             ParameterSetName = "ApiKey",
             Type = PublishDestination.PowerShellGallery,
             ApiKey = "unused",
             RepositoryName = "MAR",
             Enabled = true
-        }));
+        });
 
-        Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("MAR", segment.Configuration.RepositoryName);
+        Assert.Null(segment.Configuration.Repository);
+        Assert.True(segment.Configuration.Enabled);
     }
 
     [Fact]
@@ -210,5 +212,24 @@ public sealed class PublishConfigurationFactoryTests
         Assert.Equal(PublishDestination.GitHub, segment.Configuration.Destination);
         Assert.Equal("MAR", segment.Configuration.RepositoryName);
         Assert.True(segment.Configuration.Enabled);
+    }
+
+    [Fact]
+    public void Create_rejects_container_registry_api_version_for_azure_artifacts()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "AzureArtifacts",
+            AzureDevOpsOrganization = "contoso",
+            AzureDevOpsProject = "Platform",
+            AzureArtifactsFeed = "Modules",
+            RepositoryApiVersion = RepositoryApiVersion.ContainerRegistry,
+            Enabled = true
+        }));
+
+        Assert.Contains("ContainerRegistry", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Azure Artifacts", ex.Message, StringComparison.Ordinal);
     }
 }

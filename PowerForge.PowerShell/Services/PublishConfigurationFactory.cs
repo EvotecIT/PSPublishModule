@@ -49,6 +49,9 @@ internal sealed class PublishConfigurationFactory
         if (isAzureArtifacts && anyRepositoryUriProvided)
             throw new ArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.", nameof(request));
 
+        if (isAzureArtifacts && request.RepositoryApiVersion == RepositoryApiVersion.ContainerRegistry)
+            throw new ArgumentException("RepositoryApiVersion ContainerRegistry cannot be used with the Azure Artifacts preset.", nameof(request));
+
         if (!isAzureArtifacts &&
             destination == PublishDestination.PowerShellGallery &&
             request.Enabled &&
@@ -159,8 +162,7 @@ internal sealed class PublishConfigurationFactory
     }
 
     private static bool IsMicrosoftArtifactRegistryPublishTarget(PublishConfigurationRequest request)
-        => MicrosoftArtifactRegistryRepository.IsDefaultName(request.RepositoryName) ||
-           MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryUri) ||
+        => MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryUri) ||
            MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositorySourceUri) ||
            MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryPublishUri);
 }
