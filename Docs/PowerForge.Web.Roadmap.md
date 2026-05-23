@@ -11,6 +11,8 @@ This document is the single source of truth for:
 
 Companion execution plan for C# libraries + PowerShell modules:
 - `Docs/PowerForge.Web.LibraryEcosystemPlan.md`
+Companion private gallery plan:
+- `Docs/PowerForge.Web.PrivateGallery.md`
 Companion SEO parity plan (Yoast-informed capability mapping):
 - `Docs/PowerForge.Web.SeoParityPlan.md`
 
@@ -160,6 +162,9 @@ Legend:
   - Code: `PowerForge.Web/Services/WebPackageHubGenerator.cs`, `PowerForge.Web/Models/WebPackageHub.cs`
   - CLI wiring: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.Content.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.cs`
 - **Partial**: Package hub currently emits metadata JSON only; turnkey rendered pages/layout contracts remain theme-driven.
+- **Missing**: Private PowerShell gallery indexing from Azure Artifacts/private NuGet feeds.
+  - Planned: `Docs/PowerForge.Web.PrivateGallery.md`
+  - Scope: feed inventory, safe `.nupkg` inspection, bundled docs/help/examples extraction, metrics, generated data/pages/search.
 
 ### Quality Gates (Verify/Audit/Doctor) + Budgets
 

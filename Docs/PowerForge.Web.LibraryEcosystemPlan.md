@@ -9,6 +9,9 @@ This plan focuses on making PowerForge.Web a first-class docs engine for:
 - mixed ecosystems that need one coherent website.
 
 It complements `Docs/PowerForge.Web.Roadmap.md` by turning parity goals into implementation slices with direct value for library, module, and mixed API documentation sites.
+Private gallery delivery is tracked separately in `Docs/PowerForge.Web.PrivateGallery.md`
+because it combines feed inventory, package inspection, docs extraction, and
+website generation.
 
 ## Review Findings (Current Gaps)
 
@@ -70,6 +73,20 @@ Site impact:
 
 Site impact:
 - Better discoverability in larger outputs, especially mixed docs/API sites.
+
+### 5) Private Gallery Indexing
+
+- Add a private gallery indexing lane for Azure Artifacts/private NuGet feeds:
+  - package/version inventory from the feed,
+  - safe `.nupkg` extraction,
+  - `.psd1`, README, docs, examples, and external help XML discovery,
+  - optional package/version metrics,
+  - generated module pages/search data.
+
+Site impact:
+- Internal module consumers get one website for approved private modules,
+  installation commands, command docs, examples, versions, dependencies, and
+  package freshness.
 
 ## Priority Backlog
 
@@ -192,8 +209,9 @@ Acceptance:
 1. Expand xref from type/cmdlet to member/parameter granularity.
 2. Introduce API provider contract while preserving existing dotnet/powershell generators.
 3. Add package/module intelligence pages from project/manifests.
-4. Standardize versioned docs contract and search ranking profiles.
-5. Land plugin contract after core models are stable.
+4. Add private gallery indexing from Azure Artifacts/private NuGet feeds.
+5. Standardize versioned docs contract and search ranking profiles.
+6. Land plugin contract after core models are stable.
 
 ## Guardrails
 
