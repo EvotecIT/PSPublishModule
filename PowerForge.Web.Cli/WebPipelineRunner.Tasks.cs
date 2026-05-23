@@ -51,6 +51,10 @@ internal static partial class WebPipelineRunner
             case "package-hub":
                 ExecutePackageHub(step, baseDir, stepResult);
                 break;
+            case "private-gallery-index":
+            case "private-gallery":
+                ExecutePrivateGalleryIndex(step, baseDir, stepResult);
+                break;
             case "llms":
                 ExecuteLlms(step, baseDir, stepResult);
                 break;

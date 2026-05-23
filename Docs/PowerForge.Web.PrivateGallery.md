@@ -293,12 +293,19 @@ The frontend may be rich, but the system of record is the generated data.
 - Emit `feed.json`.
 - Test paging, missing feed, auth failure, and empty feed behavior.
 
+Status: implemented as the first engine slice. The task emits `feed.json` and
+per-package/per-version JSON under `modules/`, plus `search.json`.
+
 ### Slice 2: Safe Package Inspection
 
 - Download selected/latest package versions.
 - Add safe extraction.
 - Parse `.psd1`, README, docs, external help XML, and examples.
 - Emit per-module/per-version JSON.
+
+Status: partially implemented. The first slice downloads `.nupkg` files through
+NuGet V3 and inspects archive entries in place without module import or script
+execution. It emits discovered module metadata on package/version JSON records.
 
 ### Slice 3: Web Page Generation
 
@@ -312,6 +319,9 @@ The frontend may be rich, but the system of record is the generated data.
 - Add quality fields such as has README, has help, has examples, has license,
   command count, dependency count, and docs freshness.
 - Add CI warning policy and baselines.
+
+Status: package and version download metrics are implemented for Azure Artifacts
+as optional data. Quality-signal rollups and CI gates remain future work.
 
 ### Slice 5: Starter/Theme Contract
 
