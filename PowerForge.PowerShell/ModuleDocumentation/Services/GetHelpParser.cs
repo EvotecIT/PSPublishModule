@@ -15,7 +15,10 @@ internal sealed partial class GetHelpParser
     public CommandHelpModel? Parse(string commandName, int timeoutSeconds = 5, ExamplesMode examplesMode = ExamplesMode.Auto)
     {
         using var ps = PowerShell.Create();
-        ps.AddScript($"Get-Help -Name '{commandName}' -Full -ErrorAction SilentlyContinue");
+        ps.AddCommand("Get-Help")
+            .AddParameter("Name", commandName)
+            .AddParameter("Full")
+            .AddParameter("ErrorAction", ActionPreference.SilentlyContinue);
         var async = ps.BeginInvoke();
         if (!async.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds))))
         {
@@ -538,8 +541,12 @@ internal sealed partial class GetHelpParser
         try
         {
             using var ps = PowerShell.Create();
-            var script = "$h = Get-Help -Full -Name '" + commandName.Replace("'", "''") + "' -ErrorAction SilentlyContinue; if ($h) { $h | Out-String -Width 1mb } else { '' }";
-            ps.AddScript(script);
+            ps.AddCommand("Get-Help")
+                .AddParameter("Full")
+                .AddParameter("Name", commandName)
+                .AddParameter("ErrorAction", ActionPreference.SilentlyContinue)
+                .AddCommand("Out-String")
+                .AddParameter("Width", 1048576);
             var async = ps.BeginInvoke();
             if (!async.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds))))
             {

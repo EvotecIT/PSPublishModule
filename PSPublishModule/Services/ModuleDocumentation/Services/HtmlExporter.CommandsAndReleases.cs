@@ -6,6 +6,8 @@ using HtmlForgeX;
 using HtmlForgeX.Extensions;
 using HtmlForgeX.Markdown;
 using PowerForge;
+using System.Collections;
+using System.Management.Automation;
 using System.Management.Automation.Language;
 
 namespace PSPublishModule;
@@ -15,23 +17,44 @@ internal sealed partial class HtmlExporter
     // Helpers for Commands tab
     private List<string> ResolveExportedCommands(string moduleName)
     {
-        var ps = System.Management.Automation.PowerShell.Create();
-        // Filter only functions/cmdlets (exclude aliases)
-        var script = @"
-            $m = Get-Module -ListAvailable -Name '" + moduleName + @"' | Sort-Object Version -Descending | Select-Object -First 1
-            if ($m) { $m.ExportedCommands.Values | Where-Object { $_.CommandType -in 'Function','Cmdlet' } | Select-Object -ExpandProperty Name }
-        ";
-        ps.AddScript(script);
-        var results = ps.Invoke();
-        return results.Select(r => r?.ToString()).Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()!;
+        using var ps = PowerShell.Create();
+        ps.AddCommand("Get-Module")
+            .AddParameter("ListAvailable")
+            .AddParameter("Name", moduleName)
+            .AddCommand("Sort-Object")
+            .AddParameter("Property", "Version")
+            .AddParameter("Descending")
+            .AddCommand("Select-Object")
+            .AddParameter("First", 1);
+
+        var module = ps.Invoke().FirstOrDefault();
+        var exportedCommands = module?.Properties["ExportedCommands"]?.Value;
+        var commands = new List<string>();
+        if (exportedCommands is IDictionary dictionary)
+        {
+            foreach (DictionaryEntry entry in dictionary)
+            {
+                var command = entry.Value as CommandInfo ?? (entry.Value as PSObject)?.BaseObject as CommandInfo;
+                if (command == null || (command.CommandType != CommandTypes.Function && command.CommandType != CommandTypes.Cmdlet))
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(command.Name))
+                    commands.Add(command.Name);
+            }
+        }
+
+        return commands.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private string? GetHelpMarkdown(string moduleName, string command, int timeoutSeconds)
     {
-        var ps = System.Management.Automation.PowerShell.Create();
+        using var ps = PowerShell.Create();
         // Use -Full for richer content; convert basic sections to markdown headings
-        var script = $"$h = Get-Help -Full -Name '{command}' -ErrorAction SilentlyContinue; if ($h) {{ $h | Out-String }} else {{ '' }}";
-        ps.AddScript(script);
+        ps.AddCommand("Get-Help")
+            .AddParameter("Full")
+            .AddParameter("Name", command)
+            .AddParameter("ErrorAction", ActionPreference.SilentlyContinue)
+            .AddCommand("Out-String");
         var async = ps.BeginInvoke();
         if (!async.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds))))
         {

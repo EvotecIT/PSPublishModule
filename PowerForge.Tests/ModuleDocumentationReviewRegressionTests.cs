@@ -50,4 +50,14 @@ public class ModuleDocumentationReviewRegressionTests
         Assert.False(InstallModuleScriptCommand.MatchesAnyForTesting(fullPath, root, System.Array.Empty<string>(), emptyMatches: false));
         Assert.True(InstallModuleScriptCommand.MatchesAnyForTesting(fullPath, root, new[] { "Repair-*" }, emptyMatches: false));
     }
+
+    [Fact]
+    public void GetHelpParser_Uses_Command_Parameters_For_Quoted_Names()
+    {
+        var parser = new GetHelpParser();
+
+        var result = parser.Parse("NoSuch'Command; throw 'unexpected", timeoutSeconds: 1);
+
+        Assert.Null(result);
+    }
 }
