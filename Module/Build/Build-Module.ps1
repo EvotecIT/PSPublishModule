@@ -276,8 +276,10 @@ Invoke-ModuleBuild @buildParams -Settings {
         NETAssemblyTypeAccelerators    = @(
             'PowerForge.ModuleTestFailureAnalysis',
             'PowerForge.ModuleTestSuiteResult',
+            'PowerForge.ModuleRepositoryProfileScope',
             'PowerForge.PrivateGalleryBootstrapMode',
             'PowerForge.PrivateGalleryCredentialSource',
+            'PowerForge.PublishTool',
             'PowerForge.RepositoryRegistrationTool'
         )
         #NETDocumentation                  = $true
