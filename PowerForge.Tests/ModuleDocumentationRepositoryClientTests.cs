@@ -26,6 +26,12 @@ public class ModuleDocumentationRepositoryClientTests
             Assert.Equal("github-token", DocumentationPlanner.ResolveTokenForTesting(RepoHost.GitHub, null));
             Assert.Equal("azdo-token", DocumentationPlanner.ResolveTokenForTesting(RepoHost.AzureDevOps, null));
             Assert.Equal("explicit-token", DocumentationPlanner.ResolveTokenForTesting(RepoHost.AzureDevOps, "explicit-token"));
+
+            Environment.SetEnvironmentVariable("PG_GITHUB_TOKEN", "");
+            Environment.SetEnvironmentVariable("PG_AZDO_PAT", " ");
+
+            Assert.Equal("github-token", DocumentationPlanner.ResolveTokenForTesting(RepoHost.GitHub, null));
+            Assert.Equal("azdo-token", DocumentationPlanner.ResolveTokenForTesting(RepoHost.AzureDevOps, null));
         }
         finally
         {

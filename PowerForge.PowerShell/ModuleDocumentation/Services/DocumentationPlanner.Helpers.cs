@@ -28,18 +28,29 @@ internal sealed partial class DocumentationPlanner
 
         return host switch
         {
-            RepoHost.GitHub => Environment.GetEnvironmentVariable("PG_GITHUB_TOKEN")
-                               ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN")
-                               ?? string.Empty,
-            RepoHost.AzureDevOps => Environment.GetEnvironmentVariable("PG_AZDO_PAT")
-                                    ?? Environment.GetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT")
-                                    ?? string.Empty,
+            RepoHost.GitHub => FirstNonEmptyEnvironmentVariable("PG_GITHUB_TOKEN", "GITHUB_TOKEN"),
+            RepoHost.AzureDevOps => FirstNonEmptyEnvironmentVariable("PG_AZDO_PAT", "AZURE_DEVOPS_EXT_PAT"),
             _ => string.Empty
         };
     }
 
     internal static string ResolveTokenForTesting(RepoHost host, string? explicitToken)
         => ResolveToken(host, explicitToken);
+
+    internal static string FirstNonEmptyEnvironmentVariable(params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var value = Environment.GetEnvironmentVariable(name);
+            if (!string.IsNullOrWhiteSpace(value))
+                return value!;
+        }
+
+        return string.Empty;
+    }
 
     private static IRepoClient? ResolveRepoClient(Request req, IRepoClient? clientOverride)
     {

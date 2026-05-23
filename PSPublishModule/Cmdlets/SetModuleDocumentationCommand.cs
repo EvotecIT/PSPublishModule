@@ -65,8 +65,8 @@ public sealed class SetModuleDocumentationCommand : PSCmdlet
         string? az = AzureDevOpsPat;
         if (FromEnvironment)
         {
-            gh = gh ?? (Environment.GetEnvironmentVariable("PG_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN"));
-            az = az ?? (Environment.GetEnvironmentVariable("PG_AZDO_PAT") ?? Environment.GetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT"));
+            gh = string.IsNullOrWhiteSpace(gh) ? DocumentationPlanner.FirstNonEmptyEnvironmentVariable("PG_GITHUB_TOKEN", "GITHUB_TOKEN") : gh;
+            az = string.IsNullOrWhiteSpace(az) ? DocumentationPlanner.FirstNonEmptyEnvironmentVariable("PG_AZDO_PAT", "AZURE_DEVOPS_EXT_PAT") : az;
         }
         if (string.IsNullOrEmpty(gh) && string.IsNullOrEmpty(az))
         {
