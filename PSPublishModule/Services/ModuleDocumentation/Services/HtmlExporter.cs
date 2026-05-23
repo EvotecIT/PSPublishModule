@@ -604,7 +604,7 @@ internal sealed partial class HtmlExporter
                                     {
                                         log?.Invoke($"Adding Commands tab with {commands.Count} commands...");
                                         // Precompute help so tabs don't duplicate content and we can log line counts
-                                        var helpMap = BuildHelpMap(module.Name, commands, module.HelpTimeoutSeconds, module.ExamplesMode, log);
+                                        var helpMap = BuildHelpMap(module.Name, commands, module.HelpTimeoutSeconds, module.ExamplesMode, module.ExamplesLayout, log);
                                         tabs.AddTab("⚙️ Commands", panel =>
                                         {
                                         panel.Tabs(inner => {
@@ -612,22 +612,15 @@ internal sealed partial class HtmlExporter
                                             {
                                                 var label = $"{EmojiForCommand(entry.Command)} {entry.Command}".Replace("-", "‑");
                                                 inner.AddTab(label, p => {
-                                                    if (entry.Model != null)
+                                                    var content = entry.Help ?? "No help available.";
+                                                    if (module.HelpAsCode && !entry.Structured)
                                                     {
-                                                        RenderHelpPanel(p, entry.Model, module.ExamplesLayout);
+                                                        var fenced = $"```powershell\n{content}\n```";
+                                                        p.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
                                                     }
                                                     else
                                                     {
-                                                        var content = entry.Help ?? "No help available.";
-                                                        if (module.HelpAsCode)
-                                                        {
-                                                            var fenced = $"```powershell\n{content}\n```";
-                                                            p.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                                                        }
-                                                        else
-                                                        {
-                                                            p.Markdown(content, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                                                        }
+                                                        p.Markdown(content, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
                                                     }
                                                 });
                                             }

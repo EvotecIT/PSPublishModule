@@ -239,18 +239,25 @@ internal sealed partial class HtmlExporter
         else { codeOut = code.TrimEnd(); remarksOut = remarks.TrimStart('\n'); }
     }
 
-    private List<(string Command, CommandHelpModel? Model, string? Help, int Lines)> BuildHelpMap(string moduleName, List<string> commands, int timeoutSeconds, ExamplesMode examplesMode, Action<string>? log)
+    private List<(string Command, string? Help, int Lines, bool Structured)> BuildHelpMap(
+        string moduleName,
+        List<string> commands,
+        int timeoutSeconds,
+        ExamplesMode examplesMode,
+        ExamplesLayout examplesLayout,
+        Action<string>? log)
     {
-        var list = new List<(string, CommandHelpModel?, string?, int)>();
-            var parser = new GetHelpParser();
+        var list = new List<(string, string?, int, bool)>();
+        var parser = new GetHelpParser();
         foreach (var cmd in commands)
         {
             string? content = null;
-            // Prefer structured parse
+            var structured = false;
             var model = parser.Parse(cmd, timeoutSeconds, examplesMode);
             if (model != null)
             {
-                content = null; // render with components
+                content = CommandHelpMarkdownFormatter.Render(moduleName, model, examplesLayout);
+                structured = true;
             }
             else
             {
@@ -279,133 +286,9 @@ internal sealed partial class HtmlExporter
             {
                 log?.Invoke($"Rendering help for {cmd}... ({lines} lines)");
             }
-            list.Add((cmd, model, content, lines));
+            list.Add((cmd, content, lines, structured));
         }
         return list;
-    }
-
-    private static void RenderHelpPanel(TablerTabsPanel panel, CommandHelpModel m, ExamplesLayout examplesLayout)
-    {
-        if (!string.IsNullOrWhiteSpace(m.Synopsis))
-        {
-            panel.Markdown("## Synopsis", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-            panel.Markdown(m.Synopsis.Trim(), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-            panel.LineBreak();
-        }
-        if (!string.IsNullOrWhiteSpace(m.Description))
-        {
-            panel.Markdown("## Description", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-            panel.Markdown(m.Description.Trim(), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-            panel.LineBreak();
-        }
-        if (m.Syntax.Count > 0)
-        {
-            panel.Markdown("## Syntax", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-            var total = m.Syntax.Count;
-            var byName = m.Parameters.ToDictionary(x => x.Name, System.StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < total; i++)
-            {
-                var s = m.Syntax[i];
-                panel.Markdown($"### Syntax - Set {i + 1} of {total}", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                var parts = new System.Collections.Generic.List<string>();
-                foreach (var p in s.Parameters)
-                {
-                    var name = p.Name;
-                    var type = string.IsNullOrEmpty(p.Type) ? string.Empty : $" <{p.Type}>";
-                    var token = $"-{name}{type}";
-                    if (!(p.Required ?? false)) token = $"[{token}]";
-                    parts.Add(token);
-                }
-                var line = (s.Name ?? m.Name) + (parts.Count > 0 ? (" " + string.Join(" ", parts)) : string.Empty);
-                var fenced = $"```powershell\n{line}\n```";
-                panel.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-
-                // Immediately render the parameters for this set
-                var names = s.Parameters.Select(p => p.Name).Distinct(System.StringComparer.OrdinalIgnoreCase);
-                var rows = new System.Collections.Generic.List<object>();
-                foreach (var n in names)
-                {
-                    var p = byName.TryGetValue(n, out var ph) ? ph : new ParameterHelp { Name = n };
-                    rows.Add(new {
-                        Name = p.Name,
-                        Type = p.Type ?? string.Empty,
-                        Required = p.Required.HasValue ? (p.Required.Value ? "Yes" : "No") : string.Empty,
-                        Position = p.Position ?? string.Empty,
-                        Pipeline = p.PipelineInput ?? string.Empty,
-                        Wildcards = p.Globbing.HasValue ? (p.Globbing.Value ? "Yes" : "No") : string.Empty,
-                        Default = p.DefaultValue ?? string.Empty,
-                        Aliases = (p.Aliases == null || p.Aliases.Count == 0) ? string.Empty : string.Join(", ", p.Aliases),
-                        Description = p.Description ?? string.Empty
-                    });
-                }
-                panel.Card(c => {
-                    c.Header(h => h.Title($"Parameters - Set {i + 1} of {total}"));
-                    c.DataTable(rows, t => t
-                        .Settings(s => s.Preset(DataTablesPreset.Minimal))
-                        .Settings(s => s.Export(DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy))
-                        .Settings(s => s.ToggleViewButton("Switch to ScrollX", ToggleViewMode.ScrollX, persist: true))
-                    );
-                });
-            }
-            panel.LineBreak();
-        }
-        if (m.Inputs.Count > 0)
-        {
-            var rows = m.Inputs.Select(t => new { Type = t.TypeName, Description = t.Description ?? string.Empty }).ToList();
-            panel.Card(c => { c.Header(h => h.Title("Inputs")); c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.Minimal)).Settings(s => s.Export(DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy)).Settings(s => s.ToggleViewButton("Switch to ScrollX", ToggleViewMode.ScrollX, persist: true))); });
-        }
-        if (m.Outputs.Count > 0)
-        {
-            var rows = m.Outputs.Select(t => new { Type = t.TypeName, Description = t.Description ?? string.Empty }).ToList();
-            panel.Card(c => { c.Header(h => h.Title("Outputs")); c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.Minimal)).Settings(s => s.Export(DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy)).Settings(s => s.ToggleViewButton("Switch to ScrollX", ToggleViewMode.ScrollX, persist: true))); });
-        }
-        if (m.Examples.Count > 0)
-        {
-            panel.Markdown("## Examples", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-            int idx = 1;
-            foreach (var ex in m.Examples)
-            {
-                var title = NormalizeExampleTitle(ex.Title, idx);
-                panel.Markdown($"### {title}", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                var code = ex.Code ?? string.Empty;
-                var remarks = ex.Remarks ?? string.Empty;
-                switch (examplesLayout)
-                {
-                    case ExamplesLayout.ProseFirst:
-                        if (!string.IsNullOrWhiteSpace(remarks)) panel.Markdown(remarks.Trim(), new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                        if (!string.IsNullOrWhiteSpace(code)) {
-                            var fenced1 = $"```powershell\n{code.TrimEnd()}\n```";
-                            panel.Markdown(fenced1, new MarkdownOptions { HeadingsBaseLevel = 4, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                        }
-                        break;
-                    case ExamplesLayout.AllAsCode:
-                        var block = string.IsNullOrEmpty(remarks) ? code : (code + "\n\n" + remarks);
-                        var fenced2 = $"```powershell\n{(block ?? string.Empty).TrimEnd()}\n```";
-                        panel.Markdown(fenced2, new MarkdownOptions { HeadingsBaseLevel = 4, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                        break;
-                    default: // MamlDefault
-                        if (!string.IsNullOrWhiteSpace(code)) {
-                            var fenced3 = $"```powershell\n{code.TrimEnd()}\n```";
-                            panel.Markdown(fenced3, new MarkdownOptions { HeadingsBaseLevel = 4, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                        }
-                        if (!string.IsNullOrWhiteSpace(remarks)) panel.Markdown(remarks.Trim(), new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-                        break;
-                }
-                panel.LineBreak();
-                idx++;
-            }
-        }
-        if (!string.IsNullOrWhiteSpace(m.Notes))
-        {
-            panel.Markdown("## Notes", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-            panel.Markdown(m.Notes!.Trim(), new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-        }
-        if (m.RelatedLinks.Count > 0)
-        {
-            panel.Markdown("## Related Links", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-            var md = string.Join("\n", m.RelatedLinks.Select(l => !string.IsNullOrEmpty(l.Uri) ? $"- [{l.Title}]({l.Uri})" : $"- {l.Title}"));
-            panel.Markdown(md, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
-        }
     }
 
 }
