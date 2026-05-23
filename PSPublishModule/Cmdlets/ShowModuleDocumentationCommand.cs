@@ -177,25 +177,14 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             }
             if ((pathsToUse == null || pathsToUse.Length == 0) && repository != null)
             {
-                System.Collections.IEnumerable? arr = null;
-                try { arr = repository.Properties["Paths"]?.Value as System.Collections.IEnumerable; } catch { }
-                if (arr == null)
-                {
-                    var prop = repository.Properties.FirstOrDefault(pp => string.Equals(pp.Name, "Paths", StringComparison.OrdinalIgnoreCase));
-                    arr = prop?.Value as System.Collections.IEnumerable;
-                }
-                if (arr == null && !string.IsNullOrEmpty(manifestPathUsed))
+                var values = GetPsObjectStringArray(repository, "Paths");
+                if (values.Length == 0 && !string.IsNullOrEmpty(manifestPathUsed))
                 {
                     var sbGet = this.InvokeCommand.NewScriptBlock("$r = (Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Repository; if ($r -is [hashtable]) { $r['Paths'] } else { $r.Paths }");
                     var res = sbGet.Invoke(manifestPathUsed).FirstOrDefault();
-                    arr = res as System.Collections.IEnumerable;
+                    values = NormalizeStringArray(res);
                 }
-                if (arr != null)
-                {
-                    var list = new System.Collections.Generic.List<string>();
-                    foreach (var o in arr) { var s = o?.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!); }
-                    if (list.Count > 0) pathsToUse = list.ToArray();
-                }
+                if (values.Length > 0) pathsToUse = values;
             }
         }
         catch { }
@@ -386,7 +375,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             RootBase = rootBase,
             InternalsBase = internalsBase,
             Delivery = delivery,
-            ProjectUri = wantsRemote ? projectUri : null,
+            ProjectUri = projectUri,
             RepositoryBranch = branchToUse,
             RepositoryToken = RepositoryToken,
             RepositoryPaths = pathsToUse,
@@ -510,32 +499,58 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
 
     private static string? GetPsObjectString(PSObject? value, string name)
     {
-        if (value == null) return null;
+        var raw = GetPsObjectValue(value, name);
+        return raw?.ToString();
+    }
+
+    internal static string[] GetPsObjectStringArrayForTesting(PSObject? value, string name)
+        => GetPsObjectStringArray(value, name);
+
+    private static string[] GetPsObjectStringArray(PSObject? value, string name)
+        => NormalizeStringArray(GetPsObjectValue(value, name));
+
+    private static object? GetPsObjectValue(PSObject? value, string name)
+    {
+        if (value == null || string.IsNullOrWhiteSpace(name)) return null;
+
         if (value.BaseObject is System.Collections.IDictionary dictionary)
         {
             foreach (System.Collections.DictionaryEntry entry in dictionary)
             {
                 if (entry.Key != null && string.Equals(entry.Key.ToString(), name, StringComparison.OrdinalIgnoreCase))
-                {
-                    var dictionaryValue = entry.Value?.ToString();
-                    if (!string.IsNullOrWhiteSpace(dictionaryValue)) return dictionaryValue;
-                }
+                    return entry.Value;
             }
         }
 
         try
         {
-            var direct = value.Properties[name]?.Value?.ToString();
-            if (!string.IsNullOrWhiteSpace(direct)) return direct;
+            var direct = value.Properties[name]?.Value;
+            if (direct != null) return direct;
         }
         catch { /* ignore */ }
 
-        try
+        var prop = value.Properties.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        return prop?.Value;
+    }
+
+    private static string[] NormalizeStringArray(object? raw)
+    {
+        if (raw is string text)
+            return string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : new[] { text };
+
+        if (raw is System.Collections.IEnumerable enumerable)
         {
-            var prop = value.Properties.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
-            var propValue = prop?.Value?.ToString();
-            return string.IsNullOrWhiteSpace(propValue) ? null : propValue;
+            var list = new System.Collections.Generic.List<string>();
+            foreach (var item in enumerable)
+            {
+                var itemText = item?.ToString();
+                if (!string.IsNullOrWhiteSpace(itemText)) list.Add(itemText!);
+            }
+
+            return list.ToArray();
         }
-        catch { return null; }
+
+        var scalar = raw?.ToString();
+        return string.IsNullOrWhiteSpace(scalar) ? Array.Empty<string>() : new[] { scalar! };
     }
 }

@@ -228,12 +228,18 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
 
         foreach (var di in plan.Items)
         {
-            if (di.Kind == "FILE" && !string.IsNullOrEmpty(di.Path))
+            if (ShouldRenderAsLocalFile(di))
                 renderer.ShowFile(di.Title, di.Path!, Raw);
             else
                 renderer.ShowContent(di.Title, di.Content, Raw);
         }
     }
+
+    internal static bool ShouldRenderAsLocalFile(DocumentItem item)
+        => item.Kind == "FILE"
+           && !string.IsNullOrEmpty(item.Path)
+           && string.IsNullOrEmpty(item.Content)
+           && !string.Equals(item.Source, "Remote", StringComparison.OrdinalIgnoreCase);
 
     private static PSObject? AsPsObject(object? value)
     {

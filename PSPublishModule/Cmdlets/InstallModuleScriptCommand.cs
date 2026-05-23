@@ -120,7 +120,7 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
         else
         {
             files = Directory.GetFiles(scriptsRoot, "*.ps1", SearchOption.AllDirectories)
-                .Where(f => MatchesAny(f, scriptsRoot, includes) && !MatchesAny(f, scriptsRoot, excludes))
+                .Where(f => MatchesAny(f, scriptsRoot, includes, emptyMatches: true) && !MatchesAny(f, scriptsRoot, excludes, emptyMatches: false))
                 .ToList();
         }
 
@@ -266,9 +266,12 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
         catch { return null; }
     }
 
-    private static bool MatchesAny(string fullPath, string root, string[] patterns)
+    internal static bool MatchesAnyForTesting(string fullPath, string root, string[] patterns, bool emptyMatches)
+        => MatchesAny(fullPath, root, patterns, emptyMatches);
+
+    private static bool MatchesAny(string fullPath, string root, string[] patterns, bool emptyMatches)
     {
-        if (patterns == null || patterns.Length == 0) return true;
+        if (patterns == null || patterns.Length == 0) return emptyMatches;
         var rel = fullPath.Substring(root.Length).TrimStart(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
         var name = System.IO.Path.GetFileName(fullPath);
         foreach (var p in patterns)
