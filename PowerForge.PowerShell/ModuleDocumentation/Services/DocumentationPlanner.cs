@@ -59,6 +59,9 @@ internal sealed partial class DocumentationPlanner
         var res = new Result();
         var items = new List<(string Kind, string Path)>();
         var effectiveRepositoryBranch = ResolveRepositoryBranch(req, clientOverride);
+        var hasSelectors = req.Readme || req.Changelog || req.License || req.All || req.Intro || req.Upgrade || !string.IsNullOrEmpty(req.SingleFile);
+        var includeSupplementalSections = !hasSelectors || req.All;
+        var includeReleases = !hasSelectors || req.All || req.Changelog;
 
         // Specific file selection
         if (!string.IsNullOrEmpty(req.SingleFile))
@@ -67,6 +70,21 @@ internal sealed partial class DocumentationPlanner
             var t2 = req.InternalsBase != null ? Path.Combine(req.InternalsBase, req.SingleFile) : null;
             if (File.Exists(t1)) items.Add(("FILE", t1));
             else if (t2 != null && File.Exists(t2)) items.Add(("FILE", t2));
+            else if (req.Online)
+            {
+                var remoteClient = ResolveRepoClient(req, clientOverride);
+                var branch = effectiveRepositoryBranch ?? remoteClient?.GetDefaultBranch() ?? "main";
+                var remoteItem = remoteClient is null ? null : TryCreateRemoteSingleFileItem(req, remoteClient, branch);
+                if (remoteItem is not null)
+                {
+                    res.Items.Add(remoteItem);
+                    res.UsedRemote = true;
+                }
+                else
+                {
+                    throw new FileNotFoundException($"File '{req.SingleFile}' not found under root, Internals, or repository.");
+                }
+            }
             else throw new FileNotFoundException($"File '{req.SingleFile}' not found under root or Internals.");
         }
 
@@ -86,7 +104,6 @@ internal sealed partial class DocumentationPlanner
         if (req.Upgrade) items.Add(("UPGRADE", string.Empty));
 
         // Default selection when nothing specified: include all known docs
-        bool hasSelectors = req.Readme || req.Changelog || req.License || req.All || req.Intro || req.Upgrade || !string.IsNullOrEmpty(req.SingleFile);
         if (!hasSelectors)
         {
             AddKind(items, req, DocumentKind.Readme);
@@ -103,24 +120,13 @@ internal sealed partial class DocumentationPlanner
         var wantRemote = req.Online;
         if (wantRemote && (!string.IsNullOrWhiteSpace(req.ProjectUri) || clientOverride != null))
         {
-            var client = clientOverride;
-            if (client == null)
-            {
-                var info = RepoUrlParser.Parse(req.ProjectUri!);
-                var token = ResolveToken(req.RepositoryToken);
-                if (string.IsNullOrEmpty(token))
-                {
-                    // Try persisted token based on host (GitHub/Azure DevOps)
-                    token = TokenStore.GetToken(info.Host) ?? string.Empty;
-                }
-                client = RepoClientFactory.Create(info, token);
-            }
+            var client = ResolveRepoClient(req, clientOverride);
             if (client != null)
             {
                 string branch = effectiveRepositoryBranch ?? "main";
                 bool anyRemote = false;
                 // Extra paths
-                if (req.RepositoryPaths != null)
+                if (includeSupplementalSections && req.RepositoryPaths != null)
                 {
                     foreach (var rp in req.RepositoryPaths)
                     {
@@ -190,7 +196,7 @@ internal sealed partial class DocumentationPlanner
                         }
                     }
                 }
-                res.UsedRemote = anyRemote;
+                res.UsedRemote = res.UsedRemote || anyRemote;
                 // Remote items are added first; local will be added below when resolving 'items'.
             }
         }
@@ -270,7 +276,7 @@ internal sealed partial class DocumentationPlanner
         }
 
         // About topics are part of the default/all view, but explicit selectors should stay narrow.
-        if (!hasSelectors || req.All)
+        if (includeSupplementalSections)
         {
             try
             {
@@ -323,23 +329,26 @@ internal sealed partial class DocumentationPlanner
         catch { }
 
         // Community files (local)
-        try
+        if (includeSupplementalSections)
         {
-            var community = _finder.ResolveCommunityFiles((req.RootBase, req.InternalsBase, new DeliveryOptions()), req.DocsPaths);
-            foreach (var f in community)
+            try
             {
-                string content; try { content = File.ReadAllText(f.FullName); } catch { continue; }
-                if (!string.IsNullOrWhiteSpace(req.ProjectUri))
+                var community = _finder.ResolveCommunityFiles((req.RootBase, req.InternalsBase, new DeliveryOptions()), req.DocsPaths);
+                foreach (var f in community)
                 {
-                    content = RepositoryContentNormalizer.RewriteRelativeUris(
-                        content,
-                        RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
-                        RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch));
+                    string content; try { content = File.ReadAllText(f.FullName); } catch { continue; }
+                    if (!string.IsNullOrWhiteSpace(req.ProjectUri))
+                    {
+                        content = RepositoryContentNormalizer.RewriteRelativeUris(
+                            content,
+                            RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
+                            RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch));
+                    }
+                    res.Items.Add(new DocumentItem { Title = BuildTitle(req, f.Name), Kind = "COMMUNITY", Path = f.FullName, FileName = f.Name, Content = content, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch) });
                 }
-                res.Items.Add(new DocumentItem { Title = BuildTitle(req, f.Name), Kind = "COMMUNITY", Path = f.FullName, FileName = f.Name, Content = content, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch) });
             }
+            catch { }
         }
-        catch { }
 
         // Remote standard docs (README/CHANGELOG/LICENSE)
         try
@@ -351,25 +360,26 @@ internal sealed partial class DocumentationPlanner
                 bool hasChlog  = res.Items.Any(i => i.Kind == "FILE" && ((i.FileName ?? i.Title).StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase)));
                 bool hasLic    = res.Items.Any(i => i.Kind == "FILE" && ((i.FileName ?? i.Title).StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)));
                 bool forceRemoteStandard = (req.Mode == DocumentationMode.All || req.Mode == DocumentationMode.PreferRemote);
+                bool wantsRemoteReadme = !hasSelectors || req.All || req.Readme;
+                bool wantsRemoteChangelog = !hasSelectors || req.All || req.Changelog;
+                bool wantsRemoteLicense = !hasSelectors || req.All || req.License;
+                bool wantsAnyRemoteStandard = wantsRemoteReadme || wantsRemoteChangelog || wantsRemoteLicense;
 
-                var info = RepoUrlParser.Parse(req.ProjectUri!);
-                var token = ResolveToken(req.RepositoryToken);
-                if (string.IsNullOrEmpty(token)) { token = TokenStore.GetToken(info.Host) ?? string.Empty; }
-                var client = RepoClientFactory.Create(info, token);
+                var client = wantsAnyRemoteStandard ? ResolveRepoClient(req, clientOverride) : null;
                 if (client != null)
                 {
                     string branch = effectiveRepositoryBranch ?? client.GetDefaultBranch();
-                    if (forceRemoteStandard || !hasReadme)
+                    if (wantsRemoteReadme && (forceRemoteStandard || !hasReadme))
                     {
                         var readme = TryFetchFirst(client, branch, new[] { "README.md", "README.MD", "Readme.md" });
                         if (!string.IsNullOrEmpty(readme)) { var di = MakeContentItem(req, "README", RepositoryContentNormalizer.RewriteRelativeUris(readme!, RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch), RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch))); di.Source = "Remote"; di.FileName = "README.md"; di.Title = "README"; res.Items.Add(di); res.UsedRemote = true; }
                     }
-                    if (forceRemoteStandard || !hasChlog)
+                    if (wantsRemoteChangelog && (forceRemoteStandard || !hasChlog))
                     {
                         var ch = TryFetchFirst(client, branch, new[] { "CHANGELOG.md", "CHANGELOG.MD", "Changelog.md" });
                         if (!string.IsNullOrEmpty(ch)) { var di = MakeContentItem(req, "CHANGELOG", RepositoryContentNormalizer.RewriteRelativeUris(ch!, RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch), RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch))); di.Source = "Remote"; di.FileName = "CHANGELOG.md"; di.Title = "CHANGELOG"; res.Items.Add(di); res.UsedRemote = true; }
                     }
-                    if (forceRemoteStandard || !hasLic)
+                    if (wantsRemoteLicense && (forceRemoteStandard || !hasLic))
                     {
                         var lc = TryFetchFirst(client, branch, new[] { "LICENSE", "LICENSE.md", "LICENSE.txt" });
                         if (!string.IsNullOrEmpty(lc)) { var di = MakeContentItem(req, "LICENSE", lc!); di.Source = "Remote"; di.FileName = "LICENSE"; di.Title = "LICENSE"; res.Items.Add(di); res.UsedRemote = true; }
@@ -379,13 +389,7 @@ internal sealed partial class DocumentationPlanner
                 // Include repository Docs/ folder similar to Internals\Docs
                 try
                 {
-                    var info2 = RepoUrlParser.Parse(req.ProjectUri!);
-                    var token2 = ResolveToken(req.RepositoryToken);
-                    if (string.IsNullOrEmpty(token2))
-                    {
-                        token2 = TokenStore.GetToken(info2.Host) ?? string.Empty;
-                    }
-                    var client2 = RepoClientFactory.Create(info2, token2);
+                    var client2 = includeSupplementalSections ? ResolveRepoClient(req, clientOverride) : null;
                     if (client2 != null && (req.RepositoryPaths == null || req.RepositoryPaths.Length == 0))
                     {
                         string branch2 = effectiveRepositoryBranch ?? client2.GetDefaultBranch();
@@ -463,197 +467,209 @@ internal sealed partial class DocumentationPlanner
         catch { /* ignore remote backfill errors */ }
 
         // Extra: scripts tab (Internals/Scripts and standalone ps1 under Internals)
-        try
+        if (includeSupplementalSections)
         {
-            if (!string.IsNullOrEmpty(req.InternalsBase) && Directory.Exists(req.InternalsBase))
+            try
             {
-                var scriptRoots = new [] {
-                    Path.Combine(req.InternalsBase!, "Scripts"),
-                    req.InternalsBase!
-                };
-                foreach (var root in scriptRoots.Distinct())
+                if (!string.IsNullOrEmpty(req.InternalsBase) && Directory.Exists(req.InternalsBase))
                 {
-                    if (!Directory.Exists(root)) continue;
-                    foreach (var f in Directory.GetFiles(root, "*.ps1", SearchOption.TopDirectoryOnly))
+                    var scriptRoots = new [] {
+                        Path.Combine(req.InternalsBase!, "Scripts"),
+                        req.InternalsBase!
+                    };
+                    foreach (var root in scriptRoots.Distinct())
                     {
-                        var name = Path.GetFileName(f);
-                        string code;
-                        try { code = File.ReadAllText(f); } catch { continue; }
-                        // wrap as fenced code for HTML renderer
-                        var md = $"```powershell\n{code}\n```";
-                        res.Items.Add(new DocumentItem { Title = name, Kind = "SCRIPT", Content = md, FileName = name, Path = f });
+                        if (!Directory.Exists(root)) continue;
+                        foreach (var f in Directory.GetFiles(root, "*.ps1", SearchOption.TopDirectoryOnly))
+                        {
+                            var name = Path.GetFileName(f);
+                            string code;
+                            try { code = File.ReadAllText(f); } catch { continue; }
+                            // wrap as fenced code for HTML renderer
+                            var md = $"```powershell\n{code}\n```";
+                            res.Items.Add(new DocumentItem { Title = name, Kind = "SCRIPT", Content = md, FileName = name, Path = f });
+                        }
                     }
                 }
             }
+            catch { /* ignore scripts discovery errors */ }
         }
-        catch { /* ignore scripts discovery errors */ }
 
         // Extra: docs tab (Internals/Docs/*.md)
-        try
+        if (includeSupplementalSections)
         {
-            if (!string.IsNullOrEmpty(req.InternalsBase))
+            try
             {
-                var docsRoot = Path.Combine(req.InternalsBase!, "Docs");
-                if (Directory.Exists(docsRoot))
+                if (!string.IsNullOrEmpty(req.InternalsBase))
                 {
-                    var mdFiles = Directory.GetFiles(docsRoot, "*.md", SearchOption.TopDirectoryOnly)
-                                            .Concat(Directory.GetFiles(docsRoot, "*.markdown", SearchOption.TopDirectoryOnly))
-                                            .ToList();
-                    // Optional ordering from delivery metadata
-                    var orderArr = GetDeliveryValue(req.Delivery, "DocumentationOrder") as System.Collections.IEnumerable;
-                    var order = new List<string>();
-                    if (orderArr != null)
+                    var docsRoot = Path.Combine(req.InternalsBase!, "Docs");
+                    if (Directory.Exists(docsRoot))
                     {
-                        foreach (var o in orderArr) { var s = o?.ToString(); if (!string.IsNullOrWhiteSpace(s)) order.Add(s!); }
-                    }
-                    IEnumerable<string> ordered;
-                    if (order.Count > 0)
-                    {
-                        // First explicit order by file name (case-insensitive), then remaining alphabetically
-                        var map = new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
-                        for (int i=0;i<order.Count;i++) map[order[i]] = i;
-                        ordered = mdFiles.OrderBy(f => map.ContainsKey(Path.GetFileName(f)) ? map[Path.GetFileName(f)] : int.MaxValue)
-                                         .ThenBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
-                    }
-                    else
-                    {
-                        ordered = mdFiles.OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
-                    }
-                    foreach (var f in ordered)
-                    {
-                        string content; try { content = File.ReadAllText(f); } catch { continue; }
-                        var fileName = Path.GetFileName(f);
-                        var kind = RepositoryContentNormalizer.IsLikelyTemplateSource(fileName, content)
-                            ? "DOCSOURCE"
-                            : "DOC";
-                        var normalizedContent = string.Equals(kind, "DOCSOURCE", StringComparison.OrdinalIgnoreCase)
-                            ? RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "markdown")
-                            : RepositoryContentNormalizer.RewriteRelativeUris(
-                                content,
-                                RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
-                                RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch));
-                        res.Items.Add(new DocumentItem { Title = fileName, Kind = kind, Content = normalizedContent, FileName = fileName, Path = f, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch) });
+                        var mdFiles = Directory.GetFiles(docsRoot, "*.md", SearchOption.TopDirectoryOnly)
+                                                .Concat(Directory.GetFiles(docsRoot, "*.markdown", SearchOption.TopDirectoryOnly))
+                                                .ToList();
+                        // Optional ordering from delivery metadata
+                        var orderArr = GetDeliveryValue(req.Delivery, "DocumentationOrder") as System.Collections.IEnumerable;
+                        var order = new List<string>();
+                        if (orderArr != null)
+                        {
+                            foreach (var o in orderArr) { var s = o?.ToString(); if (!string.IsNullOrWhiteSpace(s)) order.Add(s!); }
+                        }
+                        IEnumerable<string> ordered;
+                        if (order.Count > 0)
+                        {
+                            // First explicit order by file name (case-insensitive), then remaining alphabetically
+                            var map = new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
+                            for (int i=0;i<order.Count;i++) map[order[i]] = i;
+                            ordered = mdFiles.OrderBy(f => map.ContainsKey(Path.GetFileName(f)) ? map[Path.GetFileName(f)] : int.MaxValue)
+                                             .ThenBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+                        }
+                        else
+                        {
+                            ordered = mdFiles.OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+                        }
+                        foreach (var f in ordered)
+                        {
+                            string content; try { content = File.ReadAllText(f); } catch { continue; }
+                            var fileName = Path.GetFileName(f);
+                            var kind = RepositoryContentNormalizer.IsLikelyTemplateSource(fileName, content)
+                                ? "DOCSOURCE"
+                                : "DOC";
+                            var normalizedContent = string.Equals(kind, "DOCSOURCE", StringComparison.OrdinalIgnoreCase)
+                                ? RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "markdown")
+                                : RepositoryContentNormalizer.RewriteRelativeUris(
+                                    content,
+                                    RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
+                                    RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch));
+                            res.Items.Add(new DocumentItem { Title = fileName, Kind = kind, Content = normalizedContent, FileName = fileName, Path = f, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch) });
+                        }
                     }
                 }
             }
+            catch { /* ignore docs discovery errors */ }
         }
-        catch { /* ignore docs discovery errors */ }
 
         // Links
-        var links = GetDeliveryValue(req.Delivery, "ImportantLinks") as System.Collections.IEnumerable;
-        if (links != null)
+        if (includeSupplementalSections)
         {
-            var md = new System.Text.StringBuilder();
-            md.AppendLine("# Links");
-            foreach (var l in links)
+            var links = GetDeliveryValue(req.Delivery, "ImportantLinks") as System.Collections.IEnumerable;
+            if (links != null)
             {
-                var t = GetDeliveryValue(l, "Title")?.ToString() ?? GetDeliveryValue(l, "Name")?.ToString();
-                var u = GetDeliveryValue(l, "Url")?.ToString();
-                if (string.IsNullOrEmpty(u)) continue;
-                if (!string.IsNullOrEmpty(t)) md.Append("- [").Append(t).Append("](").Append(u).AppendLine(")");
-                else md.Append("- ").AppendLine(u);
+                var md = new System.Text.StringBuilder();
+                md.AppendLine("# Links");
+                foreach (var l in links)
+                {
+                    var t = GetDeliveryValue(l, "Title")?.ToString() ?? GetDeliveryValue(l, "Name")?.ToString();
+                    var u = GetDeliveryValue(l, "Url")?.ToString();
+                    if (string.IsNullOrEmpty(u)) continue;
+                    if (!string.IsNullOrEmpty(t)) md.Append("- [").Append(t).Append("](").Append(u).AppendLine(")");
+                    else md.Append("- ").AppendLine(u);
+                }
+                if (md.Length > 0)
+                    res.Items.Add(new DocumentItem { Title = BuildTitle(req, "Links"), Kind = "FILE", Content = md.ToString() });
             }
-            if (md.Length > 0)
-                res.Items.Add(new DocumentItem { Title = BuildTitle(req, "Links"), Kind = "FILE", Content = md.ToString() });
         }
 
         // Release summary derived from CHANGELOG
-        try
+        if (includeReleases)
         {
-            string? changelogContent = null;
-            var remoteChangelog = res.Items.FirstOrDefault(i => string.Equals(i.Kind, "FILE", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "CHANGELOG.md", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase));
-            if (remoteChangelog != null) changelogContent = remoteChangelog.Content;
-            if (string.IsNullOrEmpty(changelogContent))
+            try
             {
-                if (!string.IsNullOrEmpty(req.LocalChangelogPath) && File.Exists(req.LocalChangelogPath))
+                string? changelogContent = null;
+                var remoteChangelog = res.Items.FirstOrDefault(i => string.Equals(i.Kind, "FILE", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "CHANGELOG.md", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase));
+                if (remoteChangelog != null) changelogContent = remoteChangelog.Content;
+                if (string.IsNullOrEmpty(changelogContent))
                 {
-                    changelogContent = File.ReadAllText(req.LocalChangelogPath);
-                }
-            }
-            if (string.IsNullOrEmpty(changelogContent))
-            {
-                var localChlog = res.Items.FirstOrDefault(i => string.Equals(i.Kind, "FILE", StringComparison.OrdinalIgnoreCase) && (i.FileName ?? i.Title)?.StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase) == true && string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase));
-                if (localChlog != null)
-                {
-                    changelogContent = string.IsNullOrEmpty(localChlog.Content) && !string.IsNullOrEmpty(localChlog.Path) && File.Exists(localChlog.Path)
-                        ? File.ReadAllText(localChlog.Path!)
-                        : localChlog.Content;
-                }
-            }
-            if (!string.IsNullOrEmpty(changelogContent))
-            {
-                var parsedReleases = ParseChangelogReleases(changelogContent!);
-                if (parsedReleases.Count > 0 && !string.IsNullOrWhiteSpace(req.ProjectUri))
-                {
-                    if (req.Online || clientOverride != null)
+                    if (!string.IsNullOrEmpty(req.LocalChangelogPath) && File.Exists(req.LocalChangelogPath))
                     {
-                        var repoReleases = GetNormalizedRepoReleases(req, clientOverride);
-                        if (repoReleases.Count > 0)
-                        {
-                            parsedReleases = MergeReleaseMetadata(parsedReleases, repoReleases);
-                        }
+                        changelogContent = File.ReadAllText(req.LocalChangelogPath);
                     }
-                    parsedReleases = NormalizeRepoReleases(parsedReleases, req.ProjectUri);
                 }
-                if (parsedReleases.Count > 0)
+                if (string.IsNullOrEmpty(changelogContent))
                 {
-                    res.Items.Add(new DocumentItem
+                    var localChlog = res.Items.FirstOrDefault(i => string.Equals(i.Kind, "FILE", StringComparison.OrdinalIgnoreCase) && (i.FileName ?? i.Title)?.StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase) == true && string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase));
+                    if (localChlog != null)
                     {
-                        Title = BuildTitle(req, "Releases"),
-                        Kind = "RELEASES",
-                        Content = BuildReleaseSummaryMarkdown(parsedReleases),
-                        Releases = parsedReleases,
-                        Source = string.IsNullOrEmpty(req.ProjectUri) ? "Local" : "Derived"
-                    });
+                        changelogContent = string.IsNullOrEmpty(localChlog.Content) && !string.IsNullOrEmpty(localChlog.Path) && File.Exists(localChlog.Path)
+                            ? File.ReadAllText(localChlog.Path!)
+                            : localChlog.Content;
+                    }
                 }
-            }
-            // If changelog not present, try repo releases API
-            if ((req.Online || clientOverride != null) && res.Items.All(i => !string.Equals(i.Kind, "RELEASES", StringComparison.OrdinalIgnoreCase)) && !string.IsNullOrWhiteSpace(req.ProjectUri))
-            {
-                try
+                if (!string.IsNullOrEmpty(changelogContent))
                 {
-                    var normalizedReleases = GetNormalizedRepoReleases(req, clientOverride);
-                    if (normalizedReleases.Count > 0)
+                    var parsedReleases = ParseChangelogReleases(changelogContent!);
+                    if (parsedReleases.Count > 0 && !string.IsNullOrWhiteSpace(req.ProjectUri))
                     {
-                        var sb = new System.Text.StringBuilder();
-                        sb.AppendLine("# Releases (repository API)");
-                        foreach (var r in normalizedReleases)
+                        if (req.Online || clientOverride != null)
                         {
-                            sb.Append("## ").Append(string.IsNullOrEmpty(r.Name) ? r.Tag : r.Name);
-                            if (r.PublishedAt.HasValue) sb.Append(" (" + r.PublishedAt.Value.ToString("yyyy-MM-dd") + ")");
-                            sb.AppendLine();
-                            if (!string.IsNullOrWhiteSpace(r.Body))
+                            var repoReleases = GetNormalizedRepoReleases(req, clientOverride);
+                            if (repoReleases.Count > 0)
                             {
-                                sb.AppendLine(r.Body.Trim()).AppendLine();
-                            }
-                            if (r.Assets.Count > 0)
-                            {
-                                sb.AppendLine("### Assets");
-                                foreach (var a in r.Assets)
-                                {
-                                    sb.Append("- [").Append(a.Name).Append("](").Append(a.DownloadUrl).Append(")");
-                                    if (a.Size.HasValue) sb.Append($" ({a.Size.Value / 1024} KB)");
-                                    if (!string.IsNullOrEmpty(a.ContentType)) sb.Append($" {a.ContentType}");
-                                    sb.AppendLine();
-                                }
-                                sb.AppendLine();
+                                parsedReleases = MergeReleaseMetadata(parsedReleases, repoReleases);
                             }
                         }
+                        parsedReleases = NormalizeRepoReleases(parsedReleases, req.ProjectUri);
+                    }
+                    if (parsedReleases.Count > 0)
+                    {
                         res.Items.Add(new DocumentItem
                         {
                             Title = BuildTitle(req, "Releases"),
                             Kind = "RELEASES",
-                            Content = sb.ToString(),
-                            Releases = normalizedReleases,
-                            Source = "Remote",
-                            BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, normalizedReleases.FirstOrDefault()?.Tag)
+                            Content = BuildReleaseSummaryMarkdown(parsedReleases),
+                            Releases = parsedReleases,
+                            Source = string.IsNullOrEmpty(req.ProjectUri) ? "Local" : "Derived"
                         });
                     }
                 }
-                catch { }
+                // If changelog not present, try repo releases API
+                if ((req.Online || clientOverride != null) && res.Items.All(i => !string.Equals(i.Kind, "RELEASES", StringComparison.OrdinalIgnoreCase)) && !string.IsNullOrWhiteSpace(req.ProjectUri))
+                {
+                    try
+                    {
+                        var normalizedReleases = GetNormalizedRepoReleases(req, clientOverride);
+                        if (normalizedReleases.Count > 0)
+                        {
+                            var sb = new System.Text.StringBuilder();
+                            sb.AppendLine("# Releases (repository API)");
+                            foreach (var r in normalizedReleases)
+                            {
+                                sb.Append("## ").Append(string.IsNullOrEmpty(r.Name) ? r.Tag : r.Name);
+                                if (r.PublishedAt.HasValue) sb.Append(" (" + r.PublishedAt.Value.ToString("yyyy-MM-dd") + ")");
+                                sb.AppendLine();
+                                if (!string.IsNullOrWhiteSpace(r.Body))
+                                {
+                                    sb.AppendLine(r.Body.Trim()).AppendLine();
+                                }
+                                if (r.Assets.Count > 0)
+                                {
+                                    sb.AppendLine("### Assets");
+                                    foreach (var a in r.Assets)
+                                    {
+                                        sb.Append("- [").Append(a.Name).Append("](").Append(a.DownloadUrl).Append(")");
+                                        if (a.Size.HasValue) sb.Append($" ({a.Size.Value / 1024} KB)");
+                                        if (!string.IsNullOrEmpty(a.ContentType)) sb.Append($" {a.ContentType}");
+                                        sb.AppendLine();
+                                    }
+                                    sb.AppendLine();
+                                }
+                            }
+                            res.Items.Add(new DocumentItem
+                            {
+                                Title = BuildTitle(req, "Releases"),
+                                Kind = "RELEASES",
+                                Content = sb.ToString(),
+                                Releases = normalizedReleases,
+                                Source = "Remote",
+                                BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, normalizedReleases.FirstOrDefault()?.Tag)
+                            });
+                        }
+                    }
+                    catch { }
+                }
             }
+            catch { }
         }
-        catch { }
 
         return res;
     }
@@ -672,18 +688,7 @@ internal sealed partial class DocumentationPlanner
 
         try
         {
-            var client = clientOverride;
-            if (client == null)
-            {
-                var info = RepoUrlParser.Parse(req.ProjectUri!);
-                var token = ResolveToken(req.RepositoryToken);
-                if (string.IsNullOrEmpty(token))
-                {
-                    token = TokenStore.GetToken(info.Host) ?? string.Empty;
-                }
-
-                client = RepoClientFactory.Create(info, token);
-            }
+            var client = ResolveRepoClient(req, clientOverride);
 
             var branch = client?.GetDefaultBranch();
             return string.IsNullOrWhiteSpace(branch) ? null : branch!.Trim();

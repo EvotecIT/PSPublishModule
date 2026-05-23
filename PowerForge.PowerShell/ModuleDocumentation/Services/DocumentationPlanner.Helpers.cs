@@ -26,6 +26,22 @@ internal sealed partial class DocumentationPlanner
            ?? Environment.GetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT")
            ?? string.Empty;
 
+    private static IRepoClient? ResolveRepoClient(Request req, IRepoClient? clientOverride)
+    {
+        if (clientOverride is not null)
+            return clientOverride;
+
+        if (string.IsNullOrWhiteSpace(req.ProjectUri))
+            return null;
+
+        var info = RepoUrlParser.Parse(req.ProjectUri!);
+        var token = ResolveToken(req.RepositoryToken);
+        if (string.IsNullOrEmpty(token))
+            token = TokenStore.GetToken(info.Host) ?? string.Empty;
+
+        return RepoClientFactory.Create(info, token);
+    }
+
     private static string? TryFetchFirst(IRepoClient client, string branch, string[] candidates)
     {
         foreach (var p in candidates)
@@ -38,6 +54,37 @@ internal sealed partial class DocumentationPlanner
 
     private static DocumentItem MakeContentItem(Request req, string name, string content)
         => new DocumentItem { Title = BuildTitle(req, name), Kind = "FILE", Content = content };
+
+    private static DocumentItem? TryCreateRemoteSingleFileItem(Request req, IRepoClient client, string branch)
+    {
+        if (string.IsNullOrWhiteSpace(req.SingleFile))
+            return null;
+
+        var remotePath = req.SingleFile!.Replace('\\', '/').TrimStart('/');
+        if (string.IsNullOrWhiteSpace(remotePath))
+            return null;
+
+        var content = client.GetFileContent(remotePath, branch);
+        if (string.IsNullOrEmpty(content))
+            return null;
+
+        var fileName = Path.GetFileName(remotePath);
+        var normalizedContent = RepositoryContentNormalizer.RewriteRelativeUris(
+            content!,
+            RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch),
+            RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch));
+
+        return new DocumentItem
+        {
+            Title = BuildTitle(req, fileName),
+            Kind = "FILE",
+            Content = normalizedContent,
+            FileName = fileName,
+            Path = remotePath,
+            Source = "Remote",
+            BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch)
+        };
+    }
 
     private static string BuildTitle(Request req, string leaf)
         => !string.IsNullOrEmpty(req.TitleName) ? $"{req.TitleName} {req.TitleVersion} - {leaf}" : leaf;
@@ -239,16 +286,7 @@ internal sealed partial class DocumentationPlanner
         if (string.IsNullOrWhiteSpace(req.ProjectUri) || (!req.Online && clientOverride is null))
             return new List<RepoRelease>();
 
-        var client = clientOverride;
-        if (client is null)
-        {
-            var info = RepoUrlParser.Parse(req.ProjectUri!);
-            var token = ResolveToken(req.RepositoryToken);
-            if (string.IsNullOrEmpty(token))
-                token = TokenStore.GetToken(info.Host) ?? string.Empty;
-
-            client = RepoClientFactory.Create(info, token);
-        }
+        var client = ResolveRepoClient(req, clientOverride);
         var rels = client?.ListReleases() ?? new List<RepoRelease>();
         return rels.Count > 0 ? NormalizeRepoReleases(rels, req.ProjectUri) : new List<RepoRelease>();
     }

@@ -53,6 +53,11 @@ internal static class RepositoryContentNormalizer
                     reference = reference!.Trim();
                 return $"https://raw.githubusercontent.com/{info.Owner}/{info.Repo}/{reference.Trim('/')}/";
             }
+            if (info.Host == RepoHost.AzureDevOps && !string.IsNullOrEmpty(info.Organization) && !string.IsNullOrEmpty(info.Project) && !string.IsNullOrEmpty(info.Repository))
+            {
+                var reference = string.IsNullOrWhiteSpace(refName) ? "main" : refName!.Trim();
+                return $"https://dev.azure.com/{EscapeSegment(info.Organization!)}/{EscapeSegment(info.Project!)}/_apis/git/repositories/{EscapeSegment(info.Repository!)}/items?api-version=7.1&versionDescriptor.version={Uri.EscapeDataString(reference)}&path={{path}}";
+            }
         }
         catch
         {
@@ -79,6 +84,11 @@ internal static class RepositoryContentNormalizer
                 else
                     reference = reference!.Trim();
                 return $"https://github.com/{info.Owner}/{info.Repo}/blob/{reference.Trim('/')}/";
+            }
+            if (info.Host == RepoHost.AzureDevOps && !string.IsNullOrEmpty(info.Organization) && !string.IsNullOrEmpty(info.Project) && !string.IsNullOrEmpty(info.Repository))
+            {
+                var reference = string.IsNullOrWhiteSpace(refName) ? "main" : refName!.Trim();
+                return $"https://dev.azure.com/{EscapeSegment(info.Organization!)}/{EscapeSegment(info.Project!)}/_git/{EscapeSegment(info.Repository!)}?version=GB{Uri.EscapeDataString(reference)}&path={{path}}";
             }
         }
         catch
@@ -196,7 +206,7 @@ internal static class RepositoryContentNormalizer
                 var baseUri = !isImage && IsLikelyViewableDocument(url) && !string.IsNullOrWhiteSpace(blobBaseUri)
                     ? blobBaseUri!
                     : rawBaseUri;
-                var absolute = new Uri(new Uri(baseUri, UriKind.Absolute), url).ToString();
+                var absolute = ResolveRelativeUrl(baseUri, url);
                 return match.Groups[1].Value + absolute + match.Groups[3].Value;
             }
             catch
@@ -221,7 +231,7 @@ internal static class RepositoryContentNormalizer
                 var baseUri = isHref && IsLikelyViewableDocument(url) && !string.IsNullOrWhiteSpace(blobBaseUri)
                     ? blobBaseUri!
                     : rawBaseUri;
-                var absolute = new Uri(new Uri(baseUri, UriKind.Absolute), url).ToString();
+                var absolute = ResolveRelativeUrl(baseUri, url);
                 return match.Groups["prefix"].Value + match.Groups["quote"].Value + absolute + match.Groups["quote"].Value;
             }
             catch
@@ -238,6 +248,37 @@ internal static class RepositoryContentNormalizer
 
         return HtmlLinkSafetyAttributeRegex.Replace(text, string.Empty);
     }
+
+    private static string ResolveRelativeUrl(string baseUri, string url)
+    {
+        if (baseUri.Contains("{path}", StringComparison.Ordinal))
+        {
+            var normalized = (url ?? string.Empty).Replace('\\', '/').TrimStart('/');
+            var fragment = string.Empty;
+            var fragmentIndex = normalized.IndexOf('#');
+            if (fragmentIndex >= 0)
+            {
+                fragment = normalized.Substring(fragmentIndex);
+                normalized = normalized.Substring(0, fragmentIndex);
+            }
+
+            var query = string.Empty;
+            var queryIndex = normalized.IndexOf('?');
+            if (queryIndex >= 0)
+            {
+                query = normalized.Substring(queryIndex);
+                normalized = normalized.Substring(0, queryIndex);
+            }
+
+            var encodedPath = Uri.EscapeDataString("/" + normalized);
+            return baseUri.Replace("{path}", encodedPath) + query + fragment;
+        }
+
+        return new Uri(new Uri(baseUri, UriKind.Absolute), url).ToString();
+    }
+
+    private static string EscapeSegment(string value)
+        => Uri.EscapeDataString(value);
 
     private static bool ShouldRewriteUrl(string? url)
     {

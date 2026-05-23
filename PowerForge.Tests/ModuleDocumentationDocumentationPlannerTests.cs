@@ -140,6 +140,29 @@ public class DocumentationPlannerTests
     }
 
     [Fact]
+    public void Execute_LocalReadme_Rewrites_AzureDevOps_Document_Links()
+    {
+        var root = CreateTempModule(out var internals);
+        File.WriteAllText(Path.Combine(root, "README.md"), """
+        [Guide](docs/Use-Git.md)
+        ![Logo](assets/ugit.svg)
+        """);
+
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            ProjectUri = "https://dev.azure.com/contoso/Platform/_git/DocsRepo",
+            RepositoryBranch = "develop"
+        });
+
+        var readme = Assert.Single(res.Items, i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("https://dev.azure.com/contoso/Platform/_git/DocsRepo?version=GBdevelop&path=%2Fdocs%2FUse-Git.md", readme.Content, StringComparison.Ordinal);
+        Assert.Contains("https://dev.azure.com/contoso/Platform/_apis/git/repositories/DocsRepo/items?api-version=7.1&versionDescriptor.version=develop&path=%2Fassets%2Fugit.svg", readme.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Execute_OnlineAll_Adds_RemoteStandardDocs_Only_Once()
     {
         var root = CreateTempModule(out var internals);
@@ -161,6 +184,79 @@ public class DocumentationPlannerTests
         Assert.Equal(1, res.Items.Count(i => string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(1, res.Items.Count(i => string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "CHANGELOG.md", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(1, res.Items.Count(i => string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "LICENSE", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void Execute_ReadmeSelection_Does_Not_Add_Supplemental_Docs_Scripts_Community_Or_Releases()
+    {
+        var root = CreateTempModule(out var internals);
+        File.WriteAllText(Path.Combine(root, "CHANGELOG.md"), """
+        # Changelog
+
+        ## [1.2.3] - 2024-12-07
+        - Release.
+        """);
+        File.WriteAllText(Path.Combine(root, "SECURITY.md"), "# Security");
+
+        var scriptsRoot = Path.Combine(internals, "Scripts");
+        Directory.CreateDirectory(scriptsRoot);
+        File.WriteAllText(Path.Combine(scriptsRoot, "Invoke-Demo.ps1"), "Get-Date");
+
+        var docsRoot = Path.Combine(internals, "Docs");
+        Directory.CreateDirectory(docsRoot);
+        File.WriteAllText(Path.Combine(docsRoot, "Guide.md"), "# Guide");
+
+        var client = new FakeRepoClient();
+        client.Files["docs"] = new List<(string Name, string Path)> { ("RemoteGuide.md", "docs/RemoteGuide.md") };
+        client.Content["docs/RemoteGuide.md"] = "# Remote guide";
+
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            Readme = true,
+            LocalChangelogPath = Path.Combine(root, "CHANGELOG.md"),
+            ProjectUri = "https://github.com/StartAutomating/ugit",
+            RepositoryPaths = new[] { "docs" },
+            Online = true
+        }, client);
+
+        Assert.Single(res.Items);
+        Assert.Contains(res.Items, i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "SCRIPT", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "DOC", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "COMMUNITY", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "RELEASES", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Execute_FileSelection_Loads_Remote_Single_File()
+    {
+        var root = CreateTempModule(out var internals);
+        var client = new FakeRepoClient();
+        client.Content["docs/guide.md"] = """
+        # Guide
+
+        [Sibling](docs/sibling.md)
+        """;
+
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            ProjectUri = "https://github.com/StartAutomating/ugit",
+            SingleFile = "docs/guide.md",
+            Online = true
+        }, client);
+
+        var item = Assert.Single(res.Items);
+        Assert.Equal("Remote", item.Source);
+        Assert.Equal("guide.md", item.FileName);
+        Assert.Equal("docs/guide.md", item.Path);
+        Assert.Contains("https://github.com/StartAutomating/ugit/blob/main/docs/sibling.md", item.Content, StringComparison.Ordinal);
+        Assert.True(res.UsedRemote);
     }
 
     [Fact]
