@@ -52,9 +52,10 @@ public sealed class AzureArtifactsPrivateGalleryClient
         foreach (var releaseFilter in releaseFilters)
         {
             var skip = 0;
-            while (packages.Count < maxPackages)
+            var fetchedForFilter = 0;
+            while (fetchedForFilter < maxPackages)
             {
-                var take = Math.Min(pageSize, maxPackages - packages.Count);
+                var take = Math.Min(pageSize, maxPackages - fetchedForFilter);
                 var uri = BuildPackagesUri(
                     organization,
                     project,
@@ -98,18 +99,14 @@ public sealed class AzureArtifactsPrivateGalleryClient
                         packages[package.Id] = package;
 
                     fetched++;
-                    if (packages.Count >= maxPackages)
-                        break;
                 }
 
+                fetchedForFilter += fetched;
                 if (fetched < take)
                     break;
 
                 skip += fetched;
             }
-
-            if (packages.Count >= maxPackages)
-                break;
         }
 
         return packages.Values

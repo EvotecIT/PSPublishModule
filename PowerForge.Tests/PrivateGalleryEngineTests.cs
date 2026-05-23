@@ -18,11 +18,36 @@ public sealed class PrivateGalleryEngineTests
             Assert.Contains("protocolType=NuGet", request.RequestUri!.Query, StringComparison.Ordinal);
             Assert.Contains("includeAllVersions=true", request.RequestUri.Query, StringComparison.Ordinal);
             Assert.Equal("Bearer token-value", request.Headers.Authorization?.ToString());
+            var isPrereleaseQuery = request.RequestUri.Query.Contains("isRelease=false", StringComparison.Ordinal);
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(
-                    """
+                    isPrereleaseQuery
+                        ? """
+                          {
+                            "count": 1,
+                            "value": [
+                              {
+                                "id": "preview-package-guid",
+                                "name": "PSPreviewModule",
+                                "protocolType": "NuGet",
+                                "description": "Preview module",
+                                "versions": [
+                                  {
+                                    "id": "preview-version-guid",
+                                    "version": "1.0.0-preview1",
+                                    "normalizedVersion": "1.0.0-preview1",
+                                    "isLatest": true,
+                                    "isListed": true,
+                                    "isDeleted": false
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                          """
+                        : """
                     {
                       "count": 1,
                       "value": [
@@ -68,13 +93,15 @@ public sealed class PrivateGalleryEngineTests
             Project = "PowerShellGallery",
             Feed = "PowerShellGalleryFeed",
             Token = "token-value",
-            AuthenticationKind = PrivateGalleryAuthenticationKind.Bearer
+            AuthenticationKind = PrivateGalleryAuthenticationKind.Bearer,
+            MaxPackages = 1
         }, warnings);
 
         Assert.Empty(warnings);
         Assert.Contains(queries, query => query.Contains("isRelease=true", StringComparison.Ordinal));
         Assert.Contains(queries, query => query.Contains("isRelease=false", StringComparison.Ordinal));
-        var package = Assert.Single(packages);
+        Assert.Equal(2, packages.Count);
+        var package = Assert.Single(packages, package => package.Name == "PSPublishModule");
         Assert.Equal("PSPublishModule", package.Name);
         Assert.Equal("3.0.13", package.LatestVersion);
         Assert.Equal("Publishing module", package.Description);

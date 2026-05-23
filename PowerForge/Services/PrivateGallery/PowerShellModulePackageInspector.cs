@@ -153,6 +153,12 @@ public sealed class PowerShellModulePackageInspector
     {
         try
         {
+            if (entry.Length > MaxTextBytes)
+            {
+                metadata.Warnings.Add($"Skipped help XML '{entry.FullName}' because it exceeds the private gallery inspection size limit.");
+                return;
+            }
+
             var settings = new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
