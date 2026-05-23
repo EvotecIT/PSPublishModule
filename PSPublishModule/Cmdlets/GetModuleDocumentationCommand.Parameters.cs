@@ -22,6 +22,7 @@ public sealed partial class GetModuleDocumentationCommand
 
     /// <summary>Exact version to select when multiple module versions are installed.</summary>
     [Parameter(ParameterSetName = "ByName")]
+    [Parameter(ParameterSetName = "ByModule")]
     public Version? RequiredVersion { get; set; }
 
     /// <summary>Direct path to a documentation folder containing README/CHANGELOG/etc.</summary>
