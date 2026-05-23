@@ -126,6 +126,8 @@ public sealed class ModulePublisher
     {
         var credential = repoConfig?.Credential;
         string? temporaryPublishPath = null;
+        var repositoryCreated = false;
+        PublishRepositoryConfiguration? repositoryForPublish = repoConfig;
         var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
 
         try
@@ -136,6 +138,12 @@ public sealed class ModulePublisher
                 information: plan.Information,
                 delivery: plan.Delivery,
                 includeScriptFolders: includeScriptFolders);
+
+            if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
+            {
+                repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
+                repositoryForPublish = CloneRegisteredRepository(repoConfig);
+            }
 
             if (!publish.Force)
                 EnsureVersionIsGreaterThanRepository(tool, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repositoryName, credential);
@@ -157,7 +165,7 @@ public sealed class ModulePublisher
                     RepositoryName = repositoryName,
                     Tool = tool,
                     ApiKey = string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
-                    Repository = repoConfig,
+                    Repository = repositoryForPublish,
                     DestinationPath = null,
                     SkipDependenciesCheck = tool != PublishTool.PowerShellGet,
                     SkipModuleManifestValidate = false
@@ -170,6 +178,18 @@ public sealed class ModulePublisher
         }
         finally
         {
+            if (repositoryCreated && repoConfig is { UnregisterAfterUse: true })
+            {
+                try
+                {
+                    UnregisterRepository(tool, repositoryName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"Failed to unregister repository '{repositoryName}': {ex.Message}");
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(temporaryPublishPath))
                 CleanupTemporaryPublishPath(temporaryPublishPath);
         }
@@ -519,6 +539,79 @@ public sealed class ModulePublisher
 
         return FormatSemVer(resource.Version, resource.PreRelease);
     }
+
+    private static bool HasRepositoryUris(PublishRepositoryConfiguration repo)
+        => repo is not null &&
+           (!string.IsNullOrWhiteSpace(repo.Uri) ||
+            !string.IsNullOrWhiteSpace(repo.SourceUri) ||
+            !string.IsNullOrWhiteSpace(repo.PublishUri));
+
+    private bool EnsureRepositoryRegistered(PublishTool tool, string repositoryName, PublishRepositoryConfiguration repo)
+    {
+        if (tool == PublishTool.PowerShellGet)
+        {
+            var sourceUri = string.IsNullOrWhiteSpace(repo.SourceUri)
+                ? (string.IsNullOrWhiteSpace(repo.Uri) ? repo.PublishUri : repo.Uri)
+                : repo.SourceUri;
+            var publishUri = string.IsNullOrWhiteSpace(repo.PublishUri)
+                ? (string.IsNullOrWhiteSpace(repo.Uri) ? repo.SourceUri : repo.Uri)
+                : repo.PublishUri;
+
+            if (string.IsNullOrWhiteSpace(sourceUri) || string.IsNullOrWhiteSpace(publishUri))
+            {
+                throw new InvalidOperationException(
+                    $"Repository '{repositoryName}' is missing SourceUri/PublishUri/Uri for PowerShellGet registration.");
+            }
+
+            return _powerShellGet.EnsureRepositoryRegistered(
+                repositoryName,
+                sourceUri!,
+                publishUri!,
+                trusted: repo.Trusted,
+                timeout: TimeSpan.FromMinutes(2));
+        }
+
+        var uri = string.IsNullOrWhiteSpace(repo.Uri)
+            ? (string.IsNullOrWhiteSpace(repo.PublishUri) ? repo.SourceUri : repo.PublishUri)
+            : repo.Uri;
+
+        if (string.IsNullOrWhiteSpace(uri))
+            throw new InvalidOperationException($"Repository '{repositoryName}' is missing Uri/PublishUri/SourceUri for PSResourceGet registration.");
+
+        return _psResourceGet.EnsureRepositoryRegistered(
+            name: repositoryName,
+            uri: uri!,
+            trusted: repo.Trusted,
+            priority: repo.Priority,
+            apiVersion: repo.ApiVersion,
+            timeout: TimeSpan.FromMinutes(2));
+    }
+
+    private void UnregisterRepository(PublishTool tool, string repositoryName)
+    {
+        if (tool == PublishTool.PowerShellGet)
+        {
+            _powerShellGet.UnregisterRepository(repositoryName, timeout: TimeSpan.FromMinutes(2));
+            return;
+        }
+
+        _psResourceGet.UnregisterRepository(repositoryName, timeout: TimeSpan.FromMinutes(2));
+    }
+
+    private static PublishRepositoryConfiguration CloneRegisteredRepository(PublishRepositoryConfiguration repo)
+        => new()
+        {
+            Name = repo.Name,
+            Uri = repo.Uri,
+            SourceUri = repo.SourceUri,
+            PublishUri = repo.PublishUri,
+            Trusted = repo.Trusted,
+            Priority = repo.Priority,
+            ApiVersion = repo.ApiVersion,
+            EnsureRegistered = false,
+            UnregisterAfterUse = false,
+            Credential = repo.Credential
+        };
 
     private static (string RepositoryName, PublishRepositoryConfiguration? Repository) ResolveRepository(PublishConfiguration publish)
     {

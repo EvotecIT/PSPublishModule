@@ -319,6 +319,31 @@ Invoke-ModuleBuild @buildParams -Settings {
     #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>' -GenerateReleaseNotes
 
 
+    # Optional one-time maintainer preflight: installs prerequisites, registers/probes the feed, and primes cached Entra/Azure DevOps auth when needed.
+    #Initialize-ModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
+    # Private feed publish target. This registers/refreshes the Azure Artifacts PSResourceGet repository before version checks and publish.
+    #New-ConfigurationPublish -AzureDevOpsOrganization 'evotecpl' -AzureDevOpsProject 'PowerShellGallery' -AzureArtifactsFeed 'PowerShellGalleryFeed' -RepositoryName 'EvotecPowerShellGallery' -Tool PSResourceGet -Enabled:$true
+
+    <#
+    Direct PSResourceGet way:
+    Initialize-ModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
+    Install-PSResource -Name PSPublishModule -Repository EvotecPowerShellGallery -TrustRepository
+    Update-PSResource -Name PSPublishModule
+
+    PSPublishModule private module management:
+    Install-Module PSPublishModule -Scope CurrentUser
+    Initialize-ModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
+    Install-PrivateModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule -InstallPrerequisites
+    Update-PrivateModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule -InstallPrerequisites
+
+    Auth behavior:
+    If the credential provider has a valid cached Entra/Azure DevOps session, it should just use it.
+    If no token exists or the token expired, it should prompt through the Azure Artifacts Credential Provider login flow, usually browser/device-code style.
+    After successful login, the provider caches the session, so later install/update runs should not need anything fancy.
+    No PAT, username, or password should be needed for normal interactive users.
+    #>
+
+
     ### FOR TESTING PURPOSES ONLY ###
     ### SHOWING HOW THINGS WORK HERE ###
 

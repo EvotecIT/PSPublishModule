@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -93,6 +95,77 @@ public sealed class ModulePublisherRepositoryVersionTests
         Assert.Contains("not greater than repository version '3.0.0'", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Publish_RegistersConfiguredRepositoryBeforeVersionCheck()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        var calls = new List<string>();
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '3.0.13'; GUID = 'eb76426a-1992-40a5-82cd-6480f883ef4d'; RootModule = 'PSPublishModule.psm1' }");
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var runner = new StubPowerShellRunner(request =>
+            {
+                var script = File.ReadAllText(request.ScriptPath!);
+                if (script.Contains("Register-PSResourceRepository", StringComparison.Ordinal))
+                {
+                    calls.Add("register");
+                    return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0", string.Empty, "pwsh.exe");
+                }
+
+                if (script.Contains("Find-PSResource", StringComparison.Ordinal))
+                {
+                    calls.Add("find");
+                    return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+                }
+
+                if (script.Contains("Publish-PSResource", StringComparison.Ordinal))
+                {
+                    calls.Add("publish");
+                    return new PowerShellRunResult(0, "PFPSRG::PUBLISH::OK", string.Empty, "pwsh.exe");
+                }
+
+                throw new InvalidOperationException("Unexpected PowerShell script invocation.");
+            });
+            var publisher = new ModulePublisher(new NullLogger(), runner);
+
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.PSResourceGet,
+                ApiKey = "AzureDevOps",
+                RepositoryName = "EvotecPowerShellGallery",
+                Repository = new PublishRepositoryConfiguration
+                {
+                    Name = "EvotecPowerShellGallery",
+                    Uri = "https://pkgs.dev.azure.com/evotecpl/PowerShellGallery/_packaging/PowerShellGalleryFeed/nuget/v3/index.json",
+                    Trusted = true,
+                    ApiVersion = RepositoryApiVersion.V3,
+                    EnsureRegistered = true
+                }
+            };
+            var plan = CreatePlan();
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var result = publisher.Publish(publish, plan, buildResult, Array.Empty<ArtefactBuildResult>());
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(new[] { "register", "find", "publish" }, calls);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
     private static string Encode(string value)
         => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 
@@ -109,18 +182,81 @@ public sealed class ModulePublisherRepositoryVersionTests
             Encode(string.Empty)
         });
 
+    private static ModulePipelinePlan CreatePlan()
+    {
+        return new ModulePipelinePlan(
+            moduleName: "PSPublishModule",
+            projectRoot: @"C:\repo\PSPublishModule",
+            expectedVersion: "3.0.13",
+            resolvedVersion: "3.0.13",
+            preRelease: null,
+            manifest: null,
+            buildSpec: new ModuleBuildSpec
+            {
+                Name = "PSPublishModule",
+                SourcePath = @"C:\repo\PSPublishModule",
+                Version = "3.0.13"
+            },
+            resolvedCsprojPath: null,
+            syncNETProjectVersion: false,
+            compatiblePSEditions: Array.Empty<string>(),
+            requiredModules: Array.Empty<RequiredModuleReference>(),
+            externalModuleDependencies: Array.Empty<string>(),
+            requiredModulesForPackaging: Array.Empty<RequiredModuleReference>(),
+            information: null,
+            documentation: null,
+            delivery: null,
+            documentationBuild: null,
+            compatibilitySettings: null,
+            fileConsistencySettings: null,
+            validationSettings: null,
+            formatting: null,
+            importModules: null,
+            placeHolders: Array.Empty<PlaceHolderReplacement>(),
+            placeHolderOption: null,
+            commandModuleDependencies: new Dictionary<string, string[]>(),
+            testsAfterMerge: Array.Empty<TestConfiguration>(),
+            mergeModule: false,
+            mergeMissing: false,
+            doNotAttemptToFixRelativePaths: false,
+            approvedModules: Array.Empty<string>(),
+            moduleSkip: null,
+            signModule: false,
+            signing: null,
+            publishes: Array.Empty<ConfigurationPublishSegment>(),
+            artefacts: Array.Empty<ConfigurationArtefactSegment>(),
+            installEnabled: false,
+            installStrategy: InstallationStrategy.AutoRevision,
+            installKeepVersions: 3,
+            installRoots: Array.Empty<string>(),
+            installLegacyFlatHandling: LegacyFlatModuleHandling.Warn,
+            installPreserveVersions: Array.Empty<string>(),
+            installMissingModules: false,
+            installMissingModulesForce: false,
+            installMissingModulesPrerelease: false,
+            installMissingModulesRepository: null,
+            installMissingModulesCredential: null,
+            stagingWasGenerated: true,
+            deleteGeneratedStagingAfterRun: true);
+    }
+
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
-        private readonly PowerShellRunResult _result;
+        private readonly Func<PowerShellRunRequest, PowerShellRunResult> _run;
 
         public StubPowerShellRunner(PowerShellRunResult result)
         {
-            _result = result;
+            _run = _ => result;
+        }
+
+        public StubPowerShellRunner(Func<PowerShellRunRequest, PowerShellRunResult> run)
+        {
+            _run = run;
         }
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
-            return _result;
+            return _run(request);
         }
     }
 
