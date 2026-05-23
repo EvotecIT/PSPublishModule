@@ -58,6 +58,8 @@ public sealed partial class GetModuleDocumentationCommand
     [Parameter] public SwitchParameter Raw { get; set; }
     /// <summary>Show a specific file by name (relative to module root or Internals) or full path.</summary>
     [Parameter] public string? File { get; set; }
+    /// <summary>Enable repository access for remote documentation fallback and repository path enumeration.</summary>
+    [Parameter] public SwitchParameter Online { get; set; }
 
     /// <summary>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</summary>
     [Parameter]

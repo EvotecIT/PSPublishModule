@@ -201,7 +201,11 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
         }
         catch { }
 
-        var wantsRemote = !string.IsNullOrWhiteSpace(projectUri);
+        var explicitRepositoryRequest = Online.IsPresent
+            || MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryBranch))
+            || MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryToken))
+            || MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryPaths));
+        var wantsRemote = !string.IsNullOrWhiteSpace(projectUri) && explicitRepositoryRequest;
 
         var planner = new DocumentationPlanner(finder);
         var reqObj = new DocumentationPlanner.Request
