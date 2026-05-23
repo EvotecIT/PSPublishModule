@@ -153,21 +153,10 @@ public sealed class PowerShellModulePackageInspector
     {
         try
         {
-            if (entry.Length > MaxTextBytes)
-            {
-                metadata.Warnings.Add($"Skipped help XML '{entry.FullName}' because it exceeds the private gallery inspection size limit.");
+            var document = LoadBoundedHelpXml(entry, metadata);
+            if (document is null)
                 return;
-            }
 
-            var settings = new XmlReaderSettings
-            {
-                DtdProcessing = DtdProcessing.Prohibit,
-                XmlResolver = null,
-                IgnoreComments = true
-            };
-            using var stream = entry.Open();
-            using var reader = XmlReader.Create(stream, settings);
-            var document = XDocument.Load(reader, LoadOptions.None);
             foreach (var commandElement in document.Descendants().Where(static element => element.Name.LocalName.Equals("command", StringComparison.OrdinalIgnoreCase)))
             {
                 var name = commandElement
@@ -202,6 +191,25 @@ public sealed class PowerShellModulePackageInspector
         {
             metadata.Warnings.Add($"Failed to parse help XML '{entry.FullName}': {ex.GetType().Name}: {ex.Message}");
         }
+    }
+
+    private static XDocument? LoadBoundedHelpXml(ZipArchiveEntry entry, PrivateGalleryModuleMetadata metadata)
+    {
+        if (entry.Length > MaxTextBytes)
+        {
+            metadata.Warnings.Add($"Skipped help XML '{entry.FullName}' because it exceeds the private gallery inspection size limit.");
+            return null;
+        }
+
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            IgnoreComments = true
+        };
+        using var stream = entry.Open();
+        using var reader = XmlReader.Create(stream, settings);
+        return XDocument.Load(reader, LoadOptions.None);
     }
 
     private static string? ReadManifestString(string content, string key)
