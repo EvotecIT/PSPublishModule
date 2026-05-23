@@ -29,8 +29,8 @@ public sealed class PrivateGalleryEngineTests
                             "count": 1,
                             "value": [
                               {
-                                "id": "preview-package-guid",
-                                "name": "PSPreviewModule",
+                                "id": "package-guid",
+                                "name": "PSPublishModule",
                                 "protocolType": "NuGet",
                                 "description": "Preview module",
                                 "versions": [
@@ -100,20 +100,22 @@ public sealed class PrivateGalleryEngineTests
         Assert.Empty(warnings);
         Assert.Contains(queries, query => query.Contains("isRelease=true", StringComparison.Ordinal));
         Assert.Contains(queries, query => query.Contains("isRelease=false", StringComparison.Ordinal));
-        Assert.Equal(2, packages.Count);
+        Assert.Single(packages);
         var package = Assert.Single(packages, package => package.Name == "PSPublishModule");
         Assert.Equal("PSPublishModule", package.Name);
         Assert.Equal("3.0.13", package.LatestVersion);
         Assert.Equal("Publishing module", package.Description);
         Assert.Equal("https://dev.azure.com/org/project/_artifacts/feed/feed/package/PSPublishModule", package.WebUrl);
 
-        var version = Assert.Single(package.Versions);
+        Assert.Equal(2, package.Versions.Count);
+        var version = Assert.Single(package.Versions, version => version.Version == "3.0.13");
         Assert.True(version.IsLatest);
         Assert.True(version.IsListed);
         Assert.False(version.IsDeleted);
         Assert.Equal("Evotec", version.Author);
         Assert.Equal("@Release", Assert.Single(version.Views));
         Assert.Equal("Pester", Assert.Single(version.Dependencies).Name);
+        Assert.Contains(package.Versions, version => version.Version == "1.0.0-preview1");
     }
 
     [Fact]

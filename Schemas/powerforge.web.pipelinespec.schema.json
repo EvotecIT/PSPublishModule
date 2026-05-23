@@ -3330,14 +3330,6 @@
             { "required": ["azureArtifactsFeed"] },
             { "required": ["azure-artifacts-feed"] }
           ]
-        },
-        {
-          "anyOf": [
-            { "required": ["out"] },
-            { "required": ["output"] },
-            { "required": ["outputDirectory"] },
-            { "required": ["output-directory"] }
-          ]
         }
       ]
     },

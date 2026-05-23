@@ -52,10 +52,9 @@ public sealed class AzureArtifactsPrivateGalleryClient
         foreach (var releaseFilter in releaseFilters)
         {
             var skip = 0;
-            var fetchedForFilter = 0;
-            while (fetchedForFilter < maxPackages)
+            while (true)
             {
-                var take = Math.Min(pageSize, maxPackages - fetchedForFilter);
+                var take = pageSize;
                 var uri = BuildPackagesUri(
                     organization,
                     project,
@@ -86,6 +85,7 @@ public sealed class AzureArtifactsPrivateGalleryClient
                     break;
                 }
 
+                var returnedRows = value.GetArrayLength();
                 var fetched = 0;
                 foreach (var element in value.EnumerateArray())
                 {
@@ -94,18 +94,28 @@ public sealed class AzureArtifactsPrivateGalleryClient
                         continue;
 
                     if (packages.TryGetValue(package.Id, out var existing))
+                    {
                         MergePackage(existing, package);
-                    else
+                    }
+                    else if (packages.Count < maxPackages)
+                    {
                         packages[package.Id] = package;
+                    }
+                    else
+                    {
+                        continue;
+                    }
 
                     fetched++;
                 }
 
-                fetchedForFilter += fetched;
-                if (fetched < take)
+                if (returnedRows < take)
                     break;
 
-                skip += fetched;
+                skip += returnedRows;
+
+                if (packages.Count >= maxPackages && fetched == 0)
+                    break;
             }
         }
 
