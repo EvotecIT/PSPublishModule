@@ -169,7 +169,7 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
         // Map -Type into fine-grained flags
         if (Type != DocumentationSelection.Default)
         {
-            Readme = false; Changelog = false; License = false; Intro = false; Upgrade = false; All = false;
+            Readme = false; Changelog = false; License = false; Intro = false; Upgrade = false; Links = false; All = false;
             switch (Type)
             {
                 case DocumentationSelection.All: All = true; break;
@@ -178,6 +178,7 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
                 case DocumentationSelection.License: License = true; break;
                 case DocumentationSelection.Intro: Intro = true; break;
                 case DocumentationSelection.Upgrade: Upgrade = true; break;
+                case DocumentationSelection.Links: Links = true; break;
                 default: break;
             }
         }
@@ -219,6 +220,7 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
             License = License,
             Intro = Intro,
             Upgrade = Upgrade,
+            Links = Links,
             All = All,
             SingleFile = File,
             TitleName = titleName,

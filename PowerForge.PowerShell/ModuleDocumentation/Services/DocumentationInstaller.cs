@@ -62,9 +62,6 @@ internal sealed class DocumentationInstaller
             var cand = Path.Combine(root, "Internals");
             if (Directory.Exists(cand)) internals = cand;
         }
-        if (internals == null)
-            throw new DirectoryNotFoundException($"Internals path '{options.InternalsPath}' not found under '{root}'.");
-
         if (Directory.Exists(dest))
         {
             switch (onExists)
@@ -83,7 +80,14 @@ internal sealed class DocumentationInstaller
         }
 
         PathHelper.EnsureDirectory(dest);
-        CopyTree(internals, dest, overwrite: force);
+        if (internals != null)
+        {
+            CopyTree(internals, dest, overwrite: force);
+        }
+        else
+        {
+            try { _cmdlet.WriteVerbose($"Internals path '{options.InternalsPath}' not found under '{root}'; copying root documentation only."); } catch { }
+        }
 
         // Copy selected root files
         TryCopyIfMatch(root, "README*", dest, force);

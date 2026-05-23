@@ -76,13 +76,16 @@ public partial class OnModuleImportAndRemove {
 
         if (name.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("PowerShellStandard.Library", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("System.Private.CoreLib", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("netstandard", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("mscorlib", StringComparison.OrdinalIgnoreCase)) {
             return true;
         }
 
-        return name.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
-               name.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase);
+        return false;
     }
+
+    internal static bool ShouldSkipCoreResolutionForTesting(string simpleName)
+        => ShouldSkipCoreResolution(new AssemblyName(simpleName));
 }
 #endif

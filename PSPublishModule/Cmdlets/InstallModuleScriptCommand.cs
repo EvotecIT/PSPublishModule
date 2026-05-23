@@ -149,7 +149,7 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
 
             if (ListOnly)
             {
-                var action = exists ? (OnExists == OnExistsOption.Overwrite ? "Overwrite" : OnExists == OnExistsOption.Skip ? "Skip" : OnExists == OnExistsOption.Stop ? "Stop" : "Keep") : "Copy";
+                var action = ResolveExistingScriptAction(exists, OnExists, Force.IsPresent);
                 var o = (PSObject)PSObject.AsPSObject(new { Source = file, Destination = target, Exists = exists, Action = action });
                 WriteObject(o);
                 continue;
@@ -165,8 +165,13 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
                     case OnExistsOption.Stop:
                         throw new IOException($"Destination file exists: {target}");
                     case OnExistsOption.Merge:
-                        WriteVerbose($"Keeping existing (merge): {target}");
-                        continue;
+                        if (!Force.IsPresent)
+                        {
+                            WriteVerbose($"Keeping existing (merge): {target}");
+                            continue;
+                        }
+                        WriteVerbose($"Refreshing existing (merge/force): {target}");
+                        break;
                     case OnExistsOption.Overwrite:
                         break;
                 }
@@ -268,6 +273,24 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
 
     internal static bool MatchesAnyForTesting(string fullPath, string root, string[] patterns, bool emptyMatches)
         => MatchesAny(fullPath, root, patterns, emptyMatches);
+
+    internal static string ResolveExistingScriptActionForTesting(bool exists, OnExistsOption onExists, bool force)
+        => ResolveExistingScriptAction(exists, onExists, force);
+
+    private static string ResolveExistingScriptAction(bool exists, OnExistsOption onExists, bool force)
+    {
+        if (!exists)
+            return "Copy";
+
+        return onExists switch
+        {
+            OnExistsOption.Overwrite => "Overwrite",
+            OnExistsOption.Merge when force => "Overwrite",
+            OnExistsOption.Skip => "Skip",
+            OnExistsOption.Stop => "Stop",
+            _ => "Keep"
+        };
+    }
 
     private static bool MatchesAny(string fullPath, string root, string[] patterns, bool emptyMatches)
     {

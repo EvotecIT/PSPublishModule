@@ -46,6 +46,8 @@ public sealed partial class GetModuleDocumentationCommand
     [Parameter] public SwitchParameter Intro { get; set; }
     /// <summary>Show configured UpgradeText/UpgradeFile (from Delivery metadata or UPGRADE.*).</summary>
     [Parameter] public SwitchParameter Upgrade { get; set; }
+    /// <summary>Show configured ImportantLinks from Delivery metadata.</summary>
+    [Parameter] public SwitchParameter Links { get; set; }
     /// <summary>Convenience switch to show Intro, README, CHANGELOG and LICENSE in order.</summary>
     [Parameter] public SwitchParameter All { get; set; }
     /// <summary>List discovered documentation files (without rendering).</summary>

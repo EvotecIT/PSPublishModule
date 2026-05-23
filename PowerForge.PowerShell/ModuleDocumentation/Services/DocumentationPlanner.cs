@@ -30,6 +30,7 @@ internal sealed partial class DocumentationPlanner
         public bool License { get; set; }
         public bool Intro { get; set; }
         public bool Upgrade { get; set; }
+        public bool Links { get; set; }
         public bool All { get; set; }
         public bool Online { get; set; }
         public DocumentationMode Mode { get; set; } = DocumentationMode.PreferLocal;
@@ -59,7 +60,7 @@ internal sealed partial class DocumentationPlanner
         var res = new Result();
         var items = new List<(string Kind, string Path)>();
         var effectiveRepositoryBranch = ResolveRepositoryBranch(req, clientOverride);
-        var hasSelectors = req.Readme || req.Changelog || req.License || req.All || req.Intro || req.Upgrade || !string.IsNullOrEmpty(req.SingleFile);
+        var hasSelectors = req.Readme || req.Changelog || req.License || req.All || req.Intro || req.Upgrade || req.Links || !string.IsNullOrEmpty(req.SingleFile);
         var includeSupplementalSections = !hasSelectors || req.All;
         var includeReleases = !hasSelectors || req.All || req.Changelog;
 
@@ -562,7 +563,7 @@ internal sealed partial class DocumentationPlanner
         }
 
         // Links
-        if (includeSupplementalSections)
+        if (includeSupplementalSections || req.Links)
         {
             var links = GetDeliveryValue(req.Delivery, "ImportantLinks") as System.Collections.IEnumerable;
             if (links != null)
@@ -572,7 +573,7 @@ internal sealed partial class DocumentationPlanner
                 foreach (var l in links)
                 {
                     var t = GetDeliveryValue(l, "Title")?.ToString() ?? GetDeliveryValue(l, "Name")?.ToString();
-                    var u = GetDeliveryValue(l, "Url")?.ToString();
+                    var u = GetDeliveryValue(l, "Url")?.ToString() ?? GetDeliveryValue(l, "Link")?.ToString();
                     if (string.IsNullOrEmpty(u)) continue;
                     if (!string.IsNullOrEmpty(t)) md.Append("- [").Append(t).Append("](").Append(u).AppendLine(")");
                     else md.Append("- ").AppendLine(u);
