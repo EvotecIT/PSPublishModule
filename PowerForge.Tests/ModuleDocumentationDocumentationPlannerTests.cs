@@ -116,6 +116,54 @@ public class DocumentationPlannerTests
     }
 
     [Fact]
+    public void Execute_LocalReadme_Uses_Resolved_Default_Branch_For_Link_Rewrites()
+    {
+        var root = CreateTempModule(out var internals);
+        File.WriteAllText(Path.Combine(root, "README.md"), """
+        [Guide](docs/Use-Git.md)
+        ![Logo](assets/ugit.svg)
+        """);
+
+        var client = new FakeRepoClient { DefaultBranch = "develop" };
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            ProjectUri = "https://github.com/StartAutomating/ugit",
+            Online = true
+        }, client);
+
+        var readme = Assert.Single(res.Items, i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("https://github.com/StartAutomating/ugit/blob/develop/docs/Use-Git.md", readme.Content, StringComparison.Ordinal);
+        Assert.Contains("https://raw.githubusercontent.com/StartAutomating/ugit/develop/assets/ugit.svg", readme.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Execute_OnlineAll_Adds_RemoteStandardDocs_Only_Once()
+    {
+        var root = CreateTempModule(out var internals);
+        var client = new FakeRepoClient();
+        client.Content["README.md"] = "# Remote readme";
+        client.Content["CHANGELOG.md"] = "# Remote changelog";
+        client.Content["LICENSE"] = "Remote license";
+
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            ProjectUri = "https://github.com/StartAutomating/ugit",
+            Online = true,
+            Mode = DocumentationMode.All
+        }, client);
+
+        Assert.Equal(1, res.Items.Count(i => string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(1, res.Items.Count(i => string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "CHANGELOG.md", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(1, res.Items.Count(i => string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase) && string.Equals(i.FileName, "LICENSE", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
     public void Execute_LocalReadme_Strips_Git_Suffix_From_ProjectUri()
     {
         var root = CreateTempModule(out var internals);
@@ -288,8 +336,9 @@ SHORT DESCRIPTION
         public Dictionary<string, List<(string Name, string Path)>> Files { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Content { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<RepoRelease> Releases { get; } = new();
+        public string DefaultBranch { get; set; } = "main";
 
-        public string GetDefaultBranch() => "main";
+        public string GetDefaultBranch() => DefaultBranch;
 
         public string? GetFileContent(string path, string branch)
             => Content.TryGetValue(path, out var value) ? value : null;

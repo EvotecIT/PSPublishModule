@@ -49,8 +49,8 @@ internal sealed class DocumentationInstaller
         {
             try
             {
-                var del = _cmdlet.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPath).FirstOrDefault() as PSObject;
-                var internalsRel = del?.Properties["InternalsPath"]?.Value as string ?? "Internals";
+                var del = _cmdlet.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPath).FirstOrDefault();
+                var internalsRel = GetDeliveryString(del, "InternalsPath") ?? "Internals";
                 var cand = Path.Combine(root, internalsRel);
                 if (Directory.Exists(cand)) internals = cand;
             }
@@ -164,5 +164,29 @@ internal sealed class DocumentationInstaller
         {
             // Let the following copy operation report the real filesystem failure.
         }
+    }
+
+    private static string? GetDeliveryString(object? delivery, string name)
+    {
+        if (delivery == null || string.IsNullOrWhiteSpace(name)) return null;
+
+        if (delivery is PSObject pso)
+        {
+            var property = pso.Properties[name];
+            if (property?.Value != null) return property.Value.ToString();
+            delivery = pso.BaseObject;
+        }
+
+        if (delivery is System.Collections.IDictionary dictionary)
+        {
+            foreach (System.Collections.DictionaryEntry entry in dictionary)
+            {
+                if (entry.Key != null && string.Equals(entry.Key.ToString(), name, StringComparison.OrdinalIgnoreCase))
+                    return entry.Value?.ToString();
+            }
+        }
+
+        var reflected = delivery.GetType().GetProperty(name);
+        return reflected?.GetValue(delivery)?.ToString();
     }
 }

@@ -200,6 +200,11 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
         }
         catch { }
 
+        var wantsRemote = !string.IsNullOrWhiteSpace(projectUri) &&
+            (!string.IsNullOrWhiteSpace(branchToUse) ||
+             !string.IsNullOrWhiteSpace(RepositoryToken) ||
+             (pathsToUse != null && pathsToUse.Length > 0));
+
         var planner = new DocumentationPlanner(finder);
         var reqObj = new DocumentationPlanner.Request
         {
@@ -210,6 +215,7 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
             RepositoryBranch = branchToUse,
             RepositoryToken = RepositoryToken,
             RepositoryPaths = pathsToUse,
+            Online = wantsRemote,
             PreferInternals = PreferInternals,
             Readme = Readme,
             Changelog = Changelog,

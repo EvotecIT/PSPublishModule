@@ -58,6 +58,7 @@ internal sealed partial class DocumentationPlanner
     {
         var res = new Result();
         var items = new List<(string Kind, string Path)>();
+        var effectiveRepositoryBranch = ResolveRepositoryBranch(req, clientOverride);
 
         // Specific file selection
         if (!string.IsNullOrEmpty(req.SingleFile))
@@ -116,35 +117,8 @@ internal sealed partial class DocumentationPlanner
             }
             if (client != null)
             {
-                string branch = string.IsNullOrWhiteSpace(req.RepositoryBranch) ? client.GetDefaultBranch() : req.RepositoryBranch!;
-                // Default remote files (always add candidates; selection policy is applied later in the exporter)
-                var readme = TryFetchFirst(client, branch, new[] { "README.md", "README.MD", "Readme.md" });
-                var changelog = TryFetchFirst(client, branch, new[] { "CHANGELOG.md", "CHANGELOG.MD", "Changelog.md" });
-                var license = TryFetchFirst(client, branch, new[] { "LICENSE", "LICENSE.md", "LICENSE.txt" });
-
+                string branch = effectiveRepositoryBranch ?? "main";
                 bool anyRemote = false;
-                if (!string.IsNullOrEmpty(readme))
-                {
-                    var baseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch);
-                    var blobBaseUri = RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch);
-                    var di = MakeContentItem(req, "README", RepositoryContentNormalizer.RewriteRelativeUris(readme!, baseUri, blobBaseUri));
-                    di.Source = "Remote"; di.FileName = "README.md"; di.Title = "README"; di.BaseUri = baseUri;
-                    res.Items.Add(di); anyRemote = true;
-                }
-                if (!string.IsNullOrEmpty(changelog))
-                {
-                    var baseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch);
-                    var blobBaseUri = RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch);
-                    var di = MakeContentItem(req, "CHANGELOG", RepositoryContentNormalizer.RewriteRelativeUris(changelog!, baseUri, blobBaseUri));
-                    di.Source = "Remote"; di.FileName = "CHANGELOG.md"; di.Title = "CHANGELOG"; di.BaseUri = baseUri;
-                    res.Items.Add(di); anyRemote = true;
-                }
-                if (!string.IsNullOrEmpty(license))
-                {
-                    var di = MakeContentItem(req, "LICENSE", license!);
-                    di.Source = "Remote"; di.FileName = "LICENSE"; di.Title = "LICENSE";
-                    res.Items.Add(di); anyRemote = true;
-                }
                 // Extra paths
                 if (req.RepositoryPaths != null)
                 {
@@ -238,8 +212,8 @@ internal sealed partial class DocumentationPlanner
                         {
                             content = RepositoryContentNormalizer.RewriteRelativeUris(
                                 content,
-                                RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, req.RepositoryBranch),
-                                RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, req.RepositoryBranch));
+                                RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
+                                RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch));
                         }
                     }
                 }
@@ -253,7 +227,7 @@ internal sealed partial class DocumentationPlanner
                     FileName = fileName,
                     Source = "Local",
                     Content = content,
-                    BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, req.RepositoryBranch)
+                    BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch)
                 });
                 continue;
             }
@@ -359,10 +333,10 @@ internal sealed partial class DocumentationPlanner
                 {
                     content = RepositoryContentNormalizer.RewriteRelativeUris(
                         content,
-                        RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, req.RepositoryBranch),
-                        RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, req.RepositoryBranch));
+                        RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
+                        RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch));
                 }
-                res.Items.Add(new DocumentItem { Title = BuildTitle(req, f.Name), Kind = "COMMUNITY", Path = f.FullName, FileName = f.Name, Content = content, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, req.RepositoryBranch) });
+                res.Items.Add(new DocumentItem { Title = BuildTitle(req, f.Name), Kind = "COMMUNITY", Path = f.FullName, FileName = f.Name, Content = content, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch) });
             }
         }
         catch { }
@@ -384,21 +358,21 @@ internal sealed partial class DocumentationPlanner
                 var client = RepoClientFactory.Create(info, token);
                 if (client != null)
                 {
-                    string branch = string.IsNullOrWhiteSpace(req.RepositoryBranch) ? client.GetDefaultBranch() : req.RepositoryBranch!;
+                    string branch = effectiveRepositoryBranch ?? client.GetDefaultBranch();
                     if (forceRemoteStandard || !hasReadme)
                     {
                         var readme = TryFetchFirst(client, branch, new[] { "README.md", "README.MD", "Readme.md" });
-                        if (!string.IsNullOrEmpty(readme)) { var di = MakeContentItem(req, "README", RepositoryContentNormalizer.RewriteRelativeUris(readme!, RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch), RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch))); di.Source = "Remote"; di.FileName = "README.md"; di.Title = "README"; res.Items.Add(di); }
+                        if (!string.IsNullOrEmpty(readme)) { var di = MakeContentItem(req, "README", RepositoryContentNormalizer.RewriteRelativeUris(readme!, RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch), RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch))); di.Source = "Remote"; di.FileName = "README.md"; di.Title = "README"; res.Items.Add(di); res.UsedRemote = true; }
                     }
                     if (forceRemoteStandard || !hasChlog)
                     {
                         var ch = TryFetchFirst(client, branch, new[] { "CHANGELOG.md", "CHANGELOG.MD", "Changelog.md" });
-                        if (!string.IsNullOrEmpty(ch)) { var di = MakeContentItem(req, "CHANGELOG", RepositoryContentNormalizer.RewriteRelativeUris(ch!, RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch), RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch))); di.Source = "Remote"; di.FileName = "CHANGELOG.md"; di.Title = "CHANGELOG"; res.Items.Add(di); }
+                        if (!string.IsNullOrEmpty(ch)) { var di = MakeContentItem(req, "CHANGELOG", RepositoryContentNormalizer.RewriteRelativeUris(ch!, RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch), RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, branch))); di.Source = "Remote"; di.FileName = "CHANGELOG.md"; di.Title = "CHANGELOG"; res.Items.Add(di); res.UsedRemote = true; }
                     }
                     if (forceRemoteStandard || !hasLic)
                     {
                         var lc = TryFetchFirst(client, branch, new[] { "LICENSE", "LICENSE.md", "LICENSE.txt" });
-                        if (!string.IsNullOrEmpty(lc)) { var di = MakeContentItem(req, "LICENSE", lc!); di.Source = "Remote"; di.FileName = "LICENSE"; di.Title = "LICENSE"; res.Items.Add(di); }
+                        if (!string.IsNullOrEmpty(lc)) { var di = MakeContentItem(req, "LICENSE", lc!); di.Source = "Remote"; di.FileName = "LICENSE"; di.Title = "LICENSE"; res.Items.Add(di); res.UsedRemote = true; }
                     }
                 }
 
@@ -414,7 +388,7 @@ internal sealed partial class DocumentationPlanner
                     var client2 = RepoClientFactory.Create(info2, token2);
                     if (client2 != null && (req.RepositoryPaths == null || req.RepositoryPaths.Length == 0))
                     {
-                        string branch2 = string.IsNullOrWhiteSpace(req.RepositoryBranch) ? client2.GetDefaultBranch() : req.RepositoryBranch!;
+                        string branch2 = effectiveRepositoryBranch ?? client2.GetDefaultBranch();
                         var roots = new[] { "docs", "Docs" };
 
                         var collected = new List<(string Name, string Path)>();
@@ -556,9 +530,9 @@ internal sealed partial class DocumentationPlanner
                             ? RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "markdown")
                             : RepositoryContentNormalizer.RewriteRelativeUris(
                                 content,
-                                RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, req.RepositoryBranch),
-                                RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, req.RepositoryBranch));
-                        res.Items.Add(new DocumentItem { Title = fileName, Kind = kind, Content = normalizedContent, FileName = fileName, Path = f, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, req.RepositoryBranch) });
+                                RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
+                                RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch));
+                        res.Items.Add(new DocumentItem { Title = fileName, Kind = kind, Content = normalizedContent, FileName = fileName, Path = f, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch) });
                     }
                 }
             }
@@ -682,6 +656,42 @@ internal sealed partial class DocumentationPlanner
         catch { }
 
         return res;
+    }
+
+    private static string? ResolveRepositoryBranch(Request req, IRepoClient? clientOverride)
+    {
+        if (!string.IsNullOrWhiteSpace(req.RepositoryBranch))
+        {
+            return req.RepositoryBranch!.Trim();
+        }
+
+        if (!req.Online || (string.IsNullOrWhiteSpace(req.ProjectUri) && clientOverride == null))
+        {
+            return null;
+        }
+
+        try
+        {
+            var client = clientOverride;
+            if (client == null)
+            {
+                var info = RepoUrlParser.Parse(req.ProjectUri!);
+                var token = ResolveToken(req.RepositoryToken);
+                if (string.IsNullOrEmpty(token))
+                {
+                    token = TokenStore.GetToken(info.Host) ?? string.Empty;
+                }
+
+                client = RepoClientFactory.Create(info, token);
+            }
+
+            var branch = client?.GetDefaultBranch();
+            return string.IsNullOrWhiteSpace(branch) ? null : branch!.Trim();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
 }
