@@ -45,6 +45,16 @@ public class ModuleDocumentationRepositoryClientTests
     }
 
     [Fact]
+    public void RepoUrlParser_Decodes_AzureDevOps_Path_Segments()
+    {
+        var info = RepoUrlParser.Parse("https://dev.azure.com/contoso/Platform%20Engineering/_git/Docs%20Repo.git");
+
+        Assert.Equal(RepoHost.AzureDevOps, info.Host);
+        Assert.Equal("Platform Engineering", info.Project);
+        Assert.Equal("Docs Repo", info.Repository);
+    }
+
+    [Fact]
     public void TokenStore_Save_And_Clear_Preserve_Unrelated_Settings()
     {
         var root = Path.Combine(Path.GetTempPath(), "PGTokenStore_" + Guid.NewGuid().ToString("N"));

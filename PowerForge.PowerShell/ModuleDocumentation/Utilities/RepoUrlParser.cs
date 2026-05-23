@@ -23,8 +23,8 @@ internal static class RepoUrlParser
                 {
                     Host = RepoHost.GitHub,
                     ProjectUri = uri,
-                    Owner = parts[0],
-                    Repo = TrimGitSuffix(parts[1])
+                    Owner = DecodeSegment(parts[0]),
+                    Repo = TrimGitSuffix(DecodeSegment(parts[1]))
                 };
             }
         }
@@ -40,9 +40,9 @@ internal static class RepoUrlParser
                 {
                     Host = RepoHost.AzureDevOps,
                     ProjectUri = uri,
-                    Organization = parts[0],
-                    Project = parts[1],
-                    Repository = parts[3]
+                    Organization = DecodeSegment(parts[0]),
+                    Project = DecodeSegment(parts[1]),
+                    Repository = TrimGitSuffix(DecodeSegment(parts[3]))
                 };
             }
         }
@@ -59,8 +59,8 @@ internal static class RepoUrlParser
                     Host = RepoHost.AzureDevOps,
                     ProjectUri = uri,
                     Organization = org,
-                    Project = parts[0],
-                    Repository = parts[2]
+                    Project = DecodeSegment(parts[0]),
+                    Repository = TrimGitSuffix(DecodeSegment(parts[2]))
                 };
             }
         }
@@ -70,4 +70,7 @@ internal static class RepoUrlParser
 
     private static string TrimGitSuffix(string value)
         => Regex.Replace(value ?? string.Empty, "\\.git$", string.Empty, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static string DecodeSegment(string value)
+        => Uri.UnescapeDataString(value ?? string.Empty);
 }

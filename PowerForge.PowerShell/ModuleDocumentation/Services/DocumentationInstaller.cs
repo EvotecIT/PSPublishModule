@@ -71,6 +71,7 @@ internal sealed class DocumentationInstaller
                 case OnExistsOption.Stop:
                     throw new IOException($"Destination '{dest}' already exists.");
                 case OnExistsOption.Overwrite:
+                    PrepareDirectoryDeleteTarget(dest, force);
                     Directory.Delete(dest, true);
                     break;
                 case OnExistsOption.Merge:
@@ -208,6 +209,32 @@ internal sealed class DocumentationInstaller
         catch
         {
             // Let the following copy operation report the real filesystem failure.
+        }
+    }
+
+    private static void PrepareDirectoryDeleteTarget(string target, bool force)
+    {
+        if (!force || !Directory.Exists(target)) return;
+
+        try
+        {
+            foreach (var path in Directory.EnumerateFileSystemEntries(target, "*", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+                }
+                catch
+                {
+                    // Directory.Delete will report the real failure if the attribute remains a blocker.
+                }
+            }
+
+            File.SetAttributes(target, File.GetAttributes(target) & ~FileAttributes.ReadOnly);
+        }
+        catch
+        {
+            // Let the following delete operation report the real filesystem failure.
         }
     }
 

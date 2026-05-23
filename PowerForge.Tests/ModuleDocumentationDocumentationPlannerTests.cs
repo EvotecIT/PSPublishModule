@@ -141,12 +141,36 @@ public class DocumentationPlannerTests
         {
             RootBase = root,
             InternalsBase = internals,
-            ProjectUri = "https://github.com/StartAutomating/ugit"
+            ProjectUri = "https://github.com/StartAutomating/ugit",
+            RepositoryBranch = "main"
         });
 
         var readme = Assert.Single(res.Items, i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("https://github.com/StartAutomating/ugit/blob/main/docs/Use-Git.md", readme.Content, StringComparison.Ordinal);
         Assert.Contains("https://raw.githubusercontent.com/StartAutomating/ugit/main/assets/ugit.svg", readme.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Execute_LocalReadme_Does_Not_Guess_Main_For_Link_Rewrites_When_Branch_Is_Unknown()
+    {
+        var root = CreateTempModule(out var internals);
+        File.WriteAllText(Path.Combine(root, "README.md"), """
+        [Guide](docs/Use-Git.md)
+        ![Logo](assets/ugit.svg)
+        """);
+
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            ProjectUri = "https://github.com/StartAutomating/ugit"
+        });
+
+        var readme = Assert.Single(res.Items, i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("[Guide](docs/Use-Git.md)", readme.Content, StringComparison.Ordinal);
+        Assert.Contains("![Logo](assets/ugit.svg)", readme.Content, StringComparison.Ordinal);
+        Assert.Null(readme.BaseUri);
     }
 
     [Fact]
@@ -356,7 +380,8 @@ public class DocumentationPlannerTests
         {
             RootBase = root,
             InternalsBase = internals,
-            ProjectUri = "https://github.com/StartAutomating/ugit.git"
+            ProjectUri = "https://github.com/StartAutomating/ugit.git",
+            RepositoryBranch = "main"
         });
 
         var readme = Assert.Single(res.Items, i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase));

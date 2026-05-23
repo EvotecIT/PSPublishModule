@@ -79,6 +79,35 @@ internal sealed partial class DocumentationPlanner
         }
     }
 
+    private static bool TryResolveLocalRewriteBases(
+        Request req,
+        IRepoClient? clientOverride,
+        ref string? effectiveRepositoryBranch,
+        string content,
+        out string? rawBaseUri,
+        out string? blobBaseUri)
+    {
+        rawBaseUri = null;
+        blobBaseUri = null;
+
+        if (string.IsNullOrWhiteSpace(req.ProjectUri))
+            return false;
+
+        effectiveRepositoryBranch = ResolveRepositoryBranchForLocalRewrite(req, clientOverride, effectiveRepositoryBranch, content);
+        if (string.IsNullOrWhiteSpace(effectiveRepositoryBranch))
+            return false;
+
+        rawBaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch);
+        if (string.IsNullOrWhiteSpace(rawBaseUri))
+            return false;
+
+        blobBaseUri = RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch);
+        return true;
+    }
+
+    private static string? BuildKnownBranchRawBase(string? projectUri, string? branch)
+        => string.IsNullOrWhiteSpace(branch) ? null : RepositoryContentNormalizer.BuildRawBase(projectUri, branch);
+
     private static string? TryFetchFirst(IRepoClient client, string branch, string[] candidates)
     {
         foreach (var p in candidates)

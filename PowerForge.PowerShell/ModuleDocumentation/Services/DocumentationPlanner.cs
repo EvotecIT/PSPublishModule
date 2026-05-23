@@ -215,14 +215,13 @@ internal sealed partial class DocumentationPlanner
                     if (!string.IsNullOrWhiteSpace(it.Path) && File.Exists(it.Path))
                     {
                         content = File.ReadAllText(it.Path);
-                        if (!string.IsNullOrWhiteSpace(req.ProjectUri))
+                        if (TryResolveLocalRewriteBases(req, clientOverride, ref effectiveRepositoryBranch, content, out var rawBaseUri, out var blobBaseUri))
                         {
-                            effectiveRepositoryBranch = ResolveRepositoryBranchForLocalRewrite(req, clientOverride, effectiveRepositoryBranch, content);
                             var repositoryPath = GetRepositoryRelativePath(req, it.Path);
                             content = RepositoryContentNormalizer.RewriteRelativeUris(
                                 content,
-                                RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
-                                RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch),
+                                rawBaseUri,
+                                blobBaseUri,
                                 repositoryPath);
                         }
                     }
@@ -237,7 +236,7 @@ internal sealed partial class DocumentationPlanner
                     FileName = fileName,
                     Source = "Local",
                     Content = content,
-                    BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch)
+                    BaseUri = BuildKnownBranchRawBase(req.ProjectUri, effectiveRepositoryBranch)
                 });
                 continue;
             }
@@ -344,17 +343,16 @@ internal sealed partial class DocumentationPlanner
                 foreach (var f in community)
                 {
                     string content; try { content = File.ReadAllText(f.FullName); } catch { continue; }
-                    if (!string.IsNullOrWhiteSpace(req.ProjectUri))
+                    if (TryResolveLocalRewriteBases(req, clientOverride, ref effectiveRepositoryBranch, content, out var rawBaseUri, out var blobBaseUri))
                     {
-                        effectiveRepositoryBranch = ResolveRepositoryBranchForLocalRewrite(req, clientOverride, effectiveRepositoryBranch, content);
                         var repositoryPath = GetRepositoryRelativePath(req, f.FullName);
                         content = RepositoryContentNormalizer.RewriteRelativeUris(
                             content,
-                            RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
-                            RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch),
+                            rawBaseUri,
+                            blobBaseUri,
                             repositoryPath);
                     }
-                    res.Items.Add(new DocumentItem { Title = BuildTitle(req, f.Name), Kind = "COMMUNITY", Path = f.FullName, FileName = f.Name, Content = content, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch) });
+                    res.Items.Add(new DocumentItem { Title = BuildTitle(req, f.Name), Kind = "COMMUNITY", Path = f.FullName, FileName = f.Name, Content = content, Source = "Local", BaseUri = BuildKnownBranchRawBase(req.ProjectUri, effectiveRepositoryBranch) });
                 }
             }
             catch { }
@@ -545,16 +543,20 @@ internal sealed partial class DocumentationPlanner
                             var kind = RepositoryContentNormalizer.IsLikelyTemplateSource(fileName, content)
                                 ? "DOCSOURCE"
                                 : "DOC";
+                            var rawBaseUri = default(string);
+                            var blobBaseUri = default(string);
                             effectiveRepositoryBranch = ResolveRepositoryBranchForLocalRewrite(req, clientOverride, effectiveRepositoryBranch, content);
                             var repositoryPath = GetRepositoryRelativePath(req, f);
                             var normalizedContent = string.Equals(kind, "DOCSOURCE", StringComparison.OrdinalIgnoreCase)
                                 ? RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "markdown")
-                                : RepositoryContentNormalizer.RewriteRelativeUris(
+                                : TryResolveLocalRewriteBases(req, clientOverride, ref effectiveRepositoryBranch, content, out rawBaseUri, out blobBaseUri)
+                                    ? RepositoryContentNormalizer.RewriteRelativeUris(
                                     content,
-                                    RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
-                                    RepositoryContentNormalizer.BuildBlobBase(req.ProjectUri, effectiveRepositoryBranch),
-                                    repositoryPath);
-                            res.Items.Add(new DocumentItem { Title = fileName, Kind = kind, Content = normalizedContent, FileName = fileName, Path = f, Source = "Local", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch) });
+                                    rawBaseUri,
+                                    blobBaseUri,
+                                    repositoryPath)
+                                    : content;
+                            res.Items.Add(new DocumentItem { Title = fileName, Kind = kind, Content = normalizedContent, FileName = fileName, Path = f, Source = "Local", BaseUri = BuildKnownBranchRawBase(req.ProjectUri, effectiveRepositoryBranch) });
                         }
                     }
                 }
