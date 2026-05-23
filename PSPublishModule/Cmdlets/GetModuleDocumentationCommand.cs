@@ -61,7 +61,7 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
             default:            defLang = null;          break;
         }
         var renderer = new Renderer(pref, defLang);
-        var finder   = new DocumentationFinder(this);
+        var finder   = new DocumentationFinder();
         string rootBase;
         string? internalsBase;
         string? titleName = null;

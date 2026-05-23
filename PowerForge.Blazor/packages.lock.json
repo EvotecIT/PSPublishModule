@@ -106,8 +106,8 @@
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "8.0.1",
-        "contentHash": "KYkIOAvPexQOLDxPO2g0BVoWInnQhPpkFzRqvNrNrMhVT6kqhVr0zEb6KCHlptLFukxnZrjuMVAnxK7pOGUYrw=="
+        "resolved": "10.0.7",
+        "contentHash": "qvYn5etKp2m3p05CCvw48OXf0mbD57g0gq/dCjQvq2ZgXYtjB3CV6rwzO7QprxMHnkZFhJ0StrB0thrVzpF49Q=="
       },
       "System.IO.Pipelines": {
         "type": "Transitive",
@@ -131,11 +131,17 @@
           "System.Reflection.Metadata": "8.0.0"
         }
       },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
-          "System.IO.Packaging": "[8.0.1, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.IO.Packaging": "[10.0.7, )",
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       }
     }

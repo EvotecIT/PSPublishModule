@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
 
 namespace PowerForge;
 
@@ -12,13 +11,13 @@ namespace PowerForge;
 /// </summary>
 internal sealed class DocumentationInstaller
 {
-    private readonly PSCmdlet _cmdlet;
-    private readonly DocumentationFinder _finder;
+    private readonly Action<string>? _verbose;
+    private readonly Action<string>? _introWriter;
 
-    public DocumentationInstaller(PSCmdlet cmdlet)
+    public DocumentationInstaller(Action<string>? verbose = null, Action<string>? introWriter = null)
     {
-        _cmdlet  = cmdlet;
-        _finder  = new DocumentationFinder(cmdlet);
+        _verbose = verbose;
+        _introWriter = introWriter;
     }
 
     /// <summary>
@@ -38,25 +37,20 @@ internal sealed class DocumentationInstaller
     /// <summary>
     /// Copies Internals and selected root files to the destination. Returns the destination path.
     /// </summary>
-    public string Install(string moduleBase, string moduleName, string moduleVersion, string dest, OnExistsOption onExists, bool force, bool open, bool noIntro)
+    public string Install(string moduleBase, string moduleName, string moduleVersion, string dest, OnExistsOption onExists, bool force, bool open, bool noIntro, object? delivery = null)
     {
         var root = moduleBase;
         // Resolve Internals path via manifest when available
         string? internals = null;
-        object? delivery = null;
         var options = new DeliveryOptions();
-        var manifestPath = Directory.GetFiles(moduleBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
-        if (!string.IsNullOrEmpty(manifestPath))
+        if (delivery != null)
         {
-            try
-            {
-                delivery = _cmdlet.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPath).FirstOrDefault();
-                var internalsRel = GetDeliveryString(delivery, "InternalsPath") ?? "Internals";
-                var cand = Path.Combine(root, internalsRel);
-                if (Directory.Exists(cand)) internals = cand;
-            }
-            catch { }
+            var internalsRel = GetDeliveryString(delivery, "InternalsPath") ?? options.InternalsPath ?? "Internals";
+            options.InternalsPath = internalsRel;
+            var cand = Path.Combine(root, internalsRel);
+            if (Directory.Exists(cand)) internals = cand;
         }
+
         if (internals == null)
         {
             var cand = Path.Combine(root, "Internals");
@@ -87,7 +81,7 @@ internal sealed class DocumentationInstaller
         }
         else
         {
-            try { _cmdlet.WriteVerbose($"Internals path '{options.InternalsPath}' not found under '{root}'; copying root documentation only."); } catch { }
+            _verbose?.Invoke($"Internals path '{options.InternalsPath}' not found under '{root}'; copying root documentation only.");
         }
 
         // Copy selected root files
@@ -131,7 +125,7 @@ internal sealed class DocumentationInstaller
     {
         foreach (var line in BuildIntroLines(moduleRoot, delivery))
         {
-            try { _cmdlet.Host.UI.WriteLine(line); } catch { }
+            try { _introWriter?.Invoke(line); } catch { }
         }
     }
 
@@ -242,13 +236,6 @@ internal sealed class DocumentationInstaller
     {
         if (delivery == null || string.IsNullOrWhiteSpace(name)) return null;
 
-        if (delivery is PSObject pso)
-        {
-            var property = pso.Properties[name];
-            if (property?.Value != null) return property.Value.ToString();
-            delivery = pso.BaseObject;
-        }
-
         if (delivery is System.Collections.IDictionary dictionary)
         {
             foreach (System.Collections.DictionaryEntry entry in dictionary)
@@ -288,13 +275,6 @@ internal sealed class DocumentationInstaller
     private static object? GetDeliveryValue(object? delivery, string name)
     {
         if (delivery == null || string.IsNullOrWhiteSpace(name)) return null;
-
-        if (delivery is PSObject pso)
-        {
-            var property = pso.Properties[name];
-            if (property?.Value != null) return property.Value;
-            delivery = pso.BaseObject;
-        }
 
         if (delivery is System.Collections.IDictionary dictionary)
         {

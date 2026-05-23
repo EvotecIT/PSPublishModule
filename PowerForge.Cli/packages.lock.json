@@ -602,7 +602,8 @@
         "type": "Project",
         "dependencies": {
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforge.powershell": {
@@ -610,7 +611,6 @@
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "PowerForge": "[1.0.0, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.7, )",
           "System.Security.Cryptography.Xml": "[10.0.7, )"
         }
       }
@@ -1241,7 +1241,8 @@
         "type": "Project",
         "dependencies": {
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforge.powershell": {
@@ -1249,7 +1250,6 @@
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "PowerForge": "[1.0.0, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.7, )",
           "System.Security.Cryptography.Xml": "[10.0.7, )"
         }
       }

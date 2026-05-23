@@ -127,6 +127,11 @@
         "resolved": "6.1.2",
         "contentHash": "2hBr6zdbIBTDE3EhK7NSVNdX58uTK6iHW/P/Axmm9sl1xoGSLqDvMtpecn226TNwHByFokYwJmt/aQQNlO5CRw=="
       },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
+      },
       "System.Text.Encodings.Web": {
         "type": "Transitive",
         "resolved": "10.0.7",
@@ -154,6 +159,7 @@
         "type": "Project",
         "dependencies": {
           "System.Reflection.Metadata": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )",
           "System.Text.Json": "[10.0.7, )"
         }
       }
@@ -195,12 +201,6 @@
         "dependencies": {
           "System.Security.Cryptography.Pkcs": "10.0.7"
         }
-      },
-      "System.Security.Cryptography.ProtectedData": {
-        "type": "Direct",
-        "requested": "[10.0.7, )",
-        "resolved": "10.0.7",
-        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
       },
       "JetBrains.Annotations": {
         "type": "Transitive",
@@ -672,6 +672,11 @@
         "resolved": "10.0.7",
         "contentHash": "dbdKfF3eA5l+CXiAbDxiCxdezoxeanbue1ck8m49ih1L9uZG6ry8Ul8On6vpragyMDJJP4rQHUY/SWgk66tCYA=="
       },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
+      },
       "System.Security.Permissions": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -756,7 +761,8 @@
         "type": "Project",
         "dependencies": {
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       }
     },
@@ -798,12 +804,6 @@
           "Microsoft.Bcl.Cryptography": "10.0.7",
           "System.Security.Cryptography.Pkcs": "10.0.7"
         }
-      },
-      "System.Security.Cryptography.ProtectedData": {
-        "type": "Direct",
-        "requested": "[10.0.7, )",
-        "resolved": "10.0.7",
-        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
       },
       "JetBrains.Annotations": {
         "type": "Transitive",
@@ -1294,6 +1294,11 @@
           "System.Formats.Asn1": "10.0.7"
         }
       },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
+      },
       "System.Security.Permissions": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -1383,7 +1388,8 @@
         "type": "Project",
         "dependencies": {
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       }
     }

@@ -59,7 +59,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
-        var finder   = new DocumentationFinder(this);
+        var finder   = new DocumentationFinder();
         string rootBase;
         string? internalsBase;
         string? titleName = null;

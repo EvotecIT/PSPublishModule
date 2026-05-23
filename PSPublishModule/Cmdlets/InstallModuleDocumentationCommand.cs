@@ -1,5 +1,9 @@
 // ReSharper disable All
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using PowerForge;
 using System.Management.Automation;
 
@@ -58,7 +62,7 @@ public sealed partial class InstallModuleDocumentationCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var resolver = new ModuleResolver(this);
-        var installer = new DocumentationInstaller(this);
+        var installer = new DocumentationInstaller(WriteVerbose, line => Host.UI.WriteLine(line));
 
         // Resolve module (by Module param or by Name)
         PSObject modulePso;
@@ -92,8 +96,78 @@ public sealed partial class InstallModuleDocumentationCommand : PSCmdlet
 
         if (ShouldProcess(modName!, $"Install docs to '{dest}'"))
         {
-            var result = installer.Install(modBase!, modName!, modVersion!, dest, OnExists, Force, Open, NoIntro);
+            var delivery = ReadDeliveryOptions(modBase!);
+            var result = installer.Install(modBase!, modName!, modVersion!, dest, OnExists, Force, Open, NoIntro, delivery);
             WriteObject(result);
         }
+    }
+
+    private object? ReadDeliveryOptions(string moduleBase)
+    {
+        var manifestPath = Directory.GetFiles(moduleBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
+        if (string.IsNullOrEmpty(manifestPath))
+            return null;
+
+        try
+        {
+            var value = InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery")
+                .Invoke(manifestPath)
+                .FirstOrDefault();
+            return ConvertPowerShellValue(value);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static object? ConvertPowerShellValue(object? value)
+    {
+        if (value is null)
+            return null;
+
+        if (value is PSObject pso)
+        {
+            var dictionary = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in pso.Properties)
+            {
+                if (property is null || string.IsNullOrWhiteSpace(property.Name))
+                    continue;
+
+                dictionary[property.Name] = ConvertPowerShellValue(property.Value);
+            }
+
+            if (dictionary.Count > 0)
+                return dictionary;
+
+            return ConvertPowerShellValue(pso.BaseObject);
+        }
+
+        if (value is string)
+            return value;
+
+        if (value is IDictionary dictionaryValue)
+        {
+            var dictionary = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (DictionaryEntry entry in dictionaryValue)
+            {
+                if (entry.Key is null)
+                    continue;
+
+                dictionary[entry.Key.ToString() ?? string.Empty] = ConvertPowerShellValue(entry.Value);
+            }
+
+            return dictionary;
+        }
+
+        if (value is IEnumerable enumerable)
+        {
+            var list = new List<object?>();
+            foreach (var item in enumerable)
+                list.Add(ConvertPowerShellValue(item));
+            return list;
+        }
+
+        return value;
     }
 }

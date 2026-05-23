@@ -724,8 +724,8 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg=="
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
       },
       "System.Security.Cryptography.Xml": {
         "type": "Transitive",
@@ -864,7 +864,8 @@
         "type": "Project",
         "dependencies": {
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforge.powershell": {
@@ -906,7 +907,8 @@
           "Spectre.Console": "[0.55.2, )",
           "Spectre.Console.Json": "[0.55.2, )",
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       }
     }
