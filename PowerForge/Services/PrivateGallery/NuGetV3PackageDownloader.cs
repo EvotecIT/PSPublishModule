@@ -10,6 +10,8 @@ namespace PowerForge;
 public sealed class NuGetV3PackageDownloader
 {
     private readonly HttpMessageHandler? _httpHandler;
+    private readonly Dictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _cacheLock = new();
 
     /// <summary>
     /// Creates a new NuGet V3 package downloader.
@@ -44,7 +46,7 @@ public sealed class NuGetV3PackageDownloader
         if (options is null) throw new ArgumentNullException(nameof(options));
 
         using var http = PrivateGalleryHttp.CreateClient(options.RequestTimeoutSeconds, _httpHandler);
-        var packageBase = await ResolvePackageBaseAddressAsync(http, serviceIndexUrl, options, cancellationToken).ConfigureAwait(false);
+        var packageBase = await ResolvePackageBaseAddressCachedAsync(http, serviceIndexUrl, options, cancellationToken).ConfigureAwait(false);
         var lowerId = packageId.Trim().ToLowerInvariant();
         var lowerVersion = version.Trim().ToLowerInvariant();
         var packageUri = new Uri(new Uri(EnsureTrailingSlash(packageBase)), $"{Uri.EscapeDataString(lowerId)}/{Uri.EscapeDataString(lowerVersion)}/{Uri.EscapeDataString(lowerId)}.{Uri.EscapeDataString(lowerVersion)}.nupkg");
@@ -65,7 +67,28 @@ public sealed class NuGetV3PackageDownloader
         await source.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<string> ResolvePackageBaseAddressAsync(
+    private async Task<string> ResolvePackageBaseAddressCachedAsync(
+        HttpClient http,
+        string serviceIndexUrl,
+        PrivateGalleryIndexOptions options,
+        CancellationToken cancellationToken)
+    {
+        lock (_cacheLock)
+        {
+            if (_packageBaseAddressCache.TryGetValue(serviceIndexUrl, out var cached))
+                return cached;
+        }
+
+        var resolved = await ResolvePackageBaseAddressUncachedAsync(http, serviceIndexUrl, options, cancellationToken).ConfigureAwait(false);
+        lock (_cacheLock)
+        {
+            _packageBaseAddressCache[serviceIndexUrl] = resolved;
+        }
+
+        return resolved;
+    }
+
+    private static async Task<string> ResolvePackageBaseAddressUncachedAsync(
         HttpClient http,
         string serviceIndexUrl,
         PrivateGalleryIndexOptions options,

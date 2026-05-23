@@ -11,8 +11,10 @@ public sealed class PrivateGalleryEngineTests
     [Fact]
     public async Task AzureArtifactsClient_ParsesPackageInventory()
     {
+        var queries = new List<string>();
         var handler = new StubHttpMessageHandler(request =>
         {
+            queries.Add(request.RequestUri!.Query);
             Assert.Contains("protocolType=NuGet", request.RequestUri!.Query, StringComparison.Ordinal);
             Assert.Contains("includeAllVersions=true", request.RequestUri.Query, StringComparison.Ordinal);
             Assert.Equal("Bearer token-value", request.Headers.Authorization?.ToString());
@@ -70,6 +72,8 @@ public sealed class PrivateGalleryEngineTests
         }, warnings);
 
         Assert.Empty(warnings);
+        Assert.Contains(queries, query => query.Contains("isRelease=true", StringComparison.Ordinal));
+        Assert.Contains(queries, query => query.Contains("isRelease=false", StringComparison.Ordinal));
         var package = Assert.Single(packages);
         Assert.Equal("PSPublishModule", package.Name);
         Assert.Equal("3.0.13", package.LatestVersion);
@@ -83,6 +87,56 @@ public sealed class PrivateGalleryEngineTests
         Assert.Equal("Evotec", version.Author);
         Assert.Equal("@Release", Assert.Single(version.Views));
         Assert.Equal("Pester", Assert.Single(version.Dependencies).Name);
+    }
+
+    [Fact]
+    public async Task NuGetV3PackageDownloader_CachesPackageBaseAddress()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-download-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var serviceIndexRequests = 0;
+        var packageRequests = 0;
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.RequestUri!.AbsoluteUri.EndsWith("/index.json", StringComparison.OrdinalIgnoreCase))
+            {
+                serviceIndexRequests++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "resources": [
+                            { "@type": "PackageBaseAddress/3.0.0", "@id": "https://pkgs.example.test/flat/" }
+                          ]
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            packageRequests++;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(Encoding.UTF8.GetBytes("package"))
+            };
+        });
+
+        try
+        {
+            var downloader = new NuGetV3PackageDownloader(handler);
+            var options = new PrivateGalleryIndexOptions();
+            await downloader.DownloadPackageAsync("https://pkgs.example.test/index.json", "Contoso.Tools", "1.0.0", Path.Combine(root, "one.nupkg"), options);
+            await downloader.DownloadPackageAsync("https://pkgs.example.test/index.json", "Contoso.Tools", "1.0.1", Path.Combine(root, "two.nupkg"), options);
+
+            Assert.Equal(1, serviceIndexRequests);
+            Assert.Equal(2, packageRequests);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
     }
 
     [Fact]
@@ -221,8 +275,8 @@ public sealed class PrivateGalleryEngineTests
                     </helpItems>
                     """);
                 AddEntry(archive, "Contoso.Tools/README.md", "# Contoso Tools");
-                AddEntry(archive, "Contoso.Tools/Docs/GettingStarted.md", "# Getting Started");
-                AddEntry(archive, "Contoso.Tools/Examples/Get-ContosoTool.ps1", "Get-ContosoTool");
+                AddEntry(archive, "docs/GettingStarted.md", "# Getting Started");
+                AddEntry(archive, "examples/Get-ContosoTool.ps1", "Get-ContosoTool");
                 AddEntry(archive, "Contoso.Tools/LICENSE", "MIT");
             }
 

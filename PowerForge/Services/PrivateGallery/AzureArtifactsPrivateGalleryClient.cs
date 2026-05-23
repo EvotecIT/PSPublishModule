@@ -42,63 +42,77 @@ public sealed class AzureArtifactsPrivateGalleryClient
         var feed = NormalizeRequired(options.Feed, nameof(options.Feed));
         var project = NormalizeOptional(options.Project);
         var maxPackages = options.MaxPackages > 0 ? options.MaxPackages : 500;
-        var packages = new List<PrivateGalleryPackage>();
-        var skip = 0;
+        var packages = new Dictionary<string, PrivateGalleryPackage>(StringComparer.OrdinalIgnoreCase);
         const int pageSize = 100;
+        var releaseFilters = options.IncludeAllVersions
+            ? new bool?[] { true, false }
+            : new bool?[] { null };
 
         using var http = PrivateGalleryHttp.CreateClient(options.RequestTimeoutSeconds, _httpHandler);
-        while (packages.Count < maxPackages)
+        foreach (var releaseFilter in releaseFilters)
         {
-            var take = Math.Min(pageSize, maxPackages - packages.Count);
-            var uri = BuildPackagesUri(
-                organization,
-                project,
-                feed,
-                includeAllVersions: options.IncludeAllVersions,
-                includeDescription: true,
-                top: take,
-                skip: skip);
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            PrivateGalleryHttp.ApplyAuthentication(request, options.Token, options.AuthenticationKind);
-
-            using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            var skip = 0;
+            while (packages.Count < maxPackages)
             {
-                var detail = await ReadErrorAsync(response).ConfigureAwait(false);
-                throw new InvalidOperationException(
-                    $"Azure Artifacts package query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for feed '{feed}'.{detail}");
-            }
+                var take = Math.Min(pageSize, maxPackages - packages.Count);
+                var uri = BuildPackagesUri(
+                    organization,
+                    project,
+                    feed,
+                    includeAllVersions: options.IncludeAllVersions,
+                    includeDescription: true,
+                    isRelease: releaseFilter,
+                    top: take,
+                    skip: skip);
 
-            using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-            using var document = JsonDocument.Parse(stream);
-            if (!TryGetArray(document.RootElement, "value", out var value))
-            {
-                warnings.Add("Azure Artifacts package response did not include a 'value' array.");
-                break;
-            }
+                using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                PrivateGalleryHttp.ApplyAuthentication(request, options.Token, options.AuthenticationKind);
 
-            var fetched = 0;
-            foreach (var element in value.EnumerateArray())
-            {
-                var package = ParsePackage(element, warnings);
-                if (package is null)
-                    continue;
+                using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var detail = await ReadErrorAsync(response).ConfigureAwait(false);
+                    throw new InvalidOperationException(
+                        $"Azure Artifacts package query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for feed '{feed}'.{detail}");
+                }
 
-                packages.Add(package);
-                fetched++;
-                if (packages.Count >= maxPackages)
+                using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                using var document = JsonDocument.Parse(stream);
+                if (!TryGetArray(document.RootElement, "value", out var value))
+                {
+                    warnings.Add("Azure Artifacts package response did not include a 'value' array.");
                     break;
+                }
+
+                var fetched = 0;
+                foreach (var element in value.EnumerateArray())
+                {
+                    var package = ParsePackage(element, warnings);
+                    if (package is null)
+                        continue;
+
+                    if (packages.TryGetValue(package.Id, out var existing))
+                        MergePackage(existing, package);
+                    else
+                        packages[package.Id] = package;
+
+                    fetched++;
+                    if (packages.Count >= maxPackages)
+                        break;
+                }
+
+                if (fetched < take)
+                    break;
+
+                skip += fetched;
             }
 
-            if (fetched < take)
+            if (packages.Count >= maxPackages)
                 break;
-
-            skip += fetched;
         }
 
-        return packages
+        return packages.Values
             .OrderBy(package => package.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -184,6 +198,7 @@ public sealed class AzureArtifactsPrivateGalleryClient
         string feed,
         bool includeAllVersions,
         bool includeDescription,
+        bool? isRelease,
         int top,
         int skip)
     {
@@ -201,6 +216,9 @@ public sealed class AzureArtifactsPrivateGalleryClient
             "$skip=" + skip.ToString(CultureInfo.InvariantCulture),
             "api-version=" + ApiVersion
         };
+        if (isRelease.HasValue)
+            query.Add("isRelease=" + isRelease.Value.ToString(CultureInfo.InvariantCulture).ToLowerInvariant());
+
         builder.Query = string.Join("&", query);
         return builder.Uri;
     }
@@ -278,6 +296,32 @@ public sealed class AzureArtifactsPrivateGalleryClient
             .ToList();
 
         return package;
+    }
+
+    private static void MergePackage(PrivateGalleryPackage target, PrivateGalleryPackage source)
+    {
+        if (string.IsNullOrWhiteSpace(target.Description))
+            target.Description = source.Description;
+        if (string.IsNullOrWhiteSpace(target.WebUrl))
+            target.WebUrl = source.WebUrl;
+
+        foreach (var version in source.Versions)
+        {
+            if (target.Versions.Any(existing => existing.Id.Equals(version.Id, StringComparison.OrdinalIgnoreCase) ||
+                                                existing.Version.Equals(version.Version, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            target.Versions.Add(version);
+        }
+
+        target.Versions = target.Versions
+            .OrderByDescending(version => version.IsLatest)
+            .ThenByDescending(version => version.PublishedAtUtc)
+            .ThenBy(version => version.Version, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        target.LatestVersion = target.Versions.FirstOrDefault(static version => version.IsLatest)?.Version ??
+                               target.LatestVersion ??
+                               source.LatestVersion;
     }
 
     private static PrivateGalleryPackageVersion? ParseVersion(JsonElement element)

@@ -249,9 +249,9 @@ public sealed class PowerShellModulePackageInspector
             kind = "changelog";
         else if (lowerName.StartsWith("license", StringComparison.Ordinal) || lowerName == "copying")
             kind = "license";
-        else if (lowerPath.Contains("/docs/", StringComparison.Ordinal) && IsTextDocument(lowerName))
+        else if (IsUnderDirectory(lowerPath, "docs") && IsTextDocument(lowerName))
             kind = "docs";
-        else if (lowerPath.Contains("/examples/", StringComparison.Ordinal) && IsExampleDocument(lowerName))
+        else if (IsUnderDirectory(lowerPath, "examples") && IsExampleDocument(lowerName))
             kind = "example";
         else if (lowerName.EndsWith("-help.xml", StringComparison.Ordinal))
             kind = "help";
@@ -272,6 +272,10 @@ public sealed class PowerShellModulePackageInspector
         => lowerName.EndsWith(".md", StringComparison.Ordinal) ||
            lowerName.EndsWith(".txt", StringComparison.Ordinal) ||
            lowerName.EndsWith(".html", StringComparison.Ordinal);
+
+    private static bool IsUnderDirectory(string lowerPath, string directoryName)
+        => lowerPath.StartsWith(directoryName + "/", StringComparison.Ordinal) ||
+           lowerPath.Contains("/" + directoryName + "/", StringComparison.Ordinal);
 
     private static bool IsExampleDocument(string lowerName)
         => IsTextDocument(lowerName) ||
