@@ -11,6 +11,9 @@ internal sealed partial class DocumentationPlanner
 {
     private void AddKind(List<(string Kind,string Path)> items, Request req, DocumentKind kind, bool includeEvenIfSelected = true)
     {
+        if (!includeEvenIfSelected)
+            return;
+
         var f = _Resolve(req, kind);
         if (f != null) items.Add(("FILE", f.FullName));
     }
@@ -40,6 +43,28 @@ internal sealed partial class DocumentationPlanner
             token = TokenStore.GetToken(info.Host) ?? string.Empty;
 
         return RepoClientFactory.Create(info, token);
+    }
+
+    private static string? ResolveRepositoryBranchForLocalRewrite(Request req, IRepoClient? clientOverride, string? currentBranch, string content)
+    {
+        if (!string.IsNullOrWhiteSpace(currentBranch)
+            || !req.Online
+            || string.IsNullOrWhiteSpace(req.ProjectUri)
+            || !RepositoryContentNormalizer.ContainsRelativeUriCandidate(content))
+        {
+            return currentBranch;
+        }
+
+        try
+        {
+            var client = ResolveRepoClient(req, clientOverride);
+            var branch = client?.GetDefaultBranch();
+            return string.IsNullOrWhiteSpace(branch) ? currentBranch : branch!.Trim();
+        }
+        catch
+        {
+            return currentBranch;
+        }
     }
 
     private static string? TryFetchFirst(IRepoClient client, string branch, string[] candidates)

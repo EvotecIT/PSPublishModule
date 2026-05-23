@@ -216,6 +216,7 @@ internal sealed partial class DocumentationPlanner
                         content = File.ReadAllText(it.Path);
                         if (!string.IsNullOrWhiteSpace(req.ProjectUri))
                         {
+                            effectiveRepositoryBranch = ResolveRepositoryBranchForLocalRewrite(req, clientOverride, effectiveRepositoryBranch, content);
                             content = RepositoryContentNormalizer.RewriteRelativeUris(
                                 content,
                                 RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
@@ -342,6 +343,7 @@ internal sealed partial class DocumentationPlanner
                     string content; try { content = File.ReadAllText(f.FullName); } catch { continue; }
                     if (!string.IsNullOrWhiteSpace(req.ProjectUri))
                     {
+                        effectiveRepositoryBranch = ResolveRepositoryBranchForLocalRewrite(req, clientOverride, effectiveRepositoryBranch, content);
                         content = RepositoryContentNormalizer.RewriteRelativeUris(
                             content,
                             RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, effectiveRepositoryBranch),
@@ -538,6 +540,7 @@ internal sealed partial class DocumentationPlanner
                             var kind = RepositoryContentNormalizer.IsLikelyTemplateSource(fileName, content)
                                 ? "DOCSOURCE"
                                 : "DOC";
+                            effectiveRepositoryBranch = ResolveRepositoryBranchForLocalRewrite(req, clientOverride, effectiveRepositoryBranch, content);
                             var normalizedContent = string.Equals(kind, "DOCSOURCE", StringComparison.OrdinalIgnoreCase)
                                 ? RepositoryContentNormalizer.WrapAsSourceCodeBlock(content, "markdown")
                                 : RepositoryContentNormalizer.RewriteRelativeUris(

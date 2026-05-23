@@ -187,6 +187,25 @@ public class DocumentationPlannerTests
     }
 
     [Fact]
+    public void Execute_AllWithExplicitReadme_Does_Not_Duplicate_Selected_Docs()
+    {
+        var root = CreateTempModule(out var internals);
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            All = true,
+            Readme = true
+        });
+
+        Assert.Equal(1, res.Items.Count(i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(1, res.Items.Count(i => string.Equals(i.FileName, "CHANGELOG.md", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(1, res.Items.Count(i => string.Equals(i.FileName, "LICENSE", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
     public void Execute_ReadmeSelection_Does_Not_Add_Supplemental_Docs_Scripts_Community_Or_Releases()
     {
         var root = CreateTempModule(out var internals);

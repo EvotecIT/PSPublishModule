@@ -161,6 +161,26 @@ internal static class RepositoryContentNormalizer
         return usesCrLf ? rewritten.Replace("\n", "\r\n") : rewritten;
     }
 
+    internal static bool ContainsRelativeUriCandidate(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+            return false;
+
+        foreach (Match match in MarkdownLinkRegex.Matches(markdown!))
+        {
+            if (ShouldRewriteUrl(match.Groups[2].Value))
+                return true;
+        }
+
+        foreach (Match match in HtmlUrlAttributeRegex.Matches(markdown!))
+        {
+            if (ShouldRewriteUrl(match.Groups["url"].Value))
+                return true;
+        }
+
+        return false;
+    }
+
     internal static bool IsLikelyTemplateSource(string? fileName, string? content)
     {
         if (string.IsNullOrWhiteSpace(content))

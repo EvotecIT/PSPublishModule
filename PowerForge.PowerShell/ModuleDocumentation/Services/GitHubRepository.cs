@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -60,7 +61,7 @@ internal sealed class GitHubRepository : IRepoClient
         try
         {
             using var c = CreateClient();
-            var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/{Uri.EscapeDataString(path)}?ref={Uri.EscapeDataString(branch ?? "main")}";
+            var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/{EncodeContentPath(path)}?ref={Uri.EscapeDataString(branch ?? "main")}";
             var resp = c.GetAsync(url).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode) return null;
             var content = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -87,7 +88,7 @@ internal sealed class GitHubRepository : IRepoClient
         try
         {
             using var c = CreateClient();
-            var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/{Uri.EscapeDataString(path.Trim('/'))}?ref={Uri.EscapeDataString(branch ?? "main")}";
+            var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/{EncodeContentPath(path)}?ref={Uri.EscapeDataString(branch ?? "main")}";
             var resp = c.GetAsync(url).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode) return result;
             var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -108,6 +109,20 @@ internal sealed class GitHubRepository : IRepoClient
         }
         catch { }
         return result;
+    }
+
+    internal static string EncodeContentPathForTesting(string path)
+        => EncodeContentPath(path);
+
+    private static string EncodeContentPath(string? path)
+    {
+        var normalized = (path ?? string.Empty).Replace('\\', '/').Trim('/');
+        if (string.IsNullOrEmpty(normalized))
+            return string.Empty;
+
+        return string.Join("/", normalized
+            .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(Uri.EscapeDataString));
     }
 
     /// <summary>
