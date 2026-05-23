@@ -43,14 +43,15 @@ internal sealed class DocumentationInstaller
         var root = moduleBase;
         // Resolve Internals path via manifest when available
         string? internals = null;
+        object? delivery = null;
         var options = new DeliveryOptions();
         var manifestPath = Directory.GetFiles(moduleBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
         if (!string.IsNullOrEmpty(manifestPath))
         {
             try
             {
-                var del = _cmdlet.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPath).FirstOrDefault();
-                var internalsRel = GetDeliveryString(del, "InternalsPath") ?? "Internals";
+                delivery = _cmdlet.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPath).FirstOrDefault();
+                var internalsRel = GetDeliveryString(delivery, "InternalsPath") ?? "Internals";
                 var cand = Path.Combine(root, internalsRel);
                 if (Directory.Exists(cand)) internals = cand;
             }
@@ -99,6 +100,11 @@ internal sealed class DocumentationInstaller
             }
         }
 
+        if (!noIntro)
+        {
+            WriteIntro(root, delivery);
+        }
+
         if (open)
         {
             try
@@ -111,6 +117,41 @@ internal sealed class DocumentationInstaller
         }
 
         return dest;
+    }
+
+    internal static string[] GetIntroLinesForTesting(string moduleRoot, object? delivery)
+        => BuildIntroLines(moduleRoot, delivery).ToArray();
+
+    private void WriteIntro(string moduleRoot, object? delivery)
+    {
+        foreach (var line in BuildIntroLines(moduleRoot, delivery))
+        {
+            try { _cmdlet.Host.UI.WriteLine(line); } catch { }
+        }
+    }
+
+    private static string[] BuildIntroLines(string moduleRoot, object? delivery)
+    {
+        var introText = GetDeliveryStringArray(delivery, "IntroText");
+        if (introText.Length > 0)
+            return introText;
+
+        var introFile = GetDeliveryString(delivery, "IntroFile");
+        if (string.IsNullOrWhiteSpace(introFile))
+            return Array.Empty<string>();
+
+        var path = Path.IsPathRooted(introFile!)
+            ? introFile!
+            : Path.Combine(moduleRoot, introFile!);
+
+        try
+        {
+            return File.Exists(path) ? File.ReadAllLines(path) : Array.Empty<string>();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
     }
 
     private static void CopyTree(string source, string dest, bool overwrite)
@@ -188,5 +229,52 @@ internal sealed class DocumentationInstaller
 
         var reflected = delivery.GetType().GetProperty(name);
         return reflected?.GetValue(delivery)?.ToString();
+    }
+
+    private static string[] GetDeliveryStringArray(object? delivery, string name)
+    {
+        var value = GetDeliveryValue(delivery, name);
+        if (value is null)
+            return Array.Empty<string>();
+
+        if (value is string text)
+            return string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : new[] { text };
+
+        if (value is System.Collections.IEnumerable enumerable)
+        {
+            return enumerable
+                .Cast<object?>()
+                .Select(item => item?.ToString())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Select(item => item!)
+                .ToArray();
+        }
+
+        var scalar = value.ToString();
+        return string.IsNullOrWhiteSpace(scalar) ? Array.Empty<string>() : new[] { scalar! };
+    }
+
+    private static object? GetDeliveryValue(object? delivery, string name)
+    {
+        if (delivery == null || string.IsNullOrWhiteSpace(name)) return null;
+
+        if (delivery is PSObject pso)
+        {
+            var property = pso.Properties[name];
+            if (property?.Value != null) return property.Value;
+            delivery = pso.BaseObject;
+        }
+
+        if (delivery is System.Collections.IDictionary dictionary)
+        {
+            foreach (System.Collections.DictionaryEntry entry in dictionary)
+            {
+                if (entry.Key != null && string.Equals(entry.Key.ToString(), name, StringComparison.OrdinalIgnoreCase))
+                    return entry.Value;
+            }
+        }
+
+        var reflected = delivery.GetType().GetProperty(name);
+        return reflected?.GetValue(delivery);
     }
 }

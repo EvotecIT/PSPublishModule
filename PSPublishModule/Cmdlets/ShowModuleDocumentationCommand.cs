@@ -450,6 +450,12 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         meta.HelpTimeoutSeconds = HelpTimeoutSeconds;
         meta.HelpAsCode = HelpAsCode.IsPresent;
         meta.DisableTokenizer = DisableTokenizer.IsPresent;
+        meta.HeadingRules = (HeadingRules ?? "H1AndH2").ToLowerInvariant() switch
+        {
+            "none" => PowerForge.DocumentationHeadingRules.None,
+            "h1" => PowerForge.DocumentationHeadingRules.H1,
+            _ => PowerForge.DocumentationHeadingRules.H1AndH2
+        };
         meta.Online = wantsRemote;
         meta.Mode = reqObj.Mode;
         meta.ShowDuplicates = ShowDuplicates.IsPresent;

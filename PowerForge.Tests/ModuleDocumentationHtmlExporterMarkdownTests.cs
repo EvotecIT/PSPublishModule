@@ -10,6 +10,44 @@ namespace PowerForge.Tests;
 public class HtmlExporterMarkdownTests
 {
     [Fact]
+    public void PrepareMarkdown_Applies_Requested_Heading_Rules()
+    {
+        var module = new ModuleInfoModel
+        {
+            HeadingRules = DocumentationHeadingRules.H1AndH2
+        };
+
+        var prepared = HtmlExporter.PrepareMarkdownForTesting(module, """
+        # Title
+        Text
+        ## Section
+        More
+        ```powershell
+        # Not a heading
+        ```
+        """);
+
+        Assert.Contains("# Title\n---\nText", prepared, StringComparison.Ordinal);
+        Assert.Contains("## Section\n---\nMore", prepared, StringComparison.Ordinal);
+        Assert.Contains("```powershell\n# Not a heading\n```", prepared, StringComparison.Ordinal);
+
+        module.HeadingRules = DocumentationHeadingRules.H1;
+        prepared = HtmlExporter.PrepareMarkdownForTesting(module, """
+        # Title
+        Text
+        ## Section
+        More
+        """);
+
+        Assert.Contains("# Title\n---\nText", prepared, StringComparison.Ordinal);
+        Assert.DoesNotContain("## Section\n---\nMore", prepared, StringComparison.Ordinal);
+
+        module.HeadingRules = DocumentationHeadingRules.None;
+        prepared = HtmlExporter.PrepareMarkdownForTesting(module, "# Title\nText");
+        Assert.Equal("# Title\nText", prepared);
+    }
+
+    [Fact]
     public void Export_UsesOfficeImoMarkdownProvider_ForAlternateFences()
     {
         var exporter = new HtmlExporter();

@@ -691,7 +691,7 @@ internal sealed partial class HtmlExporter
 
     private static string PrepareMarkdown(ModuleInfoModel module, string? markdown)
     {
-        var text = markdown ?? string.Empty;
+        var text = ApplyHeadingRules(markdown ?? string.Empty, module.HeadingRules);
         if (!module.DisableTokenizer || text.Length == 0)
             return text;
 
@@ -716,6 +716,120 @@ internal sealed partial class HtmlExporter
 
         var prepared = string.Join("\n", lines);
         return usesCrLf ? prepared.Replace("\n", "\r\n") : prepared;
+    }
+
+    internal static string PrepareMarkdownForTesting(ModuleInfoModel module, string? markdown)
+        => PrepareMarkdown(module, markdown);
+
+    private static string ApplyHeadingRules(string markdown, DocumentationHeadingRules headingRules)
+    {
+        if (headingRules == DocumentationHeadingRules.None || string.IsNullOrEmpty(markdown))
+            return markdown;
+
+        var usesCrLf = markdown.Contains("\r\n", StringComparison.Ordinal);
+        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        var output = new List<string>(lines.Length + 8);
+        var inFence = false;
+        char fenceChar = '\0';
+        var fenceLength = 0;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var trimmed = line.TrimStart();
+            var markerLength = CountFenceMarker(trimmed, out var markerChar);
+            if (markerLength >= 3)
+            {
+                if (!inFence)
+                {
+                    inFence = true;
+                    fenceChar = markerChar;
+                    fenceLength = markerLength;
+                }
+                else if (markerChar == fenceChar && markerLength >= fenceLength)
+                {
+                    inFence = false;
+                    fenceChar = '\0';
+                    fenceLength = 0;
+                }
+
+                output.Add(line);
+                continue;
+            }
+
+            output.Add(line);
+            if (inFence)
+                continue;
+
+            var level = GetAtxHeadingLevel(trimmed);
+            if (level == 1 || (level == 2 && headingRules == DocumentationHeadingRules.H1AndH2))
+            {
+                var next = NextNonEmpty(lines, i + 1);
+                if (!IsHorizontalRule(next))
+                    output.Add("---");
+            }
+        }
+
+        var prepared = string.Join("\n", output);
+        return usesCrLf ? prepared.Replace("\n", "\r\n") : prepared;
+    }
+
+    private static int CountFenceMarker(string text, out char markerChar)
+    {
+        markerChar = '\0';
+        if (string.IsNullOrEmpty(text) || (text[0] != '`' && text[0] != '~'))
+            return 0;
+
+        markerChar = text[0];
+        var length = 0;
+        while (length < text.Length && text[length] == markerChar)
+            length++;
+        return length;
+    }
+
+    private static int GetAtxHeadingLevel(string trimmed)
+    {
+        if (string.IsNullOrEmpty(trimmed) || trimmed[0] != '#')
+            return 0;
+
+        var level = 0;
+        while (level < trimmed.Length && trimmed[level] == '#')
+            level++;
+
+        if (level == 0 || level > 6)
+            return 0;
+
+        return level < trimmed.Length && char.IsWhiteSpace(trimmed[level]) ? level : 0;
+    }
+
+    private static string? NextNonEmpty(string[] lines, int index)
+    {
+        for (var i = index; i < lines.Length; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(lines[i]))
+                return lines[i].Trim();
+        }
+
+        return null;
+    }
+
+    private static bool IsHorizontalRule(string? line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return false;
+
+        var trimmed = line!.Trim();
+        if (trimmed.Equals("<hr>", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("<hr/>", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("<hr />", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var compact = new string(trimmed.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        return compact.Length >= 3
+               && compact.All(c => c == compact[0])
+               && (compact[0] == '-' || compact[0] == '_' || compact[0] == '*');
     }
 
 }

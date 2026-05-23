@@ -8,6 +8,11 @@ namespace PowerForge;
 internal enum DocumentationDocumentationModuleDependencyKind { Required, External }
 
 /// <summary>
+/// Controls which markdown headings receive horizontal rules in exported documentation.
+/// </summary>
+internal enum DocumentationHeadingRules { None, H1, H1AndH2 }
+
+/// <summary>
 /// Represents a module dependency with optional version/Guid and a list of child dependencies.
 /// </summary>
 internal sealed class DocumentationModuleDependency
@@ -61,6 +66,8 @@ internal sealed class ModuleInfoModel
     public bool HelpAsCode { get; set; }
     /// <summary>Render Markdown code fences without syntax tokenization.</summary>
     public bool DisableTokenizer { get; set; }
+    /// <summary>Controls which markdown headings receive horizontal rules during HTML export.</summary>
+    public DocumentationHeadingRules HeadingRules { get; set; } = DocumentationHeadingRules.H1AndH2;
     /// <summary>Source for examples: Auto (Raw then Maml), Raw (Out‑String EXAMPLES), or Maml (structured).</summary>
     public ExamplesMode ExamplesMode { get; set; } = ExamplesMode.Auto;
     /// <summary>Selection policy for standard tabs when both Local and Remote exist (PreferLocal/PreferRemote/All).</summary>
