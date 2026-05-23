@@ -51,6 +51,7 @@
         { "$ref": "#/$defs/ReleaseHubStep" },
         { "$ref": "#/$defs/VersionHubStep" },
         { "$ref": "#/$defs/PackageHubStep" },
+        { "$ref": "#/$defs/PrivateGalleryStep" },
         { "$ref": "#/$defs/LlmsStep" },
         { "$ref": "#/$defs/CompatMatrixStep" },
         { "$ref": "#/$defs/SitemapStep" },
@@ -3254,6 +3255,80 @@
             { "required": ["modules"] },
             { "required": ["moduleFiles"] },
             { "required": ["module-files"] }
+          ]
+        }
+      ]
+    },
+    "PrivateGalleryStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "enum": ["private-gallery-index", "private-gallery"] },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "provider": { "type": "string", "enum": ["azure-artifacts", "azureArtifacts"] },
+        "title": { "type": "string" },
+        "organization": { "type": "string" },
+        "azureDevOpsOrganization": { "type": "string" },
+        "azure-devops-organization": { "type": "string" },
+        "project": { "type": "string" },
+        "azureDevOpsProject": { "type": "string" },
+        "azure-devops-project": { "type": "string" },
+        "feed": { "type": "string" },
+        "azureArtifactsFeed": { "type": "string" },
+        "azure-artifacts-feed": { "type": "string" },
+        "repositoryName": { "type": "string" },
+        "repository-name": { "type": "string" },
+        "includeAllVersions": { "type": "boolean" },
+        "include-all-versions": { "type": "boolean" },
+        "includePackageContent": { "type": "boolean" },
+        "include-package-content": { "type": "boolean" },
+        "includeMetrics": { "type": "boolean" },
+        "include-metrics": { "type": "boolean" },
+        "maxPackages": { "type": "integer", "minimum": 1 },
+        "max-packages": { "type": "integer", "minimum": 1 },
+        "maxVersionsPerPackage": { "type": "integer", "minimum": 1 },
+        "max-versions-per-package": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1 },
+        "token": { "type": "string" },
+        "tokenEnv": { "type": "string" },
+        "token-env": { "type": "string" },
+        "tokenEnvironmentVariable": { "type": "string" },
+        "token-environment-variable": { "type": "string" },
+        "authentication": { "type": "string", "enum": ["none", "bearer", "oauth", "oauth2", "basic", "basic-token", "pat"] },
+        "authenticationKind": { "type": "string", "enum": ["none", "bearer", "oauth", "oauth2", "basic", "basic-token", "pat"] },
+        "authentication-kind": { "type": "string", "enum": ["none", "bearer", "oauth", "oauth2", "basic", "basic-token", "pat"] },
+        "auth": { "type": "string", "enum": ["none", "bearer", "oauth", "oauth2", "basic", "basic-token", "pat"] },
+        "authKind": { "type": "string", "enum": ["none", "bearer", "oauth", "oauth2", "basic", "basic-token", "pat"] },
+        "auth-kind": { "type": "string", "enum": ["none", "bearer", "oauth", "oauth2", "basic", "basic-token", "pat"] },
+        "tempDirectory": { "type": "string" },
+        "temp-directory": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" },
+        "outputDirectory": { "type": "string" },
+        "output-directory": { "type": "string" }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["organization"] },
+            { "required": ["azureDevOpsOrganization"] },
+            { "required": ["azure-devops-organization"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["feed"] },
+            { "required": ["azureArtifactsFeed"] },
+            { "required": ["azure-artifacts-feed"] }
           ]
         }
       ]

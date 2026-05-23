@@ -612,6 +612,48 @@ Notes:
 - PowerShell `RequiredModules` supports both string entries and hashtable entries (`ModuleName` + version keys).
 - Best used before `build` so templates can consume `data/package-hub.json`.
 
+#### private-gallery-index
+Generates private PowerShell gallery data from an Azure Artifacts feed.
+```json
+{
+  "task": "private-gallery-index",
+  "provider": "azure-artifacts",
+  "organization": "evotecpl",
+  "project": "PowerShellGallery",
+  "feed": "PowerShellGalleryFeed",
+  "repositoryName": "EvotecPowerShellGallery",
+  "includeAllVersions": true,
+  "includePackageContent": true,
+  "includeMetrics": false,
+  "tokenEnv": "AZURE_DEVOPS_TOKEN",
+  "auth": "bearer",
+  "out": "./data/private-gallery"
+}
+```
+
+Notes:
+- This is an engine/data task only; it does not generate a website UI.
+- `provider` currently supports `azure-artifacts`.
+- `auth` supports `bearer`, `basic`/`pat`, and `none`.
+- `tokenEnv` is preferred over inline `token`.
+- Output includes:
+  - `feed.json`
+  - `modules/<module>.json`
+  - `modules/<module>/<version>.json`
+  - `search.json`
+- Azure Artifacts is used for feed/package/version inventory.
+- When `includePackageContent` is true, the task downloads selected `.nupkg`
+  files through the feed's NuGet V3 endpoint and inspects static package
+  content without importing or executing modules.
+- Static inspection can discover `.psd1`, README, docs, examples, external help
+  XML, dependencies, tags, and exported/documented commands.
+- `includeMetrics` queries Azure Artifacts package and version metrics. Microsoft
+  documents those endpoints with a stronger packaging scope than basic read, so
+  metric failures are reported as warnings and do not block inventory/content
+  indexing.
+- Best used before `build` so templates and search data can consume
+  `data/private-gallery/feed.json`.
+
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 ```json
