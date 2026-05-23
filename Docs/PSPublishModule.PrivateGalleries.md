@@ -4,6 +4,9 @@ This page describes the supported enterprise flow for consuming private modules
 from Azure Artifacts with PSPublishModule and the related Microsoft Artifact
 Registry (MAR) intake path for Microsoft-owned packages.
 
+For the short maintainer/end-user process used for the Evotec private feed, see
+`Docs/PSPublishModule.PrivateGalleryProcess.md`.
+
 ## Recommended Azure Artifacts Flow
 
 Use Microsoft Entra ID/MFA through Microsoft.PowerShell.PSResourceGet and the
