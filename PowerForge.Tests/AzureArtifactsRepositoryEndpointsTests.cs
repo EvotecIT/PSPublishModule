@@ -62,6 +62,18 @@ public sealed class AzureArtifactsRepositoryEndpointsTests
         Assert.Equal("https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v2", repository.Uri);
     }
 
+    [Fact]
+    public void CreatePublishRepositoryConfiguration_RejectsContainerRegistryApiVersion()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => AzureArtifactsRepositoryEndpoints.CreatePublishRepositoryConfiguration(
+            organization: "contoso",
+            project: "Platform",
+            feed: "Modules",
+            apiVersion: RepositoryApiVersion.ContainerRegistry));
+
+        Assert.Contains("Azure Artifacts", ex.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("PSGallery", null)]
     [InlineData("Modules", "PSGallery")]

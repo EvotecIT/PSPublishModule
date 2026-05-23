@@ -88,6 +88,7 @@ public sealed class PowerForgeCliProjectReleaseTests
                 try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
                 throw new TimeoutException("PowerForge CLI project release plan test timed out.");
             }
+            process.WaitForExit();
 
             var outputDrainTimedOut = false;
             var drainTask = Task.WhenAll(stdoutClosed.Task, stderrClosed.Task);

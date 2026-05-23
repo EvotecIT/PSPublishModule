@@ -563,11 +563,13 @@ Describe 'Private gallery command metadata' {
         $install.DefaultParameterSet | Should -Be 'Repository'
         $install.ParameterSets.Name | Should -Contain 'Repository'
         $install.ParameterSets.Name | Should -Contain 'AzureArtifacts'
+        $install.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
 
         $update = Get-Command Update-PrivateModule -ErrorAction Stop
         $update.DefaultParameterSet | Should -Be 'Repository'
         $update.ParameterSets.Name | Should -Contain 'Repository'
         $update.ParameterSets.Name | Should -Contain 'AzureArtifacts'
+        $update.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
         $update.ParameterSets.Name | Should -Contain 'Profile'
     }
 
@@ -580,6 +582,8 @@ Describe 'Private gallery command metadata' {
         $connect.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
         $connect.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $connect.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $connect.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
+        $connect.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
         $connect.ParameterSets.Name | Should -Contain 'Profile'
 
         $register = $module.ExportedCmdlets['Register-ModuleRepository']
@@ -589,6 +593,8 @@ Describe 'Private gallery command metadata' {
         $register.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
         $register.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $register.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $register.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
+        $register.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
         $register.ParameterSets.Name | Should -Contain 'Profile'
 
         $install = $module.ExportedCmdlets['Install-PrivateModule']
@@ -597,6 +603,7 @@ Describe 'Private gallery command metadata' {
         $install.Parameters['CredentialSecret'].Aliases | Should -Contain 'Token'
         $install.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $install.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $install.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
         $install.ParameterSets.Name | Should -Contain 'Profile'
 
         $update = $module.ExportedCmdlets['Update-PrivateModule']
@@ -604,6 +611,7 @@ Describe 'Private gallery command metadata' {
         $update.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
         $update.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $update.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $update.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
         $update.ParameterSets.Name | Should -Contain 'Profile'
 
         $profile = $module.ExportedCmdlets['Set-ModuleRepositoryProfile']

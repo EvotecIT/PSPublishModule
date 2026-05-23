@@ -13,6 +13,7 @@ internal sealed class PrivateModuleWorkflowRequest
     internal PrivateModuleWorkflowOperation Operation { get; set; }
     internal IReadOnlyList<string> ModuleNames { get; set; } = System.Array.Empty<string>();
     internal bool UseAzureArtifacts { get; set; }
+    internal bool UseMicrosoftArtifactRegistry { get; set; }
     internal string? ProfileName { get; set; }
     internal string RepositoryName { get; set; } = string.Empty;
     internal PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;

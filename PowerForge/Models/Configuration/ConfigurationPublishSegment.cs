@@ -103,7 +103,7 @@ public sealed class PublishRepositoryConfiguration
     public int? Priority { get; set; }
 
     /// <summary>
-    /// API version for PSResourceGet repository registration (v2/v3). Default: <see cref="RepositoryApiVersion.Auto"/>.
+    /// API version for PSResourceGet repository registration. Default: <see cref="RepositoryApiVersion.Auto"/>.
     /// </summary>
     public RepositoryApiVersion ApiVersion { get; set; } = RepositoryApiVersion.Auto;
 

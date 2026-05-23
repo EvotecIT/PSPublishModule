@@ -348,10 +348,101 @@ internal sealed class PrivateGalleryService
         return result;
     }
 
+    public ModuleRepositoryRegistrationResult EnsureMicrosoftArtifactRegistryRegistered(
+        string? repositoryName,
+        RepositoryRegistrationTool tool,
+        bool trusted,
+        int? priority,
+        BootstrapPrerequisiteStatus prerequisiteStatus,
+        string shouldProcessAction)
+    {
+        if (tool is RepositoryRegistrationTool.PowerShellGet or RepositoryRegistrationTool.Both)
+            throw new InvalidOperationException("Microsoft Artifact Registry requires PSResourceGet. PowerShellGet does not support container-registry PowerShell repositories.");
+
+        var resolvedName = string.IsNullOrWhiteSpace(repositoryName)
+            ? MicrosoftArtifactRegistryRepository.DefaultName
+            : repositoryName!.Trim();
+        var result = new ModuleRepositoryRegistrationResult
+        {
+            RepositoryName = resolvedName,
+            Provider = "MicrosoftArtifactRegistry",
+            BootstrapModeRequested = PrivateGalleryBootstrapMode.ExistingSession,
+            BootstrapModeUsed = PrivateGalleryBootstrapMode.ExistingSession,
+            CredentialSource = PrivateGalleryCredentialSource.None,
+            PSResourceGetUri = MicrosoftArtifactRegistryRepository.DefaultUri,
+            Trusted = trusted,
+            CredentialUsed = false,
+            ToolRequested = tool,
+            Tool = RepositoryRegistrationTool.PSResourceGet,
+            PSResourceGetAvailable = prerequisiteStatus.PSResourceGetAvailable,
+            PSResourceGetVersion = prerequisiteStatus.PSResourceGetVersion,
+            PSResourceGetMeetsMinimumVersion = prerequisiteStatus.PSResourceGetMeetsMinimumVersion,
+            PSResourceGetSupportsExistingSessionBootstrap = prerequisiteStatus.PSResourceGetSupportsExistingSessionBootstrap,
+            PowerShellGetAvailable = prerequisiteStatus.PowerShellGetAvailable,
+            PowerShellGetVersion = prerequisiteStatus.PowerShellGetVersion,
+            ReadinessMessages = prerequisiteStatus.ReadinessMessages
+        };
+
+        if (!prerequisiteStatus.PSResourceGetAvailable || !prerequisiteStatus.PSResourceGetMeetsMinimumVersion)
+        {
+            throw new InvalidOperationException($"PSResourceGet {MinimumPSResourceGetVersion}+ is required to register Microsoft Artifact Registry. Detected version: {prerequisiteStatus.PSResourceGetVersion ?? "not installed"}.");
+        }
+
+        if (!_host.ShouldProcess(result.RepositoryName, shouldProcessAction))
+            return result;
+
+        result.RegistrationPerformed = true;
+        var runner = new PowerShellRunner();
+        var logger = new PrivateGalleryHostLogger(_host);
+        var messages = new List<string>(2);
+
+        try
+        {
+            var client = new PSResourceGetClient(runner, logger);
+            var created = client.EnsureMicrosoftArtifactRegistryRegistered(
+                resolvedName,
+                trusted,
+                priority,
+                timeout: TimeSpan.FromMinutes(2));
+
+            result.PSResourceGetRegistered = true;
+            result.PSResourceGetCreated = created;
+            result.ToolUsed = RepositoryRegistrationTool.PSResourceGet;
+            messages.Add(created
+                ? $"Registered PSResourceGet repository '{result.RepositoryName}' for Microsoft Artifact Registry."
+                : $"PSResourceGet repository '{result.RepositoryName}' for Microsoft Artifact Registry already existed and was refreshed.");
+        }
+        catch (PowerShellToolNotAvailableException ex)
+        {
+            result.UnavailableTools = new[] { "PSResourceGet" };
+            messages.Add(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            messages.Add($"Microsoft Artifact Registry registration failed: {ex.Message}");
+        }
+
+        result.Messages = messages
+            .Where(static message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (!result.PSResourceGetRegistered)
+        {
+            var message = result.Messages.Length > 0
+                ? string.Join(" ", result.Messages)
+                : $"Microsoft Artifact Registry repository '{resolvedName}' could not be registered.";
+            throw new InvalidOperationException(message);
+        }
+
+        return result;
+    }
+
     public BootstrapPrerequisiteInstallResult EnsureBootstrapPrerequisites(
         bool installPrerequisites,
         PrivateGalleryBootstrapMode bootstrapMode = PrivateGalleryBootstrapMode.Auto,
-        bool forceInstall = false)
+        bool forceInstall = false,
+        bool includeAzureArtifactsCredentialProvider = true)
     {
         var initialStatus = GetBootstrapPrerequisiteStatus();
         if (!installPrerequisites)
@@ -361,9 +452,9 @@ internal sealed class PrivateGalleryService
         var messages = new List<string>(4);
         var runner = new PowerShellRunner();
         var logger = new PrivateGalleryHostLogger(_host);
-        var requiredPSResourceGetVersion = PrivateGalleryVersionPolicy.RequiresExistingSessionBootstrap(bootstrapMode)
-            ? MinimumPSResourceGetExistingSessionVersion
-            : MinimumPSResourceGetVersion;
+        var requiredPSResourceGetVersion = GetRequiredPSResourceGetVersion(
+            bootstrapMode,
+            includeAzureArtifactsCredentialProvider);
 
         if (!initialStatus.PSResourceGetAvailable ||
             !PrivateGalleryVersionPolicy.VersionMeetsMinimum(initialStatus.PSResourceGetVersion, requiredPSResourceGetVersion) ||
@@ -399,7 +490,8 @@ internal sealed class PrivateGalleryService
             throw new InvalidOperationException($"PSResourceGet prerequisite installation completed, but version {statusAfterPsResourceGet.PSResourceGetVersion ?? "unknown"} does not satisfy minimum {requiredPSResourceGetVersion}.");
         }
 
-        if (!statusAfterPsResourceGet.CredentialProviderDetection.IsDetected)
+        if (includeAzureArtifactsCredentialProvider &&
+            !statusAfterPsResourceGet.CredentialProviderDetection.IsDetected)
         {
             if (Path.DirectorySeparatorChar == '\\')
             {
@@ -432,6 +524,20 @@ internal sealed class PrivateGalleryService
             messages.Where(static message => !string.IsNullOrWhiteSpace(message)).Distinct(StringComparer.Ordinal).ToArray(),
             finalStatus);
     }
+
+    public BootstrapPrerequisiteInstallResult EnsureMicrosoftArtifactRegistryPrerequisites(bool installPrerequisites)
+        => EnsureBootstrapPrerequisites(
+            installPrerequisites,
+            PrivateGalleryBootstrapMode.Auto,
+            includeAzureArtifactsCredentialProvider: false);
+
+    internal static string GetRequiredPSResourceGetVersion(
+        PrivateGalleryBootstrapMode bootstrapMode,
+        bool includeAzureArtifactsCredentialProvider)
+        => includeAzureArtifactsCredentialProvider &&
+           PrivateGalleryVersionPolicy.RequiresExistingSessionBootstrap(bootstrapMode)
+            ? MinimumPSResourceGetExistingSessionVersion
+            : MinimumPSResourceGetVersion;
 
     public RepositoryAccessProbeResult ProbeRepositoryAccess(ModuleRepositoryRegistrationResult registration, RepositoryCredential? credential)
     {
@@ -484,6 +590,7 @@ internal sealed class PrivateGalleryService
         if (probe.Succeeded ||
             credential is not null ||
             !allowInteractiveCredentialProviderPrime ||
+            !string.Equals(registration.Provider, "AzureArtifacts", StringComparison.OrdinalIgnoreCase) ||
             registration.BootstrapModeUsed != PrivateGalleryBootstrapMode.ExistingSession ||
             !registration.PSResourceGetRegistered ||
             !registration.ExistingSessionBootstrapReady)
@@ -701,6 +808,7 @@ internal sealed class PrivateGalleryService
         }
 
         if (result.BootstrapModeRequested == PrivateGalleryBootstrapMode.ExistingSession &&
+            string.Equals(result.Provider, "AzureArtifacts", StringComparison.OrdinalIgnoreCase) &&
             !result.ExistingSessionBootstrapReady)
         {
             _host.WriteWarning($"ExistingSession bootstrap was requested, but Azure Artifacts ExistingSession support requires PSResourceGet {MinimumPSResourceGetExistingSessionVersion}+ and a detected Azure Artifacts Credential Provider.");

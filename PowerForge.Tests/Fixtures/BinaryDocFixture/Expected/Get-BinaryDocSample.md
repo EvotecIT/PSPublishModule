@@ -57,7 +57,7 @@ Name of the requested sample object.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: SampleName
-Possible values: 
+Possible values:
 
 Required: True
 Position: 0

@@ -1,7 +1,8 @@
 # PSPublishModule Private Galleries
 
 This page describes the supported enterprise flow for consuming private modules
-from Azure Artifacts with PSPublishModule.
+from Azure Artifacts with PSPublishModule and the related Microsoft Artifact
+Registry (MAR) intake path for Microsoft-owned packages.
 
 ## Recommended Azure Artifacts Flow
 
@@ -15,6 +16,35 @@ When registering Azure Artifacts feeds through PSResourceGet, PSPublishModule
 sets the repository credential provider to `AzArtifacts` when the installed
 PSResourceGet version exposes that parameter, and falls back to PSResourceGet's
 Azure Artifacts URL detection for older versions.
+
+## Microsoft Artifact Registry (MAR)
+
+MAR is the Microsoft-controlled source for Microsoft-owned PowerShell packages.
+It is a PSResourceGet container-registry repository, not a PowerShellGet
+repository, and it is read-only for consumers. PSPublishModule therefore treats
+MAR as a trusted discovery/intake source and never as a publish target.
+
+Register or validate MAR explicitly:
+
+```powershell
+Register-ModuleRepository -MicrosoftArtifactRegistry
+Connect-ModuleRepository -MicrosoftArtifactRegistry
+```
+
+Install Microsoft-owned packages from MAR with the wrapper or native command:
+
+```powershell
+Install-PrivateModule -MicrosoftArtifactRegistry -Name Microsoft.PowerShell.SecretManagement
+Install-PSResource -Repository MAR -Name Microsoft.PowerShell.SecretManagement
+```
+
+For production estates, keep using a central enterprise feed such as Azure
+Artifacts as the only trusted runtime source. The recommended flow is:
+
+1. Discover Microsoft-owned packages from MAR.
+2. Review, scan, approve, and version-pin them.
+3. Promote the approved packages into the enterprise feed.
+4. Point production automation only at that enterprise feed.
 
 ## Enterprise Rollout Checklist
 

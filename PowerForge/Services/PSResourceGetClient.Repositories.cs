@@ -51,6 +51,24 @@ public sealed partial class PSResourceGetClient
     }
 
     /// <summary>
+    /// Ensures Microsoft Artifact Registry is registered with PSResourceGet.
+    /// </summary>
+    public bool EnsureMicrosoftArtifactRegistryRegistered(
+        string? name = null,
+        bool trusted = true,
+        int? priority = null,
+        TimeSpan? timeout = null)
+    {
+        return EnsureRepositoryRegistered(
+            string.IsNullOrWhiteSpace(name) ? MicrosoftArtifactRegistryRepository.DefaultName : name!.Trim(),
+            MicrosoftArtifactRegistryRepository.DefaultUri,
+            trusted,
+            priority,
+            RepositoryApiVersion.ContainerRegistry,
+            timeout);
+    }
+
+    /// <summary>
     /// Unregisters a PSResourceGet repository by name.
     /// </summary>
     public void UnregisterRepository(string name, TimeSpan? timeout = null)
@@ -95,4 +113,3 @@ public sealed partial class PSResourceGetClient
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Unregister-Repository.ps1");
 }
 }
-

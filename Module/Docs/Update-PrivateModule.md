@@ -24,6 +24,11 @@ Update-PrivateModule [-Name] <string[]> -ProfileName <string> [-CredentialUserNa
 Update-PrivateModule [-Name] <string[]> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### MicrosoftArtifactRegistry
+```powershell
+Update-PrivateModule [-Name] <string[]> -MicrosoftArtifactRegistry [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <int>] [-InstallPrerequisites] [-Prerelease] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
 This cmdlet is the day-to-day maintenance companion to Install-PrivateModule. When Azure Artifacts details
 are provided, the repository registration is refreshed before the update is attempted.
@@ -157,15 +162,31 @@ Accept wildcard characters: True
 ```
 
 ### -InstallPrerequisites
-Installs missing private-gallery prerequisites before automatic registration refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.
+Installs missing private-gallery prerequisites before automatic registration refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Profile, AzureArtifacts
+Parameter Sets: Profile, AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MicrosoftArtifactRegistry
+Updates Microsoft-owned packages from Microsoft Artifact Registry, registering MAR first when needed.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -177,7 +198,7 @@ Module names to update.
 
 ```yaml
 Type: String[]
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: ModuleName
 Possible values:
 
@@ -193,7 +214,7 @@ Includes prerelease versions when supported by the selected installer.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -209,7 +230,7 @@ Optional PSResourceGet repository priority used during automatic registration re
 
 ```yaml
 Type: Nullable`1
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -289,7 +310,7 @@ Optional repository name override when Azure Artifacts details are supplied.
 
 ```yaml
 Type: String
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -305,7 +326,7 @@ Registration strategy used when Azure Artifacts details are supplied. Auto prefe
 
 ```yaml
 Type: RepositoryRegistrationTool
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values: Auto, PSResourceGet, PowerShellGet, Both
 
@@ -321,7 +342,7 @@ When true, marks the repository as trusted during automatic registration refresh
 
 ```yaml
 Type: Boolean
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 

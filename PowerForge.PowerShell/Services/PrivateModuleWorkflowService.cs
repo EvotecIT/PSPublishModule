@@ -37,6 +37,10 @@ internal sealed class PrivateModuleWorkflowService
         RepositoryCredential? credential = null;
         var preferPowerShellGet = false;
         var useAzureArtifacts = request.UseAzureArtifacts;
+        var useMicrosoftArtifactRegistry = request.UseMicrosoftArtifactRegistry;
+
+        if (useAzureArtifacts && useMicrosoftArtifactRegistry)
+            throw new ArgumentException("Choose either Azure Artifacts or Microsoft Artifact Registry, not both.", nameof(request));
 
         if (useAzureArtifacts)
         {
@@ -126,6 +130,48 @@ internal sealed class PrivateModuleWorkflowService
             preferPowerShellGet = credential is null &&
                                   string.Equals(registration.PreferredInstallCommand, "Install-Module", StringComparison.OrdinalIgnoreCase);
         }
+        else if (useMicrosoftArtifactRegistry)
+        {
+            var prerequisiteInstall = _privateGalleryService.EnsureMicrosoftArtifactRegistryPrerequisites(
+                request.InstallPrerequisites);
+            var registration = _privateGalleryService.EnsureMicrosoftArtifactRegistryRegistered(
+                request.RepositoryName,
+                request.Tool,
+                request.Trusted,
+                request.Priority,
+                prerequisiteInstall.Status,
+                shouldProcessAction: GetRepositoryAction(request.Operation, RepositoryRegistrationTool.PSResourceGet));
+            registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
+            registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
+            repositoryName = registration.RepositoryName;
+
+            if (!registration.RegistrationPerformed)
+            {
+                _host.WriteWarning(GetSkippedRegistrationMessage(request.Operation, registration.RepositoryName));
+                return new PrivateModuleWorkflowResult
+                {
+                    OperationPerformed = false,
+                    RepositoryName = registration.RepositoryName,
+                    DependencyResults = Array.Empty<ModuleDependencyInstallResult>()
+                };
+            }
+
+            var probe = _accessProbeExecutor(registration, credential, false);
+            registration.AccessProbePerformed = true;
+            registration.AccessProbeSucceeded = probe.Succeeded;
+            registration.AccessProbeTool = probe.Tool;
+            registration.AccessProbeMessage = probe.Message;
+
+            _privateGalleryService.WriteRegistrationSummary(registration);
+
+            if (!probe.Succeeded)
+            {
+                var message = string.IsNullOrWhiteSpace(probe.Message)
+                    ? $"Microsoft Artifact Registry access probe failed via {probe.Tool}."
+                    : $"Microsoft Artifact Registry access probe failed via {probe.Tool}: {probe.Message}";
+                throw new InvalidOperationException(message);
+            }
+        }
         if (!shouldProcess(
                 $"{modules.Count} module(s) from repository '{repositoryName}'",
                 GetFinalAction(request.Operation, request.Force)))
@@ -138,7 +184,7 @@ internal sealed class PrivateModuleWorkflowService
             };
         }
 
-        if (!useAzureArtifacts)
+        if (!useAzureArtifacts && !useMicrosoftArtifactRegistry)
         {
             credential = _privateGalleryService.ResolveOptionalCredential(
                 repositoryName,

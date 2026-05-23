@@ -28,6 +28,11 @@ if (-not [string]::IsNullOrWhiteSpace($ApiVersion)) { $commonParams.ApiVersion =
 
 $isPSGallery = -not [string]::IsNullOrWhiteSpace($Name) -and ($Name.Trim().ToLowerInvariant() -eq 'psgallery')
 $isAzureArtifacts = $Uri -match '^https://pkgs\.dev\.azure\.com/' -or $Uri -match '^https://[^/]+\.pkgs\.visualstudio\.com/'
+$isMicrosoftArtifactRegistry = -not [string]::IsNullOrWhiteSpace($Uri) -and
+  $Uri.TrimEnd('/').ToLowerInvariant() -eq 'https://mcr.microsoft.com' -and
+  -not [string]::IsNullOrWhiteSpace($Name) -and
+  $Name.Trim().ToLowerInvariant() -eq 'mar' -and
+  $ApiVersion -eq 'ContainerRegistry'
 
 function Invoke-RepositoryCommand {
   param(
@@ -62,6 +67,33 @@ try {
       Register-PSResourceRepository -PSGallery -Force -ErrorAction Stop | Out-Null
       # Apply settings (Trusted/Priority/ApiVersion) after registration (PSGallery has a predefined Uri).
       Set-PSResourceRepository @commonParams | Out-Null
+    }
+  } elseif ($isMicrosoftArtifactRegistry) {
+    $marSetParams = $commonParams.Clone()
+    $marSetParams.Uri = $Uri
+    if ($existing) {
+      Set-PSResourceRepository @marSetParams | Out-Null
+    } else {
+      $created = $true
+      $registerCommand = Get-Command -Name 'Register-PSResourceRepository' -ErrorAction Stop
+      if ($registerCommand.Parameters.ContainsKey('MAR')) {
+        $marParams = @{ MAR = $true; Force = $true; ErrorAction = 'Stop' }
+        if ($TrustedFlag -eq '1') { $marParams.Trusted = $true }
+        if (-not [string]::IsNullOrWhiteSpace($Priority)) { $marParams.Priority = [int]$Priority }
+        Register-PSResourceRepository @marParams | Out-Null
+        Set-PSResourceRepository @marSetParams | Out-Null
+      } elseif ($registerCommand.Parameters.ContainsKey('MicrosoftArtifactRegistry')) {
+        $marParams = @{ MicrosoftArtifactRegistry = $true; Force = $true; ErrorAction = 'Stop' }
+        if ($TrustedFlag -eq '1') { $marParams.Trusted = $true }
+        if (-not [string]::IsNullOrWhiteSpace($Priority)) { $marParams.Priority = [int]$Priority }
+        Register-PSResourceRepository @marParams | Out-Null
+        Set-PSResourceRepository @marSetParams | Out-Null
+      } else {
+        $params = $commonParams.Clone()
+        $params.Uri = $Uri
+        $params.Force = $true
+        Invoke-RepositoryCommand -CommandName 'Register-PSResourceRepository' -Parameters $params
+      }
     }
   } else {
     $params = $commonParams.Clone()

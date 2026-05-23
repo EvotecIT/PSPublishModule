@@ -49,6 +49,17 @@ internal sealed class PublishConfigurationFactory
         if (isAzureArtifacts && anyRepositoryUriProvided)
             throw new ArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.", nameof(request));
 
+        if (isAzureArtifacts && request.RepositoryApiVersion == RepositoryApiVersion.ContainerRegistry)
+            throw new ArgumentException("RepositoryApiVersion ContainerRegistry cannot be used with the Azure Artifacts preset.", nameof(request));
+
+        if (!isAzureArtifacts &&
+            destination == PublishDestination.PowerShellGallery &&
+            request.Enabled &&
+            IsMicrosoftArtifactRegistryPublishTarget(request))
+        {
+            throw new ArgumentException("Microsoft Artifact Registry is read-only. Do not enable publishing to MAR; use it only as a dependency/discovery source.", nameof(request));
+        }
+
         if (!isAzureArtifacts && anyRepositoryUriProvided)
         {
             var resolvedRepositoryName = request.RepositoryName?.Trim();
@@ -149,4 +160,9 @@ internal sealed class PublishConfigurationFactory
 
         return string.Empty;
     }
+
+    private static bool IsMicrosoftArtifactRegistryPublishTarget(PublishConfigurationRequest request)
+        => MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryUri) ||
+           MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositorySourceUri) ||
+           MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryPublishUri);
 }

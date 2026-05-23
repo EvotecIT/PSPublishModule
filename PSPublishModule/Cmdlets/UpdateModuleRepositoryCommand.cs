@@ -26,6 +26,7 @@ namespace PSPublishModule;
 public sealed class UpdateModuleRepositoryCommand : PSCmdlet
 {
     private const string ParameterSetAzureArtifacts = "AzureArtifacts";
+    private const string ParameterSetMicrosoftArtifactRegistry = "MicrosoftArtifactRegistry";
     private const string ParameterSetProfile = "Profile";
 
     /// <summary>Saved repository profile name.</summary>
@@ -37,6 +38,10 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
     /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;
+
+    /// <summary>Refreshes Microsoft Artifact Registry registration for Microsoft-owned packages.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
+    public SwitchParameter MicrosoftArtifactRegistry { get; set; }
 
     /// <summary>Azure DevOps organization name.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
@@ -57,11 +62,13 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
 
     /// <summary>Optional repository name override. Defaults to the feed name.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     [Alias("Repository")]
     public string? Name { get; set; }
 
     /// <summary>Registration strategy. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.Auto;
 
     /// <summary>Bootstrap/authentication mode. Auto uses supplied or prompted credentials when requested; otherwise it prefers ExistingSession when Azure Artifacts prerequisites are ready and falls back to CredentialPrompt when they are not.</summary>
@@ -71,39 +78,69 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
 
     /// <summary>When true, marks the repository as trusted.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     public bool Trusted { get; set; } = true;
 
     /// <summary>Optional PSResourceGet repository priority.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     public int? Priority { get; set; }
 
     /// <summary>Optional repository credential username.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetProfile)]
     [Alias("UserName")]
     public string? CredentialUserName { get; set; }
 
     /// <summary>Optional repository credential secret.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetProfile)]
     [Alias("Password", "Token")]
     public string? CredentialSecret { get; set; }
 
     /// <summary>Optional path to a file containing the repository credential secret.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetProfile)]
     [Alias("CredentialPath", "TokenPath")]
     public string? CredentialSecretFilePath { get; set; }
 
     /// <summary>Prompts interactively for repository credentials.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetProfile)]
     [Alias("Interactive")]
     public SwitchParameter PromptForCredential { get; set; }
 
-    /// <summary>Installs missing private-gallery prerequisites before refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</summary>
+    /// <summary>Installs missing private-gallery prerequisites before refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.</summary>
     [Parameter]
     public SwitchParameter InstallPrerequisites { get; set; }
 
     /// <summary>Executes the repository refresh.</summary>
     protected override void ProcessRecord()
     {
+        var host = new CmdletPrivateGalleryHost(this);
+        var service = new PrivateGalleryService(host);
+
+        if (ParameterSetName == ParameterSetMicrosoftArtifactRegistry)
+        {
+            var prerequisites = service.EnsureMicrosoftArtifactRegistryPrerequisites(
+                InstallPrerequisites.IsPresent);
+            var marResult = service.EnsureMicrosoftArtifactRegistryRegistered(
+                Name,
+                Tool,
+                Trusted,
+                Priority,
+                prerequisites.Status,
+                Tool == RepositoryRegistrationTool.Auto
+                    ? "Update Microsoft Artifact Registry using PSResourceGet"
+                    : $"Update Microsoft Artifact Registry using {Tool}");
+            marResult.InstalledPrerequisites = prerequisites.InstalledPrerequisites;
+            marResult.PrerequisiteInstallMessages = prerequisites.Messages;
+
+            service.WriteRegistrationSummary(marResult);
+            WriteObject(ModuleRepositoryRegistrationResultMapper.ToCmdletResult(marResult));
+            return;
+        }
+
         var provider = Provider;
         var organization = AzureDevOpsOrganization;
         var project = AzureDevOpsProject;
@@ -128,8 +165,6 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
             priority = profile.Priority;
         }
 
-        var host = new CmdletPrivateGalleryHost(this);
-        var service = new PrivateGalleryService(host);
         service.EnsureProviderSupported(provider);
 
         var endpoint = AzureArtifactsRepositoryEndpoints.Create(

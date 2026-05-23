@@ -141,8 +141,14 @@ public sealed class ModuleRepositoryRegistrationResult
     /// <summary>Outcome message from Azure Artifacts Credential Provider session priming.</summary>
     public string? CredentialProviderSessionPrimeMessage { get; set; }
 
-    /// <summary>Whether the existing-session/device-login bootstrap path is ready for Azure Artifacts.</summary>
-    public bool ExistingSessionBootstrapReady => PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
+    private bool IsMicrosoftArtifactRegistry
+        => string.Equals(Provider, "MicrosoftArtifactRegistry", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether the existing-session/device-login bootstrap path is ready.</summary>
+    public bool ExistingSessionBootstrapReady
+        => IsMicrosoftArtifactRegistry
+            ? PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion
+            : PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
 
     /// <summary>Whether the credential-prompt bootstrap path is available.</summary>
     public bool CredentialPromptBootstrapReady => (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion) || PowerShellGetAvailable;
@@ -162,6 +168,9 @@ public sealed class ModuleRepositoryRegistrationResult
                 ? false
                 : PowerShellGetAvailable;
 
+            if (IsMicrosoftArtifactRegistry)
+                return !(PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion);
+
             return ToolRequested switch
             {
                 RepositoryRegistrationTool.PSResourceGet => !psResourceGetReady,
@@ -174,14 +183,16 @@ public sealed class ModuleRepositoryRegistrationResult
 
     /// <summary>Suggested bootstrap mode based on detected prerequisites.</summary>
     public PrivateGalleryBootstrapMode RecommendedBootstrapMode
-        => ExistingSessionBootstrapReady
+        => IsMicrosoftArtifactRegistry
+            ? PrivateGalleryBootstrapMode.ExistingSession
+            : ExistingSessionBootstrapReady
             ? PrivateGalleryBootstrapMode.ExistingSession
             : CredentialPromptBootstrapReady
                 ? PrivateGalleryBootstrapMode.CredentialPrompt
                 : PrivateGalleryBootstrapMode.Auto;
 
     /// <summary>Whether native Install-PSResource is ready to use with this repository.</summary>
-    public bool InstallPSResourceReady => PSResourceGetRegistered && ExistingSessionBootstrapReady;
+    public bool InstallPSResourceReady => PSResourceGetRegistered && (IsMicrosoftArtifactRegistry || ExistingSessionBootstrapReady);
 
     /// <summary>Whether native Install-Module is ready to use with this repository.</summary>
     public bool InstallModuleReady => PowerShellGetRegistered;
@@ -231,6 +242,17 @@ public sealed class ModuleRepositoryRegistrationResult
     {
         get
         {
+            if (IsMicrosoftArtifactRegistry)
+            {
+                var marParts = new List<string> { "Register-ModuleRepository", "-MicrosoftArtifactRegistry" };
+                if (InstallPrerequisitesRecommended)
+                    marParts.Add("-InstallPrerequisites");
+                if (!string.IsNullOrWhiteSpace(RepositoryName) &&
+                    !MicrosoftArtifactRegistryRepository.IsDefaultName(RepositoryName))
+                    marParts.Add($"-Name '{RepositoryName}'");
+                return string.Join(" ", marParts);
+            }
+
             if (string.IsNullOrWhiteSpace(AzureDevOpsOrganization) || string.IsNullOrWhiteSpace(AzureArtifactsFeed))
                 return string.Empty;
 

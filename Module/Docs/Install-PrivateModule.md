@@ -24,6 +24,11 @@ Install-PrivateModule [-Name] <string[]> -ProfileName <string> [-CredentialUserN
 Install-PrivateModule [-Name] <string[]> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### MicrosoftArtifactRegistry
+```powershell
+Install-PrivateModule [-Name] <string[]> -MicrosoftArtifactRegistry [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <int>] [-InstallPrerequisites] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
 This cmdlet provides the simplified end-user flow for private gallery onboarding. You can point it at an existing
 repository name or provide Azure Artifacts details and let the cmdlet register the repository before installing
@@ -162,7 +167,7 @@ Forces reinstall even when a matching version is already present.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -174,15 +179,31 @@ Accept wildcard characters: True
 ```
 
 ### -InstallPrerequisites
-Installs missing private-gallery prerequisites before automatic registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.
+Installs missing private-gallery prerequisites before automatic registration, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Profile, AzureArtifacts
+Parameter Sets: Profile, AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MicrosoftArtifactRegistry
+Installs Microsoft-owned packages from Microsoft Artifact Registry, registering MAR first when needed.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -194,7 +215,7 @@ Module names to install.
 
 ```yaml
 Type: String[]
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: ModuleName
 Possible values:
 
@@ -210,7 +231,7 @@ Includes prerelease versions when supported by the selected installer.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -226,7 +247,7 @@ Optional PSResourceGet repository priority used during automatic registration.
 
 ```yaml
 Type: Nullable`1
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -306,7 +327,7 @@ Optional repository name override when Azure Artifacts details are supplied.
 
 ```yaml
 Type: String
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -322,7 +343,7 @@ Registration strategy used when Azure Artifacts details are supplied. Auto prefe
 
 ```yaml
 Type: RepositoryRegistrationTool
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values: Auto, PSResourceGet, PowerShellGet, Both
 
@@ -338,7 +359,7 @@ When true, marks the repository as trusted during automatic registration.
 
 ```yaml
 Type: Boolean
-Parameter Sets: AzureArtifacts
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
