@@ -211,13 +211,14 @@ public sealed class AzureArtifactsPrivateGalleryClient
             "protocolType=NuGet",
             "includeUrls=true",
             "includeAllVersions=" + includeAllVersions.ToString(CultureInfo.InvariantCulture).ToLowerInvariant(),
-            "includeDescription=" + includeDescription.ToString(CultureInfo.InvariantCulture).ToLowerInvariant(),
-            "$top=" + top.ToString(CultureInfo.InvariantCulture),
-            "$skip=" + skip.ToString(CultureInfo.InvariantCulture),
-            "api-version=" + ApiVersion
+            "includeDescription=" + includeDescription.ToString(CultureInfo.InvariantCulture).ToLowerInvariant()
         };
         if (isRelease.HasValue)
             query.Add("isRelease=" + isRelease.Value.ToString(CultureInfo.InvariantCulture).ToLowerInvariant());
+
+        query.Add("$top=" + top.ToString(CultureInfo.InvariantCulture));
+        query.Add("$skip=" + skip.ToString(CultureInfo.InvariantCulture));
+        query.Add("api-version=" + ApiVersion);
 
         builder.Query = string.Join("&", query);
         return builder.Uri;
