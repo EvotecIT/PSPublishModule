@@ -49,13 +49,18 @@
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "10.0.1",
-        "contentHash": "KGS+cdplxa0R6cRQdVMRQRdnU8aY5UcUwDLyRJVHgOAstUnpF726xOYeaW3OxtkHcnfsijO0LfDjT4kDgvYn9A=="
+        "resolved": "10.0.7",
+        "contentHash": "qvYn5etKp2m3p05CCvw48OXf0mbD57g0gq/dCjQvq2ZgXYtjB3CV6rwzO7QprxMHnkZFhJ0StrB0thrVzpF49Q=="
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
         "resolved": "8.0.0",
         "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
+      },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
       },
       "dbaclientx.core": {
         "type": "Project"
@@ -63,15 +68,16 @@
       "dbaclientx.sqlite": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.Core": "[0.3.0, )",
+          "DBAClientX.Core": "[0.6.0, )",
           "Microsoft.Data.Sqlite": "[10.0.5, )"
         }
       },
       "powerforge": {
         "type": "Project",
         "dependencies": {
-          "System.IO.Packaging": "[10.0.1, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.IO.Packaging": "[10.0.7, )",
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforgestudio.domain": {
@@ -80,7 +86,7 @@
       "powerforgestudio.orchestrator": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.SQLite": "[0.2.0, )",
+          "DBAClientX.SQLite": "[0.5.0, )",
           "PowerForge": "[1.0.0, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }

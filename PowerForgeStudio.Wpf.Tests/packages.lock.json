@@ -79,13 +79,46 @@
       },
       "Microsoft.Web.WebView2": {
         "type": "Transitive",
-        "resolved": "1.0.3856.49",
-        "contentHash": "OOBKvFgK0pUKcndvTK6/jUsbrPRwce62Wt/0hkJWDsK2AcsJ2ylOS/mLa4xAcNUTOs96YIjpPN4AHMADXJcrgQ=="
+        "resolved": "1.0.3967.48",
+        "contentHash": "b7dZ5kZ9bfU5Yo11M8feCOoiyalXCN+2Gsw674RBDBmQ2dJV5EOXb8/ivN2LuLJ+VO2V7FmK6l6LsyfEnG1lXw=="
       },
       "Newtonsoft.Json": {
         "type": "Transitive",
         "resolved": "13.0.3",
         "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
+      "OfficeIMO.Markdown": {
+        "type": "Transitive",
+        "resolved": "0.6.5",
+        "contentHash": "8tCl4cdsN/Qx+FICyFgo8tAU5nN64mQlBbROoK3gNXvD4+kfniDSwfHxYWydJMfS2BaDGMm51YZZ20FDR5loUQ=="
+      },
+      "OfficeIMO.Markdown.Html": {
+        "type": "Transitive",
+        "resolved": "0.1.5",
+        "contentHash": "z7gCXslAQLUx0bZ5JXUqvP7ZybQ94pLfYZ8PdhQ6O/qAvlYDLGtpzovCXX0yNVqTbR62pHJMiGSCBdqNMWX8iA==",
+        "dependencies": {
+          "AngleSharp": "1.3.0",
+          "OfficeIMO.Markdown": "0.6.5"
+        }
+      },
+      "OfficeIMO.MarkdownRenderer": {
+        "type": "Transitive",
+        "resolved": "0.2.5",
+        "contentHash": "vDpOtV854M3dFfNQ3tJ3r6h6MIg3l1MzVoDrYkTULkLtfgq+nJshQTUAbYwAIQVnl/XbTvoHRJNfRN7Wf3oe8g==",
+        "dependencies": {
+          "OfficeIMO.Markdown": "0.6.5",
+          "OfficeIMO.Markdown.Html": "0.1.5",
+          "System.Text.Json": "[8.0.5, 9.0.0)"
+        }
+      },
+      "OfficeIMO.MarkdownRenderer.Wpf": {
+        "type": "Transitive",
+        "resolved": "0.1.0",
+        "contentHash": "7ZetGNPohn2rgFXK7fqktR+oERRJUXOvuFpqCpEWLUgjXl3CBDamhQLkT8mYlidNSCCyHhuakjc6TynopGcJYg==",
+        "dependencies": {
+          "Microsoft.Web.WebView2": "1.0.3856.49",
+          "OfficeIMO.MarkdownRenderer": "0.2.5"
+        }
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Transitive",
@@ -116,13 +149,18 @@
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "10.0.1",
-        "contentHash": "KGS+cdplxa0R6cRQdVMRQRdnU8aY5UcUwDLyRJVHgOAstUnpF726xOYeaW3OxtkHcnfsijO0LfDjT4kDgvYn9A=="
+        "resolved": "10.0.7",
+        "contentHash": "qvYn5etKp2m3p05CCvw48OXf0mbD57g0gq/dCjQvq2ZgXYtjB3CV6rwzO7QprxMHnkZFhJ0StrB0thrVzpF49Q=="
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
         "resolved": "8.0.0",
         "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
+      },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
       },
       "System.Text.Json": {
         "type": "Transitive",
@@ -175,33 +213,16 @@
       "dbaclientx.sqlite": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.Core": "[0.3.0, )",
+          "DBAClientX.Core": "[0.6.0, )",
           "Microsoft.Data.Sqlite": "[10.0.5, )"
-        }
-      },
-      "officeimo.markdown": {
-        "type": "Project"
-      },
-      "officeimo.markdown.html": {
-        "type": "Project",
-        "dependencies": {
-          "AngleSharp": "[1.3.0, )",
-          "OfficeIMO.Markdown": "[0.6.4, )"
-        }
-      },
-      "officeimo.markdownrenderer": {
-        "type": "Project",
-        "dependencies": {
-          "OfficeIMO.Markdown": "[0.6.4, )",
-          "OfficeIMO.Markdown.Html": "[0.1.4, )",
-          "System.Text.Json": "[8.0.5, 9.0.0)"
         }
       },
       "powerforge": {
         "type": "Project",
         "dependencies": {
-          "System.IO.Packaging": "[10.0.1, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.IO.Packaging": "[10.0.7, )",
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforgestudio.domain": {
@@ -210,7 +231,7 @@
       "powerforgestudio.orchestrator": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.SQLite": "[0.2.0, )",
+          "DBAClientX.SQLite": "[0.5.0, )",
           "PowerForge": "[1.0.0, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
@@ -219,7 +240,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Web.WebView2": "[1.0.*, )",
-          "OfficeIMO.MarkdownRenderer": "[0.2.4, )",
+          "OfficeIMO.MarkdownRenderer.Wpf": "[0.1.0, )",
           "PowerForgeStudio.Domain": "[1.0.0, )",
           "PowerForgeStudio.Orchestrator": "[1.0.0, )"
         }

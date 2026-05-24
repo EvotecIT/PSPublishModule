@@ -527,6 +527,86 @@ Markdown only topic body.
     }
 
     [Fact]
+    public void MarkdownHelpWriter_RendersExamplesUsingRequestedLayout()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-Demo",
+            Synopsis = "Gets demo data.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Code = "Get-Demo -Name Test",
+                    Remarks = "Gets the named demo item."
+                }
+            }
+        };
+
+        var proseFirst = MarkdownHelpWriter.RenderCommandMarkdown(
+            "DemoModule",
+            command,
+            examplesLayout: DocumentationExampleLayout.ProseFirst);
+        var exampleSection = proseFirst.Substring(proseFirst.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+        Assert.True(
+            exampleSection.IndexOf("Gets the named demo item.", StringComparison.Ordinal) <
+            exampleSection.IndexOf("```powershell", StringComparison.Ordinal));
+
+        var allAsCode = MarkdownHelpWriter.RenderCommandMarkdown(
+            "DemoModule",
+            command,
+            examplesLayout: DocumentationExampleLayout.AllAsCode);
+        var codeFence = allAsCode.Substring(allAsCode.IndexOf("```powershell", StringComparison.Ordinal));
+        Assert.Contains("Get-Demo -Name Test", codeFence, StringComparison.Ordinal);
+        Assert.Contains("Gets the named demo item.", codeFence, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommandHelpMarkdownFormatter_UsesGeneratedHelpMarkdownShape()
+    {
+        var model = new CommandHelpModel
+        {
+            Name = "Get-Demo",
+            Synopsis = "Gets demo data.",
+            Description = "Gets demo data from a shared command-help model."
+        };
+        model.Syntax.Add(new SyntaxSet { Name = "Get-Demo" });
+        model.Syntax[0].Parameters.Add(new ParameterHelp
+        {
+            Name = "Name",
+            Type = "String",
+            Required = true,
+            Position = "0",
+            PipelineInput = "False"
+        });
+        model.Parameters.Add(new ParameterHelp
+        {
+            Name = "Name",
+            Type = "String",
+            Description = "Demo item name.",
+            Required = true,
+            Position = "0",
+            PipelineInput = "False"
+        });
+        model.Examples.Add(new ExampleHelp
+        {
+            Title = "Example 1",
+            Code = "Get-Demo -Name Test",
+            Remarks = "Gets the named demo item."
+        });
+
+        var markdown = CommandHelpMarkdownFormatter.Render("DemoModule", model, ExamplesLayout.MamlDefault);
+
+        Assert.Contains("external help file: DemoModule-help.xml", markdown, StringComparison.Ordinal);
+        Assert.Contains("## SYNTAX", markdown, StringComparison.Ordinal);
+        Assert.Contains("Get-Demo -Name <String>", markdown, StringComparison.Ordinal);
+        Assert.Contains("## PARAMETERS", markdown, StringComparison.Ordinal);
+        Assert.Contains("### -Name", markdown, StringComparison.Ordinal);
+        Assert.Contains("Parameter Sets: Get-Demo", markdown, StringComparison.Ordinal);
+        Assert.Contains("Gets the named demo item.", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void XmlDocCommentEnricher_SimplifiesCrefTokensInDescriptions()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-cref-" + Guid.NewGuid().ToString("N"));

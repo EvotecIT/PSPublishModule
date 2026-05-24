@@ -5,8 +5,8 @@
       "Microsoft.Web.WebView2": {
         "type": "Direct",
         "requested": "[1.0.*, )",
-        "resolved": "1.0.3856.49",
-        "contentHash": "OOBKvFgK0pUKcndvTK6/jUsbrPRwce62Wt/0hkJWDsK2AcsJ2ylOS/mLa4xAcNUTOs96YIjpPN4AHMADXJcrgQ=="
+        "resolved": "1.0.3967.48",
+        "contentHash": "b7dZ5kZ9bfU5Yo11M8feCOoiyalXCN+2Gsw674RBDBmQ2dJV5EOXb8/ivN2LuLJ+VO2V7FmK6l6LsyfEnG1lXw=="
       },
       "OfficeIMO.MarkdownRenderer.Wpf": {
         "type": "Direct",
@@ -108,7 +108,7 @@
       "dbaclientx.sqlite": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.Core": "[0.3.0, )",
+          "DBAClientX.Core": "[0.6.0, )",
           "Microsoft.Data.Sqlite": "[10.0.5, )"
         }
       },
@@ -124,7 +124,7 @@
       "powerforgestudio.orchestrator": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.SQLite": "[0.2.0, )",
+          "DBAClientX.SQLite": "[0.5.0, )",
           "PowerForge": "[1.0.0, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
