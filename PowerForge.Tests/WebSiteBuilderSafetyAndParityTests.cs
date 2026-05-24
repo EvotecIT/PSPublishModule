@@ -340,7 +340,7 @@ public class WebSiteBuilderSafetyAndParityTests
                 """
                 ---
                 title: Register
-                slug: register
+                slug: v1.0
                 ---
 
                 Register
@@ -356,6 +356,79 @@ public class WebSiteBuilderSafetyAndParityTests
                 """);
 
             var spec = BuildBasicSpec("content/docs", "/docs");
+            spec.ThemesRoot = "themes";
+            spec.DefaultTheme = "t";
+            spec.ThemeEngine = "scriban";
+            spec.AssetRegistry = new AssetRegistrySpec
+            {
+                Bundles = new[]
+                {
+                    new AssetBundleSpec
+                    {
+                        Name = "global",
+                        Css = new[] { "themes/t/assets/site.css", "blob:https://example.test/style" },
+                        Js = new[] { "themes/t/assets/site.js", "file:///C:/assets/tool.js" }
+                    }
+                },
+                RouteBundles = new[]
+                {
+                    new RouteBundleSpec
+                    {
+                        Match = "/**",
+                        Bundles = new[] { "global" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "docs", "v1.0", "index.html"));
+
+            Assert.Contains("href=\"../../themes/t/assets/site.css\"", html, StringComparison.Ordinal);
+            Assert.Contains("src=\"../../themes/t/assets/site.js\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"blob:https://example.test/style\"", html, StringComparison.Ordinal);
+            Assert.Contains("src=\"file:///C:/assets/tool.js\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_RendersBareAssetRegistryLinksAtRootForNotFoundPage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-route-relative-404-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "404.md"),
+                """
+                ---
+                title: Not found
+                slug: 404
+                ---
+
+                Not found
+                """);
+
+            WriteScribanTheme(root,
+                """
+                <!doctype html>
+                <html>
+                <head>{{ assets.css_html }}</head>
+                <body>{{ content }}{{ assets.js_html }}</body>
+                </html>
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
             spec.ThemesRoot = "themes";
             spec.DefaultTheme = "t";
             spec.ThemeEngine = "scriban";
@@ -385,10 +458,12 @@ public class WebSiteBuilderSafetyAndParityTests
 
             var plan = WebSitePlanner.Plan(spec, configPath);
             var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
-            var html = File.ReadAllText(Path.Combine(build.OutputPath, "docs", "register", "index.html"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "404.html"));
 
-            Assert.Contains("href=\"../../themes/t/assets/site.css\"", html, StringComparison.Ordinal);
-            Assert.Contains("src=\"../../themes/t/assets/site.js\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"themes/t/assets/site.css\"", html, StringComparison.Ordinal);
+            Assert.Contains("src=\"themes/t/assets/site.js\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("../themes/t/assets/site.css", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("../themes/t/assets/site.js", html, StringComparison.Ordinal);
         }
         finally
         {

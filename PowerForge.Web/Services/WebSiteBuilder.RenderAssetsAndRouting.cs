@@ -132,13 +132,14 @@ public static partial class WebSiteBuilder
 
     private static bool IsExternalOrRootedAssetHref(string href)
     {
-        return href.StartsWith("/", StringComparison.Ordinal) ||
-               href.StartsWith("#", StringComparison.Ordinal) ||
-               href.StartsWith("//", StringComparison.Ordinal) ||
-               href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-               href.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
-               href.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
-               href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
+        if (href.StartsWith("/", StringComparison.Ordinal) ||
+            href.StartsWith("#", StringComparison.Ordinal) ||
+            href.StartsWith("//", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return Uri.TryCreate(href, UriKind.Absolute, out _);
     }
 
     private static string BuildRelativePrefixForRoute(string route)
@@ -150,12 +151,25 @@ public static partial class WebSiteBuilder
         var isDirectoryRoute = normalized.EndsWith("/", StringComparison.Ordinal);
         var segments = normalized.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
         var lastSegment = segments.Length == 0 ? string.Empty : segments[^1];
-        var looksLikeFileRoute = lastSegment.Contains('.', StringComparison.Ordinal);
+        var looksLikeFileRoute = lastSegment.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                                 lastSegment.EndsWith(".htm", StringComparison.OrdinalIgnoreCase);
         var depth = isDirectoryRoute || !looksLikeFileRoute ? segments.Length : Math.Max(0, segments.Length - 1);
         if (depth <= 0)
             return string.Empty;
 
         return string.Concat(Enumerable.Repeat("../", depth));
+    }
+
+    private static string ResolveHtmlAssetBaseRoute(string route)
+    {
+        var normalized = NormalizePath(route);
+        if (normalized.Equals("404", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("404.html", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/404.html";
+        }
+
+        return route;
     }
 
     private readonly record struct AssetSlotUsage(bool UsePreloadsSlot, bool UseCssSlot);
