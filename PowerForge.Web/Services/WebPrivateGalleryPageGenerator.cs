@@ -48,7 +48,7 @@ public static class WebPrivateGalleryPageGenerator
         {
             "index"
         };
-        WriteGalleryIndexPage(outputDirectory, gallery, packages, packageSlugs, profileName, options);
+        WriteGalleryIndexPage(outputDirectory, gallery, packages, packageSlugs, profileName, repositoryName, options);
 
         foreach (var package in packages)
         {
@@ -94,12 +94,19 @@ public static class WebPrivateGalleryPageGenerator
         IReadOnlyList<PrivateGalleryPackage> packages,
         IReadOnlyDictionary<PrivateGalleryPackage, string> packageSlugs,
         string profileName,
+        string repositoryName,
         WebPrivateGalleryPageOptions options)
     {
         var sb = new StringBuilder();
-        AppendFrontMatter(sb, "Modules", gallery.Title, options.Layout, new Dictionary<string, string?>
+        AppendFrontMatter(sb, "Modules", gallery.Title, ResolvePageLayout(options.IndexLayout, options.Layout), new Dictionary<string, string?>
         {
-            ["profile"] = profileName
+            ["profile"] = profileName,
+            ["pageKind"] = "module-catalog",
+            ["feed"] = gallery.Feed.Name,
+            ["moduleCount"] = packages.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["repositoryName"] = repositoryName,
+            ["organization"] = gallery.Feed.Organization,
+            ["project"] = gallery.Feed.Project
         });
         sb.AppendLine("# Modules");
         sb.AppendLine();
@@ -155,10 +162,15 @@ public static class WebPrivateGalleryPageGenerator
         var nativeInstall = $"Install-PSResource -Name {QuotePowerShell(package.Name)} -Repository {QuotePowerShell(repositoryName)} -TrustRepository";
 
         var sb = new StringBuilder();
-        AppendFrontMatter(sb, package.Name, description, options.Layout, new Dictionary<string, string?>
+        AppendFrontMatter(sb, package.Name, description, ResolvePageLayout(options.ModuleLayout, options.Layout), new Dictionary<string, string?>
         {
+            ["pageKind"] = "module-detail",
             ["module"] = package.Name,
-            ["version"] = version
+            ["version"] = version,
+            ["commandCount"] = commands.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["packageDocCount"] = packageDocs.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["portalDocCount"] = portalDocs.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["dependencyCount"] = dependencies.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
         });
 
         sb.AppendLine($"# {package.Name}");
@@ -204,11 +216,14 @@ public static class WebPrivateGalleryPageGenerator
         var path = Path.Combine(docDir, "index.md");
 
         var sb = new StringBuilder();
-        AppendFrontMatter(sb, doc.Title, doc.Summary, options.Layout, new Dictionary<string, string?>
+        AppendFrontMatter(sb, doc.Title, doc.Summary, ResolvePageLayout(options.DocumentLayout, options.Layout), new Dictionary<string, string?>
         {
+            ["pageKind"] = "module-document",
             ["module"] = package.Name,
             ["source"] = doc.SourceKind,
-            ["kind"] = doc.Kind
+            ["kind"] = doc.Kind,
+            ["sourceId"] = doc.SourceId,
+            ["navigationGroup"] = doc.NavigationGroup
         });
         sb.AppendLine($"# {doc.Title}");
         sb.AppendLine();
@@ -463,6 +478,9 @@ public static class WebPrivateGalleryPageGenerator
 
     private static string? FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static string? ResolvePageLayout(params string?[] layouts)
+        => FirstNonEmpty(layouts);
 
     private static bool Matches(string? left, string? right)
         => !string.IsNullOrWhiteSpace(left) &&

@@ -45,6 +45,9 @@ internal static partial class WebPipelineRunner
             ProfileName = GetString(step, "profileName") ?? GetString(step, "profile-name"),
             RepositoryName = GetString(step, "repositoryName") ?? GetString(step, "repository-name"),
             Layout = GetString(step, "layout") ?? "page",
+            IndexLayout = GetString(step, "indexLayout") ?? GetString(step, "index-layout"),
+            ModuleLayout = GetString(step, "moduleLayout") ?? GetString(step, "module-layout"),
+            DocumentLayout = GetString(step, "documentLayout") ?? GetString(step, "document-layout"),
             GenerateDocumentPages = GetBool(step, "generateDocumentPages") ??
                                     GetBool(step, "generate-document-pages") ??
                                     true
