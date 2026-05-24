@@ -135,7 +135,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 "--nologo"
             });
 
-            if (plan.Restore)
+            if (!plan.Restore)
                 args.Add("--no-restore");
         }
         else
@@ -149,7 +149,7 @@ public sealed partial class DotNetPublishPipelineRunner
             args.Add("/t:Build");
             args.Add("/nologo");
             args.Add($"/p:Configuration={plan.Configuration}");
-            if (!plan.Restore)
+            if (plan.Restore)
                 args.Add("/restore");
         }
 
@@ -277,8 +277,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
             if (options.ForceUpdateFromAnyVersion.HasValue)
             {
-                var force = updateSettings.Element(ns + "ForceUpdateFromAnyVersion");
-                force ??= new XElement(ns + "ForceUpdateFromAnyVersion");
+                var forceNs = ResolveForceUpdateNamespace(root, ns, options);
+                var force = updateSettings.Element(forceNs + "ForceUpdateFromAnyVersion");
+                force ??= new XElement(forceNs + "ForceUpdateFromAnyVersion");
                 force.Value = ToXmlBool(options.ForceUpdateFromAnyVersion.Value);
                 if (force.Parent is null)
                     updateSettings.Add(force);
@@ -309,6 +310,19 @@ public sealed partial class DotNetPublishPipelineRunner
         => string.Equals(options.SchemaVersion, "2021", StringComparison.OrdinalIgnoreCase)
             ? "http://schemas.microsoft.com/appx/appinstaller/2021"
             : "http://schemas.microsoft.com/appx/appinstaller/2017/2";
+
+    private static XNamespace ResolveForceUpdateNamespace(
+        XElement root,
+        XNamespace appInstallerNamespace,
+        DotNetPublishAppInstallerOptions options)
+    {
+        if (string.Equals(options.SchemaVersion, "2021", StringComparison.OrdinalIgnoreCase))
+            return appInstallerNamespace;
+
+        XNamespace s4 = "http://schemas.microsoft.com/appx/appinstaller/2021";
+        root.SetAttributeValue(XNamespace.Xmlns + "s4", s4.NamespaceName);
+        return s4;
+    }
 
     private static void RewriteElementNamespace(XElement element, XNamespace ns)
     {

@@ -2024,7 +2024,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!IsSupportedAppInstallerSchemaVersion(clone.SchemaVersion))
         {
             throw new ArgumentException(
-                $"Store package '{storePackageId}' AppInstaller.SchemaVersion must be 2021 or 2017.");
+                $"Store package '{storePackageId}' AppInstaller.SchemaVersion must be 2021 or 2017/2.");
         }
 
         if (clone.HoursBetweenUpdateChecks is < 0 or > 255)
@@ -2053,7 +2053,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsSupportedAppInstallerSchemaVersion(string schemaVersion)
         => string.Equals(schemaVersion, "2021", StringComparison.OrdinalIgnoreCase) ||
-           string.Equals(schemaVersion, "2017", StringComparison.OrdinalIgnoreCase);
+           string.Equals(schemaVersion, "2017", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(schemaVersion, "2017/2", StringComparison.OrdinalIgnoreCase);
 
     private static string ResolveStorePackagingProjectPath(
         string storePackageId,

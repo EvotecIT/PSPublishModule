@@ -205,7 +205,42 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
                 new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
 
             Assert.Contains("AppInstaller.SchemaVersion", ex.Message, StringComparison.Ordinal);
-            Assert.Contains("2021 or 2017", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("2021 or 2017/2", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_AcceptsSchemaListedAppInstallerVersion()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var packaging = CreateProject(root, "Store/Package.wapproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.StorePackages = new[]
+            {
+                new DotNetPublishStorePackage
+                {
+                    Id = "app.store",
+                    PrepareFromTarget = "app",
+                    PackagingProjectPath = packaging,
+                    AppInstaller = new DotNetPublishAppInstallerOptions
+                    {
+                        SchemaVersion = "2017/2"
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var storePackage = Assert.Single(plan.StorePackages);
+
+            Assert.Equal("2017/2", storePackage.AppInstaller!.SchemaVersion);
         }
         finally
         {
@@ -229,7 +264,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             {
                 ProjectRoot = root,
                 Configuration = "Release",
-                Restore = false,
+                Restore = true,
                 Build = false,
                 StorePackages = new[]
                 {
@@ -309,7 +344,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             {
                 ProjectRoot = root,
                 Configuration = "Release",
-                Restore = false,
+                Restore = true,
                 Build = false,
                 StorePackages = new[]
                 {
@@ -373,7 +408,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             {
                 ProjectRoot = root,
                 Configuration = "Release",
-                Restore = false,
+                Restore = true,
                 Build = false,
                 StorePackages = new[]
                 {
@@ -457,6 +492,42 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             Assert.NotNull(rootElement.Element(ns + "UpdateSettings")!.Element(ns + "AutomaticBackgroundTask"));
             Assert.Equal("true", rootElement.Element(ns + "UpdateSettings")!.Element(ns + "ForceUpdateFromAnyVersion")!.Value);
             Assert.Equal("https://fallback.contoso.test/app.appinstaller", rootElement.Element(ns + "UpdateUris")!.Element(ns + "UpdateUri")!.Value);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void NormalizeAppInstallerFile_UsesS4NamespaceForForceUpdateIn2017Schema()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var appInstaller = Path.Combine(root, "Contoso.appinstaller");
+            File.WriteAllText(appInstaller, """
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2" Version="1.0.0.0" Uri="https://old.example/app.appinstaller">
+  <MainBundle Name="Contoso.App" Publisher="CN=Contoso" Version="1.0.0.0" Uri="https://old.example/app.msixbundle" />
+</AppInstaller>
+""", new UTF8Encoding(false));
+
+            DotNetPublishPipelineRunner.NormalizeAppInstallerFile(
+                appInstaller,
+                new DotNetPublishAppInstallerOptions
+                {
+                    SchemaVersion = "2017/2",
+                    ForceUpdateFromAnyVersion = true
+                });
+
+            var document = XDocument.Load(appInstaller);
+            var ns = XNamespace.Get("http://schemas.microsoft.com/appx/appinstaller/2017/2");
+            var s4 = XNamespace.Get("http://schemas.microsoft.com/appx/appinstaller/2021");
+            var updateSettings = document.Root!.Element(ns + "UpdateSettings")!;
+
+            Assert.Equal("true", updateSettings.Element(s4 + "ForceUpdateFromAnyVersion")!.Value);
+            Assert.Null(updateSettings.Element(ns + "ForceUpdateFromAnyVersion"));
         }
         finally
         {
