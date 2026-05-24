@@ -340,7 +340,7 @@ public sealed class PrivateGalleryEngineTests
     }
 
     [Fact]
-    public void PowerShellModulePackageInspector_SkipsOversizedDocumentContent()
+    public void PowerShellModulePackageInspector_TruncatesOversizedDocumentContent()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-doc-limit-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -357,8 +357,10 @@ public sealed class PrivateGalleryEngineTests
             var metadata = new PowerShellModulePackageInspector().Inspect(packagePath, maxDocumentContentBytes: 16);
             var readme = Assert.Single(metadata.Documents, document => document.Kind == "readme");
 
-            Assert.Null(readme.Content);
-            Assert.Contains(metadata.Warnings, warning => warning.Contains("document content size limit", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(readme.Content);
+            Assert.StartsWith("# Contoso", readme.Content, StringComparison.Ordinal);
+            Assert.DoesNotContain("tiny test limit", readme.Content, StringComparison.Ordinal);
+            Assert.Contains(metadata.Warnings, warning => warning.Contains("truncated document content", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -298,15 +299,15 @@ public sealed class PowerShellModulePackageInspector
             return null;
 
         var maxBytes = Math.Min(maxDocumentContentBytes, MaxTextBytes);
-        if (entry.Length > maxBytes)
-        {
-            metadata.Warnings.Add($"Skipped document content for '{entry.FullName}' because it exceeds the private gallery document content size limit.");
-            return null;
-        }
+        var truncated = entry.Length > maxBytes;
 
         try
         {
-            return ReadTextEntry(entry);
+            var content = ReadTextEntry(entry, maxBytes);
+            if (truncated)
+                metadata.Warnings.Add($"Truncated document content for '{entry.FullName}' to the private gallery document content size limit.");
+
+            return content;
         }
         catch (Exception ex)
         {
@@ -337,6 +338,41 @@ public sealed class PowerShellModulePackageInspector
         using var stream = entry.Open();
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static string ReadTextEntry(ZipArchiveEntry entry, int maxBytes)
+    {
+        if (maxBytes <= 0)
+            return string.Empty;
+
+        using var stream = entry.Open();
+        var buffer = new byte[Math.Min(maxBytes, MaxTextBytes)];
+        var totalBytes = 0;
+
+        while (totalBytes < buffer.Length)
+        {
+            var bytesRead = stream.Read(buffer, totalBytes, buffer.Length - totalBytes);
+            if (bytesRead == 0)
+                break;
+
+            totalBytes += bytesRead;
+        }
+
+        var offset = HasUtf8ByteOrderMark(buffer, totalBytes) ? Encoding.UTF8.GetPreamble().Length : 0;
+        var decoder = Encoding.UTF8.GetDecoder();
+        var charCount = decoder.GetCharCount(buffer, offset, totalBytes - offset, flush: false);
+        var chars = new char[charCount];
+        decoder.GetChars(buffer, offset, totalBytes - offset, chars, 0, flush: false);
+        return new string(chars);
+    }
+
+    private static bool HasUtf8ByteOrderMark(byte[] buffer, int totalBytes)
+    {
+        var preamble = Encoding.UTF8.GetPreamble();
+        return totalBytes >= preamble.Length &&
+               buffer[0] == preamble[0] &&
+               buffer[1] == preamble[1] &&
+               buffer[2] == preamble[2];
     }
 
     private static string NormalizePackagePath(string path)
