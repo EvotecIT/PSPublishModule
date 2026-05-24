@@ -13,11 +13,14 @@ public static partial class WebPortalDocsGenerator
         HttpClient http,
         List<string> include,
         List<string> exclude,
+        string? token,
         WebPortalDocsSource normalizedSource,
         List<string> warnings)
     {
         var treeUrl = $"https://api.github.com/repos/{owner}/{repo}/git/trees/{Uri.EscapeDataString(branch)}?recursive=1";
-        using var response = await http.GetAsync(treeUrl).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Get, treeUrl);
+        ApplyGitHubAuthorization(request, token);
+        using var response = await http.SendAsync(request).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             AddSourceWarning(normalizedSource, warnings, $"GitHub tree request for '{owner}/{repo}@{branch}' failed with {(int)response.StatusCode} {response.ReasonPhrase}.");
@@ -28,6 +31,11 @@ public static partial class WebPortalDocsGenerator
         using var json = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
         if (!json.RootElement.TryGetProperty("tree", out var tree) || tree.ValueKind != JsonValueKind.Array)
             return ExplicitIncludePaths(include);
+        if (json.RootElement.TryGetProperty("truncated", out var truncated) &&
+            truncated.ValueKind == JsonValueKind.True)
+        {
+            AddSourceWarning(normalizedSource, warnings, $"GitHub tree request for '{owner}/{repo}@{branch}' was truncated; generated repository docs may be incomplete.");
+        }
 
         return tree.EnumerateArray()
             .Where(item => item.TryGetProperty("type", out var type) && type.GetString()?.Equals("blob", StringComparison.OrdinalIgnoreCase) == true)
@@ -84,32 +92,34 @@ public static partial class WebPortalDocsGenerator
         WebPortalDocsSource source,
         List<string> warnings)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        ApplyAzureDevOpsAuthorization(request, sourceSpec, token);
-        using var response = await http.SendAsync(request).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            AddSourceWarning(source, warnings, $"Azure DevOps content request '{url}' failed with {(int)response.StatusCode} {response.ReasonPhrase}.");
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            ApplyAzureDevOpsAuthorization(request, sourceSpec, token);
+            using var response = await http.SendAsync(request).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                AddSourceWarning(source, warnings, $"Azure DevOps content request '{url}' failed with {(int)response.StatusCode} {response.ReasonPhrase}.");
+                return null;
+            }
+
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            var body = Encoding.UTF8.GetString(bytes);
+            if (!string.IsNullOrWhiteSpace(mediaType) && mediaType.Contains("json", StringComparison.OrdinalIgnoreCase))
+            {
+                using var json = JsonDocument.Parse(body);
+                if (json.RootElement.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
+                    return TruncateText(content.GetString(), maxContentBytes, url, "Azure DevOps content request", source, warnings);
+            }
+
+            return TruncateBytes(bytes, maxContentBytes, url, "Azure DevOps content request", source, warnings);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException)
+        {
+            AddSourceWarning(source, warnings, $"Azure DevOps content request '{url}' failed: {ex.Message}");
             return null;
         }
-
-        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-        if (bytes.Length > maxContentBytes)
-        {
-            AddSourceWarning(source, warnings, $"Azure DevOps content request '{url}' returned {bytes.Length} bytes and was truncated to {maxContentBytes} bytes.");
-            bytes = bytes.Take(maxContentBytes).ToArray();
-        }
-
-        var mediaType = response.Content.Headers.ContentType?.MediaType;
-        var body = Encoding.UTF8.GetString(bytes);
-        if (!string.IsNullOrWhiteSpace(mediaType) && mediaType.Contains("json", StringComparison.OrdinalIgnoreCase))
-        {
-            using var json = JsonDocument.Parse(body);
-            if (json.RootElement.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
-                return content.GetString();
-        }
-
-        return body;
     }
 
     private static List<string> ExplicitIncludePaths(List<string> include)
@@ -120,23 +130,47 @@ public static partial class WebPortalDocsGenerator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    private static async Task<string?> FetchText(string rawUrl, HttpClient http, int maxContentBytes, WebPortalDocsSource source, List<string> warnings)
+    private static async Task<string?> FetchText(string rawUrl, HttpClient http, int maxContentBytes, string? token, WebPortalDocsSource source, List<string> warnings)
     {
-        using var response = await http.GetAsync(rawUrl).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            AddSourceWarning(source, warnings, $"Content request '{rawUrl}' failed with {(int)response.StatusCode} {response.ReasonPhrase}.");
+            using var request = new HttpRequestMessage(HttpMethod.Get, rawUrl);
+            ApplyGitHubAuthorization(request, token);
+            using var response = await http.SendAsync(request).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                AddSourceWarning(source, warnings, $"Content request '{rawUrl}' failed with {(int)response.StatusCode} {response.ReasonPhrase}.");
+                return null;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            return TruncateBytes(bytes, maxContentBytes, rawUrl, "Content request", source, warnings);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            AddSourceWarning(source, warnings, $"Content request '{rawUrl}' failed: {ex.Message}");
             return null;
         }
+    }
 
-        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+    private static string TruncateBytes(byte[] bytes, int maxContentBytes, string url, string label, WebPortalDocsSource source, List<string> warnings)
+    {
         if (bytes.Length > maxContentBytes)
         {
-            AddSourceWarning(source, warnings, $"Content request '{rawUrl}' returned {bytes.Length} bytes and was truncated to {maxContentBytes} bytes.");
+            AddSourceWarning(source, warnings, $"{label} '{url}' returned {bytes.Length} bytes and was truncated to {maxContentBytes} bytes.");
             bytes = bytes.Take(maxContentBytes).ToArray();
         }
 
         return Encoding.UTF8.GetString(bytes);
+    }
+
+    private static string? TruncateText(string? value, int maxContentBytes, string url, string label, WebPortalDocsSource source, List<string> warnings)
+    {
+        if (value is null)
+            return null;
+
+        var bytes = Encoding.UTF8.GetBytes(value);
+        return TruncateBytes(bytes, maxContentBytes, url, label, source, warnings);
     }
 
     private static bool IsAzureDevOpsFolder(JsonElement item)
@@ -174,6 +208,12 @@ public static partial class WebPortalDocsGenerator
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
+    }
+
+    private static void ApplyGitHubAuthorization(HttpRequestMessage request, string? token)
+    {
+        if (!string.IsNullOrWhiteSpace(token))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
     private static string EscapePath(string path)

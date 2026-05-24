@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -40,7 +41,7 @@ public static partial class WebPortalDocsGenerator
 
         var sourceSpec = LoadSources(sourcesPath, document.Warnings);
         var gallery = LoadPrivateGallery(galleryPath, document.Warnings);
-        using var http = CreateHttpClient(options, messageHandler, token);
+        using var http = CreateHttpClient(options, messageHandler);
 
         foreach (var source in sourceSpec.Sources)
         {
@@ -49,11 +50,11 @@ public static partial class WebPortalDocsGenerator
 
             try
             {
-                var docs = source.Kind?.Trim().ToLowerInvariant() switch
+                var docs = normalizedSource.Kind.Trim().ToLowerInvariant() switch
                 {
                     "local" => IndexLocalSource(sourceSpec.Defaults, source, normalizedSource, baseDir, options, document.Warnings),
                     "package" => IndexPackageSource(sourceSpec.Defaults, source, normalizedSource, gallery, document.Warnings),
-                    "github" => await IndexGitHubSource(sourceSpec.Defaults, source, normalizedSource, http, options, document.Warnings).ConfigureAwait(false),
+                    "github" => await IndexGitHubSource(sourceSpec.Defaults, source, normalizedSource, http, options, token, document.Warnings).ConfigureAwait(false),
                     "azure-devops" or "azuredevops" => await IndexAzureDevOpsSource(sourceSpec.Defaults, source, normalizedSource, http, options, token, document.Warnings).ConfigureAwait(false),
                     _ => UnsupportedSource(source, normalizedSource, document.Warnings)
                 };
@@ -131,7 +132,15 @@ public static partial class WebPortalDocsGenerator
             return null;
         }
 
-        return JsonSerializer.Deserialize<PrivateGalleryDocument>(File.ReadAllText(galleryPath), WebJson.Options);
+        try
+        {
+            return JsonSerializer.Deserialize<PrivateGalleryDocument>(File.ReadAllText(galleryPath), WebJson.Options);
+        }
+        catch (JsonException ex)
+        {
+            warnings.Add($"Private gallery feed '{galleryPath}' could not be parsed: {ex.Message}. Package-backed portal docs were skipped.");
+            return null;
+        }
     }
 
     private static IEnumerable<WebPortalDocEntry> IndexLocalSource(
@@ -202,13 +211,12 @@ public static partial class WebPortalDocsGenerator
             var assets = package.Module?.Documents ?? package.Versions.SelectMany(version => version.Module?.Documents ?? Enumerable.Empty<PrivateGalleryDocumentAsset>()).ToList();
             foreach (var asset in assets.OrderBy(asset => asset.Path, StringComparer.OrdinalIgnoreCase))
             {
-                var doc = CreateDocument(source, normalizedSource, asset.Path, null, package.WebUrl, null, asset.Kind, docs.Count);
+                var kind = string.IsNullOrWhiteSpace(asset.Kind) ? Classify(asset.Path, classify) : asset.Kind;
+                var doc = CreateDocument(source, normalizedSource, asset.Path, null, package.WebUrl, null, kind, docs.Count);
                 doc.Module = source.RelationshipDefaults?.Module ?? source.Placement?.Module ?? package.Module?.Name ?? package.Name;
                 doc.Package = package.Name;
                 doc.Version = package.Module?.Version ?? package.LatestVersion;
                 doc.Title = string.IsNullOrWhiteSpace(asset.Title) ? ExtractTitle(null, asset.Path) : asset.Title!;
-                if (string.IsNullOrWhiteSpace(doc.Kind))
-                    doc.Kind = Classify(asset.Path, classify);
                 docs.Add(doc);
             }
         }
@@ -222,6 +230,7 @@ public static partial class WebPortalDocsGenerator
         WebPortalDocsSource normalizedSource,
         HttpClient http,
         WebPortalDocsOptions options,
+        string? token,
         List<string> warnings)
     {
         if (string.IsNullOrWhiteSpace(source.Owner) || string.IsNullOrWhiteSpace(source.Repo))
@@ -235,7 +244,7 @@ public static partial class WebPortalDocsGenerator
         var include = EffectiveList(source.Include, defaults.Include, DefaultIncludePatterns());
         var exclude = EffectiveList(source.Exclude, defaults.Exclude, DefaultExcludePatterns());
         var classify = MergeClassify(defaults.Classify, source.Classify);
-        var paths = await GetGitHubPaths(source.Owner, source.Repo, branch, http, include, exclude, normalizedSource, warnings).ConfigureAwait(false);
+        var paths = await GetGitHubPaths(source.Owner, source.Repo, branch, http, include, exclude, token, normalizedSource, warnings).ConfigureAwait(false);
         var docs = new List<WebPortalDocEntry>();
 
         foreach (var path in paths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
@@ -243,7 +252,7 @@ public static partial class WebPortalDocsGenerator
             var rawUrl = BuildGitHubRawUrl(source.Owner, source.Repo, branch, path);
             string? content = null;
             if (options.IncludeContent)
-                content = await FetchText(rawUrl, http, options.MaxContentBytes, normalizedSource, warnings).ConfigureAwait(false);
+                content = await FetchText(rawUrl, http, options.MaxContentBytes, token, normalizedSource, warnings).ConfigureAwait(false);
 
             var blobUrl = $"https://github.com/{source.Owner}/{source.Repo}/blob/{Uri.EscapeDataString(branch)}/{EscapePath(path)}";
             docs.Add(CreateDocument(source, normalizedSource, path, content, blobUrl, rawUrl, Classify(path, classify), docs.Count));
@@ -544,13 +553,11 @@ public static partial class WebPortalDocsGenerator
         return Encoding.UTF8.GetString(buffer, 0, read);
     }
 
-    private static HttpClient CreateHttpClient(WebPortalDocsOptions options, HttpMessageHandler? messageHandler, string? token)
+    private static HttpClient CreateHttpClient(WebPortalDocsOptions options, HttpMessageHandler? messageHandler)
     {
         var client = messageHandler is null ? new HttpClient() : new HttpClient(messageHandler, disposeHandler: false);
         client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.RequestTimeoutSeconds));
         client.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web.PortalDocsIndex/1.0");
-        if (!string.IsNullOrWhiteSpace(token))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
     }
 
@@ -662,7 +669,11 @@ public static partial class WebPortalDocsGenerator
         => value.Replace('\\', '/').TrimStart('/');
 
     private static string MakeStableId(string sourceId, string path)
-        => MakeSafeFragment(sourceId + "-" + NormalizePath(path));
+    {
+        var normalized = NormalizePath(path);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sourceId + "|" + normalized));
+        return MakeSafeFragment(sourceId + "-" + normalized) + "-" + Convert.ToHexString(hash, 0, 4).ToLowerInvariant();
+    }
 
     private static string MakeSafeFragment(string value)
     {
