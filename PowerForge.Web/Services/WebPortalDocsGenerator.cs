@@ -53,7 +53,7 @@ public static partial class WebPortalDocsGenerator
                 var docs = normalizedSource.Kind.Trim().ToLowerInvariant() switch
                 {
                     "local" => IndexLocalSource(sourceSpec.Defaults, source, normalizedSource, baseDir, options, document.Warnings),
-                    "package" => IndexPackageSource(sourceSpec.Defaults, source, normalizedSource, gallery, document.Warnings),
+                    "package" => IndexPackageSource(sourceSpec.Defaults, source, normalizedSource, gallery, options, document.Warnings),
                     "github" => await IndexGitHubSource(sourceSpec.Defaults, source, normalizedSource, http, options, token, document.Warnings).ConfigureAwait(false),
                     "azure-devops" or "azuredevops" => await IndexAzureDevOpsSource(sourceSpec.Defaults, source, normalizedSource, http, options, token, document.Warnings).ConfigureAwait(false),
                     _ => UnsupportedSource(source, normalizedSource, document.Warnings)
@@ -184,6 +184,7 @@ public static partial class WebPortalDocsGenerator
         WebPortalDocsSourceSpec source,
         WebPortalDocsSource normalizedSource,
         PrivateGalleryDocument? gallery,
+        WebPortalDocsOptions options,
         List<string> warnings)
     {
         if (gallery is null)
@@ -212,21 +213,34 @@ public static partial class WebPortalDocsGenerator
             foreach (var asset in assets.OrderBy(asset => asset.Path, StringComparer.OrdinalIgnoreCase))
             {
                 var kind = string.IsNullOrWhiteSpace(asset.Kind) ? Classify(asset.Path, classify) : asset.Kind;
-                var doc = CreateDocument(source, normalizedSource, asset.Path, asset.Content, package.WebUrl, null, kind, docs.Count);
+                var content = ApplyContentPolicy(asset.Content, options);
+                var doc = CreateDocument(source, normalizedSource, asset.Path, content, package.WebUrl, null, kind, docs.Count);
                 doc.Module = source.RelationshipDefaults?.Module ?? source.Placement?.Module ?? package.Module?.Name ?? package.Name;
                 doc.Package = package.Name;
                 doc.Version = package.Module?.Version ?? package.LatestVersion;
                 doc.Title = string.IsNullOrWhiteSpace(asset.Title) ? ExtractTitle(null, asset.Path) : asset.Title!;
-                if (!string.IsNullOrWhiteSpace(asset.Content))
+                if (!string.IsNullOrWhiteSpace(content))
                 {
-                    doc.Title = ExtractTitle(asset.Content, asset.Path);
-                    doc.Summary = ExtractSummary(asset.Content);
+                    doc.Title = ExtractTitle(content, asset.Path);
+                    doc.Summary = ExtractSummary(content);
                 }
                 docs.Add(doc);
             }
         }
 
         return docs;
+    }
+
+    private static string? ApplyContentPolicy(string? content, WebPortalDocsOptions options)
+    {
+        if (!options.IncludeContent || string.IsNullOrWhiteSpace(content))
+            return null;
+
+        var max = Math.Max(1, options.MaxContentBytes);
+        var bytes = Encoding.UTF8.GetBytes(content);
+        return bytes.Length <= max
+            ? content
+            : Encoding.UTF8.GetString(bytes, 0, max);
     }
 
     private static async Task<IEnumerable<WebPortalDocEntry>> IndexGitHubSource(

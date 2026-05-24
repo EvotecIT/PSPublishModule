@@ -119,6 +119,76 @@ public sealed class PortalDocsIndexTests
     }
 
     [Fact]
+    public void WebPortalDocsGenerator_HonorsContentPolicyForPackageDocs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-package-policy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, "data", "private-gallery"));
+
+        try
+        {
+            var gallery = new PrivateGalleryDocument
+            {
+                Packages =
+                {
+                    new PrivateGalleryPackage
+                    {
+                        Name = "Contoso.Tools",
+                        Module = new PrivateGalleryModuleMetadata
+                        {
+                            Name = "Contoso.Tools",
+                            Documents =
+                            {
+                                new PrivateGalleryDocumentAsset
+                                {
+                                    Path = "README.md",
+                                    Kind = "readme",
+                                    Content = "1234567890"
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            File.WriteAllText(Path.Combine(root, "data", "private-gallery", "feed.json"), JsonSerializer.Serialize(gallery, JsonOptions));
+            File.WriteAllText(Path.Combine(root, "portal.sources.json"),
+                """
+                {
+                  "sources": [
+                    { "id": "pkg", "kind": "package", "module": "Contoso.Tools" }
+                  ]
+                }
+                """);
+
+            var withoutContent = WebPortalDocsGenerator.Generate(new WebPortalDocsOptions
+            {
+                BaseDirectory = root,
+                SourcesPath = "./portal.sources.json",
+                PrivateGalleryPath = "./data/private-gallery/feed.json",
+                OutputDirectory = "./data/portal-off",
+                IncludeContent = false
+            });
+            var withoutDocs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(withoutContent.DocsPath), JsonOptions)!;
+            Assert.Null(Assert.Single(withoutDocs.Documents).Content);
+
+            var limited = WebPortalDocsGenerator.Generate(new WebPortalDocsOptions
+            {
+                BaseDirectory = root,
+                SourcesPath = "./portal.sources.json",
+                PrivateGalleryPath = "./data/private-gallery/feed.json",
+                OutputDirectory = "./data/portal-limited",
+                MaxContentBytes = 4
+            });
+            var limitedDocs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(limited.DocsPath), JsonOptions)!;
+            Assert.Equal("1234", Assert.Single(limitedDocs.Documents).Content);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void WebPortalDocsGenerator_FetchesGitHubRepositoryDocs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-gh-" + Guid.NewGuid().ToString("N"));
