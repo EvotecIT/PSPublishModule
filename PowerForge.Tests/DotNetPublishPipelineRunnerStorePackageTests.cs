@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Xml.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -124,6 +125,51 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             Assert.Equal("net8.0", storeStep.Framework);
             Assert.Equal("win-arm64", storeStep.Runtime);
             Assert.Equal(DotNetPublishStyle.FrameworkDependent, storeStep.Style);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_PreservesTypedAppInstallerOptions()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var packaging = CreateProject(root, "Store/Package.wapproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.StorePackages = new[]
+            {
+                new DotNetPublishStorePackage
+                {
+                    Id = "app.store",
+                    PrepareFromTarget = "app",
+                    PackagingProjectPath = packaging,
+                    AppInstaller = new DotNetPublishAppInstallerOptions
+                    {
+                        Uri = "https://downloads.contoso.test/app/app.appinstaller",
+                        HoursBetweenUpdateChecks = 4,
+                        ShowPrompt = true,
+                        UpdateBlocksActivation = true,
+                        UpdateUris = new[] { "https://fallback.contoso.test/app.appinstaller" }
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var storePackage = Assert.Single(plan.StorePackages);
+
+            Assert.NotNull(storePackage.AppInstaller);
+            Assert.Equal("https://downloads.contoso.test/app/app.appinstaller", storePackage.AppInstaller!.Uri);
+            Assert.Equal(4, storePackage.AppInstaller.HoursBetweenUpdateChecks);
+            Assert.True(storePackage.AppInstaller.ShowPrompt);
+            Assert.True(storePackage.AppInstaller.UpdateBlocksActivation);
+            Assert.Equal("2021", storePackage.AppInstaller.SchemaVersion);
+            Assert.Single(storePackage.AppInstaller.UpdateUris);
         }
         finally
         {
@@ -266,6 +312,53 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             Assert.Single(store.OutputFiles);
             Assert.EndsWith(".msixbundle", store.OutputFiles[0], StringComparison.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine("Store", "AppPackages"), store.OutputDir, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void NormalizeAppInstallerFile_UpgradesSchemaAndWritesUpdateSettings()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var appInstaller = Path.Combine(root, "Contoso.appinstaller");
+            File.WriteAllText(appInstaller, """
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2" Version="1.0.0.0" Uri="https://old.example/app.appinstaller">
+  <MainBundle Name="Contoso.App" Publisher="CN=Contoso" Version="1.0.0.0" Uri="https://old.example/app.msixbundle" />
+</AppInstaller>
+""", new UTF8Encoding(false));
+
+            DotNetPublishPipelineRunner.NormalizeAppInstallerFile(
+                appInstaller,
+                new DotNetPublishAppInstallerOptions
+                {
+                    Uri = "https://downloads.contoso.test/app.appinstaller",
+                    HoursBetweenUpdateChecks = 2,
+                    ShowPrompt = true,
+                    UpdateBlocksActivation = true,
+                    AutomaticBackgroundTask = true,
+                    ForceUpdateFromAnyVersion = true,
+                    UpdateUris = new[] { "https://fallback.contoso.test/app.appinstaller" }
+                });
+
+            var document = XDocument.Load(appInstaller);
+            var ns = XNamespace.Get("http://schemas.microsoft.com/appx/appinstaller/2021");
+            var rootElement = document.Root!;
+            var onLaunch = rootElement.Element(ns + "UpdateSettings")!.Element(ns + "OnLaunch")!;
+
+            Assert.Equal(ns + "AppInstaller", rootElement.Name);
+            Assert.Equal("https://downloads.contoso.test/app.appinstaller", rootElement.Attribute("Uri")!.Value);
+            Assert.Equal("2", onLaunch.Attribute("HoursBetweenUpdateChecks")!.Value);
+            Assert.Equal("true", onLaunch.Attribute("ShowPrompt")!.Value);
+            Assert.Equal("true", onLaunch.Attribute("UpdateBlocksActivation")!.Value);
+            Assert.NotNull(rootElement.Element(ns + "UpdateSettings")!.Element(ns + "AutomaticBackgroundTask"));
+            Assert.Equal("true", rootElement.Element(ns + "UpdateSettings")!.Element(ns + "ForceUpdateFromAnyVersion")!.Value);
+            Assert.Equal("https://fallback.contoso.test/app.appinstaller", rootElement.Element(ns + "UpdateUris")!.Element(ns + "UpdateUri")!.Value);
         }
         finally
         {

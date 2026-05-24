@@ -457,7 +457,8 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         return EnumerateExistingFiles((store.OutputFiles ?? Array.Empty<string>())
             .Concat(store.UploadFiles ?? Array.Empty<string>())
-            .Concat(store.SymbolFiles ?? Array.Empty<string>()));
+            .Concat(store.SymbolFiles ?? Array.Empty<string>())
+            .Concat(store.AppInstallerFiles ?? Array.Empty<string>()));
     }
 
     private static IEnumerable<string> EnumerateExistingFiles(IEnumerable<string>? files)

@@ -218,6 +218,9 @@ public sealed class DotNetPublishStorePackagePlan
     /// <summary>When true, generates an app installer file when the packaging project supports it.</summary>
     public bool GenerateAppInstaller { get; set; }
 
+    /// <summary>Optional App Installer update settings.</summary>
+    public DotNetPublishAppInstallerOptions? AppInstaller { get; set; }
+
     /// <summary>Optional Store packaging MSBuild properties.</summary>
     public Dictionary<string, string>? MsBuildProperties { get; set; }
 }
@@ -476,7 +479,7 @@ public sealed class DotNetPublishStep
     /// <summary>Optional target framework for publish steps.</summary>
     public string? Framework { get; set; }
 
-    /// <summary>Optional runtime identifier for publish steps.</summary>       
+    /// <summary>Optional runtime identifier for publish steps.</summary>
     public string? Runtime { get; set; }
 
     /// <summary>Optional publish style for publish steps.</summary>

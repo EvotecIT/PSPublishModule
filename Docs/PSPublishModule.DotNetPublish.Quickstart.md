@@ -114,6 +114,7 @@ Depending on config, the run can emit:
 - Use `Publish.SignProfile` or `Installers[].SignProfile` to reference a named profile.
 - Use `SignOverrides` when you want small per-target tweaks on top of a shared profile, for example only changing the description.
 - Direct `Sign` still works and takes precedence when you want one target to fully define its own signing behavior.
+- Signing uses `TimeoutSeconds` per file, defaulting to 300 seconds, so a stuck `signtool.exe` follows `OnSignFailure` instead of hanging the publish run.
 
 ## Installer Filters
 
@@ -175,7 +176,11 @@ Depending on config, the run can emit:
 - Generated MSI builds place the final `.msi` in the sibling `output/` directory, and that final file is listed in `manifest.json`, `manifest.txt`, and `SHA256SUMS.txt`.
 - Use `Harvest: Auto` with `Authoring.PayloadComponentGroupId` to include the prepared publish payload in the generated MSI feature.
 - Component entries require a `Type` discriminator: `File`, `Folder`, `RemoveFolder`, `Service`, `RegistryValue`, or `Shortcut`.
-- Installer inputs can set `Required: true`; generated dialogs block `Next` until text/license/path inputs have a value, or until required checkbox properties are non-empty. Required prompts list the required field labels for the current dialog. `RequiredMessage` is only used when the dialog contains exactly one required input; dialogs with multiple required inputs continue to show the label list. Required radio-group inputs must set `DefaultValue` to one of their choices.
+- Installer inputs can set `Required: true`; generated dialogs block `Next` until text/license/path inputs have a value, or until required checkbox properties are non-empty. Required prompts list the required field labels for the current dialog. `RequiredMessage` is only used when the dialog contains exactly one required input; dialogs with multiple required inputs continue to show the label list. Required radio-group and combo-box inputs must set `DefaultValue` to one of their choices.
+- `Kind: ComboBox` renders a WiX drop-down from `Choices`; use it for presets such as configuration profile, database mode, or environment.
+- `LicenseAgreement` points at an RTF license file and emits the WiX UI license variable for generated installers.
+- Dialog `Actions[]` render command buttons on generated dialogs and open shell targets such as `https://...` configuration/studio pages.
+- `ExitLaunch` renders the final-page checkbox action, for example opening a service configuration website after install.
 - Installer inputs can define validation metadata (`MinLength`, `MaxLength`, `ValidationPattern`, `ValidationMessage`) for text, password, path, and license-key inputs. Generated authoring validates metadata shape and authored default values before writing the `.wxs`; runtime UI enforcement beyond `Required` is reserved for the follow-up validation layer.
 - Generated authoring validates WiX identifiers, product upgrade GUIDs, and uppercase public MSI property names for installer inputs before writing the `.wxs` file. WiX identifiers must be 72 characters or fewer.
 - Registry value components can write a literal `Value`, or write an installer property by setting `ValueProperty`, for example persisting `LICENSE_KEY` after the UI collects it.
@@ -192,6 +197,9 @@ Depending on config, the run can emit:
 - `BuildMode` selects Store-upload vs sideload packaging behavior.
 - `Bundle` controls `AppxBundle` mode (`Auto`, `Always`, `Never`).
 - `GenerateAppInstaller` maps to `GenerateAppInstallerFile` for packaging projects that support it.
+- `AppInstaller` is the typed side-load/update contract. When enabled, PowerForge requests an `.appinstaller` file, records it in Store package outputs, and normalizes generated XML to the configured schema/update settings.
+- Use `AppInstaller.SchemaVersion: "2021"` when setting `ShowPrompt`, `UpdateBlocksActivation`, or `UpdateUris`; those settings require the newer App Installer schema on current Windows.
+- `AppInstaller.HoursBetweenUpdateChecks` maps to the on-launch update interval and is validated to the documented `0..255` hour range. `UpdateBlocksActivation` requires `ShowPrompt: true`.
 - PowerForge forwards the selected publish style into packaging builds through `SelfContained` / `WindowsAppSDKSelfContained`, so `FrameworkDependent` versus `PortableCompat` remains meaningful for Store packages too.
 - Use `MsBuildProperties` for project-specific Store settings that are still too repo-specific to deserve a first-class contract.
 

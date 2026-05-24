@@ -62,6 +62,7 @@ internal static class DotNetPublishSigningProfileResolver
             ToolPath = sign.ToolPath,
             OnMissingTool = sign.OnMissingTool,
             OnSignFailure = sign.OnSignFailure,
+            TimeoutSeconds = sign.TimeoutSeconds,
             Thumbprint = sign.Thumbprint,
             SubjectName = sign.SubjectName,
             TimestampUrl = sign.TimestampUrl,
@@ -82,6 +83,7 @@ internal static class DotNetPublishSigningProfileResolver
             ToolPath = signOverrides.ToolPath,
             OnMissingTool = signOverrides.OnMissingTool,
             OnSignFailure = signOverrides.OnSignFailure,
+            TimeoutSeconds = signOverrides.TimeoutSeconds,
             Thumbprint = signOverrides.Thumbprint,
             SubjectName = signOverrides.SubjectName,
             TimestampUrl = signOverrides.TimestampUrl,
@@ -107,6 +109,8 @@ internal static class DotNetPublishSigningProfileResolver
             sign.OnMissingTool = patch.OnMissingTool.Value;
         if (patch.OnSignFailure.HasValue)
             sign.OnSignFailure = patch.OnSignFailure.Value;
+        if (patch.TimeoutSeconds.HasValue)
+            sign.TimeoutSeconds = Math.Max(1, patch.TimeoutSeconds.Value);
         if (patch.ToolPath is not null)
             sign.ToolPath = patch.ToolPath;
         if (patch.Thumbprint is not null)

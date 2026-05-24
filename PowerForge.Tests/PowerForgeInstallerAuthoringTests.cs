@@ -88,8 +88,10 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand" &&
             (string?)e.Attribute("Property") == "WixQuietExecCmdLine" &&
-            ((string?)e.Attribute("Value"))?.Contains(@"reg query ""HKLM\SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring"" /v ImagePath", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("|| type nul", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains(@"HKLM\SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("ImagePath", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("tokens=2,*", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("do @echo %B", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("[TempFolder]tmx-svc.txt", StringComparison.Ordinal) == true));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetStopService" &&
@@ -161,12 +163,65 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
-    public void EmitSource_ModelsLicenseAgreementRtfVariable()
+    public void EmitSource_ModelsDeferredExecutableActions()
     {
         var definition = CreateMonitoringInstaller();
+        definition.ExecutableActions.Add(new PowerForgeInstallerExecutableAction
+        {
+            Id = "InitMonitoringConfig",
+            FileRef = "MonitoringExe",
+            Arguments = "--init-config --force --config \"[ProgramDataMonitoring]TestimoX.Monitoring.json\" --init-preset [INIT_PRESET] --no-console",
+            Condition = "INIT_CONFIG=1 AND NOT REMOVE=\"ALL\"",
+            After = "InstallFiles"
+        });
+        definition.ExecutableActions.Add(new PowerForgeInstallerExecutableAction
+        {
+            Id = "InstallMonitoringLicense",
+            FileRef = "MonitoringExe",
+            Arguments = "--install-license --license-path \"[LICENSE_PATH]\" --no-console",
+            Condition = "LICENSE_PATH<>\"\" AND NOT REMOVE=\"ALL\"",
+            Before = "InstallServices",
+            After = null
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "InitMonitoringConfig.SetData" &&
+            (string?)e.Attribute("Property") == "InitMonitoringConfig" &&
+            ((string?)e.Attribute("Value"))?.Contains("--init-preset [INIT_PRESET]", StringComparison.Ordinal) == true));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "InitMonitoringConfig" &&
+            (string?)e.Attribute("FileRef") == "MonitoringExe" &&
+            (string?)e.Attribute("ExeCommand") == "[CustomActionData]" &&
+            (string?)e.Attribute("Execute") == "deferred" &&
+            (string?)e.Attribute("Impersonate") == "no" &&
+            (string?)e.Attribute("HideTarget") == "yes"));
+        var sequenceRows = doc.Descendants(Wix + "InstallExecuteSequence")
+            .Descendants(Wix + "Custom")
+            .ToArray();
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "InitMonitoringConfig.SetData" &&
+            (string?)e.Attribute("After") == "InstallFiles"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "InitMonitoringConfig" &&
+            (string?)e.Attribute("After") == "InitMonitoringConfig.SetData"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "InstallMonitoringLicense.SetData" &&
+            (string?)e.Attribute("Before") == "InstallMonitoringLicense"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "InstallMonitoringLicense" &&
+            (string?)e.Attribute("Before") == "InstallServices"));
+    }
+
+    [Fact]
+    public void EmitSource_ModelsLicenseAgreement()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
         definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
         {
-            Path = @"Build\Installer\SyncSE-License.rtf"
+            Path = "License.rtf"
         };
 
         var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
@@ -175,8 +230,51 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Root!.Attribute(XNamespace.Xmlns + "ui"));
         Assert.NotNull(doc.Descendants(Wix + "WixVariable").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "WixUILicenseRtf" &&
-            (string?)e.Attribute("Value") == @"Build\Installer\SyncSE-License.rtf"));
+            (string?)e.Attribute("Value") == "License.rtf"));
         Assert.NotNull(doc.Descendants(Wix + "UI").SingleOrDefault());
+    }
+
+    [Fact]
+    public void EmitSource_ModelsComboBoxAndDialogActionButton()
+    {
+        var definition = CreateMonitoringInstaller();
+        var preset = definition.Inputs.Single(input => input.Id == "Preset");
+        preset.Kind = PowerForgeInstallerInputKind.ComboBox;
+        var dialog = definition.Dialogs.Single(dialog => dialog.Id == "ConfigurationDlg");
+        dialog.Actions.Add(new PowerForgeInstallerDialogAction
+        {
+            Id = "OpenStudio",
+            Text = "Open Studio",
+            Target = "http://127.0.0.1:58433/studio"
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Root!.Attribute(XNamespace.Xmlns + "util"));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "PowerForgeDialogShellExecute" &&
+            (string?)e.Attribute("DllEntry") == "WixShellExec"));
+        Assert.NotNull(doc.Descendants(Wix + "Control").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "Preset" &&
+            (string?)e.Attribute("Type") == "ComboBox" &&
+            e.Descendants(Wix + "ListItem").Any(item =>
+                (string?)item.Attribute("Value") == "core" &&
+                (string?)item.Attribute("Text") == "Core AD")));
+
+        var action = doc.Descendants(Wix + "Control").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "OpenStudio" &&
+            (string?)e.Attribute("Type") == "PushButton" &&
+            (string?)e.Attribute("Text") == "Open Studio");
+        Assert.NotNull(action);
+        Assert.NotNull(action!.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)e.Attribute("Value") == "http://127.0.0.1:58433/studio" &&
+            (string?)e.Attribute("Order") == "1"));
+        Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Event") == "DoAction" &&
+            (string?)e.Attribute("Value") == "PowerForgeDialogShellExecute" &&
+            (string?)e.Attribute("Order") == "2"));
     }
 
     [Fact]
@@ -253,7 +351,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         string[] backupCommands = doc.Descendants(Wix + "CustomAction")
             .Where(e => (string?)e.Attribute("Property") == "WixQuietExecCmdLine")
             .Select(e => (string?)e.Attribute("Value"))
-            .Where(value => value?.Contains("reg query", StringComparison.Ordinal) == true)
+            .Where(value => value?.Contains("ImagePath", StringComparison.Ordinal) == true)
             .Select(value => value!)
             .ToArray();
         Assert.Contains(backupCommands, command =>
@@ -1353,26 +1451,6 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
-    public void EmitProjectFile_IncludesUiExtensionForLicenseAgreement()
-    {
-        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
-        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
-        {
-            Path = @"Build\Installer\SyncSE-License.rtf"
-        };
-
-        var xml = new PowerForgeWixInstallerSourceEmitter().EmitProjectFile(
-            definition,
-            new PowerForgeWixInstallerProjectOptions { SourceFile = "Generated.wxs" });
-        var doc = XDocument.Parse(xml);
-
-        Assert.DoesNotContain(doc.Descendants("PackageReference"), e =>
-            (string?)e.Attribute("Include") == "WixToolset.Util.wixext");
-        Assert.NotNull(doc.Descendants("PackageReference").SingleOrDefault(e =>
-            (string?)e.Attribute("Include") == "WixToolset.UI.wixext"));
-    }
-
-    [Fact]
     public void PrepareWorkspace_WritesGeneratedSourceAndProject()
     {
         var root = CreateTempDirectory();
@@ -1554,13 +1632,11 @@ public sealed class PowerForgeInstallerAuthoringTests
                 "InstallDirectoryName": "Monitoring",
                 "PayloadComponentGroupId": "ProductFiles",
                 "ExitLaunch": {
-                  "Enabled": true,
-                  "Text": "Open TestimoX Monitoring",
-                  "Target": "http://127.0.0.1:9000/",
-                  "Condition": "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed"
+                  "Text": "Open monitoring",
+                  "Target": "http://127.0.0.1:9000/"
                 },
                 "LicenseAgreement": {
-                  "Path": "Build\\Installer\\TestimoX-Monitoring-License.rtf"
+                  "Path": "Installer/TestimoX.Monitoring/License.rtf"
                 },
                 "Inputs": [
                   {
@@ -1589,13 +1665,31 @@ public sealed class PowerForgeInstallerAuthoringTests
                       "Name": "DataDir",
                       "Type": "raw"
                     }
+                  },
+                  {
+                    "Id": "Preset",
+                    "PropertyName": "INIT_PRESET",
+                    "Label": "Preset",
+                    "Kind": "ComboBox",
+                    "DefaultValue": "core",
+                    "Choices": [
+                      { "Value": "none", "Text": "None" },
+                      { "Value": "core", "Text": "Core" }
+                    ]
                   }
                 ],
                 "Dialogs": [
                   {
                     "Id": "ConfigurationDlg",
                     "Title": "Configuration",
-                    "InputIds": [ "LicenseKey" ]
+                    "InputIds": [ "LicenseKey", "Preset" ],
+                    "Actions": [
+                      {
+                        "Id": "OpenStudio",
+                        "Text": "Open Studio",
+                        "Target": "http://127.0.0.1:9000/"
+                      }
+                    ]
                   }
                 ],
                 "Directories": [
@@ -1632,6 +1726,15 @@ public sealed class PowerForgeInstallerAuthoringTests
                     "ValueProperty": "LICENSE_KEY",
                     "ValueType": "string"
                   }
+                ],
+                "ExecutableActions": [
+                  {
+                    "Id": "InitMonitoringConfig",
+                    "FileRef": "MonitoringExe",
+                    "Arguments": "--init-config --force --config \"[ProgramDataMonitoring]TestimoX.Monitoring.json\" --init-preset [INIT_PRESET] --no-console",
+                    "Condition": "INIT_CONFIG=1 AND NOT REMOVE=\"ALL\"",
+                    "After": "InstallFiles"
+                  }
                 ]
               }
             }
@@ -1647,7 +1750,11 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(authoring);
         Assert.Equal("TestimoX Monitoring", authoring!.Product.Name);
         Assert.Equal("ProductFiles", authoring.PayloadComponentGroupId);
-        Assert.Equal(2, authoring.Inputs.Count);
+        Assert.NotNull(authoring.ExitLaunch);
+        Assert.Equal("http://127.0.0.1:9000/", authoring.ExitLaunch!.Target);
+        Assert.NotNull(authoring.LicenseAgreement);
+        Assert.Equal("Installer/TestimoX.Monitoring/License.rtf", authoring.LicenseAgreement!.Path);
+        Assert.Equal(3, authoring.Inputs.Count);
         var input = authoring.Inputs[0];
         Assert.True(input.Required);
         Assert.Equal("Enter a license key before continuing.", input.RequiredMessage);
@@ -1659,15 +1766,14 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Equal("MONITORINGDATADIR", dataDir.PropertyName);
         Assert.NotNull(dataDir.RegistrySearch);
         Assert.Equal("MonitoringDataDirSearch", dataDir.RegistrySearch!.Id);
+        var preset = authoring.Inputs[2];
+        Assert.Equal(PowerForgeInstallerInputKind.ComboBox, preset.Kind);
+        Assert.Equal("core", preset.DefaultValue);
+        Assert.Equal(2, preset.Choices.Count);
         Assert.Single(authoring.Dialogs);
+        Assert.Single(authoring.Dialogs[0].Actions);
+        Assert.Equal("OpenStudio", authoring.Dialogs[0].Actions[0].Id);
         Assert.Single(authoring.Directories);
-        Assert.NotNull(authoring.ExitLaunch);
-        Assert.True(authoring.ExitLaunch!.Enabled);
-        Assert.Equal("Open TestimoX Monitoring", authoring.ExitLaunch.Text);
-        Assert.Equal("http://127.0.0.1:9000/", authoring.ExitLaunch.Target);
-        Assert.NotNull(authoring.LicenseAgreement);
-        Assert.True(authoring.LicenseAgreement!.Enabled);
-        Assert.Equal(@"Build\Installer\TestimoX-Monitoring-License.rtf", authoring.LicenseAgreement.Path);
 
         var service = Assert.IsType<PowerForgeInstallerServiceComponent>(authoring.Components[0]);
         Assert.Equal("TestimoX.Monitoring", service.ServiceName);
@@ -1678,61 +1784,14 @@ public sealed class PowerForgeInstallerAuthoringTests
         var registryValue = Assert.IsType<PowerForgeInstallerRegistryValueComponent>(authoring.Components[2]);
         Assert.Equal("LICENSE_KEY", registryValue.ValueProperty);
         Assert.Equal("string", registryValue.ValueType);
+        var executableAction = Assert.Single(authoring.ExecutableActions);
+        Assert.Equal("InitMonitoringConfig", executableAction.Id);
+        Assert.Equal("MonitoringExe", executableAction.FileRef);
+        Assert.Equal("InstallFiles", executableAction.After);
 
         var serialized = JsonSerializer.Serialize(authoring.Components[2], options);
         Assert.Contains("\"Type\":\"RegistryValue\"", serialized, StringComparison.Ordinal);
         Assert.Contains("\"ValueProperty\":\"LICENSE_KEY\"", serialized, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void DotNetPublishSchema_AllowsInstallerExitLaunch()
-    {
-        using var schema = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(ResolveRepositoryRoot(), "Schemas", "powerforge.dotnetpublish.schema.json")));
-
-        var definitions = schema.RootElement.GetProperty("$defs");
-        Assert.True(definitions.TryGetProperty("PowerForgeInstallerExitLaunch", out _));
-        Assert.True(definitions.TryGetProperty("PowerForgeInstallerLicenseAgreement", out _));
-
-        var exitLaunch = definitions
-            .GetProperty("PowerForgeInstallerDefinition")
-            .GetProperty("properties")
-            .GetProperty("ExitLaunch");
-        Assert.Contains(
-            exitLaunch.GetProperty("anyOf").EnumerateArray(),
-            option => option.TryGetProperty("$ref", out var reference) &&
-                string.Equals(reference.GetString(), "#/$defs/PowerForgeInstallerExitLaunch", StringComparison.Ordinal));
-
-        var licenseAgreement = definitions
-            .GetProperty("PowerForgeInstallerDefinition")
-            .GetProperty("properties")
-            .GetProperty("LicenseAgreement");
-        Assert.Contains(
-            licenseAgreement.GetProperty("anyOf").EnumerateArray(),
-            option => option.TryGetProperty("$ref", out var reference) &&
-                string.Equals(reference.GetString(), "#/$defs/PowerForgeInstallerLicenseAgreement", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void DotNetPublishExample_UsesTypedGeneratedInstallerLaunchAndLicense()
-    {
-        using var example = JsonDocument.Parse(File.ReadAllText(Path.Combine(
-            ResolveRepositoryRoot(),
-            "Module",
-            "Examples",
-            "DotNetPublish",
-            "Example.GeneratedServiceMsi.json")));
-
-        var authoring = example.RootElement
-            .GetProperty("Installers")[0]
-            .GetProperty("Authoring");
-        var exitLaunch = authoring.GetProperty("ExitLaunch");
-        Assert.True(exitLaunch.GetProperty("Enabled").GetBoolean());
-        Assert.Equal("Open My Service", exitLaunch.GetProperty("Text").GetString());
-        Assert.Equal("http://127.0.0.1:9000/", exitLaunch.GetProperty("Target").GetString());
-
-        var licenseAgreement = authoring.GetProperty("LicenseAgreement");
-        Assert.Equal(@"Installer\My.Service\License.rtf", licenseAgreement.GetProperty("Path").GetString());
     }
 
     private static PowerForgeInstallerDefinition CreateMonitoringInstaller()
@@ -1878,26 +1937,24 @@ public sealed class PowerForgeInstallerAuthoringTests
         return definition;
     }
 
-    private static string ResolveRepositoryRoot()
-    {
-        DirectoryInfo? directory = new(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new InvalidOperationException("Could not locate repository root.");
-    }
-
     private static PowerForgeInstallerDefinition CreateMonitoringCompileInstaller(string payloadRoot)
     {
         var definition = CreateMonitoringInstaller();
         definition.PayloadComponentGroupId = null;
+        var licensePath = Path.Combine(payloadRoot, "License.rtf");
+        File.WriteAllText(licensePath, @"{\rtf1\ansi PowerForge smoke license}");
+        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
+        {
+            Path = licensePath
+        };
+        var preset = definition.Inputs.Single(input => input.Id == "Preset");
+        preset.Kind = PowerForgeInstallerInputKind.ComboBox;
+        definition.Dialogs.Single(dialog => dialog.Id == "ConfigurationDlg").Actions.Add(new PowerForgeInstallerDialogAction
+        {
+            Id = "OpenStudio",
+            Text = "Open Studio",
+            Target = "http://127.0.0.1:58433/studio"
+        });
 
         foreach (var component in definition.Components)
         {

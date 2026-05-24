@@ -83,6 +83,37 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
     }
 
     [Fact]
+    public void Validate_RejectsEnabledLicenseAgreementWithoutPath()
+    {
+        var definition = CreateValidDefinition();
+        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("LicenseAgreement.Path", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_RejectsComboBoxWithoutChoices()
+    {
+        var definition = CreateValidDefinition();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "Preset",
+            PropertyName = "PRESET",
+            Label = "Preset",
+            Kind = PowerForgeInstallerInputKind.ComboBox
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("combo box", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("choices", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Validate_RejectsDuplicateAuthoringIdsAfterTrimming()
     {
         var definition = CreateValidDefinition();

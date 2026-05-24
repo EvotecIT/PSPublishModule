@@ -763,7 +763,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 : new PowerForgeInstallerLicenseAgreement
                 {
                     Enabled = definition.LicenseAgreement.Enabled,
-                    Path = definition.LicenseAgreement.Path
+                    Path = definition.LicenseAgreement.Path,
+                    VariableId = definition.LicenseAgreement.VariableId
                 }
         };
 
@@ -819,6 +820,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 Description = dialog.Description
             };
             dialogClone.InputIds.AddRange(dialog.InputIds);
+            foreach (var action in dialog.Actions)
+            {
+                if (action is null) continue;
+                dialogClone.Actions.Add(new PowerForgeInstallerDialogAction
+                {
+                    Id = action.Id,
+                    Text = action.Text,
+                    Target = action.Target,
+                    Condition = action.Condition
+                });
+            }
             clone.Dialogs.Add(dialogClone);
         }
 
@@ -847,6 +859,23 @@ public sealed partial class DotNetPublishPipelineRunner
             var componentClone = CloneInstallerComponent(component);
             if (componentClone is not null)
                 clone.Components.Add(componentClone);
+        }
+
+        foreach (var action in definition.ExecutableActions)
+        {
+            if (action is null) continue;
+            clone.ExecutableActions.Add(new PowerForgeInstallerExecutableAction
+            {
+                Id = action.Id,
+                FileRef = action.FileRef,
+                Arguments = action.Arguments,
+                Condition = action.Condition,
+                Before = action.Before,
+                After = action.After,
+                ImpersonateNo = action.ImpersonateNo,
+                HideTarget = action.HideTarget,
+                Return = action.Return
+            });
         }
 
         return clone;
@@ -958,11 +987,31 @@ public sealed partial class DotNetPublishPipelineRunner
                 BuildMode = i.BuildMode,
                 Bundle = i.Bundle,
                 GenerateAppInstaller = i.GenerateAppInstaller,
+                AppInstaller = CloneAppInstallerOptions(i.AppInstaller),
                 MsBuildProperties = i.MsBuildProperties is null
                     ? null
                     : new Dictionary<string, string>(i.MsBuildProperties, StringComparer.OrdinalIgnoreCase)
             })
             .ToArray();
+    }
+
+    private static DotNetPublishAppInstallerOptions? CloneAppInstallerOptions(DotNetPublishAppInstallerOptions? options)
+    {
+        if (options is null)
+            return null;
+
+        return new DotNetPublishAppInstallerOptions
+        {
+            Enabled = options.Enabled,
+            Uri = options.Uri,
+            HoursBetweenUpdateChecks = options.HoursBetweenUpdateChecks,
+            ShowPrompt = options.ShowPrompt,
+            UpdateBlocksActivation = options.UpdateBlocksActivation,
+            AutomaticBackgroundTask = options.AutomaticBackgroundTask,
+            ForceUpdateFromAnyVersion = options.ForceUpdateFromAnyVersion,
+            UpdateUris = NormalizeStrings(options.UpdateUris),
+            SchemaVersion = options.SchemaVersion
+        };
     }
 
     private static DotNetPublishBundle[] CloneBundles(DotNetPublishBundle[] bundles)
@@ -1948,6 +1997,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 BuildMode = storePackage.BuildMode,
                 Bundle = storePackage.Bundle,
                 GenerateAppInstaller = storePackage.GenerateAppInstaller,
+                AppInstaller = NormalizeAppInstallerOptions(id, storePackage.AppInstaller),
                 MsBuildProperties = storePackage.MsBuildProperties is null
                     ? null
                     : new Dictionary<string, string>(storePackage.MsBuildProperties, StringComparer.OrdinalIgnoreCase)
@@ -1955,6 +2005,44 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return plans.ToArray();
+    }
+
+    private static DotNetPublishAppInstallerOptions? NormalizeAppInstallerOptions(
+        string storePackageId,
+        DotNetPublishAppInstallerOptions? options)
+    {
+        var clone = CloneAppInstallerOptions(options);
+        if (clone is null)
+            return null;
+        if (!clone.Enabled)
+            return clone;
+
+        clone.Uri = string.IsNullOrWhiteSpace(clone.Uri) ? null : clone.Uri!.Trim();
+        clone.SchemaVersion = string.IsNullOrWhiteSpace(clone.SchemaVersion) ? "2021" : clone.SchemaVersion.Trim();
+        clone.UpdateUris = NormalizeStrings(clone.UpdateUris);
+
+        if (clone.HoursBetweenUpdateChecks is < 0 or > 255)
+        {
+            throw new ArgumentException(
+                $"Store package '{storePackageId}' AppInstaller.HoursBetweenUpdateChecks must be between 0 and 255.");
+        }
+
+        if (clone.UpdateBlocksActivation == true && clone.ShowPrompt != true)
+        {
+            throw new ArgumentException(
+                $"Store package '{storePackageId}' AppInstaller.UpdateBlocksActivation requires ShowPrompt=true.");
+        }
+
+        var requires2021 = clone.ShowPrompt.HasValue ||
+                           clone.UpdateBlocksActivation.HasValue ||
+                           clone.UpdateUris.Length > 0;
+        if (requires2021 && !string.Equals(clone.SchemaVersion, "2021", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Store package '{storePackageId}' AppInstaller.SchemaVersion must be 2021 when ShowPrompt, UpdateBlocksActivation, or UpdateUris are configured.");
+        }
+
+        return clone;
     }
 
     private static string ResolveStorePackagingProjectPath(

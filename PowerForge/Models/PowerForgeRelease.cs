@@ -108,6 +108,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public DotNetPublishPolicyMode? SignOnFailure { get; set; }
 
+    public int? SignTimeoutSeconds { get; set; }
+
     public string? SignTimestampUrl { get; set; }
 
     public string? SignDescription { get; set; }

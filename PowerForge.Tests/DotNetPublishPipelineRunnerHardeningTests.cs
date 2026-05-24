@@ -453,6 +453,38 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void RunProcessWithTimeout_KillsLongRunningProcess()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "RunProcessWithTimeout",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var raw = method!.Invoke(
+            null,
+            new object[]
+            {
+                Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                Environment.CurrentDirectory,
+                new[] { "/c", "ping", "127.0.0.1", "-n", "6" },
+                TimeSpan.FromSeconds(1)
+            });
+
+        Assert.NotNull(raw);
+        var resultType = raw!.GetType();
+        var exitCode = (int)resultType.GetField("Item1")!.GetValue(raw)!;
+        var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
+        var timedOut = (bool)resultType.GetField("Item4")!.GetValue(raw)!;
+
+        Assert.True(timedOut);
+        Assert.Equal(-1, exitCode);
+        Assert.Contains("timed out", stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void BuildPublishMsBuildProperties_MergesGlobalTargetAndStyleOverrides()
     {
         var plan = new DotNetPublishPlan

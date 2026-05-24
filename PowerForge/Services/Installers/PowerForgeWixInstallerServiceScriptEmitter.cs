@@ -174,13 +174,15 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
     private static string BuildBackupCommand(
         PowerForgeInstallerServiceComponent service,
         string backupPath)
-        => "\"[%ComSpec]\" /c reg query \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\" +
-           service.ServiceName +
-           "\" /v ImagePath > \"" +
-           backupPath +
-           "\" 2>nul || type nul > \"" +
-           backupPath +
-           "\"";
+    {
+        var serviceName = EscapeCommandDoubleQuoted(service.ServiceName);
+        var backup = EscapeCommandDoubleQuoted(backupPath);
+        return "\"[%ComSpec]\" /c (for /f \"tokens=2,*\" %A in ('reg query \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\" +
+               serviceName +
+               "\" /v ImagePath 2^>nul ^| find \"ImagePath\"') do @echo %B)>\"" +
+               backup +
+               "\"";
+    }
 
     private static string BuildStopCommand(
         PowerForgeInstallerServiceComponent service,
@@ -228,6 +230,9 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             Regex.Escape(token),
             _ => replacement,
             RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static string EscapeCommandDoubleQuoted(string value)
+        => (value ?? string.Empty).Replace("\"", "\\\"");
 
     private static string CombineConditions(params string[] conditions)
     {

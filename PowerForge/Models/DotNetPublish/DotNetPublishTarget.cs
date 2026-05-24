@@ -192,6 +192,9 @@ public sealed class DotNetPublishSignOptions
     /// </summary>
     public DotNetPublishPolicyMode OnSignFailure { get; set; } = DotNetPublishPolicyMode.Warn;
 
+    /// <summary>Maximum time allowed for each signtool invocation. Defaults to 300 seconds.</summary>
+    public int TimeoutSeconds { get; set; } = 300;
+
     /// <summary>Optional certificate thumbprint (SHA1) used for signing (signtool /sha1).</summary>
     public string? Thumbprint { get; set; }
 
@@ -233,6 +236,9 @@ public sealed class DotNetPublishSignPatch
 
     /// <summary>Optional sign-failure policy override.</summary>
     public DotNetPublishPolicyMode? OnSignFailure { get; set; }
+
+    /// <summary>Optional per-file signtool timeout override in seconds.</summary>
+    public int? TimeoutSeconds { get; set; }
 
     /// <summary>Optional certificate thumbprint override.</summary>
     public string? Thumbprint { get; set; }

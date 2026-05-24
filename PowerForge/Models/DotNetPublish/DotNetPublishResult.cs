@@ -55,7 +55,7 @@ public sealed class DotNetPublishFailure
     /// <summary>Failed step kind.</summary>
     public DotNetPublishStepKind StepKind { get; set; }
 
-    /// <summary>Optional target name associated with the failure.</summary>    
+    /// <summary>Optional target name associated with the failure.</summary>
     public string? TargetName { get; set; }
 
     /// <summary>Optional target framework associated with the failure.</summary>
@@ -326,6 +326,9 @@ public sealed class DotNetPublishStorePackageResult
 
     /// <summary>Symbol artifacts produced by the build (for example <c>*.appxsym</c>).</summary>
     public string[] SymbolFiles { get; set; } = Array.Empty<string>();
+
+    /// <summary>App Installer metadata files produced by the build (for example <c>*.appinstaller</c>).</summary>
+    public string[] AppInstallerFiles { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>

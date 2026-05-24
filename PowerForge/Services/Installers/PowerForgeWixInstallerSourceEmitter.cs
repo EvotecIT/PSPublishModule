@@ -49,11 +49,13 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         EmitProperties(package, definition);
         EmitLicenseAgreement(package, definition);
         EmitExitLaunchAction(package, definition);
+        EmitDialogShellExecuteAction(package, definition);
         if (needsUi)
             package.Add(EmitUi(definition));
 
         package.Add(EmitFeature(definition));
         package.Add(PowerForgeWixInstallerServiceScriptEmitter.EmitScriptInstallActions(definition));
+        package.Add(PowerForgeWixInstallerExecutableActionEmitter.EmitActions(definition));
 
         var root = new XElement(WixNamespace + "Wix", rootAttributes, package);
         root.Add(EmitDirectories(definition));
@@ -179,6 +181,17 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         }
     }
 
+    private static void EmitLicenseAgreement(XElement package, PowerForgeInstallerDefinition definition)
+    {
+        if (definition.LicenseAgreement is not { Enabled: true } licenseAgreement)
+            return;
+
+        package.Add(new XElement(
+            WixNamespace + "WixVariable",
+            new XAttribute("Id", licenseAgreement.VariableId),
+            new XAttribute("Value", licenseAgreement.Path)));
+    }
+
     private static void EmitExitLaunchAction(XElement package, PowerForgeInstallerDefinition definition)
     {
         if (definition.ExitLaunch is not { Enabled: true } exitLaunch)
@@ -201,15 +214,17 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("Impersonate", "yes")));
     }
 
-    private static void EmitLicenseAgreement(XElement package, PowerForgeInstallerDefinition definition)
+    private static void EmitDialogShellExecuteAction(XElement package, PowerForgeInstallerDefinition definition)
     {
-        if (definition.LicenseAgreement is not { Enabled: true } licenseAgreement)
+        if (!HasDialogActions(definition))
             return;
 
         package.Add(new XElement(
-            WixNamespace + "WixVariable",
-            new XAttribute("Id", "WixUILicenseRtf"),
-            new XAttribute("Value", licenseAgreement.Path)));
+            WixNamespace + "CustomAction",
+            new XAttribute("Id", "PowerForgeDialogShellExecute"),
+            new XAttribute("BinaryRef", "Wix4UtilCA_$(sys.BUILDARCHSHORT)"),
+            new XAttribute("DllEntry", "WixShellExec"),
+            new XAttribute("Impersonate", "yes")));
     }
 
     private static XElement EmitUi(PowerForgeInstallerDefinition definition)
@@ -410,6 +425,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         }
 
         var nextPublishes = BuildNextDialogPublishes(dialogInputs, nextDialogId, requiredDialogId);
+        AddDialogActionControls(element, dialog.Actions);
 
         element.Add(
             new XElement(
@@ -454,6 +470,47 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                     new XAttribute("Condition", "1"))));
 
         return element;
+    }
+
+    private static void AddDialogActionControls(XElement dialog, IReadOnlyList<PowerForgeInstallerDialogAction> actions)
+    {
+        var visibleActions = actions
+            .Where(action => action is not null)
+            .Take(3)
+            .ToArray();
+        if (visibleActions.Length == 0)
+            return;
+
+        const int startX = 20;
+        const int actionY = 218;
+        const int actionWidth = 104;
+        const int gap = 8;
+        for (var i = 0; i < visibleActions.Length; i++)
+        {
+            var action = visibleActions[i];
+            var x = startX + (i * (actionWidth + gap));
+            dialog.Add(new XElement(
+                WixNamespace + "Control",
+                new XAttribute("Id", action.Id),
+                new XAttribute("Type", "PushButton"),
+                new XAttribute("X", x.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new XAttribute("Y", actionY.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new XAttribute("Width", actionWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new XAttribute("Height", "17"),
+                new XAttribute("Text", action.Text),
+                new XElement(
+                    WixNamespace + "Publish",
+                    new XAttribute("Property", "WixShellExecTarget"),
+                    new XAttribute("Value", action.Target),
+                    new XAttribute("Order", "1"),
+                    new XAttribute("Condition", action.Condition)),
+                new XElement(
+                    WixNamespace + "Publish",
+                    new XAttribute("Event", "DoAction"),
+                    new XAttribute("Value", "PowerForgeDialogShellExecute"),
+                    new XAttribute("Order", "2"),
+                    new XAttribute("Condition", action.Condition))));
+        }
     }
 
     private static IEnumerable<XElement> BuildNextDialogPublishes(
@@ -582,6 +639,31 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             }
 
             control.Add(group);
+            dialog.Add(control);
+            return;
+        }
+
+        if (input.Kind == PowerForgeInstallerInputKind.ComboBox)
+        {
+            var control = new XElement(
+                WixNamespace + "Control",
+                new XAttribute("Id", input.Id),
+                new XAttribute("Type", "ComboBox"),
+                new XAttribute("X", "20"),
+                new XAttribute("Y", (y + 18).ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new XAttribute("Width", "330"),
+                new XAttribute("Height", "18"),
+                new XAttribute("Property", input.PropertyName));
+            var combo = new XElement(WixNamespace + "ComboBox", new XAttribute("Property", input.PropertyName));
+            foreach (var choice in input.Choices)
+            {
+                combo.Add(new XElement(
+                    WixNamespace + "ListItem",
+                    new XAttribute("Value", choice.Value),
+                    new XAttribute("Text", choice.Text)));
+            }
+
+            control.Add(combo);
             dialog.Add(control);
             return;
         }
@@ -792,15 +874,19 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         return component;
     }
 
-    private static bool RequiresUtilExtension(PowerForgeInstallerDefinition definition)
-        => definition.Components.OfType<PowerForgeInstallerRemoveFolderComponent>().Any() ||
-           definition.ExitLaunch is { Enabled: true } ||
-           PowerForgeWixInstallerServiceScriptEmitter.RequiresUtilExtension(definition);
-
     private static bool RequiresUiExtension(PowerForgeInstallerDefinition definition)
         => definition.Dialogs.Count > 0 ||
            definition.ExitLaunch is { Enabled: true } ||
            definition.LicenseAgreement is { Enabled: true };
+
+    private static bool RequiresUtilExtension(PowerForgeInstallerDefinition definition)
+        => definition.Components.OfType<PowerForgeInstallerRemoveFolderComponent>().Any() ||
+           definition.ExitLaunch is { Enabled: true } ||
+           HasDialogActions(definition) ||
+           PowerForgeWixInstallerServiceScriptEmitter.RequiresUtilExtension(definition);
+
+    private static bool HasDialogActions(PowerForgeInstallerDefinition definition)
+        => definition.Dialogs.Any(dialog => dialog.Actions.Count > 0);
 
     private static XElement EmitServiceInstall(PowerForgeInstallerServiceComponent service)
     {

@@ -321,9 +321,50 @@ public sealed class DotNetPublishStorePackage
     public bool GenerateAppInstaller { get; set; }
 
     /// <summary>
+    /// Optional typed App Installer update settings for side-loaded MSIX/AppX packages.
+    /// When enabled, PowerForge requests an appinstaller file and normalizes generated files.
+    /// </summary>
+    public DotNetPublishAppInstallerOptions? AppInstaller { get; set; }
+
+    /// <summary>
     /// Optional extra MSBuild properties applied only to the Store packaging project build.
     /// </summary>
     public Dictionary<string, string>? MsBuildProperties { get; set; }
+}
+
+/// <summary>
+/// App Installer update settings for side-loaded MSIX/AppX packages.
+/// </summary>
+public sealed class DotNetPublishAppInstallerOptions
+{
+    /// <summary>Whether App Installer generation and normalization is enabled.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Published URI of the appinstaller file.</summary>
+    public string? Uri { get; set; }
+
+    /// <summary>Optional on-launch update check interval in hours. Valid range: 0-255.</summary>
+    public int? HoursBetweenUpdateChecks { get; set; }
+
+    /// <summary>Whether Windows should show update UI when checking or installing updates.</summary>
+    public bool? ShowPrompt { get; set; }
+
+    /// <summary>Whether an available update blocks application activation until installed.</summary>
+    public bool? UpdateBlocksActivation { get; set; }
+
+    /// <summary>Whether to add the background update task element.</summary>
+    public bool AutomaticBackgroundTask { get; set; }
+
+    /// <summary>Whether the package can update to lower versions as well as higher versions.</summary>
+    public bool? ForceUpdateFromAnyVersion { get; set; }
+
+    /// <summary>Fallback appinstaller URIs used if the primary appinstaller URI is unavailable.</summary>
+    public string[] UpdateUris { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// App Installer XML namespace year. Use 2021 for ShowPrompt, UpdateBlocksActivation, and UpdateUris support.
+    /// </summary>
+    public string SchemaVersion { get; set; } = "2021";
 }
 
 /// <summary>

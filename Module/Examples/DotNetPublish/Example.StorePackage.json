@@ -58,7 +58,20 @@
       "OutputPath": "Artifacts/DotNetPublish/Store/{storePackage}/{target}/{rid}/{framework}/{style}",
       "BuildMode": "StoreUpload",
       "Bundle": "Always",
-      "GenerateAppInstaller": false
+      "GenerateAppInstaller": false,
+      "AppInstaller": {
+        "Enabled": false,
+        "SchemaVersion": "2021",
+        "Uri": "https://downloads.contoso.test/App/App.appinstaller",
+        "HoursBetweenUpdateChecks": 12,
+        "ShowPrompt": true,
+        "UpdateBlocksActivation": true,
+        "AutomaticBackgroundTask": false,
+        "ForceUpdateFromAnyVersion": false,
+        "UpdateUris": [
+          "https://fallback.contoso.test/App/App.appinstaller"
+        ]
+      }
     }
   ],
   "Outputs": {

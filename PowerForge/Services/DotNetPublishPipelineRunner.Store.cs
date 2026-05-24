@@ -1,3 +1,5 @@
+using System.Xml.Linq;
+
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
@@ -102,12 +104,15 @@ public sealed partial class DotNetPublishPipelineRunner
         var useDotNet = string.Equals(buildExecutable, "dotnet", StringComparison.OrdinalIgnoreCase);
         var isWapProject = projectPath.EndsWith(".wapproj", StringComparison.OrdinalIgnoreCase);
         var platform = ResolveStorePlatform(runtime);
+        var appInstaller = storePackage.AppInstaller?.Enabled == true ? storePackage.AppInstaller : null;
         msbuildProperties["GenerateAppxPackageOnBuild"] = "true";
         if (!isWapProject)
             msbuildProperties["AppxPackageDir"] = EnsureTrailingDirectorySeparator(outputDir);
         msbuildProperties["UapAppxPackageBuildMode"] = storePackage.BuildMode.ToString();
         msbuildProperties["AppxBundle"] = storePackage.Bundle.ToString();
-        msbuildProperties["GenerateAppInstallerFile"] = storePackage.GenerateAppInstaller ? "true" : "false";
+        msbuildProperties["GenerateAppInstallerFile"] = storePackage.GenerateAppInstaller || appInstaller is not null ? "true" : "false";
+        if (appInstaller is not null && !string.IsNullOrWhiteSpace(appInstaller.Uri))
+            msbuildProperties["AppInstallerUri"] = appInstaller.Uri!;
         msbuildProperties["Platform"] = platform;
         msbuildProperties["AppxBundlePlatforms"] = platform;
         if (!msbuildProperties.ContainsKey("RuntimeIdentifier"))
@@ -191,6 +196,12 @@ public sealed partial class DotNetPublishPipelineRunner
         var packageFiles = EnumerateStoreFiles(searchRoots, ".msix", ".msixbundle", ".appx", ".appxbundle");
         var uploadFiles = EnumerateStoreFiles(searchRoots, ".msixupload", ".appxupload");
         var symbolFiles = EnumerateStoreFiles(searchRoots, ".appxsym", ".msixsym");
+        var appInstallerFiles = EnumerateStoreFiles(searchRoots, ".appinstaller");
+        if (appInstaller is not null)
+        {
+            foreach (var appInstallerFile in appInstallerFiles)
+                NormalizeAppInstallerFile(appInstallerFile, appInstaller);
+        }
         var detectedOutputDir = DetermineStoreOutputDir(outputDir, packageFiles, uploadFiles, symbolFiles);
 
         if (packageFiles.Length == 0 && uploadFiles.Length == 0)
@@ -200,7 +211,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         _logger.Info(
-            $"Store package '{storePackageId}' produced {packageFiles.Length} package file(s), {uploadFiles.Length} upload file(s), {symbolFiles.Length} symbol file(s).");
+            $"Store package '{storePackageId}' produced {packageFiles.Length} package file(s), {uploadFiles.Length} upload file(s), {symbolFiles.Length} symbol file(s), {appInstallerFiles.Length} appinstaller file(s).");
 
         return new DotNetPublishStorePackageResult
         {
@@ -213,9 +224,101 @@ public sealed partial class DotNetPublishPipelineRunner
             OutputDir = detectedOutputDir,
             OutputFiles = packageFiles,
             UploadFiles = uploadFiles,
-            SymbolFiles = symbolFiles
+            SymbolFiles = symbolFiles,
+            AppInstallerFiles = appInstallerFiles
         };
     }
+
+    internal static void NormalizeAppInstallerFile(string path, DotNetPublishAppInstallerOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return;
+        if (options is null || !options.Enabled)
+            return;
+
+        var document = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+        var root = document.Root;
+        if (root is null)
+            return;
+
+        var ns = ResolveAppInstallerNamespace(options);
+        RewriteElementNamespace(root, ns);
+        if (!string.IsNullOrWhiteSpace(options.Uri))
+            root.SetAttributeValue("Uri", options.Uri!.Trim());
+
+        var updateSettings = root.Element(ns + "UpdateSettings");
+        if (RequiresUpdateSettings(options))
+        {
+            updateSettings ??= new XElement(ns + "UpdateSettings");
+            if (updateSettings.Parent is null)
+                root.Add(updateSettings);
+
+            if (options.HoursBetweenUpdateChecks.HasValue ||
+                options.ShowPrompt.HasValue ||
+                options.UpdateBlocksActivation.HasValue)
+            {
+                var onLaunch = updateSettings.Element(ns + "OnLaunch");
+                onLaunch ??= new XElement(ns + "OnLaunch");
+                if (onLaunch.Parent is null)
+                    updateSettings.Add(onLaunch);
+
+                if (options.HoursBetweenUpdateChecks.HasValue)
+                    onLaunch.SetAttributeValue("HoursBetweenUpdateChecks", options.HoursBetweenUpdateChecks.Value);
+                if (options.ShowPrompt.HasValue)
+                    onLaunch.SetAttributeValue("ShowPrompt", ToXmlBool(options.ShowPrompt.Value));
+                if (options.UpdateBlocksActivation.HasValue)
+                    onLaunch.SetAttributeValue("UpdateBlocksActivation", ToXmlBool(options.UpdateBlocksActivation.Value));
+            }
+
+            if (options.AutomaticBackgroundTask && updateSettings.Element(ns + "AutomaticBackgroundTask") is null)
+                updateSettings.Add(new XElement(ns + "AutomaticBackgroundTask"));
+
+            if (options.ForceUpdateFromAnyVersion.HasValue)
+            {
+                var force = updateSettings.Element(ns + "ForceUpdateFromAnyVersion");
+                force ??= new XElement(ns + "ForceUpdateFromAnyVersion");
+                force.Value = ToXmlBool(options.ForceUpdateFromAnyVersion.Value);
+                if (force.Parent is null)
+                    updateSettings.Add(force);
+            }
+        }
+
+        if (options.UpdateUris is { Length: > 0 })
+        {
+            root.Elements(ns + "UpdateUris").Remove();
+            root.Add(new XElement(
+                ns + "UpdateUris",
+                options.UpdateUris
+                    .Where(uri => !string.IsNullOrWhiteSpace(uri))
+                    .Select(uri => new XElement(ns + "UpdateUri", uri.Trim()))));
+        }
+
+        document.Save(path);
+    }
+
+    private static bool RequiresUpdateSettings(DotNetPublishAppInstallerOptions options)
+        => options.HoursBetweenUpdateChecks.HasValue ||
+           options.ShowPrompt.HasValue ||
+           options.UpdateBlocksActivation.HasValue ||
+           options.AutomaticBackgroundTask ||
+           options.ForceUpdateFromAnyVersion.HasValue;
+
+    private static XNamespace ResolveAppInstallerNamespace(DotNetPublishAppInstallerOptions options)
+        => string.Equals(options.SchemaVersion, "2021", StringComparison.OrdinalIgnoreCase)
+            ? "http://schemas.microsoft.com/appx/appinstaller/2021"
+            : "http://schemas.microsoft.com/appx/appinstaller/2017/2";
+
+    private static void RewriteElementNamespace(XElement element, XNamespace ns)
+    {
+        element.Name = ns + element.Name.LocalName;
+        element.Attributes()
+            .Where(attribute => attribute.IsNamespaceDeclaration)
+            .Remove();
+        foreach (var child in element.Elements())
+            RewriteElementNamespace(child, ns);
+    }
+
+    private static string ToXmlBool(bool value) => value ? "true" : "false";
 
     internal static string DetermineStoreOutputDir(string preferredRoot, params string[][] fileSets)
     {

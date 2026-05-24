@@ -1,4 +1,4 @@
-﻿using PowerForge;
+using PowerForge;
 using PowerForge.Cli;
 using Spectre.Console;
 using System.Diagnostics;
@@ -161,7 +161,7 @@ internal static partial class Program
         }
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(staging))
             return null;
-        return (name!, version!, staging!, roots.ToArray(), strategy, keep);        
+        return (name!, version!, staging!, roots.ToArray(), strategy, keep);
     }
 
     static ModuleTestSuiteSpec? ParseTestArgs(string[] argv)
@@ -1237,6 +1237,11 @@ internal static partial class Program
                 msiPrepareMatches.Add(key);
             }
 
+            var installerById = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+                .Where(i => i is not null && !string.IsNullOrWhiteSpace(i.Id))
+                .GroupBy(i => i.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
             foreach (var msiBuild in plan.Steps.Where(s => s.Kind == DotNetPublishStepKind.MsiBuild))
             {
                 if (string.IsNullOrWhiteSpace(msiBuild.InstallerId))
@@ -1245,7 +1250,11 @@ internal static partial class Program
                     errors.Add($"MSI build step '{msiBuild.Key}' is missing style.");
                 if (string.IsNullOrWhiteSpace(msiBuild.InstallerProjectPath))
                 {
-                    errors.Add($"MSI build step '{msiBuild.Key}' is missing InstallerProjectPath.");
+                    var hasGeneratedAuthoring = !string.IsNullOrWhiteSpace(msiBuild.InstallerId)
+                        && installerById.TryGetValue(msiBuild.InstallerId!, out var installer)
+                        && installer.Authoring is not null;
+                    if (!hasGeneratedAuthoring)
+                        errors.Add($"MSI build step '{msiBuild.Key}' is missing InstallerProjectPath.");
                 }
                 else if (!File.Exists(msiBuild.InstallerProjectPath))
                 {
@@ -1260,11 +1269,6 @@ internal static partial class Program
                         $"for installer/target/framework/runtime/style.");
                 }
             }
-
-            var installerById = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
-                .Where(i => i is not null && !string.IsNullOrWhiteSpace(i.Id))
-                .GroupBy(i => i.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
             var msiBuildMatches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var msiBuild in plan.Steps.Where(s => s.Kind == DotNetPublishStepKind.MsiBuild))

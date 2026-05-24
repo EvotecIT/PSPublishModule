@@ -42,7 +42,11 @@ internal static class PowerForgeInstallerDefinitionValidator
             Require(exitLaunch.Condition, nameof(definition.ExitLaunch.Condition));
         }
         if (definition.LicenseAgreement is { Enabled: true } licenseAgreement)
-            Require(licenseAgreement.Path, nameof(definition.LicenseAgreement.Path));
+        {
+            Require(licenseAgreement.Path, "LicenseAgreement.Path");
+            Require(licenseAgreement.VariableId, "LicenseAgreement.VariableId");
+            RequireWixIdentifier(licenseAgreement.VariableId, "LicenseAgreement.VariableId");
+        }
 
         EnsureUnique(
             definition.Inputs.Select(input => input.Id),
@@ -56,6 +60,12 @@ internal static class PowerForgeInstallerDefinitionValidator
         EnsureUnique(
             definition.Dialogs.Select(dialog => dialog.Id),
             "installer dialog ID");
+        EnsureUnique(
+            definition.Dialogs.SelectMany(dialog => dialog.Actions).Select(action => action.Id),
+            "installer dialog action ID");
+        EnsureUnique(
+            definition.ExecutableActions.Select(action => action.Id),
+            "installer executable action ID");
         // Reserve the whole generated-dialog prefix case-insensitively so authored dialogs cannot
         // collide with future generated validation prompts such as PowerForgeRequiredInputDlg2.
         if (definition.Dialogs.Any(dialog =>
@@ -106,20 +116,20 @@ internal static class PowerForgeInstallerDefinitionValidator
                 Require(input.RegistrySearch.Type, $"input '{input.Id}' registry search type");
             }
 
-            if (input.Kind == PowerForgeInstallerInputKind.RadioGroup && input.Choices.Count == 0)
-                throw new InvalidOperationException($"Input '{input.Id}' is a radio group but has no choices.");
-            if (input.Required && input.Kind == PowerForgeInstallerInputKind.RadioGroup)
+            if (InputKindRequiresChoices(input.Kind) && input.Choices.Count == 0)
+                throw new InvalidOperationException($"Input '{input.Id}' is a {DescribeInputKind(input.Kind)} input but has no choices.");
+            if (input.Required && InputKindRequiresChoices(input.Kind))
             {
                 if (string.IsNullOrWhiteSpace(input.DefaultValue))
                 {
                     throw new InvalidOperationException(
-                        $"Input '{input.Id}' is a required radio group but has no default value.");
+                        $"Input '{input.Id}' is a required {DescribeInputKind(input.Kind)} input but has no default value.");
                 }
 
                 if (!input.Choices.Any(choice => string.Equals(choice.Value, input.DefaultValue, StringComparison.Ordinal)))
                 {
                     throw new InvalidOperationException(
-                        $"Input '{input.Id}' is a required radio group but its default value does not match any choice.");
+                        $"Input '{input.Id}' is a required {DescribeInputKind(input.Kind)} input but its default value does not match any choice.");
                 }
             }
         }
@@ -134,6 +144,36 @@ internal static class PowerForgeInstallerDefinitionValidator
                 if (!inputIds.Contains(inputId))
                     throw new InvalidOperationException($"Dialog '{dialog.Id}' references unknown input '{inputId}'.");
             }
+
+            foreach (var action in dialog.Actions)
+            {
+                Require(action.Id, $"dialog '{dialog.Id}' action ID");
+                RequireWixIdentifier(action.Id, $"dialog '{dialog.Id}' action '{action.Id}' ID");
+                Require(action.Text, $"dialog '{dialog.Id}' action '{action.Id}' Text");
+                Require(action.Target, $"dialog '{dialog.Id}' action '{action.Id}' Target");
+                Require(action.Condition, $"dialog '{dialog.Id}' action '{action.Id}' Condition");
+            }
+        }
+
+        foreach (var action in definition.ExecutableActions)
+        {
+            Require(action.Id, "installer executable action ID");
+            RequireWixIdentifier(action.Id, $"executable action '{action.Id}' ID");
+            Require(action.FileRef, $"executable action '{action.Id}' FileRef");
+            RequireWixIdentifier(action.FileRef, $"executable action '{action.Id}' FileRef");
+            Require(action.Arguments, $"executable action '{action.Id}' Arguments");
+            Require(action.Condition, $"executable action '{action.Id}' Condition");
+            Require(action.Return, $"executable action '{action.Id}' Return");
+            if (!string.IsNullOrWhiteSpace(action.Before) && !string.IsNullOrWhiteSpace(action.After))
+            {
+                throw new InvalidOperationException(
+                    $"Executable action '{action.Id}' cannot set both Before and After.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(action.Before))
+                RequireWixIdentifier(action.Before, $"executable action '{action.Id}' Before");
+            if (!string.IsNullOrWhiteSpace(action.After))
+                RequireWixIdentifier(action.After, $"executable action '{action.Id}' After");
         }
 
         foreach (var tree in definition.Directories)
@@ -293,6 +333,17 @@ internal static class PowerForgeInstallerDefinitionValidator
            kind == PowerForgeInstallerInputKind.FilePath ||
            kind == PowerForgeInstallerInputKind.FolderPath ||
            kind == PowerForgeInstallerInputKind.LicenseKey;
+
+    private static bool InputKindRequiresChoices(PowerForgeInstallerInputKind kind)
+        => kind == PowerForgeInstallerInputKind.RadioGroup ||
+           kind == PowerForgeInstallerInputKind.ComboBox;
+
+    private static string DescribeInputKind(PowerForgeInstallerInputKind kind)
+        => kind == PowerForgeInstallerInputKind.RadioGroup
+            ? "radio group"
+            : kind == PowerForgeInstallerInputKind.ComboBox
+                ? "combo box"
+                : kind.ToString();
 
     private static void ValidateInputDefaultValue(PowerForgeInstallerInput input, Regex? validationRegex)
     {
