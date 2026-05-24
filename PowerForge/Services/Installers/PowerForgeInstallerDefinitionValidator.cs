@@ -66,6 +66,7 @@ internal static class PowerForgeInstallerDefinitionValidator
         EnsureUnique(
             definition.ExecutableActions.Select(action => action.Id),
             "installer executable action ID");
+        ValidateExecutableActionIds(definition);
         // Reserve the whole generated-dialog prefix case-insensitively so authored dialogs cannot
         // collide with future generated validation prompts such as PowerForgeRequiredInputDlg2.
         if (definition.Dialogs.Any(dialog =>
@@ -139,6 +140,12 @@ internal static class PowerForgeInstallerDefinitionValidator
             Require(dialog.Id, nameof(dialog.Id));
             RequireWixIdentifier(dialog.Id, $"dialog '{dialog.Id}' ID");
             Require(dialog.Title, nameof(dialog.Title));
+            if (dialog.Actions.Count > 3)
+            {
+                throw new InvalidOperationException(
+                    $"Dialog '{dialog.Id}' supports at most 3 actions.");
+            }
+
             foreach (var inputId in dialog.InputIds)
             {
                 if (!inputIds.Contains(inputId))
@@ -268,6 +275,43 @@ internal static class PowerForgeInstallerDefinitionValidator
         {
             throw new InvalidOperationException(
                 $"Service component '{service.Id}' ScriptInstall.StopDelaySeconds must be greater than or equal to 0.");
+        }
+    }
+
+    private static void ValidateExecutableActionIds(PowerForgeInstallerDefinition definition)
+    {
+        var emittedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "PowerForgeLaunchOnExit",
+            "PowerForgeDialogShellExecute"
+        };
+
+        foreach (var service in definition.Components.OfType<PowerForgeInstallerServiceComponent>())
+        {
+            foreach (var generatedId in PowerForgeWixInstallerServiceScriptEmitter.GetGeneratedActionIds(service))
+            {
+                emittedIds.Add(generatedId);
+            }
+        }
+
+        foreach (var action in definition.ExecutableActions)
+        {
+            if (string.IsNullOrWhiteSpace(action.Id))
+                continue;
+
+            var id = action.Id.Trim();
+            if (!emittedIds.Add(id))
+            {
+                throw new InvalidOperationException(
+                    $"Executable action '{id}' collides with a generated installer custom action ID.");
+            }
+
+            var setDataId = id + ".SetData";
+            if (!emittedIds.Add(setDataId))
+            {
+                throw new InvalidOperationException(
+                    $"Executable action '{id}' generated SetData action '{setDataId}' collides with another installer custom action ID.");
+            }
         }
     }
 

@@ -2021,6 +2021,12 @@ public sealed partial class DotNetPublishPipelineRunner
         clone.SchemaVersion = string.IsNullOrWhiteSpace(clone.SchemaVersion) ? "2021" : clone.SchemaVersion.Trim();
         clone.UpdateUris = NormalizeStrings(clone.UpdateUris);
 
+        if (!IsSupportedAppInstallerSchemaVersion(clone.SchemaVersion))
+        {
+            throw new ArgumentException(
+                $"Store package '{storePackageId}' AppInstaller.SchemaVersion must be 2021 or 2017.");
+        }
+
         if (clone.HoursBetweenUpdateChecks is < 0 or > 255)
         {
             throw new ArgumentException(
@@ -2044,6 +2050,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
         return clone;
     }
+
+    private static bool IsSupportedAppInstallerSchemaVersion(string schemaVersion)
+        => string.Equals(schemaVersion, "2021", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(schemaVersion, "2017", StringComparison.OrdinalIgnoreCase);
 
     private static string ResolveStorePackagingProjectPath(
         string storePackageId,

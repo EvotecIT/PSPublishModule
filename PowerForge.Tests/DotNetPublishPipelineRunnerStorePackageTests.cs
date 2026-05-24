@@ -178,6 +178,42 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
     }
 
     [Fact]
+    public void Plan_RejectsUnsupportedAppInstallerSchemaVersion()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var packaging = CreateProject(root, "Store/Package.wapproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.StorePackages = new[]
+            {
+                new DotNetPublishStorePackage
+                {
+                    Id = "app.store",
+                    PrepareFromTarget = "app",
+                    PackagingProjectPath = packaging,
+                    AppInstaller = new DotNetPublishAppInstallerOptions
+                    {
+                        SchemaVersion = "2022"
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<ArgumentException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("AppInstaller.SchemaVersion", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("2021 or 2017", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Run_StorePackage_BuildsOutputsAndWritesChecksums()
     {
         var root = CreateTempRoot();

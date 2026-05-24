@@ -353,6 +353,83 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
         PowerForgeInstallerDefinitionValidator.Validate(definition);
     }
 
+    [Fact]
+    public void Validate_RejectsExecutableActionGeneratedSetDataCollision()
+    {
+        var definition = CreateValidDefinition();
+        definition.ExecutableActions.Add(CreateExecutableAction("Configure"));
+        definition.ExecutableActions.Add(CreateExecutableAction("Configure.SetData"));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("SetData", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("collides", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("PowerForgeLaunchOnExit")]
+    [InlineData("PowerForgeDialogShellExecute")]
+    public void Validate_RejectsExecutableActionBuiltInIdCollision(string actionId)
+    {
+        var definition = CreateValidDefinition();
+        definition.ExecutableActions.Add(CreateExecutableAction(actionId));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("generated installer custom action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsExecutableActionServiceScriptIdCollision()
+    {
+        var definition = CreateValidDefinition();
+        definition.Components.Add(new PowerForgeInstallerServiceComponent
+        {
+            Id = "SyncService",
+            DirectoryRefId = "INSTALLFOLDER",
+            FileId = "SyncServiceExe",
+            Source = "SyncService.exe",
+            ServiceName = "SyncService",
+            DisplayName = "Sync Service",
+            ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+            {
+                Command = "sc.exe config SyncService binPath= \"[#SyncServiceExe]\"",
+                Condition = "NOT REMOVE"
+            }
+        });
+        definition.ExecutableActions.Add(CreateExecutableAction("SyncService.InstallService"));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("generated installer custom action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsDialogActionsBeyondRenderedLimit()
+    {
+        var definition = CreateValidDefinition();
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            Actions =
+            {
+                CreateDialogAction("OpenOne"),
+                CreateDialogAction("OpenTwo"),
+                CreateDialogAction("OpenThree"),
+                CreateDialogAction("OpenFour")
+            }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("at most 3 actions", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PowerForgeInstallerDefinition CreateValidDefinition()
     {
         var definition = new PowerForgeInstallerDefinition
@@ -377,4 +454,24 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
 
         return definition;
     }
+
+    private static PowerForgeInstallerExecutableAction CreateExecutableAction(string id)
+        => new()
+        {
+            Id = id,
+            FileRef = "ToolExe",
+            Arguments = "configure",
+            Condition = "NOT Installed",
+            Return = "check",
+            Before = "InstallFinalize"
+        };
+
+    private static PowerForgeInstallerDialogAction CreateDialogAction(string id)
+        => new()
+        {
+            Id = id,
+            Text = id,
+            Target = "https://example.test/",
+            Condition = "1"
+        };
 }

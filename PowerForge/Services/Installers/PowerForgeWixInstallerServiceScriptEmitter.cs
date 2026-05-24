@@ -37,6 +37,21 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             yield return sequence;
     }
 
+    internal static IEnumerable<string> GetGeneratedActionIds(PowerForgeInstallerServiceComponent service)
+    {
+        if (service.ScriptInstall is null)
+            yield break;
+
+        var ids = BuildIds(service.Id);
+        yield return ids.BackupImagePathId;
+        yield return ids.SetBackupCommandId;
+        yield return ids.SetStopServiceId;
+        yield return ids.StopServiceId;
+        yield return ids.InstallServiceId;
+        yield return ids.SetInstallStandardId;
+        yield return ids.SetInstallUpgradeId;
+    }
+
     private static string? EmitServiceActions(
         PowerForgeInstallerServiceComponent service,
         ICollection<XElement> actions,
