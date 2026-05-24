@@ -625,6 +625,7 @@ Generates private PowerShell gallery data from an Azure Artifacts feed.
   "includeAllVersions": true,
   "includePackageContent": true,
   "includeMetrics": false,
+  "maxDocumentContentBytes": 262144,
   "tokenEnv": "AZURE_DEVOPS_TOKEN",
   "auth": "bearer",
   "out": "./data/private-gallery"
@@ -647,6 +648,10 @@ Notes:
   content without importing or executing modules.
 - Static inspection can discover `.psd1`, README, docs, examples, external help
   XML, dependencies, tags, and exported/documented commands.
+- Markdown/text package documentation content is retained in the generated JSON
+  up to `maxDocumentContentBytes` per document so `portal-docs-index` can render
+  bundled README/docs/changelog/license files as website pages without importing
+  or executing the module.
 - `includeMetrics` queries Azure Artifacts package and version metrics. Microsoft
   documents those endpoints with a stronger packaging scope than basic read, so
   metric failures are reported as warnings and do not block inventory/content

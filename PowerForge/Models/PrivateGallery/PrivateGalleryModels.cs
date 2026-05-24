@@ -64,6 +64,9 @@ public sealed class PrivateGalleryIndexOptions
     /// <summary>Maximum number of versions to inspect per package when content inspection is enabled.</summary>
     public int MaxVersionsPerPackage { get; set; } = 1;
 
+    /// <summary>Maximum text bytes to retain for each package documentation asset.</summary>
+    public int MaxDocumentContentBytes { get; set; } = 262144;
+
     /// <summary>HTTP request timeout in seconds.</summary>
     public int RequestTimeoutSeconds { get; set; } = 30;
 
@@ -334,6 +337,9 @@ public sealed class PrivateGalleryDocumentAsset
 
     /// <summary>Asset size in bytes.</summary>
     public long Size { get; set; }
+
+    /// <summary>Bounded text content for documentation assets when captured during package inspection.</summary>
+    public string? Content { get; set; }
 }
 
 /// <summary>

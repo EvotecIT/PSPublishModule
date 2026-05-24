@@ -19,8 +19,9 @@ public sealed class PowerShellModulePackageInspector
     /// Inspects a nupkg file and returns module metadata discovered from static files.
     /// </summary>
     /// <param name="packagePath">Path to the nupkg file.</param>
+    /// <param name="maxDocumentContentBytes">Maximum text bytes to retain per documentation asset.</param>
     /// <returns>Module metadata.</returns>
-    public PrivateGalleryModuleMetadata Inspect(string packagePath)
+    public PrivateGalleryModuleMetadata Inspect(string packagePath, int maxDocumentContentBytes = 262144)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
             throw new ArgumentException("Package path is required.", nameof(packagePath));
@@ -50,7 +51,7 @@ public sealed class PowerShellModulePackageInspector
                 continue;
             }
 
-            AddDocumentAsset(metadata, normalizedPath, entry);
+            AddDocumentAsset(metadata, normalizedPath, entry, maxDocumentContentBytes);
         }
 
         var manifestEntry = archive.Entries
@@ -247,7 +248,7 @@ public sealed class PowerShellModulePackageInspector
         return values.Length > 0;
     }
 
-    private static void AddDocumentAsset(PrivateGalleryModuleMetadata metadata, string normalizedPath, ZipArchiveEntry entry)
+    private static void AddDocumentAsset(PrivateGalleryModuleMetadata metadata, string normalizedPath, ZipArchiveEntry entry, int maxDocumentContentBytes)
     {
         if (entry.FullName.EndsWith("/", StringComparison.Ordinal) || entry.Length == 0)
             return;
@@ -273,13 +274,45 @@ public sealed class PowerShellModulePackageInspector
         if (kind is null)
             return;
 
-        metadata.Documents.Add(new PrivateGalleryDocumentAsset
+        var asset = new PrivateGalleryDocumentAsset
         {
             Path = normalizedPath,
             Kind = kind,
             Title = Path.GetFileNameWithoutExtension(fileName),
             Size = entry.Length
-        });
+        };
+
+        if (ShouldCaptureDocumentContent(kind, lowerName))
+            asset.Content = ReadDocumentContent(metadata, entry, maxDocumentContentBytes);
+
+        metadata.Documents.Add(asset);
+    }
+
+    private static bool ShouldCaptureDocumentContent(string kind, string lowerName)
+        => kind is "readme" or "docs" or "changelog" or "license" ||
+           kind == "example" && (lowerName.EndsWith(".md", StringComparison.Ordinal) || lowerName.EndsWith(".txt", StringComparison.Ordinal));
+
+    private static string? ReadDocumentContent(PrivateGalleryModuleMetadata metadata, ZipArchiveEntry entry, int maxDocumentContentBytes)
+    {
+        if (maxDocumentContentBytes <= 0)
+            return null;
+
+        var maxBytes = Math.Min(maxDocumentContentBytes, MaxTextBytes);
+        if (entry.Length > maxBytes)
+        {
+            metadata.Warnings.Add($"Skipped document content for '{entry.FullName}' because it exceeds the private gallery document content size limit.");
+            return null;
+        }
+
+        try
+        {
+            return ReadTextEntry(entry);
+        }
+        catch (Exception ex)
+        {
+            metadata.Warnings.Add($"Failed to read document content '{entry.FullName}': {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
     }
 
     private static bool IsTextDocument(string lowerName)

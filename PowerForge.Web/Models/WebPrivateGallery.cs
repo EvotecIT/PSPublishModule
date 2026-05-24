@@ -41,6 +41,9 @@ public sealed class WebPrivateGalleryOptions
     /// <summary>Maximum versions per package to inspect when package content inspection is enabled.</summary>
     public int MaxVersionsPerPackage { get; set; } = 1;
 
+    /// <summary>Maximum text bytes retained for each package documentation asset.</summary>
+    public int MaxDocumentContentBytes { get; set; } = 262144;
+
     /// <summary>HTTP request timeout in seconds.</summary>
     public int RequestTimeoutSeconds { get; set; } = 30;
 

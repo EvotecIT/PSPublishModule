@@ -212,11 +212,16 @@ public static partial class WebPortalDocsGenerator
             foreach (var asset in assets.OrderBy(asset => asset.Path, StringComparer.OrdinalIgnoreCase))
             {
                 var kind = string.IsNullOrWhiteSpace(asset.Kind) ? Classify(asset.Path, classify) : asset.Kind;
-                var doc = CreateDocument(source, normalizedSource, asset.Path, null, package.WebUrl, null, kind, docs.Count);
+                var doc = CreateDocument(source, normalizedSource, asset.Path, asset.Content, package.WebUrl, null, kind, docs.Count);
                 doc.Module = source.RelationshipDefaults?.Module ?? source.Placement?.Module ?? package.Module?.Name ?? package.Name;
                 doc.Package = package.Name;
                 doc.Version = package.Module?.Version ?? package.LatestVersion;
                 doc.Title = string.IsNullOrWhiteSpace(asset.Title) ? ExtractTitle(null, asset.Path) : asset.Title!;
+                if (!string.IsNullOrWhiteSpace(asset.Content))
+                {
+                    doc.Title = ExtractTitle(asset.Content, asset.Path);
+                    doc.Summary = ExtractSummary(asset.Content);
+                }
                 docs.Add(doc);
             }
         }

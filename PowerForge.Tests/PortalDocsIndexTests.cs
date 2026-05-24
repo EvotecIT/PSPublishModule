@@ -49,7 +49,13 @@ public sealed class PortalDocsIndexTests
                             Version = "1.2.3",
                             Documents =
                             {
-                                new PrivateGalleryDocumentAsset { Path = "Contoso.Tools/README.md", Kind = "readme", Title = "Contoso Tools" }
+                                new PrivateGalleryDocumentAsset
+                                {
+                                    Path = "Contoso.Tools/README.md",
+                                    Kind = "readme",
+                                    Title = "Contoso Tools",
+                                    Content = "# Contoso Package Docs\n\nBundled package guidance."
+                                }
                             }
                         }
                     }
@@ -95,11 +101,16 @@ public sealed class PortalDocsIndexTests
             var docs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(result.DocsPath), JsonOptions)!;
             Assert.Equal(2, docs.Documents.Count);
             Assert.Contains(docs.Documents, doc => doc.SourceKind == "local" && doc.Title == "Getting Started" && doc.Kind == "docs");
-            Assert.Contains(docs.Documents, doc => doc.SourceKind == "package" && doc.Module == "Contoso.Tools" && doc.Kind == "readme");
+            Assert.Contains(docs.Documents, doc =>
+                doc.SourceKind == "package" &&
+                doc.Module == "Contoso.Tools" &&
+                doc.Kind == "readme" &&
+                doc.Title == "Contoso Package Docs" &&
+                doc.Content!.Contains("Bundled package guidance.", StringComparison.Ordinal));
 
             var search = JsonSerializer.Deserialize<WebPortalDocsSearchDocument>(File.ReadAllText(result.SearchPath), JsonOptions)!;
             Assert.Contains(search.Entries, entry => entry.Title == "Getting Started");
-            Assert.Contains(search.Entries, entry => entry.Module == "Contoso.Tools");
+            Assert.Contains(search.Entries, entry => entry.Module == "Contoso.Tools" && entry.Summary == "Bundled package guidance.");
         }
         finally
         {
