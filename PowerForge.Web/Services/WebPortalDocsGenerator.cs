@@ -353,7 +353,7 @@ public static partial class WebPortalDocsGenerator
     private static WebPortalDocsSource CreateSource(WebPortalDocsSourceSpec source)
     {
         var id = string.IsNullOrWhiteSpace(source.Id)
-            ? MakeSafeFragment($"{source.Kind}-{source.Title}-{source.Module}-{source.Path}-{source.Repo}")
+            ? MakeSafeFragment($"{source.Kind}-{source.Title}-{source.Module}-{source.Path}-{source.Owner}-{source.Organization}-{source.Project}-{source.Repository ?? source.Repo}")
             : source.Id!;
         return new WebPortalDocsSource
         {
@@ -625,10 +625,14 @@ public static partial class WebPortalDocsGenerator
     private static bool IsTextDocument(string path)
     {
         var extension = Path.GetExtension(path);
+        var fileName = Path.GetFileName(path);
         return extension.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
                extension.Equals(".mdx", StringComparison.OrdinalIgnoreCase) ||
                extension.Equals(".txt", StringComparison.OrdinalIgnoreCase) ||
-               string.IsNullOrWhiteSpace(extension) && Path.GetFileName(path).Equals("LICENSE", StringComparison.OrdinalIgnoreCase);
+               string.IsNullOrWhiteSpace(extension) &&
+               (fileName.Equals("LICENSE", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Equals("README", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Equals("CHANGELOG", StringComparison.OrdinalIgnoreCase));
     }
 
     private static List<string> DefaultIncludePatterns()
