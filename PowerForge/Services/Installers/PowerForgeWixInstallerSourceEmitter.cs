@@ -25,7 +25,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         if (definition is null) throw new ArgumentNullException(nameof(definition));
         PowerForgeInstallerDefinitionValidator.Validate(definition);
 
-        var needsUi = definition.Dialogs.Count > 0 || definition.ExitLaunch is { Enabled: true };
+        var needsUi = RequiresUiExtension(definition);
         var needsUtil = RequiresUtilExtension(definition);
         var rootAttributes = new List<XAttribute>();
         if (needsUtil)
@@ -47,6 +47,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XElement(WixNamespace + "MediaTemplate", new XAttribute("EmbedCab", "yes")));
 
         EmitProperties(package, definition);
+        EmitLicenseAgreement(package, definition);
         EmitExitLaunchAction(package, definition);
         if (needsUi)
             package.Add(EmitUi(definition));
@@ -83,7 +84,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             .OrderBy(file => string.Equals(file, options.SourceFile, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(file => file, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var needsUi = definition.Dialogs.Count > 0 || definition.ExitLaunch is { Enabled: true };
+        var needsUi = RequiresUiExtension(definition);
 
         var project = new XElement(
             "Project",
@@ -198,6 +199,17 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("BinaryRef", "Wix4UtilCA_$(sys.BUILDARCHSHORT)"),
                 new XAttribute("DllEntry", "WixShellExec"),
                 new XAttribute("Impersonate", "yes")));
+    }
+
+    private static void EmitLicenseAgreement(XElement package, PowerForgeInstallerDefinition definition)
+    {
+        if (definition.LicenseAgreement is not { Enabled: true } licenseAgreement)
+            return;
+
+        package.Add(new XElement(
+            WixNamespace + "WixVariable",
+            new XAttribute("Id", "WixUILicenseRtf"),
+            new XAttribute("Value", licenseAgreement.Path)));
     }
 
     private static XElement EmitUi(PowerForgeInstallerDefinition definition)
@@ -784,6 +796,11 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         => definition.Components.OfType<PowerForgeInstallerRemoveFolderComponent>().Any() ||
            definition.ExitLaunch is { Enabled: true } ||
            PowerForgeWixInstallerServiceScriptEmitter.RequiresUtilExtension(definition);
+
+    private static bool RequiresUiExtension(PowerForgeInstallerDefinition definition)
+        => definition.Dialogs.Count > 0 ||
+           definition.ExitLaunch is { Enabled: true } ||
+           definition.LicenseAgreement is { Enabled: true };
 
     private static XElement EmitServiceInstall(PowerForgeInstallerServiceComponent service)
     {

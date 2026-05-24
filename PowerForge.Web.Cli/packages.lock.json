@@ -71,16 +71,16 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Transitive",
-        "resolved": "14.12.0",
-        "contentHash": "YGEgNTZ6DaMhXgJYLClRrmEe6CMsEL5E8hy4c2iH/aEmj41ojFAtA/PIXYH1AOYINNEUX/83nLp/y5obt9P/vw==",
+        "resolved": "14.13.1",
+        "contentHash": "Naw4lYw9Mv+Tnd67H2Un+joZsZTWmbo7A4kycoosM6JnclMXb+ZNRbCqgvMRA6wAEJfybFDiP5NauLgL4xkyXA==",
         "dependencies": {
-          "Magick.NET.Core": "14.12.0"
+          "Magick.NET.Core": "14.13.1"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.12.0",
-        "contentHash": "QPyuk1Lxp1xgSTP8xomnoZjeOtUeTSoeSuEckhGaUAi6GdZ5d2PmZqzr0O4m/zPbC4So/yg5rr2QO4vYD6fB5g=="
+        "resolved": "14.13.1",
+        "contentHash": "BhqOKCLixvj/Ofwe+aRPHqoGdWekvKavsQrivBSuUq0zzzijnIF/OxqVA+GCd6WP46C4PaIfGhR65BPi2M0cKg=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -116,8 +116,8 @@
       },
       "Scriban": {
         "type": "Transitive",
-        "resolved": "7.0.0",
-        "contentHash": "Y4/BGU/c2TjvGUfMBm5jZfPjHe8B4dk8ej72Vsy+nTsRCb/TNqZ1PdGQnV+04p7RJ85UiM4ni2Dx2F7yKOORNw=="
+        "resolved": "7.2.0",
+        "contentHash": "GiAuu6bCPVWJeMMK8AkJMCNX+wyqt2qgiKjVAPLvRWxzBwpDJjLhJltVP034tsZUHOkBtdfA/Otrny+n3NelBw=="
       },
       "SixLabors.Fonts": {
         "type": "Transitive",
@@ -153,6 +153,11 @@
         "resolved": "8.0.0",
         "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
       },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
+      },
       "YamlDotNet": {
         "type": "Transitive",
         "resolved": "15.1.2",
@@ -162,17 +167,18 @@
         "type": "Project",
         "dependencies": {
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
           "HtmlTinkerX": "[2.0.6, )",
-          "Magick.NET-Q8-AnyCPU": "[14.12.0, )",
+          "Magick.NET-Q8-AnyCPU": "[14.13.1, )",
           "OfficeIMO.Markdown": "[0.6.7, )",
           "PowerForge": "[1.0.0, )",
-          "Scriban": "[7.0.0, )",
+          "Scriban": "[7.2.0, )",
           "YamlDotNet": "[15.1.2, )"
         }
       }
@@ -247,16 +253,16 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Transitive",
-        "resolved": "14.12.0",
-        "contentHash": "YGEgNTZ6DaMhXgJYLClRrmEe6CMsEL5E8hy4c2iH/aEmj41ojFAtA/PIXYH1AOYINNEUX/83nLp/y5obt9P/vw==",
+        "resolved": "14.13.1",
+        "contentHash": "Naw4lYw9Mv+Tnd67H2Un+joZsZTWmbo7A4kycoosM6JnclMXb+ZNRbCqgvMRA6wAEJfybFDiP5NauLgL4xkyXA==",
         "dependencies": {
-          "Magick.NET.Core": "14.12.0"
+          "Magick.NET.Core": "14.13.1"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.12.0",
-        "contentHash": "QPyuk1Lxp1xgSTP8xomnoZjeOtUeTSoeSuEckhGaUAi6GdZ5d2PmZqzr0O4m/zPbC4So/yg5rr2QO4vYD6fB5g=="
+        "resolved": "14.13.1",
+        "contentHash": "BhqOKCLixvj/Ofwe+aRPHqoGdWekvKavsQrivBSuUq0zzzijnIF/OxqVA+GCd6WP46C4PaIfGhR65BPi2M0cKg=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -291,8 +297,8 @@
       },
       "Scriban": {
         "type": "Transitive",
-        "resolved": "7.0.0",
-        "contentHash": "Y4/BGU/c2TjvGUfMBm5jZfPjHe8B4dk8ej72Vsy+nTsRCb/TNqZ1PdGQnV+04p7RJ85UiM4ni2Dx2F7yKOORNw=="
+        "resolved": "7.2.0",
+        "contentHash": "GiAuu6bCPVWJeMMK8AkJMCNX+wyqt2qgiKjVAPLvRWxzBwpDJjLhJltVP034tsZUHOkBtdfA/Otrny+n3NelBw=="
       },
       "SixLabors.Fonts": {
         "type": "Transitive",
@@ -323,6 +329,11 @@
         "resolved": "8.0.0",
         "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
       },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
+      },
       "YamlDotNet": {
         "type": "Transitive",
         "resolved": "15.1.2",
@@ -332,17 +343,18 @@
         "type": "Project",
         "dependencies": {
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
           "HtmlTinkerX": "[2.0.6, )",
-          "Magick.NET-Q8-AnyCPU": "[14.12.0, )",
+          "Magick.NET-Q8-AnyCPU": "[14.13.1, )",
           "OfficeIMO.Markdown": "[0.6.7, )",
           "PowerForge": "[1.0.0, )",
-          "Scriban": "[7.0.0, )",
+          "Scriban": "[7.2.0, )",
           "YamlDotNet": "[15.1.2, )"
         }
       }

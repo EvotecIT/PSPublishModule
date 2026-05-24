@@ -272,6 +272,16 @@ Invoke-ModuleBuild @buildParams -Settings {
         NETConfiguration               = 'Release'
         NETFramework                   = 'net8.0', 'net472'
         NETHandleAssemblyWithSameName  = $true
+        NETAssemblyLoadContext         = $true
+        NETAssemblyTypeAccelerators    = @(
+            'PowerForge.ModuleTestFailureAnalysis',
+            'PowerForge.ModuleTestSuiteResult',
+            'PowerForge.ModuleRepositoryProfileScope',
+            'PowerForge.PrivateGalleryBootstrapMode',
+            'PowerForge.PrivateGalleryCredentialSource',
+            'PowerForge.PublishTool',
+            'PowerForge.RepositoryRegistrationTool'
+        )
         #NETDocumentation                  = $true
         DotSourceLibraries             = $true
         DotSourceClasses               = $true

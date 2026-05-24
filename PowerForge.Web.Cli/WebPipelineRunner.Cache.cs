@@ -445,6 +445,38 @@ internal static partial class WebPipelineRunner
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "package-hub":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "portal-docs-index":
+            case "portal-docs":
+            case "company-portal-docs":
+            {
+                var outRoot = ResolvePath(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputDirectory") ??
+                    GetString(step, "output-directory") ??
+                    "./data/portal");
+                return string.IsNullOrWhiteSpace(outRoot)
+                    ? Array.Empty<string>()
+                    : new[]
+                    {
+                        Path.Combine(outRoot, "docs.json"),
+                        Path.Combine(outRoot, "search.json")
+                    };
+            }
+            case "portal-module-pages":
+            case "private-gallery-pages":
+            case "company-portal-module-pages":
+            {
+                var outRoot = ResolvePath(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputDirectory") ??
+                    GetString(step, "output-directory") ??
+                    "./content/generated/modules");
+                return string.IsNullOrWhiteSpace(outRoot)
+                    ? Array.Empty<string>()
+                    : new[] { outRoot };
+            }
             case "llms":
             {
                 var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));

@@ -104,7 +104,11 @@ internal sealed class MarkdownHelpWriter
         GeneratedTextNormalizer.WriteUtf8NoBom(readmePath, doc.ToString());
     }
 
-    private static string RenderCommandMarkdown(string moduleName, DocumentationCommandHelp cmd, string? onlineVersion)
+    internal static string RenderCommandMarkdown(
+        string moduleName,
+        DocumentationCommandHelp cmd,
+        string? onlineVersion = null,
+        DocumentationExampleLayout examplesLayout = DocumentationExampleLayout.MamlDefault)
     {
         var doc = new MarkdownDocumentBuilder(blankLineAfterFrontMatter: false);
         doc.FrontMatterRaw("external help file", $"{moduleName}-help.xml");
@@ -159,10 +163,31 @@ internal sealed class MarkdownHelpWriter
             {
                 var ex = examples[i];
                 doc.RawLine($"### EXAMPLE {i + 1}");
-                doc.CodeFence("powershell", RenderMarkdownExampleCode(cmd.Name.Trim(), ex));
-                if (!string.IsNullOrWhiteSpace(ex.Remarks))
+                var code = RenderMarkdownExampleCode(cmd.Name.Trim(), ex);
+                var remarks = (ex.Remarks ?? string.Empty).Replace("\r\n", "\n").TrimEnd('\n', '\r');
+                if (examplesLayout == DocumentationExampleLayout.ProseFirst)
                 {
-                    doc.RawLine(ex.Remarks.Replace("\r\n", "\n").TrimEnd('\n', '\r').Replace("\n", Environment.NewLine));
+                    if (!string.IsNullOrWhiteSpace(remarks))
+                    {
+                        doc.RawLine(remarks.Replace("\n", Environment.NewLine));
+                    }
+
+                    doc.CodeFence("powershell", code);
+                }
+                else if (examplesLayout == DocumentationExampleLayout.AllAsCode)
+                {
+                    var block = string.IsNullOrWhiteSpace(remarks)
+                        ? code
+                        : code.TrimEnd() + Environment.NewLine + Environment.NewLine + remarks.Replace("\n", Environment.NewLine);
+                    doc.CodeFence("powershell", block);
+                }
+                else
+                {
+                    doc.CodeFence("powershell", code);
+                    if (!string.IsNullOrWhiteSpace(remarks))
+                    {
+                        doc.RawLine(remarks.Replace("\n", Environment.NewLine));
+                    }
                 }
                 doc.BlankLine();
             }
@@ -363,4 +388,11 @@ internal sealed class MarkdownHelpWriter
         var p = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return p + Path.DirectorySeparatorChar;
     }
+}
+
+internal enum DocumentationExampleLayout
+{
+    MamlDefault,
+    ProseFirst,
+    AllAsCode
 }

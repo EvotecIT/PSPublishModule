@@ -7,13 +7,15 @@ using System.Reflection;
 /// <summary>
 /// Namespace for module import and removal handling.
 /// </summary>
-public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemblyCleanup {
+public partial class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemblyCleanup {
     /// <summary>
     /// Handles module import event.
     /// </summary>
     public void OnImport() {
         if (IsNetFramework()) {
             AppDomain.CurrentDomain.AssemblyResolve += MyResolveEventHandler;
+        } else {
+            RegisterCoreResolver();
         }
     }
 
@@ -24,8 +26,14 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
     public void OnRemove(PSModuleInfo module) {
         if (IsNetFramework()) {
             AppDomain.CurrentDomain.AssemblyResolve -= MyResolveEventHandler;
+        } else {
+            UnregisterCoreResolver();
         }
     }
+
+    partial void RegisterCoreResolver();
+
+    partial void UnregisterCoreResolver();
 
     /// <summary>
     /// Custom assembly resolver to load assemblies from the module directory.
@@ -38,15 +46,12 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
         //Console.WriteLine($"Resolving {args.Name}");
         var directoryPath = Path.GetDirectoryName(typeof(OnModuleImportAndRemove).Assembly.Location);
         if (directoryPath != null) {
-            var filesInDirectory = Directory.GetFiles(directoryPath);
-
-            foreach (var file in filesInDirectory) {
-                var fileName = Path.GetFileName(file);
-                var assemblyName = Path.GetFileNameWithoutExtension(file);
-
-                if (args.Name.StartsWith(assemblyName)) {
-                    //Console.WriteLine($"Loading {args.Name} assembly {fileName}");
-                    return Assembly.LoadFile(file);
+            var requestedName = new AssemblyName(args.Name).Name;
+            if (!string.IsNullOrWhiteSpace(requestedName)) {
+                var candidate = Path.Combine(directoryPath, requestedName + ".dll");
+                if (File.Exists(candidate)) {
+                    //Console.WriteLine($"Loading {args.Name} assembly {Path.GetFileName(candidate)}");
+                    return Assembly.LoadFile(candidate);
                 }
             }
         }
@@ -81,6 +86,8 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
         return System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription.StartsWith(".NET 5", StringComparison.OrdinalIgnoreCase) ||
                System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription.StartsWith(".NET 6", StringComparison.OrdinalIgnoreCase) ||
                System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription.StartsWith(".NET 7", StringComparison.OrdinalIgnoreCase) ||
-               System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription.StartsWith(".NET 8", StringComparison.OrdinalIgnoreCase);
+               System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription.StartsWith(".NET 8", StringComparison.OrdinalIgnoreCase) ||
+               System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription.StartsWith(".NET 9", StringComparison.OrdinalIgnoreCase) ||
+               System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription.StartsWith(".NET 10", StringComparison.OrdinalIgnoreCase);
     }
 }

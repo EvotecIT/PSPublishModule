@@ -654,6 +654,115 @@ Notes:
 - Best used before `build` so templates and search data can consume
   `data/private-gallery/feed.json`.
 
+#### portal-docs-index
+Generates company portal documentation data from website-local content, private
+gallery package metadata, and repository-backed docs.
+```json
+{
+  "task": "portal-docs-index",
+  "sources": "./portal.sources.json",
+  "privateGallery": "./data/private-gallery/feed.json",
+  "includeContent": true,
+  "tokenEnv": "GITHUB_TOKEN",
+  "out": "./data/portal"
+}
+```
+
+Example `portal.sources.json`:
+```json
+{
+  "schemaVersion": 1,
+  "format": "powerforge.portal.sources",
+  "defaults": {
+    "branch": "main",
+    "include": [ "README.md", "CHANGELOG.md", "Docs/**/*.md", "docs/**/*.md" ],
+    "exclude": [ "**/bin/**", "**/obj/**", "**/_site/**", "**/.git/**" ]
+  },
+  "sources": [
+    {
+      "id": "portal-local",
+      "kind": "local",
+      "path": "./content",
+      "include": [ "docs/**/*.md", "maintainers/**/*.md", "sop/**/*.md" ],
+      "placement": { "surface": "knowledge-base", "navigationGroup": "Documentation" }
+    },
+    {
+      "id": "pspublishmodule-package",
+      "kind": "package",
+      "module": "PSPublishModule",
+      "placement": { "surface": "module", "module": "PSPublishModule", "navigationGroup": "Bundled module docs" }
+    },
+    {
+      "id": "pspublishmodule-repository",
+      "kind": "github",
+      "owner": "EvotecIT",
+      "repo": "PSPublishModule",
+      "module": "PSPublishModule",
+      "include": [ "README.md", "CHANGELOG.md", "Docs/PSPublishModule.PrivateGalleries.md" ],
+      "placement": { "surface": "module", "module": "PSPublishModule", "navigationGroup": "Repository docs" },
+      "relationshipDefaults": { "module": "PSPublishModule", "tags": [ "PowerForge", "PrivateGallery" ] }
+    },
+    {
+      "id": "internal-azdo-repository",
+      "kind": "azure-devops",
+      "organization": "evotecpl",
+      "project": "PowerShellGallery",
+      "repository": "InternalModule",
+      "branch": "main",
+      "authentication": "pat",
+      "include": [ "README.md", "Docs/**/*.md" ],
+      "placement": { "surface": "module", "module": "InternalModule", "navigationGroup": "Repository docs" },
+      "relationshipDefaults": { "module": "InternalModule", "tags": [ "AzureDevOps" ] }
+    }
+  ]
+}
+```
+
+Notes:
+- This is an engine/data task only; themes decide how to render the portal UI.
+- Output includes `docs.json` and `search.json`.
+- `local` sources read markdown/text files from the website repository.
+- `package` sources project document assets discovered by `private-gallery-index`
+  from inspected `.nupkg` content; no module code is imported or executed.
+- `github` sources enumerate repository files through the GitHub tree API and
+  fetch raw content when `includeContent` is true. Use `tokenEnv` for private
+  repositories or higher API limits.
+- `azure-devops` sources enumerate repository files through Azure DevOps Git
+  Items and fetch item content when `includeContent` is true. Use `auth:
+  "bearer"`/default for job access tokens or `authentication: "pat"` for PAT
+  style basic-token requests.
+- Best used after `private-gallery-index` and before `build`, so templates and
+  client-side search can consume `data/portal/docs.json` and
+  `data/portal/search.json`.
+
+#### portal-module-pages
+Generates static Markdown pages for each private gallery module by composing
+`private-gallery-index` feed data with `portal-docs-index` documentation data.
+```json
+{
+  "task": "portal-module-pages",
+  "privateGallery": "./data/private-gallery/feed.json",
+  "portalDocs": "./data/portal/docs.json",
+  "profileName": "EvotecPowerShellGallery",
+  "repositoryName": "PowerShellGalleryFeed",
+  "out": "./content/generated/modules"
+}
+```
+
+Notes:
+- Output is content, not rendered HTML. Add a site collection that points at the
+  generated folder, for example `Input: "content/generated/modules"` and
+  `Output: "/modules"`, then run `build`.
+- Each module gets an `index.md` page with install/update commands, module
+  facts, commands, package document assets, related portal/repository docs,
+  dependencies, and versions.
+- Portal docs with embedded content get generated module-related pages under
+  `<module>-<doc>/`, so repository-maintained README/changelog/how-to files can
+  be displayed without copying them into the website repository.
+- The task does not contact the feed or repositories. It consumes the JSON
+  outputs from the earlier tasks, which keeps page generation deterministic and
+  reusable in CI.
+
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 ```json

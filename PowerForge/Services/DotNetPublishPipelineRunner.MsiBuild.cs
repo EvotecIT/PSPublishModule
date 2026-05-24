@@ -195,6 +195,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var definition = CloneInstallerDefinition(installer.Authoring)!;
         if (!string.IsNullOrWhiteSpace(productVersion))
             definition.Product.Version = productVersion!;
+        ResolveGeneratedInstallerLicenseAgreementPath(definition, plan.ProjectRoot);
         if (string.IsNullOrWhiteSpace(definition.PayloadComponentGroupId) &&
             !string.IsNullOrWhiteSpace(prepare.HarvestComponentGroupId))
         {
@@ -224,6 +225,19 @@ public sealed partial class DotNetPublishPipelineRunner
             .PrepareWorkspace(definition, request);
         _logger.Info($"Generated WiX installer project for '{installerId}' -> {workspace.ProjectPath}");
         return workspace.ProjectPath;
+    }
+
+    private static void ResolveGeneratedInstallerLicenseAgreementPath(
+        PowerForgeInstallerDefinition definition,
+        string projectRoot)
+    {
+        if (definition.LicenseAgreement is not { Enabled: true } licenseAgreement ||
+            string.IsNullOrWhiteSpace(licenseAgreement.Path))
+        {
+            return;
+        }
+
+        licenseAgreement.Path = ResolvePath(projectRoot, licenseAgreement.Path);
     }
 
     private static bool IsGeneratedInstallerProject(
