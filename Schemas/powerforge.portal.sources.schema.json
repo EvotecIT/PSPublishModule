@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.portal.sources.schema.json",
+  "title": "PowerForge Portal Sources",
+  "type": "object",
+  "required": [ "sources" ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "format": { "type": "string", "const": "powerforge.portal.sources" },
+    "defaults": { "$ref": "#/$defs/sourceDefaults" },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/source" }
+    }
+  },
+  "$defs": {
+    "sourceDefaults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "branch": { "type": "string" },
+        "include": { "type": "array", "items": { "type": "string" } },
+        "exclude": { "type": "array", "items": { "type": "string" } },
+        "classify": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": [ "kind" ],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": [ "local", "package", "github", "azure-devops", "azuredevops", "module", "module-docs", "moduleDocs" ]
+        },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "path": { "type": "string" },
+        "owner": { "type": "string" },
+        "repo": { "type": "string" },
+        "project": { "type": "string" },
+        "organization": { "type": "string" },
+        "repository": { "type": "string" },
+        "repositoryKind": { "type": "string", "enum": [ "github", "azure-devops", "azuredevops" ] },
+        "branch": { "type": "string" },
+        "authentication": { "type": "string" },
+        "auth": { "type": "string" },
+        "module": { "type": "string" },
+        "section": { "type": "string" },
+        "include": { "type": "array", "items": { "type": "string" } },
+        "exclude": { "type": "array", "items": { "type": "string" } },
+        "includePackage": { "type": "boolean" },
+        "includePackageDocs": { "type": "boolean" },
+        "includeRepository": { "type": "boolean" },
+        "includeRepositoryDocs": { "type": "boolean" },
+        "placement": { "$ref": "#/$defs/placement" },
+        "relationshipDefaults": { "$ref": "#/$defs/relationshipDefaults" }
+      }
+    },
+    "placement": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "surface": { "type": "string" },
+        "module": { "type": "string" },
+        "navigationGroup": { "type": "string" },
+        "order": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "relationshipDefaults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "module": { "type": "string" },
+        "package": { "type": "string" },
+        "version": { "type": "string" },
+        "command": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

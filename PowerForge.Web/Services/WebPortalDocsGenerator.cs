@@ -43,7 +43,7 @@ public static partial class WebPortalDocsGenerator
         var gallery = LoadPrivateGallery(galleryPath, document.Warnings);
         using var http = CreateHttpClient(options, messageHandler);
 
-        foreach (var source in sourceSpec.Sources)
+        foreach (var source in ExpandModuleSources(sourceSpec.Sources))
         {
             var normalizedSource = CreateSource(source);
             document.Sources.Add(normalizedSource);
@@ -54,6 +54,7 @@ public static partial class WebPortalDocsGenerator
                 {
                     "local" => IndexLocalSource(sourceSpec.Defaults, source, normalizedSource, baseDir, options, document.Warnings),
                     "package" => IndexPackageSource(sourceSpec.Defaults, source, normalizedSource, gallery, options, document.Warnings),
+                    "module" or "module-docs" or "moduleDocs" => UnsupportedSource(source, normalizedSource, document.Warnings),
                     "github" => await IndexGitHubSource(sourceSpec.Defaults, source, normalizedSource, http, options, token, document.Warnings).ConfigureAwait(false),
                     "azure-devops" or "azuredevops" => await IndexAzureDevOpsSource(sourceSpec.Defaults, source, normalizedSource, http, options, token, document.Warnings).ConfigureAwait(false),
                     _ => UnsupportedSource(source, normalizedSource, document.Warnings)
@@ -120,6 +121,142 @@ public static partial class WebPortalDocsGenerator
         var spec = JsonSerializer.Deserialize<WebPortalDocsSourcesSpec>(File.ReadAllText(sourcesPath), WebJson.Options);
         return spec ?? new WebPortalDocsSourcesSpec();
     }
+
+    private static List<WebPortalDocsSourceSpec> ExpandModuleSources(IEnumerable<WebPortalDocsSourceSpec> sources)
+    {
+        var expanded = new List<WebPortalDocsSourceSpec>();
+        foreach (var source in sources)
+        {
+            if (!IsModuleSource(source))
+            {
+                expanded.Add(source);
+                continue;
+            }
+
+            var module = source.Module ?? source.RelationshipDefaults?.Module ?? source.Placement?.Module;
+            var includePackageDocs = source.IncludePackageDocs ?? source.IncludePackage ?? true;
+            var includeRepositoryDocs = source.IncludeRepositoryDocs ?? source.IncludeRepository ?? HasRepositorySource(source);
+            if (includePackageDocs)
+                expanded.Add(CreatePackageSource(source, module));
+            if (includeRepositoryDocs)
+                expanded.Add(CreateRepositorySource(source, module));
+        }
+
+        return expanded;
+    }
+
+    private static bool IsModuleSource(WebPortalDocsSourceSpec source)
+        => source.Kind?.Equals("module", StringComparison.OrdinalIgnoreCase) == true ||
+           source.Kind?.Equals("module-docs", StringComparison.OrdinalIgnoreCase) == true ||
+           source.Kind?.Equals("moduleDocs", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static WebPortalDocsSourceSpec CreatePackageSource(WebPortalDocsSourceSpec source, string? module)
+    {
+        var copy = CloneSource(source);
+        copy.Id = BuildExpandedSourceId(source, "package");
+        copy.Kind = "package";
+        copy.Title ??= string.IsNullOrWhiteSpace(module) ? "Package docs" : $"{module} package docs";
+        copy.Module = module ?? source.Module;
+        copy.Placement ??= new WebPortalDocsPlacement();
+        copy.Placement.Module ??= module;
+        copy.Placement.Surface ??= "module";
+        copy.Placement.NavigationGroup ??= "Bundled module docs";
+        copy.RelationshipDefaults ??= new WebPortalDocsRelationshipDefaults();
+        copy.RelationshipDefaults.Module ??= module;
+        copy.RelationshipDefaults.Package ??= module;
+        return copy;
+    }
+
+    private static WebPortalDocsSourceSpec CreateRepositorySource(WebPortalDocsSourceSpec source, string? module)
+    {
+        var copy = CloneSource(source);
+        copy.Id = BuildExpandedSourceId(source, "repository");
+        copy.Kind = ResolveRepositoryKind(source);
+        copy.Title ??= string.IsNullOrWhiteSpace(module) ? "Repository docs" : $"{module} repository docs";
+        copy.Module = module ?? source.Module;
+        copy.Placement ??= new WebPortalDocsPlacement();
+        copy.Placement.Module ??= module;
+        copy.Placement.Surface ??= "module";
+        copy.Placement.NavigationGroup ??= "Repository docs";
+        copy.RelationshipDefaults ??= new WebPortalDocsRelationshipDefaults();
+        copy.RelationshipDefaults.Module ??= module;
+        copy.RelationshipDefaults.Package ??= module;
+        return copy;
+    }
+
+    private static string BuildExpandedSourceId(WebPortalDocsSourceSpec source, string suffix)
+        => string.IsNullOrWhiteSpace(source.Id)
+            ? MakeSafeFragment($"{source.Module}-{suffix}")
+            : $"{source.Id}-{suffix}";
+
+    private static string ResolveRepositoryKind(WebPortalDocsSourceSpec source)
+    {
+        if (!string.IsNullOrWhiteSpace(source.RepositoryKind))
+            return source.RepositoryKind!;
+        if (!string.IsNullOrWhiteSpace(source.Organization) || !string.IsNullOrWhiteSpace(source.Project))
+            return "azure-devops";
+        return "github";
+    }
+
+    private static bool HasRepositorySource(WebPortalDocsSourceSpec source)
+        => !string.IsNullOrWhiteSpace(source.Owner) ||
+           !string.IsNullOrWhiteSpace(source.Repo) ||
+           !string.IsNullOrWhiteSpace(source.Organization) ||
+           !string.IsNullOrWhiteSpace(source.Project) ||
+           !string.IsNullOrWhiteSpace(source.Repository);
+
+    private static WebPortalDocsSourceSpec CloneSource(WebPortalDocsSourceSpec source)
+        => new()
+        {
+            Id = source.Id,
+            Kind = source.Kind,
+            Title = source.Title,
+            Description = source.Description,
+            Path = source.Path,
+            Section = source.Section,
+            Module = source.Module,
+            Owner = source.Owner,
+            Repo = source.Repo,
+            Organization = source.Organization,
+            Project = source.Project,
+            Repository = source.Repository,
+            RepositoryKind = source.RepositoryKind,
+            Branch = source.Branch,
+            Authentication = source.Authentication,
+            Auth = source.Auth,
+            Include = source.Include.ToList(),
+            Exclude = source.Exclude.ToList(),
+            Classify = new Dictionary<string, string>(source.Classify, StringComparer.OrdinalIgnoreCase),
+            Placement = ClonePlacement(source.Placement),
+            RelationshipDefaults = CloneRelationshipDefaults(source.RelationshipDefaults),
+            IncludePackage = source.IncludePackage,
+            IncludePackageDocs = source.IncludePackageDocs,
+            IncludeRepository = source.IncludeRepository,
+            IncludeRepositoryDocs = source.IncludeRepositoryDocs
+        };
+
+    private static WebPortalDocsPlacement? ClonePlacement(WebPortalDocsPlacement? placement)
+        => placement is null
+            ? null
+            : new WebPortalDocsPlacement
+            {
+                Surface = placement.Surface,
+                Module = placement.Module,
+                NavigationGroup = placement.NavigationGroup,
+                Order = placement.Order.ToList()
+            };
+
+    private static WebPortalDocsRelationshipDefaults? CloneRelationshipDefaults(WebPortalDocsRelationshipDefaults? defaults)
+        => defaults is null
+            ? null
+            : new WebPortalDocsRelationshipDefaults
+            {
+                Module = defaults.Module,
+                Package = defaults.Package,
+                Version = defaults.Version,
+                Command = defaults.Command,
+                Tags = defaults.Tags.ToList()
+            };
 
     private static PrivateGalleryDocument? LoadPrivateGallery(string? galleryPath, List<string> warnings)
     {
@@ -763,6 +900,8 @@ public static partial class WebPortalDocsGenerator
 
         public string? Repository { get; set; }
 
+        public string? RepositoryKind { get; set; }
+
         public string? Branch { get; set; }
 
         public string? Authentication { get; set; }
@@ -778,6 +917,14 @@ public static partial class WebPortalDocsGenerator
         public WebPortalDocsPlacement? Placement { get; set; }
 
         public WebPortalDocsRelationshipDefaults? RelationshipDefaults { get; set; }
+
+        public bool? IncludePackage { get; set; }
+
+        public bool? IncludePackageDocs { get; set; }
+
+        public bool? IncludeRepository { get; set; }
+
+        public bool? IncludeRepositoryDocs { get; set; }
     }
 
     private sealed class WebPortalDocsPlacement

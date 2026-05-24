@@ -317,7 +317,10 @@ package-bundled documentation can be rendered by the portal docs pipeline.
 
 Status: initial module and related-document page generation is implemented via
 `portal-module-pages`, composing `private-gallery-index` feed data with
-`portal-docs-index` documentation data.
+`portal-docs-index` documentation data. `portal-docs-index` also supports a
+reusable `kind: "module"` source declaration that expands to package-bundled
+docs plus related repository docs when GitHub or Azure DevOps repository details
+are present.
 
 ### Slice 4: Metrics and Quality Signals
 
