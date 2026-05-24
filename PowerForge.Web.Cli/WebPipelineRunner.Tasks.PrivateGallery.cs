@@ -52,6 +52,11 @@ internal static partial class WebPipelineRunner
             IncludeMetrics = GetBool(step, "includeMetrics") ?? GetBool(step, "include-metrics") ?? false,
             MaxPackages = GetInt(step, "maxPackages") ?? GetInt(step, "max-packages") ?? 500,
             MaxVersionsPerPackage = GetInt(step, "maxVersionsPerPackage") ?? GetInt(step, "max-versions-per-package") ?? 1,
+            MaxDocumentContentBytes = GetInt(step, "maxDocumentContentBytes") ??
+                                      GetInt(step, "max-document-content-bytes") ??
+                                      GetInt(step, "maxPackageDocumentBytes") ??
+                                      GetInt(step, "max-package-document-bytes") ??
+                                      262144,
             RequestTimeoutSeconds = GetInt(step, "timeoutSeconds") ?? GetInt(step, "timeout-seconds") ?? 30,
             Token = token,
             TokenEnvironmentVariable = tokenEnv,

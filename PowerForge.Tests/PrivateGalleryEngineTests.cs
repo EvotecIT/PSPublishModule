@@ -303,8 +303,8 @@ public sealed class PrivateGalleryEngineTests
                       </command:command>
                     </helpItems>
                     """);
-                AddEntry(archive, "Contoso.Tools/README.md", "# Contoso Tools");
-                AddEntry(archive, "docs/GettingStarted.md", "# Getting Started");
+                AddEntry(archive, "Contoso.Tools/README.md", "# Contoso Tools\n\nPackage README content.");
+                AddEntry(archive, "docs/GettingStarted.md", "# Getting Started\n\nBundled getting started content.");
                 AddEntry(archive, "examples/Get-ContosoTool.ps1", "Get-ContosoTool");
                 AddEntry(archive, "Contoso.Tools/LICENSE", "MIT");
             }
@@ -330,6 +330,37 @@ public sealed class PrivateGalleryEngineTests
             Assert.Contains(metadata.Documents, document => document.Kind == "example");
             Assert.Contains(metadata.Documents, document => document.Kind == "help");
             Assert.Contains(metadata.Documents, document => document.Kind == "license");
+            Assert.Contains(metadata.Documents, document => document.Kind == "readme" && document.Content!.Contains("Package README content.", StringComparison.Ordinal));
+            Assert.Contains(metadata.Documents, document => document.Kind == "docs" && document.Content!.Contains("Bundled getting started content.", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void PowerShellModulePackageInspector_TruncatesOversizedDocumentContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-doc-limit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var packagePath = Path.Combine(root, "Contoso.Tools.1.0.0.nupkg");
+
+        try
+        {
+            using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+            {
+                AddEntry(archive, "Contoso.Tools/Contoso.Tools.psd1", "@{ ModuleVersion = '1.0.0'; RootModule = 'Contoso.Tools.psm1' }");
+                AddEntry(archive, "Contoso.Tools/README.md", "# Contoso Tools\n\nThis content is intentionally over the tiny test limit.");
+            }
+
+            var metadata = new PowerShellModulePackageInspector().Inspect(packagePath, maxDocumentContentBytes: 16);
+            var readme = Assert.Single(metadata.Documents, document => document.Kind == "readme");
+
+            Assert.NotNull(readme.Content);
+            Assert.StartsWith("# Contoso", readme.Content, StringComparison.Ordinal);
+            Assert.DoesNotContain("tiny test limit", readme.Content, StringComparison.Ordinal);
+            Assert.Contains(metadata.Warnings, warning => warning.Contains("truncated document content", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

@@ -134,7 +134,7 @@ public sealed class PrivateGalleryIndexer
                         options,
                         cancellationToken).ConfigureAwait(false);
 
-                    var module = _packageInspector.Inspect(packagePath);
+                    var module = _packageInspector.Inspect(packagePath, options.MaxDocumentContentBytes);
                     version.Module = module;
                     package.Module ??= module;
                 }

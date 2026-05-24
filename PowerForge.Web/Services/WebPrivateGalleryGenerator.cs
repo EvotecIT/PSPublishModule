@@ -42,6 +42,7 @@ public static class WebPrivateGalleryGenerator
             IncludeMetrics = options.IncludeMetrics,
             MaxPackages = options.MaxPackages,
             MaxVersionsPerPackage = options.MaxVersionsPerPackage,
+            MaxDocumentContentBytes = options.MaxDocumentContentBytes,
             RequestTimeoutSeconds = options.RequestTimeoutSeconds,
             Token = token,
             AuthenticationKind = options.AuthenticationKind,

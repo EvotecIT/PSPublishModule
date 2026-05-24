@@ -305,13 +305,19 @@ per-package/per-version JSON under `modules/`, plus `search.json`.
 
 Status: partially implemented. The first slice downloads `.nupkg` files through
 NuGet V3 and inspects archive entries in place without module import or script
-execution. It emits discovered module metadata on package/version JSON records.
+execution. It emits discovered module metadata on package/version JSON records,
+including bounded text content for README/docs/changelog/license assets so
+package-bundled documentation can be rendered by the portal docs pipeline.
 
 ### Slice 3: Web Page Generation
 
 - Generate module list/detail/version pages.
 - Generate install/update command snippets from repository profile settings.
 - Add search entries for modules, commands, docs, and examples.
+
+Status: initial module and related-document page generation is implemented via
+`portal-module-pages`, composing `private-gallery-index` feed data with
+`portal-docs-index` documentation data.
 
 ### Slice 4: Metrics and Quality Signals
 

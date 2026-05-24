@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -19,8 +20,9 @@ public sealed class PowerShellModulePackageInspector
     /// Inspects a nupkg file and returns module metadata discovered from static files.
     /// </summary>
     /// <param name="packagePath">Path to the nupkg file.</param>
+    /// <param name="maxDocumentContentBytes">Maximum text bytes to retain per documentation asset.</param>
     /// <returns>Module metadata.</returns>
-    public PrivateGalleryModuleMetadata Inspect(string packagePath)
+    public PrivateGalleryModuleMetadata Inspect(string packagePath, int maxDocumentContentBytes = 262144)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
             throw new ArgumentException("Package path is required.", nameof(packagePath));
@@ -50,7 +52,7 @@ public sealed class PowerShellModulePackageInspector
                 continue;
             }
 
-            AddDocumentAsset(metadata, normalizedPath, entry);
+            AddDocumentAsset(metadata, normalizedPath, entry, maxDocumentContentBytes);
         }
 
         var manifestEntry = archive.Entries
@@ -247,7 +249,7 @@ public sealed class PowerShellModulePackageInspector
         return values.Length > 0;
     }
 
-    private static void AddDocumentAsset(PrivateGalleryModuleMetadata metadata, string normalizedPath, ZipArchiveEntry entry)
+    private static void AddDocumentAsset(PrivateGalleryModuleMetadata metadata, string normalizedPath, ZipArchiveEntry entry, int maxDocumentContentBytes)
     {
         if (entry.FullName.EndsWith("/", StringComparison.Ordinal) || entry.Length == 0)
             return;
@@ -273,13 +275,45 @@ public sealed class PowerShellModulePackageInspector
         if (kind is null)
             return;
 
-        metadata.Documents.Add(new PrivateGalleryDocumentAsset
+        var asset = new PrivateGalleryDocumentAsset
         {
             Path = normalizedPath,
             Kind = kind,
             Title = Path.GetFileNameWithoutExtension(fileName),
             Size = entry.Length
-        });
+        };
+
+        if (ShouldCaptureDocumentContent(kind, lowerName))
+            asset.Content = ReadDocumentContent(metadata, entry, maxDocumentContentBytes);
+
+        metadata.Documents.Add(asset);
+    }
+
+    private static bool ShouldCaptureDocumentContent(string kind, string lowerName)
+        => kind is "readme" or "docs" or "changelog" or "license" ||
+           kind == "example" && (lowerName.EndsWith(".md", StringComparison.Ordinal) || lowerName.EndsWith(".txt", StringComparison.Ordinal));
+
+    private static string? ReadDocumentContent(PrivateGalleryModuleMetadata metadata, ZipArchiveEntry entry, int maxDocumentContentBytes)
+    {
+        if (maxDocumentContentBytes <= 0)
+            return null;
+
+        var maxBytes = Math.Min(maxDocumentContentBytes, MaxTextBytes);
+        var truncated = entry.Length > maxBytes;
+
+        try
+        {
+            var content = ReadTextEntry(entry, maxBytes);
+            if (truncated)
+                metadata.Warnings.Add($"Truncated document content for '{entry.FullName}' to the private gallery document content size limit.");
+
+            return content;
+        }
+        catch (Exception ex)
+        {
+            metadata.Warnings.Add($"Failed to read document content '{entry.FullName}': {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
     }
 
     private static bool IsTextDocument(string lowerName)
@@ -304,6 +338,41 @@ public sealed class PowerShellModulePackageInspector
         using var stream = entry.Open();
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static string ReadTextEntry(ZipArchiveEntry entry, int maxBytes)
+    {
+        if (maxBytes <= 0)
+            return string.Empty;
+
+        using var stream = entry.Open();
+        var buffer = new byte[Math.Min(maxBytes, MaxTextBytes)];
+        var totalBytes = 0;
+
+        while (totalBytes < buffer.Length)
+        {
+            var bytesRead = stream.Read(buffer, totalBytes, buffer.Length - totalBytes);
+            if (bytesRead == 0)
+                break;
+
+            totalBytes += bytesRead;
+        }
+
+        var offset = HasUtf8ByteOrderMark(buffer, totalBytes) ? Encoding.UTF8.GetPreamble().Length : 0;
+        var decoder = Encoding.UTF8.GetDecoder();
+        var charCount = decoder.GetCharCount(buffer, offset, totalBytes - offset, flush: false);
+        var chars = new char[charCount];
+        decoder.GetChars(buffer, offset, totalBytes - offset, chars, 0, flush: false);
+        return new string(chars);
+    }
+
+    private static bool HasUtf8ByteOrderMark(byte[] buffer, int totalBytes)
+    {
+        var preamble = Encoding.UTF8.GetPreamble();
+        return totalBytes >= preamble.Length &&
+               buffer[0] == preamble[0] &&
+               buffer[1] == preamble[1] &&
+               buffer[2] == preamble[2];
     }
 
     private static string NormalizePackagePath(string path)
