@@ -340,7 +340,7 @@ public class WebSiteBuilderSafetyAndParityTests
                 """
                 ---
                 title: Register
-                slug: v1.0
+                slug: install.html
                 ---
 
                 Register
@@ -366,8 +366,8 @@ public class WebSiteBuilderSafetyAndParityTests
                     new AssetBundleSpec
                     {
                         Name = "global",
-                        Css = new[] { "themes/t/assets/site.css", "blob:https://example.test/style" },
-                        Js = new[] { "themes/t/assets/site.js", "file:///C:/assets/tool.js" }
+                        Css = new[] { "themes/t/assets/site.css", "blob:https://example.test/style", "../assets/section.css" },
+                        Js = new[] { "themes/t/assets/site.js", "file:///C:/assets/tool.js", "./local.js" }
                     }
                 },
                 RouteBundles = new[]
@@ -385,12 +385,14 @@ public class WebSiteBuilderSafetyAndParityTests
 
             var plan = WebSitePlanner.Plan(spec, configPath);
             var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
-            var html = File.ReadAllText(Path.Combine(build.OutputPath, "docs", "v1.0", "index.html"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "docs", "install.html", "index.html"));
 
             Assert.Contains("href=\"../../themes/t/assets/site.css\"", html, StringComparison.Ordinal);
             Assert.Contains("src=\"../../themes/t/assets/site.js\"", html, StringComparison.Ordinal);
             Assert.Contains("href=\"blob:https://example.test/style\"", html, StringComparison.Ordinal);
             Assert.Contains("src=\"file:///C:/assets/tool.js\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"../assets/section.css\"", html, StringComparison.Ordinal);
+            Assert.Contains("src=\"./local.js\"", html, StringComparison.Ordinal);
         }
         finally
         {

@@ -122,12 +122,14 @@ public static partial class WebSiteBuilder
         if (IsExternalOrRootedAssetHref(trimmed))
             return trimmed;
 
-        var cleanHref = trimmed.StartsWith("./", StringComparison.Ordinal)
-            ? trimmed.Substring(2)
-            : trimmed;
+        if (trimmed.StartsWith("./", StringComparison.Ordinal) ||
+            trimmed.StartsWith("../", StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
 
         var prefix = BuildRelativePrefixForRoute(route);
-        return prefix + cleanHref.TrimStart('/');
+        return prefix + trimmed.TrimStart('/');
     }
 
     private static bool IsExternalOrRootedAssetHref(string href)
@@ -150,9 +152,8 @@ public static partial class WebSiteBuilder
         var normalized = route.Replace('\\', '/').Trim();
         var isDirectoryRoute = normalized.EndsWith("/", StringComparison.Ordinal);
         var segments = normalized.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var lastSegment = segments.Length == 0 ? string.Empty : segments[^1];
-        var looksLikeFileRoute = lastSegment.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
-                                 lastSegment.EndsWith(".htm", StringComparison.OrdinalIgnoreCase);
+        var normalizedPath = NormalizePath(normalized);
+        var looksLikeFileRoute = normalizedPath.Equals("404.html", StringComparison.OrdinalIgnoreCase);
         var depth = isDirectoryRoute || !looksLikeFileRoute ? segments.Length : Math.Max(0, segments.Length - 1);
         if (depth <= 0)
             return string.Empty;
