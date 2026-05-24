@@ -71,14 +71,14 @@ public static partial class WebSiteBuilder
         return sb.ToString();
     }
 
-    private static string RenderCssLinks(IEnumerable<string> cssLinks, AssetRegistrySpec? assets, HeadSpec? head = null)
+    private static string RenderCssLinks(IEnumerable<string> cssLinks, AssetRegistrySpec? assets, string route, HeadSpec? head = null)
     {
         var parts = new List<string>();
         var headStyles = RenderHeadLinks(head, static link => IsStylesheetHeadLink(link.Rel));
         if (!string.IsNullOrWhiteSpace(headStyles))
             parts.Add(headStyles);
 
-        var links = cssLinks.ToArray();
+        var links = cssLinks.Select(link => ResolveRouteRelativeAssetHref(link, route)).ToArray();
         if (links.Length == 0) return string.Join(Environment.NewLine, parts);
 
         var strategy = WebAssetCssStrategy.Normalize(assets?.CssStrategy);
@@ -94,6 +94,13 @@ public static partial class WebSiteBuilder
         return string.Join(Environment.NewLine, parts);
     }
 
+    private static string RenderJsLinks(IEnumerable<string> jsLinks, string route)
+    {
+        return string.Join(
+            Environment.NewLine,
+            jsLinks.Select(j => $"<script src=\"{ResolveRouteRelativeAssetHref(j, route)}\" defer data-cfasync=\"false\"></script>"));
+    }
+
     private static string RenderAsyncCssLink(string href)
     {
         return $@"<link rel=""stylesheet"" href=""{href}"" media=""print"" onload=""this.media='all'"" />
@@ -104,6 +111,51 @@ public static partial class WebSiteBuilder
     {
         return $@"<link rel=""preload"" href=""{href}"" as=""style"" onload=""this.onload=null;this.rel='stylesheet'"" />
 <noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
+    }
+
+    private static string ResolveRouteRelativeAssetHref(string href, string route)
+    {
+        if (string.IsNullOrWhiteSpace(href))
+            return href;
+
+        var trimmed = href.Trim();
+        if (IsExternalOrRootedAssetHref(trimmed))
+            return trimmed;
+
+        var cleanHref = trimmed.StartsWith("./", StringComparison.Ordinal)
+            ? trimmed.Substring(2)
+            : trimmed;
+
+        var prefix = BuildRelativePrefixForRoute(route);
+        return prefix + cleanHref.TrimStart('/');
+    }
+
+    private static bool IsExternalOrRootedAssetHref(string href)
+    {
+        return href.StartsWith("/", StringComparison.Ordinal) ||
+               href.StartsWith("#", StringComparison.Ordinal) ||
+               href.StartsWith("//", StringComparison.Ordinal) ||
+               href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               href.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+               href.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+               href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildRelativePrefixForRoute(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route) || route == "/")
+            return string.Empty;
+
+        var normalized = route.Replace('\\', '/').Trim();
+        var isDirectoryRoute = normalized.EndsWith("/", StringComparison.Ordinal);
+        var segments = normalized.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var lastSegment = segments.Length == 0 ? string.Empty : segments[^1];
+        var looksLikeFileRoute = lastSegment.Contains('.', StringComparison.Ordinal);
+        var depth = isDirectoryRoute || !looksLikeFileRoute ? segments.Length : Math.Max(0, segments.Length - 1);
+        if (depth <= 0)
+            return string.Empty;
+
+        return string.Concat(Enumerable.Repeat("../", depth));
     }
 
     private readonly record struct AssetSlotUsage(bool UsePreloadsSlot, bool UseCssSlot);

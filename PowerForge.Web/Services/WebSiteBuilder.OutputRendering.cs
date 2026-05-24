@@ -106,8 +106,8 @@ public static partial class WebSiteBuilder
             ? string.Empty
             : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";
 
-        var cssHtml = RenderCssLinks(cssLinks, assetRegistry, assetSlotUsage.UseCssSlot ? spec.Head : null);
-        var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer data-cfasync=\"false\"></script>"));
+        var cssHtml = RenderCssLinks(cssLinks, assetRegistry, item.OutputPath, assetSlotUsage.UseCssSlot ? spec.Head : null);
+        var jsHtml = RenderJsLinks(jsLinks, item.OutputPath);
         var pageTitle = ResolveSeoTitle(spec, item);
         var pageDescription = ResolveMetaDescription(spec, item);
         var descriptionMeta = string.IsNullOrWhiteSpace(pageDescription)
