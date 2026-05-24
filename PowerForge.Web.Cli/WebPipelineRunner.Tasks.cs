@@ -60,6 +60,11 @@ internal static partial class WebPipelineRunner
             case "company-portal-docs":
                 ExecutePortalDocsIndex(step, baseDir, stepResult);
                 break;
+            case "portal-module-pages":
+            case "private-gallery-pages":
+            case "company-portal-module-pages":
+                ExecutePortalModulePages(step, baseDir, stepResult);
+                break;
             case "llms":
                 ExecuteLlms(step, baseDir, stepResult);
                 break;
