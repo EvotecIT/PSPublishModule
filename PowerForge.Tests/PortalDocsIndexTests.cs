@@ -398,6 +398,75 @@ public sealed class PortalDocsIndexTests
     }
 
     [Fact]
+    public void WebPortalDocsGenerator_ModuleRepositorySourceUsesRepositoryCoordinatesForFallbackId()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-module-repo-id-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "portal.sources.json"),
+                """
+                {
+                  "sources": [
+                    {
+                      "kind": "module",
+                      "owner": "EvotecIT",
+                      "repo": "RepoOnly",
+                      "includePackageDocs": false,
+                      "include": [ "README.md" ]
+                    }
+                  ]
+                }
+                """);
+
+            var handler = new StubHttpMessageHandler(request =>
+            {
+                if (request.RequestUri!.AbsoluteUri.Contains("/git/trees/main", StringComparison.Ordinal))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """
+                            {
+                              "tree": [
+                                { "path": "README.md", "type": "blob" }
+                              ]
+                            }
+                            """,
+                            Encoding.UTF8,
+                            "application/json")
+                    };
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("# Repo Docs\n\nRepository-only docs.", Encoding.UTF8, "text/markdown")
+                };
+            });
+
+            var result = WebPortalDocsGenerator.Generate(new WebPortalDocsOptions
+            {
+                BaseDirectory = root,
+                SourcesPath = "./portal.sources.json",
+                OutputDirectory = "./data/portal"
+            }, handler);
+
+            Assert.Equal(1, result.SourceCount);
+            Assert.Equal(1, result.DocumentCount);
+            Assert.Empty(result.Warnings);
+
+            var docs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(result.DocsPath), JsonOptions)!;
+            Assert.Contains(docs.Sources, source => source.Id == "evotecit-repoonly-repository" && source.Kind == "github");
+            Assert.Equal("evotecit-repoonly-repository", Assert.Single(docs.Documents).SourceId);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void WebPortalDocsGenerator_FetchesGitHubRepositoryDocs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-gh-" + Guid.NewGuid().ToString("N"));

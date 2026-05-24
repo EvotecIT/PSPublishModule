@@ -192,8 +192,20 @@ public static partial class WebPortalDocsGenerator
 
     private static string BuildExpandedSourceId(WebPortalDocsSourceSpec source, string? module, string suffix)
         => string.IsNullOrWhiteSpace(source.Id)
-            ? MakeSafeFragment($"{module}-{suffix}")
+            ? MakeSafeFragment($"{ResolveExpandedSourceKey(source, module)}-{suffix}")
             : $"{source.Id}-{suffix}";
+
+    private static string ResolveExpandedSourceKey(WebPortalDocsSourceSpec source, string? module)
+    {
+        if (!string.IsNullOrWhiteSpace(module))
+            return module!;
+        if (!string.IsNullOrWhiteSpace(source.Owner) && !string.IsNullOrWhiteSpace(source.Repo))
+            return $"{source.Owner}-{source.Repo}";
+        if (!string.IsNullOrWhiteSpace(source.Organization) && !string.IsNullOrWhiteSpace(source.Project) && !string.IsNullOrWhiteSpace(source.Repository ?? source.Repo))
+            return $"{source.Organization}-{source.Project}-{source.Repository ?? source.Repo}";
+
+        return source.Title ?? source.Repository ?? source.Repo ?? source.Path ?? "module";
+    }
 
     private static string DescribeSource(WebPortalDocsSourceSpec source)
         => source.Id ?? source.Title ?? source.Module ?? source.Repo ?? source.Repository ?? "module";
