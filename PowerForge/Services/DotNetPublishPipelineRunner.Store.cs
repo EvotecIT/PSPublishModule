@@ -485,7 +485,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         var relativePath = string.IsNullOrEmpty(rootPrefix) || path.Length < rootPrefix.Length
             ? path
-            : path[rootPrefix.Length..];
+            : path.Substring(rootPrefix.Length);
 
         return relativePath
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
