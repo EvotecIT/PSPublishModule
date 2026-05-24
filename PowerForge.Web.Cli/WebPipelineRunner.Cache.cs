@@ -463,6 +463,20 @@ internal static partial class WebPipelineRunner
                         Path.Combine(outRoot, "search.json")
                     };
             }
+            case "portal-module-pages":
+            case "private-gallery-pages":
+            case "company-portal-module-pages":
+            {
+                var outRoot = ResolvePath(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputDirectory") ??
+                    GetString(step, "output-directory") ??
+                    "./content/generated/modules");
+                return string.IsNullOrWhiteSpace(outRoot)
+                    ? Array.Empty<string>()
+                    : new[] { outRoot };
+            }
             case "llms":
             {
                 var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));

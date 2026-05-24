@@ -735,6 +735,34 @@ Notes:
   client-side search can consume `data/portal/docs.json` and
   `data/portal/search.json`.
 
+#### portal-module-pages
+Generates static Markdown pages for each private gallery module by composing
+`private-gallery-index` feed data with `portal-docs-index` documentation data.
+```json
+{
+  "task": "portal-module-pages",
+  "privateGallery": "./data/private-gallery/feed.json",
+  "portalDocs": "./data/portal/docs.json",
+  "profileName": "EvotecPowerShellGallery",
+  "repositoryName": "PowerShellGalleryFeed",
+  "out": "./content/generated/modules"
+}
+```
+
+Notes:
+- Output is content, not rendered HTML. Add a site collection that points at the
+  generated folder, for example `Input: "content/generated/modules"` and
+  `Output: "/modules"`, then run `build`.
+- Each module gets an `index.md` page with install/update commands, module
+  facts, commands, package document assets, related portal/repository docs,
+  dependencies, and versions.
+- Portal docs with embedded content get generated module-related pages under
+  `<module>-<doc>/`, so repository-maintained README/changelog/how-to files can
+  be displayed without copying them into the website repository.
+- The task does not contact the feed or repositories. It consumes the JSON
+  outputs from the earlier tasks, which keeps page generation deterministic and
+  reusable in CI.
+
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 ```json
