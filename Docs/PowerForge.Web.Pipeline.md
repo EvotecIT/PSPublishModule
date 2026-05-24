@@ -692,19 +692,12 @@ Example `portal.sources.json`:
       "placement": { "surface": "knowledge-base", "navigationGroup": "Documentation" }
     },
     {
-      "id": "pspublishmodule-package",
-      "kind": "package",
+      "id": "pspublishmodule",
+      "kind": "module",
       "module": "PSPublishModule",
-      "placement": { "surface": "module", "module": "PSPublishModule", "navigationGroup": "Bundled module docs" }
-    },
-    {
-      "id": "pspublishmodule-repository",
-      "kind": "github",
       "owner": "EvotecIT",
       "repo": "PSPublishModule",
-      "module": "PSPublishModule",
       "include": [ "README.md", "CHANGELOG.md", "Docs/PSPublishModule.PrivateGalleries.md" ],
-      "placement": { "surface": "module", "module": "PSPublishModule", "navigationGroup": "Repository docs" },
       "relationshipDefaults": { "module": "PSPublishModule", "tags": [ "PowerForge", "PrivateGallery" ] }
     },
     {
@@ -729,6 +722,12 @@ Notes:
 - `local` sources read markdown/text files from the website repository.
 - `package` sources project document assets discovered by `private-gallery-index`
   from inspected `.nupkg` content; no module code is imported or executed.
+- `module` sources are a reusable shortcut for company/private gallery sites.
+  They expand to a package-backed source plus a repository-backed source when
+  repository details are present. This lets a team declare one module once and
+  get bundled package docs and related repo docs under the same module page.
+  Use `includePackageDocs:false` or `includeRepositoryDocs:false` to disable
+  either side.
 - `github` sources enumerate repository files through the GitHub tree API and
   fetch raw content when `includeContent` is true. Use `tokenEnv` for private
   repositories or higher API limits.

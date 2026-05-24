@@ -189,6 +189,284 @@ public sealed class PortalDocsIndexTests
     }
 
     [Fact]
+    public void WebPortalDocsGenerator_ExpandsModuleSourceToPackageAndRepositoryDocs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-module-source-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, "data", "private-gallery"));
+
+        try
+        {
+            var gallery = new PrivateGalleryDocument
+            {
+                Packages =
+                {
+                    new PrivateGalleryPackage
+                    {
+                        Name = "Contoso.Tools",
+                        LatestVersion = "1.2.3",
+                        Module = new PrivateGalleryModuleMetadata
+                        {
+                            Name = "Contoso.Tools",
+                            Version = "1.2.3",
+                            Documents =
+                            {
+                                new PrivateGalleryDocumentAsset
+                                {
+                                    Path = "README.md",
+                                    Kind = "readme",
+                                    Content = "# Package README\n\nBundled module guidance."
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            File.WriteAllText(Path.Combine(root, "data", "private-gallery", "feed.json"), JsonSerializer.Serialize(gallery, JsonOptions));
+            File.WriteAllText(Path.Combine(root, "portal.sources.json"),
+                """
+                {
+                  "defaults": { "branch": "main" },
+                  "sources": [
+                    {
+                      "id": "contoso-tools",
+                      "kind": "module",
+                      "module": "Contoso.Tools",
+                      "owner": "EvotecIT",
+                      "repo": "Contoso.Tools",
+                      "include": [ "README.md" ],
+                      "relationshipDefaults": { "tags": [ "Internal" ] }
+                    }
+                  ]
+                }
+                """);
+
+            var handler = new StubHttpMessageHandler(request =>
+            {
+                if (request.RequestUri!.AbsoluteUri.Contains("/git/trees/main", StringComparison.Ordinal))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """
+                            {
+                              "tree": [
+                                { "path": "README.md", "type": "blob" }
+                              ]
+                            }
+                            """,
+                            Encoding.UTF8,
+                            "application/json")
+                    };
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("# Repository README\n\nSource repository guidance.", Encoding.UTF8, "text/markdown")
+                };
+            });
+
+            var result = WebPortalDocsGenerator.Generate(new WebPortalDocsOptions
+            {
+                BaseDirectory = root,
+                SourcesPath = "./portal.sources.json",
+                PrivateGalleryPath = "./data/private-gallery/feed.json",
+                OutputDirectory = "./data/portal"
+            }, handler);
+
+            Assert.Equal(2, result.SourceCount);
+            Assert.Equal(2, result.DocumentCount);
+            Assert.Empty(result.Warnings);
+
+            var docs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(result.DocsPath), JsonOptions)!;
+            Assert.Contains(docs.Sources, source => source.Id == "contoso-tools-package" && source.Kind == "package");
+            Assert.Contains(docs.Sources, source => source.Id == "contoso-tools-repository" && source.Kind == "github");
+            Assert.Contains(docs.Documents, doc =>
+                doc.SourceId == "contoso-tools-package" &&
+                doc.SourceKind == "package" &&
+                doc.Module == "Contoso.Tools" &&
+                doc.NavigationGroup == "Bundled module docs" &&
+                doc.Summary == "Bundled module guidance.");
+            Assert.Contains(docs.Documents, doc =>
+                doc.SourceId == "contoso-tools-repository" &&
+                doc.SourceKind == "github" &&
+                doc.Module == "Contoso.Tools" &&
+                doc.NavigationGroup == "Repository docs" &&
+                doc.Summary == "Source repository guidance." &&
+                doc.Tags.Contains("Internal"));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void WebPortalDocsGenerator_ModuleSourceUsesResolvedModuleAndHandlesNullCollections()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-module-source-guards-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, "data", "private-gallery"));
+
+        try
+        {
+            var gallery = new PrivateGalleryDocument
+            {
+                Packages =
+                {
+                    new PrivateGalleryPackage
+                    {
+                        Name = "Contoso.Tools",
+                        Module = new PrivateGalleryModuleMetadata
+                        {
+                            Name = "Contoso.Tools",
+                            Documents =
+                            {
+                                new PrivateGalleryDocumentAsset
+                                {
+                                    Path = "README.md",
+                                    Kind = "readme",
+                                    Content = "# Contoso README\n\nExpected package docs."
+                                }
+                            }
+                        }
+                    },
+                    new PrivateGalleryPackage
+                    {
+                        Name = "Other.Tools",
+                        Module = new PrivateGalleryModuleMetadata
+                        {
+                            Name = "Other.Tools",
+                            Documents =
+                            {
+                                new PrivateGalleryDocumentAsset
+                                {
+                                    Path = "README.md",
+                                    Kind = "readme",
+                                    Content = "# Other README\n\nUnexpected package docs."
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            File.WriteAllText(Path.Combine(root, "data", "private-gallery", "feed.json"), JsonSerializer.Serialize(gallery, JsonOptions));
+            File.WriteAllText(Path.Combine(root, "portal.sources.json"),
+                """
+                {
+                  "sources": [
+                    {
+                      "kind": "module",
+                      "include": null,
+                      "exclude": null,
+                      "classify": null,
+                      "placement": { "module": "Contoso.Tools", "order": null },
+                      "relationshipDefaults": { "tags": null }
+                    },
+                    {
+                      "id": "missing-module",
+                      "kind": "module",
+                      "includeRepositoryDocs": false
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPortalDocsGenerator.Generate(new WebPortalDocsOptions
+            {
+                BaseDirectory = root,
+                SourcesPath = "./portal.sources.json",
+                PrivateGalleryPath = "./data/private-gallery/feed.json",
+                OutputDirectory = "./data/portal"
+            });
+
+            Assert.Equal(1, result.SourceCount);
+            Assert.Equal(1, result.DocumentCount);
+            Assert.Contains(result.Warnings, warning => warning.Contains("requires module", StringComparison.OrdinalIgnoreCase));
+
+            var docs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(result.DocsPath), JsonOptions)!;
+            Assert.Contains(docs.Sources, source => source.Id == "contoso-tools-package" && source.Kind == "package");
+            var document = Assert.Single(docs.Documents);
+            Assert.Equal("Contoso.Tools", document.Module);
+            Assert.Equal("contoso-tools-package", document.SourceId);
+            Assert.DoesNotContain(docs.Documents, doc => doc.Module == "Other.Tools");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void WebPortalDocsGenerator_ModuleRepositorySourceUsesRepositoryCoordinatesForFallbackId()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-module-repo-id-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "portal.sources.json"),
+                """
+                {
+                  "sources": [
+                    {
+                      "kind": "module",
+                      "owner": "EvotecIT",
+                      "repo": "RepoOnly",
+                      "includePackageDocs": false,
+                      "include": [ "README.md" ]
+                    }
+                  ]
+                }
+                """);
+
+            var handler = new StubHttpMessageHandler(request =>
+            {
+                if (request.RequestUri!.AbsoluteUri.Contains("/git/trees/main", StringComparison.Ordinal))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """
+                            {
+                              "tree": [
+                                { "path": "README.md", "type": "blob" }
+                              ]
+                            }
+                            """,
+                            Encoding.UTF8,
+                            "application/json")
+                    };
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("# Repo Docs\n\nRepository-only docs.", Encoding.UTF8, "text/markdown")
+                };
+            });
+
+            var result = WebPortalDocsGenerator.Generate(new WebPortalDocsOptions
+            {
+                BaseDirectory = root,
+                SourcesPath = "./portal.sources.json",
+                OutputDirectory = "./data/portal"
+            }, handler);
+
+            Assert.Equal(1, result.SourceCount);
+            Assert.Equal(1, result.DocumentCount);
+            Assert.Empty(result.Warnings);
+
+            var docs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(result.DocsPath), JsonOptions)!;
+            Assert.Contains(docs.Sources, source => source.Id == "evotecit-repoonly-repository" && source.Kind == "github");
+            Assert.Equal("evotecit-repoonly-repository", Assert.Single(docs.Documents).SourceId);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void WebPortalDocsGenerator_FetchesGitHubRepositoryDocs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-gh-" + Guid.NewGuid().ToString("N"));
