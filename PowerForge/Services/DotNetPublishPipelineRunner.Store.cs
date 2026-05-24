@@ -135,7 +135,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 "--nologo"
             });
 
-            if (!plan.Restore)
+            if (plan.Restore)
                 args.Add("--no-restore");
         }
         else
@@ -149,7 +149,8 @@ public sealed partial class DotNetPublishPipelineRunner
             args.Add("/t:Build");
             args.Add("/nologo");
             args.Add($"/p:Configuration={plan.Configuration}");
-            args.Add("/restore");
+            if (!plan.Restore)
+                args.Add("/restore");
         }
 
         args.AddRange(BuildMsBuildPropertyArgs(msbuildProperties));
@@ -445,20 +446,23 @@ public sealed partial class DotNetPublishPipelineRunner
         if (roots is null || roots.Length == 0)
             return null;
 
-        var first = roots[0]
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            .Where(segment => !string.IsNullOrWhiteSpace(segment))
+        var normalizedRoots = roots
+            .Where(root => !string.IsNullOrWhiteSpace(root))
+            .Select(root => Path.GetFullPath(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)))
             .ToArray();
+        if (normalizedRoots.Length == 0)
+            return null;
+
+        var rootPrefix = Path.GetPathRoot(normalizedRoots[0]) ?? string.Empty;
+        if (normalizedRoots.Any(root => !string.Equals(Path.GetPathRoot(root) ?? string.Empty, rootPrefix, StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        var first = SplitRelativePathSegments(normalizedRoots[0], rootPrefix);
 
         var commonLength = first.Length;
-        foreach (var root in roots.Skip(1))
+        foreach (var root in normalizedRoots.Skip(1))
         {
-            var segments = root
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                .Where(segment => !string.IsNullOrWhiteSpace(segment))
-                .ToArray();
+            var segments = SplitRelativePathSegments(root, rootPrefix);
 
             commonLength = Math.Min(commonLength, segments.Length);
             for (var i = 0; i < commonLength; i++)
@@ -474,11 +478,20 @@ public sealed partial class DotNetPublishPipelineRunner
         if (commonLength == 0)
             return null;
 
-        var prefix = roots[0].StartsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
-            ? Path.DirectorySeparatorChar.ToString()
-            : string.Empty;
+        return Path.Combine(new[] { rootPrefix }.Concat(first.Take(commonLength)).ToArray());
+    }
 
-        return prefix + Path.Combine(first.Take(commonLength).ToArray());
+    private static string[] SplitRelativePathSegments(string path, string rootPrefix)
+    {
+        var relativePath = string.IsNullOrEmpty(rootPrefix) || path.Length < rootPrefix.Length
+            ? path
+            : path[rootPrefix.Length..];
+
+        return relativePath
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Where(segment => !string.IsNullOrWhiteSpace(segment))
+            .ToArray();
     }
 
     private static IEnumerable<string> EnumerateKnownMsBuildPaths()

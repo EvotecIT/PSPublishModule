@@ -229,7 +229,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             {
                 ProjectRoot = root,
                 Configuration = "Release",
-                Restore = true,
+                Restore = false,
                 Build = false,
                 StorePackages = new[]
                 {
@@ -309,7 +309,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             {
                 ProjectRoot = root,
                 Configuration = "Release",
-                Restore = true,
+                Restore = false,
                 Build = false,
                 StorePackages = new[]
                 {
@@ -373,7 +373,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             {
                 ProjectRoot = root,
                 Configuration = "Release",
-                Restore = true,
+                Restore = false,
                 Build = false,
                 StorePackages = new[]
                 {
@@ -492,6 +492,20 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void DetermineStoreOutputDir_PreservesWindowsDriveRootForMultiRootOutputs()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var detected = DotNetPublishPipelineRunner.DetermineStoreOutputDir(
+            @"C:\Build\Artifacts\Store\unused",
+            new[] { @"C:\Build\Store\AppPackages\Contoso_1.0.0.0_Test\Contoso.msixbundle" },
+            new[] { @"C:\Build\Store\AppPackages\Contoso_1.0.0.0_x64_bundle.msixupload" });
+
+        Assert.Equal(@"C:\Build\Store\AppPackages", detected);
     }
 
     private static DotNetPublishSpec CreateBaseSpec(string root, string projectPath)
