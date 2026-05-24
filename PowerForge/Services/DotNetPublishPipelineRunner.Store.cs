@@ -157,6 +157,7 @@ public sealed partial class DotNetPublishPipelineRunner
         _logger.Info(
             $"Store package build starting for '{storePackageId}' ({target}, {framework}, {runtime}, {style.Value}) -> {Path.GetFileName(projectPath)} using {Path.GetFileName(buildExecutable)}");
 
+        var buildStartedUtc = DateTime.UtcNow.AddSeconds(-2);
         var result = RunProcess(buildExecutable!, plan.ProjectRoot, args);
         if (result.ExitCode != 0)
         {
@@ -193,10 +194,10 @@ public sealed partial class DotNetPublishPipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var packageFiles = EnumerateStoreFiles(searchRoots, ".msix", ".msixbundle", ".appx", ".appxbundle");
-        var uploadFiles = EnumerateStoreFiles(searchRoots, ".msixupload", ".appxupload");
-        var symbolFiles = EnumerateStoreFiles(searchRoots, ".appxsym", ".msixsym");
-        var appInstallerFiles = EnumerateStoreFiles(searchRoots, ".appinstaller");
+        var packageFiles = EnumerateStoreFiles(searchRoots, buildStartedUtc, ".msix", ".msixbundle", ".appx", ".appxbundle");
+        var uploadFiles = EnumerateStoreFiles(searchRoots, buildStartedUtc, ".msixupload", ".appxupload");
+        var symbolFiles = EnumerateStoreFiles(searchRoots, buildStartedUtc, ".appxsym", ".msixsym");
+        var appInstallerFiles = EnumerateStoreFiles(searchRoots, buildStartedUtc, ".appinstaller");
         if (appInstaller is not null)
         {
             foreach (var appInstallerFile in appInstallerFiles)
@@ -342,7 +343,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return string.IsNullOrWhiteSpace(commonRoot) ? normalizedPreferredRoot : commonRoot!;
     }
 
-    private static string[] EnumerateStoreFiles(IEnumerable<string> roots, params string[] extensions)
+    private static string[] EnumerateStoreFiles(IEnumerable<string> roots, DateTime? notOlderThanUtc = null, params string[] extensions)
     {
         var rootList = (roots ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
@@ -363,6 +364,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return rootList
             .SelectMany(root => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
             .Where(path => !string.IsNullOrWhiteSpace(path) && extensionSet.Contains(Path.GetExtension(path)))
+            .Where(path => notOlderThanUtc is null || File.GetLastWriteTimeUtc(path) >= notOlderThanUtc.Value)
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)

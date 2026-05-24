@@ -356,6 +356,68 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
     }
 
     [Fact]
+    public void Run_StorePackage_RejectsStaleFallbackOutputs()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagingProject = CreateFakeStorePackagingProject(root, writeToDefaultAppPackages: true, writeOutputs: false);
+            var configuredOutputDir = Path.Combine(root, "Artifacts", "Store", "app.store");
+            var defaultAppPackages = Path.Combine(Path.GetDirectoryName(packagingProject)!, "AppPackages");
+            Directory.CreateDirectory(defaultAppPackages);
+            var stalePackage = Path.Combine(defaultAppPackages, "Stale.msixbundle");
+            File.WriteAllText(stalePackage, "stale", new UTF8Encoding(false));
+            File.SetLastWriteTimeUtc(stalePackage, DateTime.UtcNow.AddMinutes(-10));
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Restore = true,
+                Build = false,
+                StorePackages = new[]
+                {
+                    new DotNetPublishStorePackagePlan
+                    {
+                        Id = "app.store",
+                        PrepareFromTarget = "app",
+                        PackagingProjectPath = packagingProject,
+                        OutputPath = configuredOutputDir,
+                        BuildMode = DotNetPublishStoreBuildMode.StoreUpload,
+                        Bundle = DotNetPublishStoreBundleMode.Always
+                    }
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "store.package:app.store:app:net8.0-windows10.0.19041.0:win-x64:FrameworkDependent",
+                        Kind = DotNetPublishStepKind.StorePackage,
+                        Title = "Store package",
+                        StorePackageId = "app.store",
+                        TargetName = "app",
+                        Framework = "net8.0-windows10.0.19041.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.FrameworkDependent,
+                        StorePackageProjectPath = packagingProject,
+                        StorePackageOutputPath = configuredOutputDir
+                    }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("no *.msix/*.appx/*.msixupload outputs were detected", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(result.StorePackages);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void NormalizeAppInstallerFile_UpgradesSchemaAndWritesUpdateSettings()
     {
         var root = CreateTempRoot();
@@ -468,18 +530,14 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
         return fullPath;
     }
 
-    private static string CreateFakeStorePackagingProject(string root, bool writeToDefaultAppPackages = false)
+    private static string CreateFakeStorePackagingProject(string root, bool writeToDefaultAppPackages = false, bool writeOutputs = true)
     {
         var path = Path.Combine(root, "Store", "FakeStore.csproj");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var outputRootExpression = writeToDefaultAppPackages
             ? "$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'AppPackages'))"
             : "$(AppxPackageDir)";
-        File.WriteAllText(path, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-  </PropertyGroup>
+        var outputTarget = writeOutputs ? """
   <Target Name="PowerForgeFakeStoreOutputs" AfterTargets="Build">
     <PropertyGroup>
       <PowerForgeStoreOutputRoot>OUTPUT_ROOT_TOKEN</PowerForgeStoreOutputRoot>
@@ -492,8 +550,20 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
     <WriteLinesToFile File="$(PowerForgeUploadPath)" Lines="upload" Overwrite="true" />
     <WriteLinesToFile File="$(PowerForgeSymbolsPath)" Lines="symbols" Overwrite="true" />
   </Target>
+""" : """
+  <Target Name="PowerForgeFakeStoreOutputs" AfterTargets="Build">
+    <Message Text="No store outputs requested." Importance="High" />
+  </Target>
+""";
+        File.WriteAllText(path, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+OUTPUT_TARGET_TOKEN
 </Project>
-""".Replace("OUTPUT_ROOT_TOKEN", outputRootExpression, StringComparison.Ordinal), new UTF8Encoding(false));
+""".Replace("OUTPUT_TARGET_TOKEN", outputTarget, StringComparison.Ordinal)
+    .Replace("OUTPUT_ROOT_TOKEN", outputRootExpression, StringComparison.Ordinal), new UTF8Encoding(false));
         return path;
     }
 
