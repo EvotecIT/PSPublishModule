@@ -302,6 +302,102 @@ public sealed class PortalDocsIndexTests
     }
 
     [Fact]
+    public void WebPortalDocsGenerator_ModuleSourceUsesResolvedModuleAndHandlesNullCollections()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-module-source-guards-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, "data", "private-gallery"));
+
+        try
+        {
+            var gallery = new PrivateGalleryDocument
+            {
+                Packages =
+                {
+                    new PrivateGalleryPackage
+                    {
+                        Name = "Contoso.Tools",
+                        Module = new PrivateGalleryModuleMetadata
+                        {
+                            Name = "Contoso.Tools",
+                            Documents =
+                            {
+                                new PrivateGalleryDocumentAsset
+                                {
+                                    Path = "README.md",
+                                    Kind = "readme",
+                                    Content = "# Contoso README\n\nExpected package docs."
+                                }
+                            }
+                        }
+                    },
+                    new PrivateGalleryPackage
+                    {
+                        Name = "Other.Tools",
+                        Module = new PrivateGalleryModuleMetadata
+                        {
+                            Name = "Other.Tools",
+                            Documents =
+                            {
+                                new PrivateGalleryDocumentAsset
+                                {
+                                    Path = "README.md",
+                                    Kind = "readme",
+                                    Content = "# Other README\n\nUnexpected package docs."
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            File.WriteAllText(Path.Combine(root, "data", "private-gallery", "feed.json"), JsonSerializer.Serialize(gallery, JsonOptions));
+            File.WriteAllText(Path.Combine(root, "portal.sources.json"),
+                """
+                {
+                  "sources": [
+                    {
+                      "kind": "module",
+                      "include": null,
+                      "exclude": null,
+                      "classify": null,
+                      "placement": { "module": "Contoso.Tools", "order": null },
+                      "relationshipDefaults": { "tags": null }
+                    },
+                    {
+                      "id": "missing-module",
+                      "kind": "module",
+                      "includeRepositoryDocs": false
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPortalDocsGenerator.Generate(new WebPortalDocsOptions
+            {
+                BaseDirectory = root,
+                SourcesPath = "./portal.sources.json",
+                PrivateGalleryPath = "./data/private-gallery/feed.json",
+                OutputDirectory = "./data/portal"
+            });
+
+            Assert.Equal(1, result.SourceCount);
+            Assert.Equal(1, result.DocumentCount);
+            Assert.Contains(result.Warnings, warning => warning.Contains("requires module", StringComparison.OrdinalIgnoreCase));
+
+            var docs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(result.DocsPath), JsonOptions)!;
+            Assert.Contains(docs.Sources, source => source.Id == "contoso-tools-package" && source.Kind == "package");
+            var document = Assert.Single(docs.Documents);
+            Assert.Equal("Contoso.Tools", document.Module);
+            Assert.Equal("contoso-tools-package", document.SourceId);
+            Assert.DoesNotContain(docs.Documents, doc => doc.Module == "Other.Tools");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void WebPortalDocsGenerator_FetchesGitHubRepositoryDocs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-gh-" + Guid.NewGuid().ToString("N"));

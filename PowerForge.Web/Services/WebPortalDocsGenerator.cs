@@ -43,7 +43,7 @@ public static partial class WebPortalDocsGenerator
         var gallery = LoadPrivateGallery(galleryPath, document.Warnings);
         using var http = CreateHttpClient(options, messageHandler);
 
-        foreach (var source in ExpandModuleSources(sourceSpec.Sources))
+        foreach (var source in ExpandModuleSources(sourceSpec.Sources, document.Warnings))
         {
             var normalizedSource = CreateSource(source);
             document.Sources.Add(normalizedSource);
@@ -122,7 +122,7 @@ public static partial class WebPortalDocsGenerator
         return spec ?? new WebPortalDocsSourcesSpec();
     }
 
-    private static List<WebPortalDocsSourceSpec> ExpandModuleSources(IEnumerable<WebPortalDocsSourceSpec> sources)
+    private static List<WebPortalDocsSourceSpec> ExpandModuleSources(IEnumerable<WebPortalDocsSourceSpec> sources, List<string> warnings)
     {
         var expanded = new List<WebPortalDocsSourceSpec>();
         foreach (var source in sources)
@@ -137,7 +137,13 @@ public static partial class WebPortalDocsGenerator
             var includePackageDocs = source.IncludePackageDocs ?? source.IncludePackage ?? true;
             var includeRepositoryDocs = source.IncludeRepositoryDocs ?? source.IncludeRepository ?? HasRepositorySource(source);
             if (includePackageDocs)
-                expanded.Add(CreatePackageSource(source, module));
+            {
+                if (string.IsNullOrWhiteSpace(module))
+                    warnings.Add($"Module source '{DescribeSource(source)}' requires module, relationshipDefaults.module, or placement.module before package docs can be indexed.");
+                else
+                    expanded.Add(CreatePackageSource(source, module));
+            }
+
             if (includeRepositoryDocs)
                 expanded.Add(CreateRepositorySource(source, module));
         }
@@ -153,7 +159,7 @@ public static partial class WebPortalDocsGenerator
     private static WebPortalDocsSourceSpec CreatePackageSource(WebPortalDocsSourceSpec source, string? module)
     {
         var copy = CloneSource(source);
-        copy.Id = BuildExpandedSourceId(source, "package");
+        copy.Id = BuildExpandedSourceId(source, module, "package");
         copy.Kind = "package";
         copy.Title ??= string.IsNullOrWhiteSpace(module) ? "Package docs" : $"{module} package docs";
         copy.Module = module ?? source.Module;
@@ -170,7 +176,7 @@ public static partial class WebPortalDocsGenerator
     private static WebPortalDocsSourceSpec CreateRepositorySource(WebPortalDocsSourceSpec source, string? module)
     {
         var copy = CloneSource(source);
-        copy.Id = BuildExpandedSourceId(source, "repository");
+        copy.Id = BuildExpandedSourceId(source, module, "repository");
         copy.Kind = ResolveRepositoryKind(source);
         copy.Title ??= string.IsNullOrWhiteSpace(module) ? "Repository docs" : $"{module} repository docs";
         copy.Module = module ?? source.Module;
@@ -184,10 +190,13 @@ public static partial class WebPortalDocsGenerator
         return copy;
     }
 
-    private static string BuildExpandedSourceId(WebPortalDocsSourceSpec source, string suffix)
+    private static string BuildExpandedSourceId(WebPortalDocsSourceSpec source, string? module, string suffix)
         => string.IsNullOrWhiteSpace(source.Id)
-            ? MakeSafeFragment($"{source.Module}-{suffix}")
+            ? MakeSafeFragment($"{module}-{suffix}")
             : $"{source.Id}-{suffix}";
+
+    private static string DescribeSource(WebPortalDocsSourceSpec source)
+        => source.Id ?? source.Title ?? source.Module ?? source.Repo ?? source.Repository ?? "module";
 
     private static string ResolveRepositoryKind(WebPortalDocsSourceSpec source)
     {
@@ -224,9 +233,9 @@ public static partial class WebPortalDocsGenerator
             Branch = source.Branch,
             Authentication = source.Authentication,
             Auth = source.Auth,
-            Include = source.Include.ToList(),
-            Exclude = source.Exclude.ToList(),
-            Classify = new Dictionary<string, string>(source.Classify, StringComparer.OrdinalIgnoreCase),
+            Include = CopyList(source.Include),
+            Exclude = CopyList(source.Exclude),
+            Classify = CopyDictionary(source.Classify),
             Placement = ClonePlacement(source.Placement),
             RelationshipDefaults = CloneRelationshipDefaults(source.RelationshipDefaults),
             IncludePackage = source.IncludePackage,
@@ -243,7 +252,7 @@ public static partial class WebPortalDocsGenerator
                 Surface = placement.Surface,
                 Module = placement.Module,
                 NavigationGroup = placement.NavigationGroup,
-                Order = placement.Order.ToList()
+                Order = CopyList(placement.Order)
             };
 
     private static WebPortalDocsRelationshipDefaults? CloneRelationshipDefaults(WebPortalDocsRelationshipDefaults? defaults)
@@ -255,8 +264,16 @@ public static partial class WebPortalDocsGenerator
                 Package = defaults.Package,
                 Version = defaults.Version,
                 Command = defaults.Command,
-                Tags = defaults.Tags.ToList()
+                Tags = CopyList(defaults.Tags)
             };
+
+    private static List<T> CopyList<T>(IEnumerable<T>? values)
+        => values is null ? new List<T>() : values.ToList();
+
+    private static Dictionary<string, string> CopyDictionary(Dictionary<string, string>? values)
+        => values is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
 
     private static PrivateGalleryDocument? LoadPrivateGallery(string? galleryPath, List<string> warnings)
     {
