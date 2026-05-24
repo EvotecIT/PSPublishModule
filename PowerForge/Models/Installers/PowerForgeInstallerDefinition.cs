@@ -54,6 +54,11 @@ public sealed class PowerForgeInstallerDefinition
     public PowerForgeInstallerExitLaunch? ExitLaunch { get; set; }
 
     /// <summary>
+    /// Optional RTF license agreement shown by WiX UI before installation.
+    /// </summary>
+    public PowerForgeInstallerLicenseAgreement? LicenseAgreement { get; set; }
+
+    /// <summary>
     /// Additional directory trees required by installer components.
     /// </summary>
     public List<PowerForgeInstallerDirectoryTree> Directories { get; set; } = new();
@@ -124,6 +129,22 @@ public sealed class PowerForgeInstallerExitLaunch
     /// WiX condition controlling the launch action.
     /// </summary>
     public string Condition { get; set; } = "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed";
+}
+
+/// <summary>
+/// RTF license agreement displayed by the generated WiX UI.
+/// </summary>
+public sealed class PowerForgeInstallerLicenseAgreement
+{
+    /// <summary>
+    /// Whether the generated installer uses the configured RTF license agreement.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Path to an RTF file. Relative paths are resolved against the publish project root.
+    /// </summary>
+    public string Path { get; set; } = string.Empty;
 }
 
 /// <summary>

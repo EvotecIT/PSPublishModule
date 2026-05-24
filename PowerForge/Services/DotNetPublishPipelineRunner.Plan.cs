@@ -757,6 +757,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     Text = definition.ExitLaunch.Text,
                     Target = definition.ExitLaunch.Target,
                     Condition = definition.ExitLaunch.Condition
+                },
+            LicenseAgreement = definition.LicenseAgreement is null
+                ? null
+                : new PowerForgeInstallerLicenseAgreement
+                {
+                    Enabled = definition.LicenseAgreement.Enabled,
+                    Path = definition.LicenseAgreement.Path
                 }
         };
 
