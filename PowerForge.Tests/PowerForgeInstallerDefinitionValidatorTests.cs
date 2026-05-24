@@ -272,6 +272,47 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
     }
 
     [Fact]
+    public void Validate_AllowsDialogActionIdsToRepeatAcrossDialogs()
+    {
+        var definition = CreateValidDefinition();
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            Actions = { CreateDialogAction("OpenSettings") }
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "DatabaseDlg",
+            Title = "Database",
+            Actions = { CreateDialogAction("OpenSettings") }
+        });
+
+        PowerForgeInstallerDefinitionValidator.Validate(definition);
+    }
+
+    [Fact]
+    public void Validate_RejectsDuplicateDialogActionIdsInsideSameDialog()
+    {
+        var definition = CreateValidDefinition();
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            Actions =
+            {
+                CreateDialogAction("OpenSettings"),
+                CreateDialogAction("opensettings")
+            }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("Duplicate installer dialog 'ConfigurationDlg' action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Validate_RejectsValidationMessageWithoutValidationRule()
     {
         var definition = CreateValidDefinition();

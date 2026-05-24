@@ -72,6 +72,13 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Store package '{storePackageId}' output path");
 
+        var defaultAppPackagesDir = Path.Combine(Path.GetDirectoryName(projectPath) ?? plan.ProjectRoot, "AppPackages");
+        var searchRoots = new[] { outputDir, defaultAppPackagesDir }
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         if (storePackage.ClearOutput && Directory.Exists(outputDir))
         {
             try { Directory.Delete(outputDir, recursive: true); }
@@ -158,7 +165,7 @@ public sealed partial class DotNetPublishPipelineRunner
         _logger.Info(
             $"Store package build starting for '{storePackageId}' ({target}, {framework}, {runtime}, {style.Value}) -> {Path.GetFileName(projectPath)} using {Path.GetFileName(buildExecutable)}");
 
-        var buildStartedUtc = DateTime.UtcNow.AddSeconds(-2);
+        var preBuildFiles = storePackage.ClearOutput ? SnapshotStoreFiles(searchRoots) : null;
         var result = RunProcess(buildExecutable!, plan.ProjectRoot, args);
         if (result.ExitCode != 0)
         {
@@ -188,17 +195,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 _logger.Verbose(result.StdErr.TrimEnd());
         }
 
-        var defaultAppPackagesDir = Path.Combine(Path.GetDirectoryName(projectPath) ?? plan.ProjectRoot, "AppPackages");
-        var searchRoots = new[] { outputDir, defaultAppPackagesDir }
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var packageFiles = EnumerateStoreFiles(searchRoots, buildStartedUtc, ".msix", ".msixbundle", ".appx", ".appxbundle");
-        var uploadFiles = EnumerateStoreFiles(searchRoots, buildStartedUtc, ".msixupload", ".appxupload");
-        var symbolFiles = EnumerateStoreFiles(searchRoots, buildStartedUtc, ".appxsym", ".msixsym");
-        var appInstallerFiles = EnumerateStoreFiles(searchRoots, buildStartedUtc, ".appinstaller");
+        var packageFiles = EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".msix", ".msixbundle", ".appx", ".appxbundle");
+        var uploadFiles = EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".msixupload", ".appxupload");
+        var symbolFiles = EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".appxsym", ".msixsym");
+        var appInstallerFiles = EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".appinstaller");
         if (appInstaller is not null)
         {
             foreach (var appInstallerFile in appInstallerFiles)
@@ -358,7 +358,33 @@ public sealed partial class DotNetPublishPipelineRunner
         return string.IsNullOrWhiteSpace(commonRoot) ? normalizedPreferredRoot : commonRoot!;
     }
 
-    private static string[] EnumerateStoreFiles(IEnumerable<string> roots, DateTime? notOlderThanUtc = null, params string[] extensions)
+    private static string[] EnumerateCurrentStoreFiles(
+        IEnumerable<string> roots,
+        IReadOnlyDictionary<string, StoreFileSnapshot>? preBuildFiles,
+        params string[] extensions)
+        => EnumerateStoreFiles(roots, extensions)
+            .Where(path => preBuildFiles is null || IsNewOrChangedStoreFile(path, preBuildFiles))
+            .ToArray();
+
+    private static Dictionary<string, StoreFileSnapshot> SnapshotStoreFiles(IEnumerable<string> roots)
+        => EnumerateStoreFiles(roots, ".msix", ".msixbundle", ".appx", ".appxbundle", ".msixupload", ".appxupload", ".appxsym", ".msixsym", ".appinstaller")
+            .ToDictionary(
+                path => path,
+                path => new StoreFileSnapshot(File.GetLastWriteTimeUtc(path), new FileInfo(path).Length),
+                StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsNewOrChangedStoreFile(
+        string path,
+        IReadOnlyDictionary<string, StoreFileSnapshot> preBuildFiles)
+    {
+        if (!preBuildFiles.TryGetValue(path, out var snapshot))
+            return true;
+
+        var info = new FileInfo(path);
+        return info.Length != snapshot.Length || info.LastWriteTimeUtc != snapshot.LastWriteTimeUtc;
+    }
+
+    private static string[] EnumerateStoreFiles(IEnumerable<string> roots, params string[] extensions)
     {
         var rootList = (roots ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
@@ -379,11 +405,23 @@ public sealed partial class DotNetPublishPipelineRunner
         return rootList
             .SelectMany(root => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
             .Where(path => !string.IsNullOrWhiteSpace(path) && extensionSet.Contains(Path.GetExtension(path)))
-            .Where(path => notOlderThanUtc is null || File.GetLastWriteTimeUtc(path) >= notOlderThanUtc.Value)
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private readonly struct StoreFileSnapshot
+    {
+        internal StoreFileSnapshot(DateTime lastWriteTimeUtc, long length)
+        {
+            LastWriteTimeUtc = lastWriteTimeUtc;
+            Length = length;
+        }
+
+        internal DateTime LastWriteTimeUtc { get; }
+
+        internal long Length { get; }
     }
 
     private static string ResolveStorePlatform(string runtime)

@@ -60,9 +60,13 @@ internal static class PowerForgeInstallerDefinitionValidator
         EnsureUnique(
             definition.Dialogs.Select(dialog => dialog.Id),
             "installer dialog ID");
-        EnsureUnique(
-            definition.Dialogs.SelectMany(dialog => dialog.Actions).Select(action => action.Id),
-            "installer dialog action ID");
+        foreach (var dialog in definition.Dialogs)
+        {
+            EnsureUnique(
+                dialog.Actions.Select(action => action.Id),
+                $"installer dialog '{dialog.Id}' action ID");
+        }
+
         EnsureUnique(
             definition.ExecutableActions.Select(action => action.Id),
             "installer executable action ID");

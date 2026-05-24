@@ -453,6 +453,69 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
     }
 
     [Fact]
+    public void Run_StorePackage_AllowsExistingOutputsWhenClearOutputIsDisabled()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagingProject = CreateFakeStorePackagingProject(root, writeToDefaultAppPackages: true, writeOutputs: false);
+            var configuredOutputDir = Path.Combine(root, "Artifacts", "Store", "app.store");
+            var defaultAppPackages = Path.Combine(Path.GetDirectoryName(packagingProject)!, "AppPackages");
+            Directory.CreateDirectory(defaultAppPackages);
+            var existingPackage = Path.Combine(defaultAppPackages, "Existing.msixbundle");
+            File.WriteAllText(existingPackage, "existing", new UTF8Encoding(false));
+            File.SetLastWriteTimeUtc(existingPackage, DateTime.UtcNow.AddMinutes(-10));
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Restore = true,
+                Build = false,
+                StorePackages = new[]
+                {
+                    new DotNetPublishStorePackagePlan
+                    {
+                        Id = "app.store",
+                        PrepareFromTarget = "app",
+                        PackagingProjectPath = packagingProject,
+                        OutputPath = configuredOutputDir,
+                        BuildMode = DotNetPublishStoreBuildMode.StoreUpload,
+                        Bundle = DotNetPublishStoreBundleMode.Always,
+                        ClearOutput = false
+                    }
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "store.package:app.store:app:net8.0-windows10.0.19041.0:win-x64:FrameworkDependent",
+                        Kind = DotNetPublishStepKind.StorePackage,
+                        Title = "Store package",
+                        StorePackageId = "app.store",
+                        TargetName = "app",
+                        Framework = "net8.0-windows10.0.19041.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.FrameworkDependent,
+                        StorePackageProjectPath = packagingProject,
+                        StorePackageOutputPath = configuredOutputDir
+                    }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            var store = Assert.Single(result.StorePackages);
+            Assert.Equal(existingPackage, Assert.Single(store.OutputFiles));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void NormalizeAppInstallerFile_UpgradesSchemaAndWritesUpdateSettings()
     {
         var root = CreateTempRoot();
