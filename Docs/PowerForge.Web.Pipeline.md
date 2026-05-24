@@ -701,6 +701,18 @@ Example `portal.sources.json`:
       "include": [ "README.md", "CHANGELOG.md", "Docs/PSPublishModule.PrivateGalleries.md" ],
       "placement": { "surface": "module", "module": "PSPublishModule", "navigationGroup": "Repository docs" },
       "relationshipDefaults": { "module": "PSPublishModule", "tags": [ "PowerForge", "PrivateGallery" ] }
+    },
+    {
+      "id": "internal-azdo-repository",
+      "kind": "azure-devops",
+      "organization": "evotecpl",
+      "project": "PowerShellGallery",
+      "repository": "InternalModule",
+      "branch": "main",
+      "authentication": "pat",
+      "include": [ "README.md", "Docs/**/*.md" ],
+      "placement": { "surface": "module", "module": "InternalModule", "navigationGroup": "Repository docs" },
+      "relationshipDefaults": { "module": "InternalModule", "tags": [ "AzureDevOps" ] }
     }
   ]
 }
@@ -715,9 +727,10 @@ Notes:
 - `github` sources enumerate repository files through the GitHub tree API and
   fetch raw content when `includeContent` is true. Use `tokenEnv` for private
   repositories or higher API limits.
-- `azure-devops` repository sources are accepted by the contract but currently
-  emit an explicit warning until Azure DevOps repository file ingestion is
-  implemented.
+- `azure-devops` sources enumerate repository files through Azure DevOps Git
+  Items and fetch item content when `includeContent` is true. Use `auth:
+  "bearer"`/default for job access tokens or `authentication: "pat"` for PAT
+  style basic-token requests.
 - Best used after `private-gallery-index` and before `build`, so templates and
   client-side search can consume `data/portal/docs.json` and
   `data/portal/search.json`.

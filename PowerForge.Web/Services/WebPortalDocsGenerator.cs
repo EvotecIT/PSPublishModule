@@ -9,7 +9,7 @@ namespace PowerForge.Web;
 /// <summary>
 /// Generates normalized company portal documentation data for static websites.
 /// </summary>
-public static class WebPortalDocsGenerator
+public static partial class WebPortalDocsGenerator
 {
     /// <summary>
     /// Generates portal documentation JSON outputs.
@@ -54,7 +54,7 @@ public static class WebPortalDocsGenerator
                     "local" => IndexLocalSource(sourceSpec.Defaults, source, normalizedSource, baseDir, options, document.Warnings),
                     "package" => IndexPackageSource(sourceSpec.Defaults, source, normalizedSource, gallery, document.Warnings),
                     "github" => await IndexGitHubSource(sourceSpec.Defaults, source, normalizedSource, http, options, document.Warnings).ConfigureAwait(false),
-                    "azure-devops" or "azuredevops" => IndexAzureDevOpsSource(normalizedSource, document.Warnings),
+                    "azure-devops" or "azuredevops" => await IndexAzureDevOpsSource(sourceSpec.Defaults, source, normalizedSource, http, options, token, document.Warnings).ConfigureAwait(false),
                     _ => UnsupportedSource(source, normalizedSource, document.Warnings)
                 };
 
@@ -252,78 +252,50 @@ public static class WebPortalDocsGenerator
         return docs;
     }
 
-    private static IEnumerable<WebPortalDocEntry> IndexAzureDevOpsSource(
+    private static async Task<IEnumerable<WebPortalDocEntry>> IndexAzureDevOpsSource(
+        WebPortalDocsDefaults defaults,
+        WebPortalDocsSourceSpec source,
         WebPortalDocsSource normalizedSource,
+        HttpClient http,
+        WebPortalDocsOptions options,
+        string? token,
         List<string> warnings)
     {
-        AddSourceWarning(normalizedSource, warnings, $"Azure DevOps repository source '{normalizedSource.Id}' is declared but repository file ingestion is not implemented in this engine slice.");
-        return Array.Empty<WebPortalDocEntry>();
+        if (string.IsNullOrWhiteSpace(source.Organization) ||
+            string.IsNullOrWhiteSpace(source.Project) ||
+            string.IsNullOrWhiteSpace(source.Repository ?? source.Repo))
+        {
+            AddSourceWarning(normalizedSource, warnings, $"Azure DevOps source '{normalizedSource.Id}' requires organization, project, and repository.");
+            return Array.Empty<WebPortalDocEntry>();
+        }
+
+        var repository = source.Repository ?? source.Repo!;
+        var branch = source.Branch ?? defaults.Branch ?? "main";
+        normalizedSource.RepositoryUrl = $"https://dev.azure.com/{source.Organization}/{source.Project}/_git/{repository}";
+        var include = EffectiveList(source.Include, defaults.Include, DefaultIncludePatterns());
+        var exclude = EffectiveList(source.Exclude, defaults.Exclude, DefaultExcludePatterns());
+        var classify = MergeClassify(defaults.Classify, source.Classify);
+        var paths = await GetAzureDevOpsPaths(source, repository, branch, http, include, exclude, token, normalizedSource, warnings).ConfigureAwait(false);
+        var docs = new List<WebPortalDocEntry>();
+
+        foreach (var path in paths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var rawUrl = BuildAzureDevOpsItemUrl(source.Organization!, source.Project!, repository, branch, path, includeContent: true);
+            string? content = null;
+            if (options.IncludeContent)
+                content = await FetchAzureDevOpsText(rawUrl, http, options.MaxContentBytes, source, token, normalizedSource, warnings).ConfigureAwait(false);
+
+            var browseUrl = $"https://dev.azure.com/{source.Organization}/{source.Project}/_git/{Uri.EscapeDataString(repository)}?path=/{EscapePath(path)}&version=GB{Uri.EscapeDataString(branch)}&_a=contents";
+            docs.Add(CreateDocument(source, normalizedSource, path, content, browseUrl, rawUrl, Classify(path, classify), docs.Count));
+        }
+
+        return docs;
     }
 
     private static IEnumerable<WebPortalDocEntry> UnsupportedSource(WebPortalDocsSourceSpec source, WebPortalDocsSource normalizedSource, List<string> warnings)
     {
         AddSourceWarning(normalizedSource, warnings, $"Portal docs source '{normalizedSource.Id}' has unsupported kind '{source.Kind}'.");
         return Array.Empty<WebPortalDocEntry>();
-    }
-
-    private static async Task<List<string>> GetGitHubPaths(
-        string owner,
-        string repo,
-        string branch,
-        HttpClient http,
-        List<string> include,
-        List<string> exclude,
-        WebPortalDocsSource normalizedSource,
-        List<string> warnings)
-    {
-        var treeUrl = $"https://api.github.com/repos/{owner}/{repo}/git/trees/{Uri.EscapeDataString(branch)}?recursive=1";
-        using var response = await http.GetAsync(treeUrl).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            AddSourceWarning(normalizedSource, warnings, $"GitHub tree request for '{owner}/{repo}@{branch}' failed with {(int)response.StatusCode} {response.ReasonPhrase}.");
-            return ExplicitIncludePaths(include);
-        }
-
-        await using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        using var json = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
-        if (!json.RootElement.TryGetProperty("tree", out var tree) || tree.ValueKind != JsonValueKind.Array)
-            return ExplicitIncludePaths(include);
-
-        return tree.EnumerateArray()
-            .Where(item => item.TryGetProperty("type", out var type) && type.GetString()?.Equals("blob", StringComparison.OrdinalIgnoreCase) == true)
-            .Select(item => item.TryGetProperty("path", out var path) ? NormalizePath(path.GetString() ?? string.Empty) : string.Empty)
-            .Where(path => path.Length > 0)
-            .Where(path => IsIncluded(path, include, exclude))
-            .Where(IsTextDocument)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private static List<string> ExplicitIncludePaths(List<string> include)
-        => include
-            .Where(pattern => !ContainsWildcard(pattern))
-            .Select(NormalizePath)
-            .Where(IsTextDocument)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-    private static async Task<string?> FetchText(string rawUrl, HttpClient http, int maxContentBytes, WebPortalDocsSource source, List<string> warnings)
-    {
-        using var response = await http.GetAsync(rawUrl).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            AddSourceWarning(source, warnings, $"Content request '{rawUrl}' failed with {(int)response.StatusCode} {response.ReasonPhrase}.");
-            return null;
-        }
-
-        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-        if (bytes.Length > maxContentBytes)
-        {
-            AddSourceWarning(source, warnings, $"Content request '{rawUrl}' returned {bytes.Length} bytes and was truncated to {maxContentBytes} bytes.");
-            bytes = bytes.Take(maxContentBytes).ToArray();
-        }
-
-        return Encoding.UTF8.GetString(bytes);
     }
 
     private static WebPortalDocEntry CreateDocument(
@@ -673,12 +645,6 @@ public static class WebPortalDocsGenerator
             "**/.git/**"
         };
 
-    private static string BuildGitHubRawUrl(string owner, string repo, string branch, string path)
-        => $"https://raw.githubusercontent.com/{owner}/{repo}/{Uri.EscapeDataString(branch)}/{EscapePath(path)}";
-
-    private static string EscapePath(string path)
-        => string.Join("/", NormalizePath(path).Split('/').Select(Uri.EscapeDataString));
-
     private static string ResolveBaseDirectory(string? baseDirectory)
         => string.IsNullOrWhiteSpace(baseDirectory)
             ? Directory.GetCurrentDirectory()
@@ -757,7 +723,17 @@ public static class WebPortalDocsGenerator
 
         public string? Repo { get; set; }
 
+        public string? Organization { get; set; }
+
+        public string? Project { get; set; }
+
+        public string? Repository { get; set; }
+
         public string? Branch { get; set; }
+
+        public string? Authentication { get; set; }
+
+        public string? Auth { get; set; }
 
         public List<string> Include { get; set; } = new();
 

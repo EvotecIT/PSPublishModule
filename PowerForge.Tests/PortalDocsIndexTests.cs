@@ -184,6 +184,87 @@ public sealed class PortalDocsIndexTests
         }
     }
 
+    [Fact]
+    public void WebPortalDocsGenerator_FetchesAzureDevOpsRepositoryDocs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-portal-docs-azdo-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "portal.sources.json"),
+                """
+                {
+                  "sources": [
+                    {
+                      "id": "contoso-azdo",
+                      "kind": "azure-devops",
+                      "organization": "evotecpl",
+                      "project": "PowerShellGallery",
+                      "repository": "Contoso.Tools",
+                      "branch": "main",
+                      "authentication": "pat",
+                      "include": [ "README.md", "Docs/**/*.md" ],
+                      "relationshipDefaults": { "module": "Contoso.Tools", "tags": [ "AzureDevOps" ] }
+                    }
+                  ]
+                }
+                """);
+
+            var handler = new StubHttpMessageHandler(request =>
+            {
+                Assert.Equal("Basic OnRva2Vu", request.Headers.Authorization?.ToString());
+
+                if (request.RequestUri!.AbsoluteUri.Contains("recursionLevel=Full", StringComparison.Ordinal))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """
+                            {
+                              "value": [
+                                { "path": "/README.md", "gitObjectType": "blob" },
+                                { "path": "/Docs/Runbook.md", "gitObjectType": "blob" },
+                                { "path": "/Docs/Nested", "gitObjectType": "tree", "isFolder": true }
+                              ]
+                            }
+                            """,
+                            Encoding.UTF8,
+                            "application/json")
+                    };
+                }
+
+                var content = request.RequestUri.AbsoluteUri.Contains("README.md", StringComparison.Ordinal)
+                    ? "# Contoso Tools\n\nAzure DevOps maintained docs."
+                    : "# Runbook\n\nOperations runbook.";
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(new { content }), Encoding.UTF8, "application/json")
+                };
+            });
+
+            var result = WebPortalDocsGenerator.Generate(new WebPortalDocsOptions
+            {
+                BaseDirectory = root,
+                SourcesPath = "./portal.sources.json",
+                OutputDirectory = "./data/portal",
+                Token = "token"
+            }, handler);
+
+            Assert.Equal(1, result.SourceCount);
+            Assert.Equal(2, result.DocumentCount);
+            Assert.Empty(result.Warnings);
+
+            var docs = JsonSerializer.Deserialize<WebPortalDocsDocument>(File.ReadAllText(result.DocsPath), JsonOptions)!;
+            Assert.Contains(docs.Documents, doc => doc.Title == "Contoso Tools" && doc.SourceKind == "azure-devops" && doc.Module == "Contoso.Tools");
+            Assert.Contains(docs.Documents, doc => doc.Title == "Runbook" && doc.Tags.Contains("AzureDevOps"));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
