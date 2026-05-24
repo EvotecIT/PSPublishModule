@@ -749,6 +749,9 @@ Generates static Markdown pages for each private gallery module by composing
   "portalDocs": "./data/portal/docs.json",
   "profileName": "EvotecPowerShellGallery",
   "repositoryName": "PowerShellGalleryFeed",
+  "indexLayout": "module-catalog",
+  "moduleLayout": "module-detail",
+  "documentLayout": "module-document",
   "out": "./content/generated/modules"
 }
 ```
@@ -760,6 +763,11 @@ Notes:
 - Each module gets an `index.md` page with install/update commands, module
   facts, commands, package document assets, related portal/repository docs,
   dependencies, and versions.
+- Use `layout` as the fallback layout for every generated page, or use
+  `indexLayout`, `moduleLayout`, and `documentLayout` when a theme has native
+  catalog/detail/document surfaces. Generated front matter also includes
+  `meta.pageKind` plus page-specific counts so layouts do not need to infer the
+  surface from the URL.
 - Portal docs with embedded content get generated module-related pages under
   `<module>-<doc>/`, so repository-maintained README/changelog/how-to files can
   be displayed without copying them into the website repository.

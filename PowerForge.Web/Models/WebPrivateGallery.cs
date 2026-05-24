@@ -152,8 +152,17 @@ public sealed class WebPrivateGalleryPageOptions
     /// <summary>Repository name shown in native PSResourceGet examples.</summary>
     public string? RepositoryName { get; set; }
 
-    /// <summary>Default layout front matter value for generated module pages.</summary>
+    /// <summary>Default layout front matter value for generated private-gallery pages.</summary>
     public string? Layout { get; set; } = "page";
+
+    /// <summary>Optional layout front matter value for the module catalog index page.</summary>
+    public string? IndexLayout { get; set; }
+
+    /// <summary>Optional layout front matter value for generated module detail pages.</summary>
+    public string? ModuleLayout { get; set; }
+
+    /// <summary>Optional layout front matter value for generated related documentation pages.</summary>
+    public string? DocumentLayout { get; set; }
 
     /// <summary>Whether module-related portal documents with content should get their own pages.</summary>
     public bool GenerateDocumentPages { get; set; } = true;

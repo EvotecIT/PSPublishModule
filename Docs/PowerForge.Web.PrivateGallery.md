@@ -320,7 +320,11 @@ Status: initial module and related-document page generation is implemented via
 `portal-docs-index` documentation data. `portal-docs-index` also supports a
 reusable `kind: "module"` source declaration that expands to package-bundled
 docs plus related repository docs when GitHub or Azure DevOps repository details
-are present.
+are present. `portal-module-pages` supports separate `indexLayout`,
+`moduleLayout`, and `documentLayout` values, and emits `meta.pageKind` plus
+surface-specific counts so reusable gallery themes can render native catalog,
+module detail, and module documentation views without route-specific template
+checks.
 
 ### Slice 4: Metrics and Quality Signals
 
@@ -337,6 +341,11 @@ as optional data. Quality-signal rollups and CI gates remain future work.
 - Add a gallery starter profile or gallery feature contract.
 - Add required selectors/partials for module cards, install command blocks,
   version tables, and command/doc search results.
+
+Status: partially implemented. Generated private-gallery pages now expose
+surface-specific layout names and metadata, which gives a starter/theme a stable
+contract for catalog/detail/document templates. A full bundled starter profile
+and selector contract remain future work.
 
 ## Non-Goals
 

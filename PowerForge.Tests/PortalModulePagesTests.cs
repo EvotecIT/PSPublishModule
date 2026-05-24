@@ -104,6 +104,65 @@ public sealed class PortalModulePagesTests
     }
 
     [Fact]
+    public void RunPipeline_PortalModulePages_UsesSurfaceSpecificLayouts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-portal-pages-layouts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, "data", "private-gallery"));
+        Directory.CreateDirectory(Path.Combine(root, "data", "portal"));
+
+        try
+        {
+            WriteSampleGallery(Path.Combine(root, "data", "private-gallery", "feed.json"));
+            WriteSamplePortalDocs(Path.Combine(root, "data", "portal", "docs.json"));
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "portal-module-pages",
+                      "privateGallery": "./data/private-gallery/feed.json",
+                      "portalDocs": "./data/portal/docs.json",
+                      "profileName": "EvotecPowerShellGallery",
+                      "repositoryName": "PublishedGalleryName",
+                      "layout": "page",
+                      "indexLayout": "module-catalog",
+                      "moduleLayout": "module-detail",
+                      "documentLayout": "module-document",
+                      "out": "./content/generated/modules"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var outDir = Path.Combine(root, "content", "generated", "modules");
+            var indexMarkdown = File.ReadAllText(Path.Combine(outDir, "index.md"));
+            var moduleMarkdown = File.ReadAllText(Path.Combine(outDir, "contoso-tools", "index.md"));
+            var docMarkdown = File.ReadAllText(Path.Combine(outDir, "contoso-tools-operator-guide", "index.md"));
+
+            Assert.Contains("layout: module-catalog", indexMarkdown);
+            Assert.Contains("meta.pageKind: \"module-catalog\"", indexMarkdown);
+            Assert.Contains("meta.moduleCount: \"1\"", indexMarkdown);
+            Assert.Contains("meta.repositoryName: \"PublishedGalleryName\"", indexMarkdown);
+            Assert.Contains("layout: module-detail", moduleMarkdown);
+            Assert.Contains("meta.pageKind: \"module-detail\"", moduleMarkdown);
+            Assert.Contains("meta.commandCount: \"1\"", moduleMarkdown);
+            Assert.Contains("meta.portalDocCount: \"1\"", moduleMarkdown);
+            Assert.Contains("layout: module-document", docMarkdown);
+            Assert.Contains("meta.pageKind: \"module-document\"", docMarkdown);
+            Assert.Contains("meta.navigationGroup: \"Repository docs\"", docMarkdown);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void WebPrivateGalleryPageGenerator_DisambiguatesSlugCollisions()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-portal-pages-collisions-" + Guid.NewGuid().ToString("N"));
