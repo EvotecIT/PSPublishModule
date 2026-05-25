@@ -321,7 +321,19 @@ public sealed partial class DotNetPublishPipelineRunner
 
         XNamespace s4 = "http://schemas.microsoft.com/appx/appinstaller/2021";
         root.SetAttributeValue(XNamespace.Xmlns + "s4", s4.NamespaceName);
+        AddIgnorableNamespace(root, "s4");
         return s4;
+    }
+
+    private static void AddIgnorableNamespace(XElement root, string prefix)
+    {
+        var values = ((string?)root.Attribute("IgnorableNamespaces") ?? string.Empty)
+            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+        if (!values.Any(value => string.Equals(value, prefix, StringComparison.Ordinal)))
+            values.Add(prefix);
+
+        root.SetAttributeValue("IgnorableNamespaces", string.Join(" ", values));
     }
 
     private static void RewriteElementNamespace(XElement element, XNamespace ns)

@@ -591,6 +591,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
 
             Assert.Equal("true", updateSettings.Element(s4 + "ForceUpdateFromAnyVersion")!.Value);
             Assert.Null(updateSettings.Element(ns + "ForceUpdateFromAnyVersion"));
+            Assert.Equal("s4", document.Root!.Attribute("IgnorableNamespaces")!.Value);
         }
         finally
         {

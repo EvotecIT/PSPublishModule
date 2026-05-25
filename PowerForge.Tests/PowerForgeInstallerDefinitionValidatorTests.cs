@@ -312,6 +312,34 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
         Assert.Contains("Duplicate installer dialog 'ConfigurationDlg' action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("Next")]
+    [InlineData("Title")]
+    [InlineData("InstallPath")]
+    [InlineData("InstallPathLabel")]
+    public void Validate_RejectsDialogActionIdsThatCollideWithGeneratedControls(string actionId)
+    {
+        var definition = CreateValidDefinition();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "InstallPath",
+            PropertyName = "INSTALL_PATH",
+            Label = "Install path"
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            InputIds = { "InstallPath" },
+            Actions = { CreateDialogAction(actionId) }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("collides with a generated dialog control ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Validate_RejectsValidationMessageWithoutValidationRule()
     {
@@ -394,6 +422,47 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
 
         Assert.Contains("SetData", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("collides", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsExecutableActionWhenGeneratedSetDataIdIsTooLong()
+    {
+        var definition = CreateValidDefinition();
+        definition.ExecutableActions.Add(CreateExecutableAction("A" + new string('b', 71)));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("generated SetData action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsUnsupportedExecutableActionReturn()
+    {
+        var definition = CreateValidDefinition();
+        var action = CreateExecutableAction("Configure");
+        action.Return = "wait";
+        definition.ExecutableActions.Add(action);
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("Return must be one of", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("check")]
+    [InlineData("ignore")]
+    [InlineData("asyncWait")]
+    [InlineData("asyncNoWait")]
+    public void Validate_AllowsSupportedExecutableActionReturns(string returnMode)
+    {
+        var definition = CreateValidDefinition();
+        var action = CreateExecutableAction("Configure");
+        action.Return = returnMode;
+        definition.ExecutableActions.Add(action);
+
+        PowerForgeInstallerDefinitionValidator.Validate(definition);
     }
 
     [Theory]
