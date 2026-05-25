@@ -27,7 +27,7 @@ internal static partial class WebPipelineRunner
     private static readonly string[] AllowedProjectContentModes = { "hybrid", "external" };
     private static readonly string[] AllowedProjectStatuses = { "active", "archived", "deprecated", "experimental" };
     private static readonly string[] AllowedProjectSurfaceKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads" };
-    private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads", "source", "website", "nuget", "powerShellGallery", "blog" };
+    private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads", "source", "website", "nuget", "powerShellGallery", "privateGallery", "privateFeed", "blog" };
     private static readonly JsonSerializerOptions ProjectSitemapFingerprintJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -939,7 +939,7 @@ internal static partial class WebPipelineRunner
         return normalized is "collection" ? "collection" : "project";
     }
 
-    private static string GetHubSectionRoute(string slug, string section, string hubSectionLinkTarget)
+    private static string GetHubSectionRoute(string slug, string section, string hubSectionLinkTarget, string? hubPath = null)
     {
         var normalizedSection = section?.Trim().ToLowerInvariant() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(slug) || string.IsNullOrWhiteSpace(normalizedSection))
@@ -947,7 +947,7 @@ internal static partial class WebPipelineRunner
 
         return hubSectionLinkTarget.Equals("collection", StringComparison.OrdinalIgnoreCase)
             ? $"/{normalizedSection}/{slug}/"
-            : $"/projects/{slug}/{normalizedSection}/";
+            : $"{(string.IsNullOrWhiteSpace(hubPath) ? $"/projects/{slug}/" : hubPath.TrimEnd('/') + "/")}{normalizedSection}/";
     }
 
     private static bool IsKnownHubSectionRoute(string? route, string projectRoute, string collectionRoute)
@@ -1007,7 +1007,7 @@ internal static partial class WebPipelineRunner
             if (mode.Equals("dedicated-external", StringComparison.OrdinalIgnoreCase))
                 contentMode = "external";
             project.ContentMode = contentMode;
-            project.HubPath = $"/projects/{slug}/";
+            project.HubPath = ResolveProjectHubPath(project, slug);
 
             var links = EnsureProjectLinks(project);
             var surfaces = EnsureProjectSurfaces(project);
@@ -1085,9 +1085,9 @@ internal static partial class WebPipelineRunner
             }
 
             var docsEnabled = surfaces.TryGetValue("docs", out var docsSurface) && docsSurface;
-            var docsProjectRoute = $"/projects/{slug}/docs/";
+            var docsProjectRoute = $"{project.HubPath.TrimEnd('/')}/docs/";
             var docsCollectionRoute = $"/docs/{slug}/";
-            var docsHubRoute = GetHubSectionRoute(slug, "docs", hubSectionLinkTarget);
+            var docsHubRoute = GetHubSectionRoute(slug, "docs", hubSectionLinkTarget, project.HubPath);
             if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
                 IsKnownHubSectionRoute(TryGetDictionaryValue(links, "docs"), docsProjectRoute, docsCollectionRoute))
             {
@@ -1102,9 +1102,9 @@ internal static partial class WebPipelineRunner
             }
 
             var apiPowerShellEnabled = surfaces.TryGetValue("apiPowerShell", out var apiPowerShellSurface) && apiPowerShellSurface;
-            var apiProjectRoute = $"/projects/{slug}/api/";
+            var apiProjectRoute = $"{project.HubPath.TrimEnd('/')}/api/";
             var apiCollectionRoute = $"/api/{slug}/";
-            var apiHubRoute = GetHubSectionRoute(slug, "api", hubSectionLinkTarget);
+            var apiHubRoute = GetHubSectionRoute(slug, "api", hubSectionLinkTarget, project.HubPath);
             if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
                 IsKnownHubSectionRoute(TryGetDictionaryValue(links, "apiPowerShell"), apiProjectRoute, apiCollectionRoute))
             {
@@ -1133,9 +1133,9 @@ internal static partial class WebPipelineRunner
             }
 
             var examplesEnabled = surfaces.TryGetValue("examples", out var examplesSurface) && examplesSurface;
-            var examplesProjectRoute = $"/projects/{slug}/examples/";
+            var examplesProjectRoute = $"{project.HubPath.TrimEnd('/')}/examples/";
             var examplesCollectionRoute = $"/examples/{slug}/";
-            var examplesHubRoute = GetHubSectionRoute(slug, "examples", hubSectionLinkTarget);
+            var examplesHubRoute = GetHubSectionRoute(slug, "examples", hubSectionLinkTarget, project.HubPath);
             if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
                 IsKnownHubSectionRoute(TryGetDictionaryValue(links, "examples"), examplesProjectRoute, examplesCollectionRoute))
             {
@@ -1237,10 +1237,7 @@ internal static partial class WebPipelineRunner
             if (!AllowedProjectStatuses.Contains(status, StringComparer.OrdinalIgnoreCase))
                 findings.Add(ProjectCatalogFinding.Error("invalid-status", slug, $"Status '{status}' is not supported. Allowed: {string.Join(", ", AllowedProjectStatuses)}."));
 
-            var expectedHubPath = $"/projects/{slug}/";
-            var hubPath = string.IsNullOrWhiteSpace(project.HubPath) ? expectedHubPath : project.HubPath!.Trim();
-            if (!hubPath.Equals(expectedHubPath, StringComparison.OrdinalIgnoreCase))
-                findings.Add(ProjectCatalogFinding.Warning("non-canonical-hub-path", slug, $"hubPath '{hubPath}' differs from canonical '{expectedHubPath}'."));
+            var hubPath = string.IsNullOrWhiteSpace(project.HubPath) ? $"/projects/{slug}/" : project.HubPath!.Trim();
             if (!hubPath.StartsWith("/", StringComparison.Ordinal) || !hubPath.EndsWith("/", StringComparison.Ordinal))
                 findings.Add(ProjectCatalogFinding.Error("invalid-hub-path", slug, $"hubPath '{hubPath}' must start and end with '/'."));
             if (!hubPaths.Add(hubPath))
@@ -1452,6 +1449,18 @@ internal static partial class WebPipelineRunner
         return TryGetProjectSurfaceValue(project.Surfaces, "docs") ?? false;
     }
 
+    private static string ResolveProjectHubPath(ProjectCatalogEntry project, string slug)
+    {
+        var hubPath = NormalizeOptionalString(project.HubPath);
+        if (string.IsNullOrWhiteSpace(hubPath))
+            hubPath = $"/projects/{slug}/";
+        if (!hubPath.StartsWith("/", StringComparison.Ordinal))
+            hubPath = "/" + hubPath;
+        if (!hubPath.EndsWith("/", StringComparison.Ordinal))
+            hubPath += "/";
+        return hubPath;
+    }
+
     private static bool HasProjectApiSection(ProjectCatalogEntry project)
     {
         return (TryGetProjectSurfaceValue(project.Surfaces, "apiPowerShell") ?? false) ||
@@ -1563,11 +1572,12 @@ internal static partial class WebPipelineRunner
             var contentMode = NormalizeProjectContentMode(project.ContentMode, mode);
             var status = NormalizeProjectStatus(project.Status, "active");
             var listed = project.Listed ?? !status.Equals("archived", StringComparison.OrdinalIgnoreCase);
+            var hubPath = ResolveProjectHubPath(project, slug);
             lines.Add($"meta.project_mode: {YamlQuote(mode)}");
             lines.Add($"meta.project_content_mode: {YamlQuote(contentMode)}");
             lines.Add($"meta.project_status: {YamlQuote(status)}");
             lines.Add($"meta.project_listed: {listed.ToString().ToLowerInvariant()}");
-            lines.Add($"meta.project_hub_path: {YamlQuote($"/projects/{slug}/")}");
+            lines.Add($"meta.project_hub_path: {YamlQuote(hubPath)}");
             lines.Add($"meta.project_base_slug: {YamlQuote(slug)}");
             lines.Add("meta.project_section: \"overview\"");
             if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
@@ -1716,7 +1726,7 @@ internal static partial class WebPipelineRunner
                 var mode = NormalizeProjectMode(project.Mode, "hub-full");
                 var contentMode = NormalizeProjectContentMode(project.ContentMode, mode);
                 var status = NormalizeProjectStatus(project.Status, "active");
-                var hubPath = $"/projects/{slug}/";
+                var hubPath = ResolveProjectHubPath(project, slug);
                 var primaryLink = $"[{hubPath}]({hubPath})";
                 var source = string.IsNullOrWhiteSpace(project.GitHubRepo)
                     ? "-"
@@ -1761,6 +1771,7 @@ internal static partial class WebPipelineRunner
             var listed = project.Listed ?? !status.Equals("archived", StringComparison.OrdinalIgnoreCase);
             var name = string.IsNullOrWhiteSpace(project.Name) ? slug : project.Name!;
             var description = string.IsNullOrWhiteSpace(project.Description) ? $"{name} project page." : project.Description!;
+            var hubPath = ResolveProjectHubPath(project, slug);
             var sections = new List<string>();
             if (HasProjectDocsSection(project))
                 sections.Add("docs");
@@ -1805,7 +1816,7 @@ internal static partial class WebPipelineRunner
                     $"meta.project_content_mode: {YamlQuote(contentMode)}",
                     $"meta.project_status: {YamlQuote(status)}",
                     $"meta.project_listed: {listed.ToString().ToLowerInvariant()}",
-                    $"meta.project_hub_path: {YamlQuote($"/projects/{slug}/")}",
+                    $"meta.project_hub_path: {YamlQuote(hubPath)}",
                     $"meta.project_base_slug: {YamlQuote(slug)}",
                     $"meta.project_section: {YamlQuote(section)}",
                     "meta.generated_by: powerforge.project-catalog"
@@ -1846,7 +1857,7 @@ internal static partial class WebPipelineRunner
                     else
                         lines.Add("Documentation for this project is being prepared.");
                     lines.Add(string.Empty);
-                    lines.Add($"- Overview: [/projects/{slug}/](/projects/{slug}/)");
+                    lines.Add($"- Overview: [{hubPath}]({hubPath})");
                     if (!string.IsNullOrWhiteSpace(apiLink))
                         lines.Add($"- API: [{apiLink}]({apiLink})");
                     if (!string.IsNullOrWhiteSpace(examplesLink))
@@ -1878,7 +1889,7 @@ internal static partial class WebPipelineRunner
                             lines.Add("API references for this project are being prepared.");
                     }
                     lines.Add(string.Empty);
-                    lines.Add($"- Overview: [/projects/{slug}/](/projects/{slug}/)");
+                    lines.Add($"- Overview: [{hubPath}]({hubPath})");
                     if (!string.IsNullOrWhiteSpace(docsLink))
                         lines.Add($"- Docs: [{docsLink}]({docsLink})");
                     if (!string.IsNullOrWhiteSpace(examplesLink))
@@ -1897,7 +1908,7 @@ internal static partial class WebPipelineRunner
                     else
                         lines.Add("Examples for this project are being prepared.");
                     lines.Add(string.Empty);
-                    lines.Add($"- Overview: [/projects/{slug}/](/projects/{slug}/)");
+                    lines.Add($"- Overview: [{hubPath}]({hubPath})");
                     if (!string.IsNullOrWhiteSpace(docsLink))
                         lines.Add($"- Docs: [{docsLink}]({docsLink})");
                     if (!string.IsNullOrWhiteSpace(apiLink))
@@ -2381,6 +2392,26 @@ internal static partial class WebPipelineRunner
         return null;
     }
 
+    private static long? ReadJsonLong(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!element.TryGetProperty(name, out var property))
+                continue;
+
+            if (property.ValueKind == JsonValueKind.Number && property.TryGetInt64(out var number))
+                return number;
+
+            if (property.ValueKind == JsonValueKind.String &&
+                long.TryParse(property.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out number))
+            {
+                return number;
+            }
+        }
+
+        return null;
+    }
+
     private static string? ReadJsonDate(JsonElement element, params string[] names)
     {
         foreach (var name in names)
@@ -2482,6 +2513,8 @@ internal static partial class WebPipelineRunner
             WriteMetaString(lines, "meta.project_link_website", TryGetDictionaryValue(project.Links, "website"));
             WriteMetaString(lines, "meta.project_link_nuget", TryGetDictionaryValue(project.Links, "nuget"));
             WriteMetaString(lines, "meta.project_link_psgallery", TryGetDictionaryValue(project.Links, "powerShellGallery"));
+            WriteMetaString(lines, "meta.project_link_private_gallery", TryGetDictionaryValue(project.Links, "privateGallery"));
+            WriteMetaString(lines, "meta.project_link_private_feed", TryGetDictionaryValue(project.Links, "privateFeed"));
         }
 
         if (project.Surfaces is { Count: > 0 })
@@ -2501,6 +2534,8 @@ internal static partial class WebPipelineRunner
             WriteMetaString(lines, "meta.project_artifact_api", project.Artifacts.Api);
             WriteMetaString(lines, "meta.project_artifact_examples", project.Artifacts.Examples);
         }
+
+        AppendPrivateGalleryFrontMatterExtensions(lines, project);
 
         if (project.Metrics is null)
             return;
@@ -2554,6 +2589,31 @@ internal static partial class WebPipelineRunner
             WriteMetaBoolean(lines, "meta.project_release_is_prerelease", project.Metrics.Release.IsPrerelease);
             WriteMetaBoolean(lines, "meta.project_release_is_draft", project.Metrics.Release.IsDraft);
         }
+    }
+
+    private static void AppendPrivateGalleryFrontMatterExtensions(List<string> lines, ProjectCatalogEntry project)
+    {
+        if (project.ExtensionData is null ||
+            !project.ExtensionData.TryGetValue("privateGallery", out var privateGallery) ||
+            privateGallery.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        WriteMetaString(lines, "meta.project_private_gallery_provider", ReadJsonString(privateGallery, "provider"));
+        WriteMetaString(lines, "meta.project_private_gallery_organization", ReadJsonString(privateGallery, "organization"));
+        WriteMetaString(lines, "meta.project_private_gallery_project", ReadJsonString(privateGallery, "project"));
+        WriteMetaString(lines, "meta.project_private_gallery_feed", ReadJsonString(privateGallery, "feed"));
+        WriteMetaString(lines, "meta.project_private_gallery_repository", ReadJsonString(privateGallery, "repositoryName", "repository"));
+        WriteMetaString(lines, "meta.project_private_gallery_package_id", ReadJsonString(privateGallery, "packageId"));
+        WriteMetaString(lines, "meta.project_private_gallery_package_url", ReadJsonString(privateGallery, "packageUrl"));
+        WriteMetaString(lines, "meta.project_private_gallery_latest_version", ReadJsonString(privateGallery, "latestVersion"));
+        WriteMetaString(lines, "meta.project_private_gallery_install_command", ReadJsonString(privateGallery, "installCommand"));
+        WriteMetaString(lines, "meta.project_private_gallery_update_command", ReadJsonString(privateGallery, "updateCommand"));
+        WriteMetaInteger(lines, "meta.project_private_gallery_versions", ReadJsonLong(privateGallery, "versionCount") ?? 0);
+        WriteMetaInteger(lines, "meta.project_private_gallery_commands", ReadJsonLong(privateGallery, "commandCount") ?? 0);
+        WriteMetaInteger(lines, "meta.project_private_gallery_documents", ReadJsonLong(privateGallery, "documentCount") ?? 0);
+        WriteMetaInteger(lines, "meta.project_private_gallery_dependencies", ReadJsonLong(privateGallery, "dependencyCount") ?? 0);
     }
 
     private static string? FormatDateForDisplay(string? value)

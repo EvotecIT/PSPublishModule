@@ -72,6 +72,14 @@ public static class WebPrivateGalleryGenerator
         var searchPath = Path.Combine(outputDirectory, "search.json");
         File.WriteAllText(searchPath, JsonSerializer.Serialize(searchDocument, WebJson.Options));
 
+        string? projectCatalogPath = null;
+        var projectCatalogProjectCount = 0;
+        if (!string.IsNullOrWhiteSpace(options.ProjectCatalogPath))
+        {
+            projectCatalogPath = ResolvePath(options.ProjectCatalogPath!, baseDir);
+            projectCatalogProjectCount = WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(result.Document, projectCatalogPath, options);
+        }
+
         return new WebPrivateGalleryResult
         {
             FeedPath = feedPath,
@@ -79,6 +87,8 @@ public static class WebPrivateGalleryGenerator
             PackageCount = result.Document.Summary.PackageCount,
             VersionCount = result.Document.Summary.VersionCount,
             CommandCount = result.Document.Summary.CommandCount,
+            ProjectCatalogPath = projectCatalogPath,
+            ProjectCatalogProjectCount = projectCatalogProjectCount,
             Warnings = result.Warnings.ToArray()
         };
     }
