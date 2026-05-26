@@ -150,10 +150,9 @@ jobs:
 
       - name: Initialize Playwright cache directory
         if: ${{ inputs.use_playwright_cache }}
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}"
+          New-Item -ItemType Directory -Force -Path $env:PLAYWRIGHT_BROWSERS_PATH | Out-Null
 
       - name: Run website pipeline
         shell: pwsh
@@ -229,20 +228,28 @@ jobs:
 
       - name: Archive Pages artifact
         if: ${{ inputs.upload_pages_artifact && runner.os == 'Windows' }}
-        shell: bash
+        shell: pwsh
         env:
           PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
         run: |
-          echo "::group::Archive Pages artifact"
-          tar \
-            --dereference --hard-dereference \
-            --directory "$PAGES_ARTIFACT_PATH" \
-            -cf "$RUNNER_TEMP/artifact.tar" \
-            --exclude=.git \
-            --exclude=.github \
-            --force-local \
-            .
-          echo "::endgroup::"
+          Write-Host "::group::Archive Pages artifact"
+          $tarArgs = @(
+            '--dereference',
+            '--hard-dereference',
+            '--directory',
+            $env:PAGES_ARTIFACT_PATH,
+            '-cf',
+            (Join-Path $env:RUNNER_TEMP 'artifact.tar'),
+            '--exclude=.git',
+            '--exclude=.github',
+            '--force-local',
+            '.'
+          )
+          tar @tarArgs
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          Write-Host "::endgroup::"
 
       - name: Upload Pages artifact
         if: ${{ inputs.upload_pages_artifact }}
@@ -255,8 +262,8 @@ jobs:
 
       - name: Cleanup Playwright cache
         if: ${{ always() && inputs.use_playwright_cache }}
-        shell: bash
+        shell: pwsh
         run: |
-          if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "${PLAYWRIGHT_BROWSERS_PATH}" ]; then
-            rm -rf "${PLAYWRIGHT_BROWSERS_PATH}"
-          fi
+          if (-not [string]::IsNullOrWhiteSpace($env:PLAYWRIGHT_BROWSERS_PATH) -and (Test-Path -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH)) {
+            Remove-Item -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH -Recurse -Force
+          }
