@@ -1454,6 +1454,7 @@ internal static partial class WebPipelineRunner
         var hubPath = NormalizeOptionalString(project.HubPath);
         if (string.IsNullOrWhiteSpace(hubPath))
             hubPath = $"/projects/{slug}/";
+        hubPath = hubPath.Replace('\\', '/');
         if (!hubPath.StartsWith("/", StringComparison.Ordinal))
             hubPath = "/" + hubPath;
         if (!hubPath.EndsWith("/", StringComparison.Ordinal))

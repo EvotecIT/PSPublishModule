@@ -443,6 +443,7 @@ public sealed class PrivateGalleryEngineTests
                 {
                     new PrivateGalleryPackage
                     {
+                        Id = "provider-package-id",
                         Name = "Contoso.Tools",
                         Description = "Internal tools",
                         WebUrl = "https://dev.azure.com/evotecpl/PowerShellGallery/_artifacts/feed/PowerShellGalleryFeed/package/Contoso.Tools",
@@ -498,12 +499,106 @@ public sealed class PrivateGalleryEngineTests
             var projected = Assert.Single(projects, project => project.GetProperty("slug").GetString() == "contoso-tools");
             Assert.Equal("Contoso.Tools", projected.GetProperty("name").GetString());
             Assert.Equal("/modules/contoso-tools/", projected.GetProperty("hubPath").GetString());
+            Assert.Equal("provider-package-id", projected.GetProperty("privateGallery").GetProperty("packageId").GetString());
             Assert.True(projected.GetProperty("surfaces").GetProperty("docs").GetBoolean());
             Assert.True(projected.GetProperty("surfaces").GetProperty("apiPowerShell").GetBoolean());
             Assert.True(projected.GetProperty("surfaces").GetProperty("examples").GetBoolean());
             Assert.Equal(42, projected.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
             Assert.Equal("Install-PrivateModule -ProfileName 'EvotecPowerShellGallery' -Name 'Contoso.Tools' -InstallPrerequisites",
                 projected.GetProperty("privateGallery").GetProperty("installCommand").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void WebPrivateGalleryProjectCatalogMapper_HandlesCollidingSlugsAndExternalMode()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-collisions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            var document = new PrivateGalleryDocument
+            {
+                Feed = new PrivateGalleryFeed { RepositoryName = "PrivateFeed" },
+                Packages =
+                {
+                    new PrivateGalleryPackage
+                    {
+                        Id = "package-one-id",
+                        Name = "Foo.Bar",
+                        WebUrl = "https://example.test/packages/foo.bar",
+                        Module = new PrivateGalleryModuleMetadata { Name = "Foo.Bar" }
+                    },
+                    new PrivateGalleryPackage
+                    {
+                        Id = "package-two-id",
+                        Name = "Foo-Bar",
+                        WebUrl = "https://example.test/packages/foo-bar",
+                        Module = new PrivateGalleryModuleMetadata { Name = "Foo-Bar" }
+                    }
+                }
+            };
+
+            var count = WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                document,
+                catalogPath,
+                new WebPrivateGalleryOptions
+                {
+                    ProjectCatalogContentMode = "external",
+                    ProjectCatalogRoutePrefix = @"modules\internal"
+                });
+
+            Assert.Equal(2, count);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var projects = json.RootElement.GetProperty("projects").EnumerateArray().ToList();
+            Assert.Contains(projects, project => project.GetProperty("slug").GetString() == "foo-bar");
+            Assert.Contains(projects, project => project.GetProperty("slug").GetString() == "foo-bar-2");
+            Assert.All(projects, project =>
+            {
+                Assert.Equal("external", project.GetProperty("contentMode").GetString());
+                Assert.True(project.TryGetProperty("externalUrl", out var externalUrl));
+                Assert.StartsWith("https://example.test/packages/", externalUrl.GetString(), StringComparison.Ordinal);
+                Assert.StartsWith("/modules/internal/", project.GetProperty("hubPath").GetString(), StringComparison.Ordinal);
+            });
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void WebPrivateGalleryProjectCatalogMapper_FailsMergeForInvalidCatalogJson()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-invalid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            File.WriteAllText(catalogPath, "{ invalid json");
+
+            var document = new PrivateGalleryDocument
+            {
+                Packages =
+                {
+                    new PrivateGalleryPackage { Name = "Contoso.Tools" }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                    document,
+                    catalogPath,
+                    new WebPrivateGalleryOptions { ProjectCatalogMerge = true }));
+
+            Assert.Contains("invalid project catalog JSON", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

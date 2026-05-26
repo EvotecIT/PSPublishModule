@@ -23,7 +23,7 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
                 """
                 {
                   "projects": [
-                    { "slug": "alpha", "surfaces": { "docs": true } },
+                    { "slug": "alpha", "hubPath": "modules\\alpha", "surfaces": { "docs": true } },
                     { "slug": "beta", "surfaces": { "docs": false } },
                     { "slug": "gamma", "surfaces": { "docs": true } }
                   ]
@@ -77,8 +77,8 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
             Assert.Contains("meta.project_base_slug: \"alpha\"", copiedRootDocContent, StringComparison.Ordinal);
             Assert.Contains("meta.project_name: \"Alpha\"", copiedRootDocContent, StringComparison.Ordinal);
             Assert.Contains("meta.project_section: \"docs\"", copiedRootDocContent, StringComparison.Ordinal);
-            Assert.Contains("meta.project_hub_path: \"/projects/alpha/\"", copiedRootDocContent, StringComparison.Ordinal);
-            Assert.Contains("meta.project_link_docs: \"/projects/alpha/docs/\"", copiedRootDocContent, StringComparison.Ordinal);
+            Assert.Contains("meta.project_hub_path: \"/modules/alpha/\"", copiedRootDocContent, StringComparison.Ordinal);
+            Assert.Contains("meta.project_link_docs: \"/modules/alpha/docs/\"", copiedRootDocContent, StringComparison.Ordinal);
 
             var summaryPath = Path.Combine(root, "Build", "sync-project-docs-summary.json");
             Assert.True(File.Exists(summaryPath));

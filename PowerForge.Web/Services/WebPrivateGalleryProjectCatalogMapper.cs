@@ -24,10 +24,16 @@ public static class WebPrivateGalleryProjectCatalogMapper
 
         var catalog = LoadCatalog(path, options.ProjectCatalogMerge);
         var projects = EnsureProjectsArray(catalog);
+        var usedSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var entries = document.Packages
             .Where(static package => !string.IsNullOrWhiteSpace(package.Name))
             .OrderBy(static package => package.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(package => BuildProjectEntry(document, package, options))
+            .Select(package =>
+            {
+                var displayName = ResolveDisplayName(package);
+                var slug = ResolveUniqueSlug(Slugify(displayName), usedSlugs);
+                return BuildProjectEntry(document, package, options, slug, displayName);
+            })
             .ToList();
 
         var slugs = entries
@@ -72,9 +78,9 @@ public static class WebPrivateGalleryProjectCatalogMapper
         {
             return JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new JsonObject();
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return new JsonObject();
+            throw new InvalidOperationException($"Cannot merge private gallery into invalid project catalog JSON: {path}", ex);
         }
     }
 
@@ -88,17 +94,18 @@ public static class WebPrivateGalleryProjectCatalogMapper
         return projects;
     }
 
-    private static JsonObject BuildProjectEntry(PrivateGalleryDocument document, PrivateGalleryPackage package, WebPrivateGalleryOptions options)
+    private static JsonObject BuildProjectEntry(PrivateGalleryDocument document, PrivateGalleryPackage package, WebPrivateGalleryOptions options, string slug, string displayName)
     {
         var module = package.Module;
         var latest = ResolveLatestVersion(package);
         var latestModule = latest?.Module ?? module;
-        var displayName = string.IsNullOrWhiteSpace(module?.Name) ? package.Name : module!.Name;
-        var slug = Slugify(displayName);
         var version = latestModule?.Version ?? latest?.Version ?? package.LatestVersion;
         var description = FirstNonEmpty(latestModule?.Description, module?.Description, latest?.Description, package.Description, $"{displayName} private gallery module.");
         var routePrefix = NormalizeRoutePrefix(options.ProjectCatalogRoutePrefix);
+        var contentMode = NormalizeContentMode(options.ProjectCatalogContentMode);
         var packageUrl = package.WebUrl;
+        if (contentMode.Equals("external", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(packageUrl))
+            contentMode = "hybrid";
         var commandCount = CountCommands(package);
         var documentCount = CountDocuments(package);
         var dependencyCount = CountDependencies(package);
@@ -150,7 +157,7 @@ public static class WebPrivateGalleryProjectCatalogMapper
             ["project"] = document.Feed.Project,
             ["feed"] = document.Feed.Name,
             ["repositoryName"] = document.Feed.RepositoryName,
-            ["packageId"] = package.Name,
+            ["packageId"] = FirstNonEmpty(package.Id, package.Name),
             ["packageUrl"] = packageUrl,
             ["latestVersion"] = version,
             ["versionCount"] = package.Versions.Count,
@@ -161,12 +168,12 @@ public static class WebPrivateGalleryProjectCatalogMapper
             ["updateCommand"] = BuildUpdateCommand(document.Feed.RepositoryName, package.Name)
         };
 
-        return new JsonObject
+        var entry = new JsonObject
         {
             ["slug"] = slug,
             ["name"] = displayName,
             ["mode"] = "hub-full",
-            ["contentMode"] = NormalizeContentMode(options.ProjectCatalogContentMode),
+            ["contentMode"] = contentMode,
             ["hubPath"] = $"{routePrefix}/{slug}/",
             ["description"] = description,
             ["status"] = ResolveStatus(package, latest),
@@ -177,6 +184,24 @@ public static class WebPrivateGalleryProjectCatalogMapper
             ["metrics"] = metrics,
             ["privateGallery"] = privateGallery
         };
+
+        if (contentMode.Equals("external", StringComparison.OrdinalIgnoreCase))
+            entry["externalUrl"] = packageUrl;
+
+        return entry;
+    }
+
+    private static string ResolveDisplayName(PrivateGalleryPackage package)
+        => string.IsNullOrWhiteSpace(package.Module?.Name) ? package.Name : package.Module!.Name;
+
+    private static string ResolveUniqueSlug(string slug, ISet<string> usedSlugs)
+    {
+        var baseSlug = string.IsNullOrWhiteSpace(slug) ? "module" : slug;
+        var candidate = baseSlug;
+        var suffix = 2;
+        while (!usedSlugs.Add(candidate))
+            candidate = $"{baseSlug}-{suffix++}";
+        return candidate;
     }
 
     private static JsonObject BuildFeedSummary(PrivateGalleryDocument document)

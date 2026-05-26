@@ -800,11 +800,11 @@ internal static partial class WebPipelineRunner
         ProjectApiDocsCatalogOverrides? apiDocsOverrides)
     {
         var name = NormalizeOptionalString(project.Name) ?? slug;
-        var hubPath = NormalizeOptionalString(project.HubPath) ?? $"/projects/{slug}/";
+        var hubPath = NormalizeOptionalString(project.HubPath)?.Replace('\\', '/') ?? $"/projects/{slug}/";
         var overviewRoute = EnsureProjectRouteTrailingSlash(hubPath);
-        var apiRoute = $"/projects/{slug}/api/";
-        var docsRoute = $"/projects/{slug}/docs/";
-        var examplesRoute = $"/projects/{slug}/examples/";
+        var apiRoute = overviewRoute + "api/";
+        var docsRoute = overviewRoute + "docs/";
+        var examplesRoute = overviewRoute + "examples/";
         var overviewUrl = ResolveProjectApiCollectionUrl(siteSpec, "projects", overviewRoute, language);
         var docsHomeUrl = ResolveProjectApiCollectionRelativeUrl(siteSpec, "projects", overviewRoute, language);
         var docsUrl = ResolveProjectApiCollectionUrl(siteSpec, "docs", docsRoute, language);
