@@ -155,7 +155,11 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
                         HoursBetweenUpdateChecks = 4,
                         ShowPrompt = true,
                         UpdateBlocksActivation = true,
-                        UpdateUris = new[] { "https://fallback.contoso.test/app.appinstaller" }
+                        UpdateUris = new[]
+                        {
+                            "https://fallback.contoso.test/app.appinstaller",
+                            "https://fallback.contoso.test/App.appinstaller"
+                        }
                     }
                 }
             };
@@ -169,7 +173,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             Assert.True(storePackage.AppInstaller.ShowPrompt);
             Assert.True(storePackage.AppInstaller.UpdateBlocksActivation);
             Assert.Equal("2021", storePackage.AppInstaller.SchemaVersion);
-            Assert.Single(storePackage.AppInstaller.UpdateUris);
+            Assert.Equal(2, storePackage.AppInstaller.UpdateUris.Length);
         }
         finally
         {
@@ -587,13 +591,89 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
                 });
 
             var document = XDocument.Load(appInstaller);
-            var ns = XNamespace.Get("http://schemas.microsoft.com/appx/appinstaller/2017/2");
+            var ns = document.Root!.Name.Namespace;
             var s4 = XNamespace.Get("http://schemas.microsoft.com/appx/appinstaller/2021");
             var updateSettings = document.Root!.Element(ns + "UpdateSettings")!;
 
             Assert.Equal("true", updateSettings.Element(s4 + "ForceUpdateFromAnyVersion")!.Value);
             Assert.Null(updateSettings.Element(ns + "ForceUpdateFromAnyVersion"));
             Assert.Equal("s4", document.Root!.Attribute("IgnorableNamespaces")!.Value);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Run_StorePackage_NormalizesExistingAppInstallerFiles()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagingProject = CreateFakeStorePackagingProject(root, writeToDefaultAppPackages: true);
+            var configuredOutputDir = Path.Combine(root, "Artifacts", "Store", "app.store");
+            var defaultAppPackages = Path.Combine(Path.GetDirectoryName(packagingProject)!, "AppPackages");
+            Directory.CreateDirectory(defaultAppPackages);
+            var existingAppInstaller = Path.Combine(defaultAppPackages, "Existing.appinstaller");
+            File.WriteAllText(existingAppInstaller, """
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2" Version="1.0.0.0" Uri="https://old.example/app.appinstaller">
+  <MainBundle Name="Contoso.App" Publisher="CN=Contoso" Version="1.0.0.0" Uri="https://old.example/app.msixbundle" />
+</AppInstaller>
+""", new UTF8Encoding(false));
+            File.SetLastWriteTimeUtc(existingAppInstaller, DateTime.UtcNow.AddMinutes(-10));
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Restore = true,
+                Build = false,
+                StorePackages = new[]
+                {
+                    new DotNetPublishStorePackagePlan
+                    {
+                        Id = "app.store",
+                        PrepareFromTarget = "app",
+                        PackagingProjectPath = packagingProject,
+                        OutputPath = configuredOutputDir,
+                        BuildMode = DotNetPublishStoreBuildMode.StoreUpload,
+                        Bundle = DotNetPublishStoreBundleMode.Always,
+                        AppInstaller = new DotNetPublishAppInstallerOptions
+                        {
+                            Uri = "https://downloads.contoso.test/app.appinstaller",
+                            HoursBetweenUpdateChecks = 2
+                        }
+                    }
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "store.package:app.store:app:net8.0-windows10.0.19041.0:win-x64:FrameworkDependent",
+                        Kind = DotNetPublishStepKind.StorePackage,
+                        Title = "Store package",
+                        StorePackageId = "app.store",
+                        TargetName = "app",
+                        Framework = "net8.0-windows10.0.19041.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.FrameworkDependent,
+                        StorePackageProjectPath = packagingProject,
+                        StorePackageOutputPath = configuredOutputDir
+                    }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            var store = Assert.Single(result.StorePackages);
+            Assert.Equal(existingAppInstaller, Assert.Single(store.AppInstallerFiles));
+            var document = XDocument.Load(existingAppInstaller);
+            var ns = document.Root!.Name.Namespace;
+            Assert.Equal("https://downloads.contoso.test/app.appinstaller", document.Root!.Attribute("Uri")!.Value);
+            Assert.Equal("2", document.Root.Element(ns + "UpdateSettings")!.Element(ns + "OnLaunch")!.Attribute("HoursBetweenUpdateChecks")!.Value);
         }
         finally
         {

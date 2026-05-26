@@ -210,6 +210,7 @@ internal static class PowerForgeInstallerDefinitionValidator
                 RequireWixIdentifier(action.Before, $"executable action '{action.Id}' Before");
             if (!string.IsNullOrWhiteSpace(action.After))
                 RequireWixIdentifier(action.After, $"executable action '{action.Id}' After");
+            ValidateExecutableActionSchedule(action);
         }
 
         foreach (var tree in definition.Directories)
@@ -381,6 +382,33 @@ internal static class PowerForgeInstallerDefinitionValidator
             throw new InvalidOperationException(
                 $"Executable action '{action.Id}' Return must be one of: check, ignore, asyncWait, asyncNoWait.");
         }
+    }
+
+    private static void ValidateExecutableActionSchedule(PowerForgeInstallerExecutableAction action)
+    {
+        var id = action.Id.Trim();
+        var setDataId = id + ".SetData";
+        if (ReferencesEmittedExecutableAction(action.Before, id, setDataId))
+        {
+            throw new InvalidOperationException(
+                $"Executable action '{id}' Before cannot reference itself or its generated SetData action.");
+        }
+
+        if (ReferencesEmittedExecutableAction(action.After, id, setDataId))
+        {
+            throw new InvalidOperationException(
+                $"Executable action '{id}' After cannot reference itself or its generated SetData action.");
+        }
+    }
+
+    private static bool ReferencesEmittedExecutableAction(string? value, string actionId, string setDataId)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value!.Trim();
+        return string.Equals(trimmed, actionId, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(trimmed, setDataId, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void ValidateInputValidationMetadata(PowerForgeInstallerInput input)

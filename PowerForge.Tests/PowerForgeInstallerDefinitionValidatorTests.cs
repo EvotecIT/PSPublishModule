@@ -482,6 +482,32 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
     }
 
     [Theory]
+    [InlineData("Before", "Configure")]
+    [InlineData("Before", "Configure.SetData")]
+    [InlineData("After", "Configure")]
+    [InlineData("After", "Configure.SetData")]
+    public void Validate_RejectsSelfReferentialExecutableActionScheduling(string propertyName, string scheduleTarget)
+    {
+        var definition = CreateValidDefinition();
+        var action = CreateExecutableAction("Configure");
+        if (propertyName == "Before")
+        {
+            action.Before = scheduleTarget;
+        }
+        else
+        {
+            action.Before = null;
+            action.After = scheduleTarget;
+        }
+        definition.ExecutableActions.Add(action);
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("cannot reference itself", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("PowerForgeLaunchOnExit")]
     [InlineData("PowerForgeDialogShellExecute")]
     public void Validate_RejectsExecutableActionBuiltInIdCollision(string actionId)

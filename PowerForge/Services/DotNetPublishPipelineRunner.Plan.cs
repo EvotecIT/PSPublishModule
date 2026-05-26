@@ -1009,7 +1009,7 @@ public sealed partial class DotNetPublishPipelineRunner
             UpdateBlocksActivation = options.UpdateBlocksActivation,
             AutomaticBackgroundTask = options.AutomaticBackgroundTask,
             ForceUpdateFromAnyVersion = options.ForceUpdateFromAnyVersion,
-            UpdateUris = NormalizeStrings(options.UpdateUris),
+            UpdateUris = NormalizeUriStrings(options.UpdateUris),
             SchemaVersion = options.SchemaVersion
         };
     }
@@ -1409,6 +1409,15 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(v => !string.IsNullOrWhiteSpace(v))
             .Select(v => v.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string[] NormalizeUriStrings(IEnumerable<string>? values)
+    {
+        return (values ?? Array.Empty<string>())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -2019,7 +2028,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         clone.Uri = string.IsNullOrWhiteSpace(clone.Uri) ? null : clone.Uri!.Trim();
         clone.SchemaVersion = string.IsNullOrWhiteSpace(clone.SchemaVersion) ? "2021" : clone.SchemaVersion.Trim();
-        clone.UpdateUris = NormalizeStrings(clone.UpdateUris);
+        clone.UpdateUris = NormalizeUriStrings(clone.UpdateUris);
 
         if (!IsSupportedAppInstallerSchemaVersion(clone.SchemaVersion))
         {

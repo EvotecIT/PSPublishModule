@@ -198,7 +198,9 @@ public sealed partial class DotNetPublishPipelineRunner
         var packageFiles = EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".msix", ".msixbundle", ".appx", ".appxbundle");
         var uploadFiles = EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".msixupload", ".appxupload");
         var symbolFiles = EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".appxsym", ".msixsym");
-        var appInstallerFiles = EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".appinstaller");
+        var appInstallerFiles = appInstaller is not null
+            ? EnumerateStoreFiles(searchRoots, ".appinstaller")
+            : EnumerateCurrentStoreFiles(searchRoots, preBuildFiles, ".appinstaller");
         if (appInstaller is not null)
         {
             foreach (var appInstallerFile in appInstallerFiles)
