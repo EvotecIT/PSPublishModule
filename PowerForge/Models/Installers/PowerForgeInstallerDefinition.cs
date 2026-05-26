@@ -54,7 +54,7 @@ public sealed class PowerForgeInstallerDefinition
     public PowerForgeInstallerExitLaunch? ExitLaunch { get; set; }
 
     /// <summary>
-    /// Optional RTF license agreement shown by WiX UI before installation.
+    /// Optional WiX UI license agreement shown by the standard installer UI.
     /// </summary>
     public PowerForgeInstallerLicenseAgreement? LicenseAgreement { get; set; }
 
@@ -67,6 +67,11 @@ public sealed class PowerForgeInstallerDefinition
     /// Components that are emitted into directory references and linked from the product feature.
     /// </summary>
     public List<PowerForgeInstallerComponent> Components { get; set; } = new();
+
+    /// <summary>
+    /// Deferred executable custom actions, usually used to run an installed app for setup tasks.
+    /// </summary>
+    public List<PowerForgeInstallerExecutableAction> ExecutableActions { get; set; } = new();
 }
 
 /// <summary>
@@ -132,19 +137,24 @@ public sealed class PowerForgeInstallerExitLaunch
 }
 
 /// <summary>
-/// RTF license agreement displayed by the generated WiX UI.
+/// License agreement resource shown by the generated WiX UI.
 /// </summary>
 public sealed class PowerForgeInstallerLicenseAgreement
 {
     /// <summary>
-    /// Whether the generated installer uses the configured RTF license agreement.
+    /// Whether the license agreement variable is emitted.
     /// </summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Path to an RTF file. Relative paths are resolved against the publish project root.
+    /// Path to the RTF license file. Relative paths are resolved from the PowerForge project root for generated installers.
     /// </summary>
     public string Path { get; set; } = string.Empty;
+
+    /// <summary>
+    /// WiX variable id used by the selected UI set.
+    /// </summary>
+    public string VariableId { get; set; } = "WixUILicenseRtf";
 }
 
 /// <summary>
@@ -317,6 +327,11 @@ public enum PowerForgeInstallerInputKind
     RadioGroup,
 
     /// <summary>
+    /// Drop-down choice input.
+    /// </summary>
+    ComboBox,
+
+    /// <summary>
     /// License key or license token input.
     /// </summary>
     LicenseKey
@@ -362,6 +377,70 @@ public sealed class PowerForgeInstallerDialog
     /// Input ids rendered by this dialog.
     /// </summary>
     public List<string> InputIds { get; set; } = new();
+
+    /// <summary>
+    /// Optional command buttons rendered above the standard Back/Next/Cancel row.
+    /// </summary>
+    public List<PowerForgeInstallerDialogAction> Actions { get; set; } = new();
+}
+
+/// <summary>
+/// Command button rendered on a generated installer dialog.
+/// </summary>
+public sealed class PowerForgeInstallerDialogAction
+{
+    /// <summary>
+    /// WiX control id.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Button text.
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Shell target to open, for example an HTTP URL, folder, or executable path.
+    /// </summary>
+    public string Target { get; set; } = string.Empty;
+
+    /// <summary>
+    /// MSI condition controlling whether the action runs.
+    /// </summary>
+    public string Condition { get; set; } = "1";
+}
+
+/// <summary>
+/// Deferred executable custom action invoked from an installed file.
+/// </summary>
+public sealed class PowerForgeInstallerExecutableAction
+{
+    /// <summary>WiX custom action id.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>File id to execute, usually from a file or service component.</summary>
+    public string FileRef { get; set; } = string.Empty;
+
+    /// <summary>Formatted command-line arguments passed to the executable.</summary>
+    public string Arguments { get; set; } = string.Empty;
+
+    /// <summary>Condition controlling both the set-data and executable custom action rows.</summary>
+    public string Condition { get; set; } = "NOT REMOVE=\"ALL\"";
+
+    /// <summary>Schedule the action before this standard or custom action.</summary>
+    public string? Before { get; set; }
+
+    /// <summary>Schedule the action after this standard or custom action. Defaults to InstallFiles when neither Before nor After is set.</summary>
+    public string? After { get; set; }
+
+    /// <summary>Whether to run elevated instead of impersonating the installing user.</summary>
+    public bool ImpersonateNo { get; set; } = true;
+
+    /// <summary>Whether to hide the command line from MSI logs where supported.</summary>
+    public bool HideTarget { get; set; } = true;
+
+    /// <summary>WiX return behavior, for example check, ignore, or asyncNoWait.</summary>
+    public string Return { get; set; } = "check";
 }
 
 /// <summary>

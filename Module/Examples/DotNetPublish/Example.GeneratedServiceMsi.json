@@ -71,6 +71,24 @@
             "MaxLength": 128,
             "ValidationPattern": "^[A-Za-z0-9-]+$",
             "ValidationMessage": "Enter a valid license key."
+          },
+          {
+            "Id": "ConfigPreset",
+            "PropertyName": "CONFIG_PRESET",
+            "Label": "Configuration preset",
+            "Kind": "ComboBox",
+            "DefaultValue": "core",
+            "Required": true,
+            "Choices": [
+              {
+                "Value": "core",
+                "Text": "Core service"
+              },
+              {
+                "Value": "database",
+                "Text": "Service with database"
+              }
+            ]
           }
         ],
         "Dialogs": [
@@ -79,10 +97,28 @@
             "Title": "Configuration",
             "Description": "Enter installer configuration.",
             "InputIds": [
-              "LicenseKey"
+              "LicenseKey",
+              "ConfigPreset"
+            ],
+            "Actions": [
+              {
+                "Id": "OpenServiceSetup",
+                "Text": "Open setup help",
+                "Target": "https://example.contoso.test/my-service/setup"
+              }
             ]
           }
         ],
+        "ExitLaunch": {
+          "Enabled": true,
+          "Text": "Open service configuration",
+          "Target": "http://127.0.0.1:58433/configuration",
+          "Condition": "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed"
+        },
+        "LicenseAgreement": {
+          "Enabled": true,
+          "Path": "Installer/License.rtf"
+        },
         "Directories": [
           {
             "StandardDirectoryId": "CommonAppDataFolder",
@@ -178,6 +214,7 @@
         "Enabled": true,
         "OnMissingTool": "Warn",
         "OnSignFailure": "Fail",
+        "TimeoutSeconds": 300,
         "TimestampUrl": "http://timestamp.digicert.com"
       }
     }

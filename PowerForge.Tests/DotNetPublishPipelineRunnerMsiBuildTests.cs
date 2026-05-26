@@ -289,7 +289,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             };
             authoring.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
             {
-                Path = "Build/App-License.rtf"
+                Path = "Installer/App/License.rtf"
             };
             authoring.Inputs.Add(new PowerForgeInstallerInput
             {
@@ -303,6 +303,21 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 MaxLength = 128,
                 ValidationPattern = "^[A-Za-z0-9-]+$",
                 ValidationMessage = "Enter a valid license key."
+            });
+            authoring.Dialogs.Add(new PowerForgeInstallerDialog
+            {
+                Id = "ConfigDlg",
+                Title = "Configuration",
+                InputIds = { "LicenseKey" },
+                Actions =
+                {
+                    new PowerForgeInstallerDialogAction
+                    {
+                        Id = "OpenConfig",
+                        Text = "Open config",
+                        Target = "http://127.0.0.1:9000/config"
+                    }
+                }
             });
             spec.Installers = new[]
             {
@@ -323,7 +338,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Equal("Open app", installerPlan.Authoring.ExitLaunch!.Text);
             Assert.Equal("http://127.0.0.1:9000/", installerPlan.Authoring.ExitLaunch.Target);
             Assert.NotNull(installerPlan.Authoring.LicenseAgreement);
-            Assert.Equal("Build/App-License.rtf", installerPlan.Authoring.LicenseAgreement!.Path);
+            Assert.Equal("Installer/App/License.rtf", installerPlan.Authoring.LicenseAgreement!.Path);
             var input = Assert.Single(installerPlan.Authoring!.Inputs);
             Assert.True(input.Required);
             Assert.Equal("Enter a license key before continuing.", input.RequiredMessage);
@@ -331,6 +346,10 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Equal(128, input.MaxLength);
             Assert.Equal("^[A-Za-z0-9-]+$", input.ValidationPattern);
             Assert.Equal("Enter a valid license key.", input.ValidationMessage);
+            var dialog = Assert.Single(installerPlan.Authoring.Dialogs);
+            var action = Assert.Single(dialog.Actions);
+            Assert.Equal("OpenConfig", action.Id);
+            Assert.Equal("http://127.0.0.1:9000/config", action.Target);
 
             var prepareStep = Assert.Single(plan.Steps, s => s.Kind == DotNetPublishStepKind.MsiPrepare);
             Assert.Equal("ProductFiles", prepareStep.HarvestComponentGroupId);

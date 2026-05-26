@@ -633,7 +633,8 @@ public sealed class PowerForgeReleaseServiceTests
                     SignThumbprint = "ABCDEF0123456789ABCDEF0123456789ABCDEF01",
                     SignDescription = "PowerForge",
                     SignOnMissingTool = DotNetPublishPolicyMode.Fail,
-                    SignOnFailure = DotNetPublishPolicyMode.Skip
+                    SignOnFailure = DotNetPublishPolicyMode.Skip,
+                    SignTimeoutSeconds = 42
                 });
 
             Assert.True(result.Success);
@@ -647,6 +648,7 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Equal("PowerForge", target.Publish.Sign.Description);
             Assert.Equal(DotNetPublishPolicyMode.Fail, target.Publish.Sign.OnMissingTool);
             Assert.Equal(DotNetPublishPolicyMode.Skip, target.Publish.Sign.OnSignFailure);
+            Assert.Equal(42, target.Publish.Sign.TimeoutSeconds);
 
             var installer = Assert.Single(result.DotNetToolPlan.Installers);
             Assert.NotNull(installer.Sign);
@@ -655,6 +657,7 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Equal("PowerForge", installer.Sign.Description);
             Assert.Equal(DotNetPublishPolicyMode.Fail, installer.Sign.OnMissingTool);
             Assert.Equal(DotNetPublishPolicyMode.Skip, installer.Sign.OnSignFailure);
+            Assert.Equal(42, installer.Sign.TimeoutSeconds);
         }
         finally
         {

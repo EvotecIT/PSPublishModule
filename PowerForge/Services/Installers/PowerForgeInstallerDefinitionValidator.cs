@@ -8,6 +8,7 @@ namespace PowerForge;
 internal static class PowerForgeInstallerDefinitionValidator
 {
     internal const string RequiredInputDialogIdPrefix = "PowerForgeRequiredInputDlg";
+    internal const string DefaultLicenseAgreementVariableId = "WixUILicenseRtf";
 
     private static readonly Regex WixIdentifierPattern = new(
         "^[A-Za-z_][A-Za-z0-9_.]{0,71}$",
@@ -16,6 +17,23 @@ internal static class PowerForgeInstallerDefinitionValidator
     private static readonly Regex PublicMsiPropertyPattern = new(
         "^[A-Z_][A-Z0-9_]*$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly string[] DialogReservedControlIds =
+    {
+        "Back",
+        "Next",
+        "Cancel",
+        "Title",
+        "Description"
+    };
+
+    private static readonly HashSet<string> WixCustomActionReturnValues = new(StringComparer.Ordinal)
+    {
+        "check",
+        "ignore",
+        "asyncWait",
+        "asyncNoWait"
+    };
 
     private static readonly TimeSpan ValidationPatternMatchTimeout = TimeSpan.FromSeconds(2);
 
@@ -42,7 +60,16 @@ internal static class PowerForgeInstallerDefinitionValidator
             Require(exitLaunch.Condition, nameof(definition.ExitLaunch.Condition));
         }
         if (definition.LicenseAgreement is { Enabled: true } licenseAgreement)
-            Require(licenseAgreement.Path, nameof(definition.LicenseAgreement.Path));
+        {
+            Require(licenseAgreement.Path, "LicenseAgreement.Path");
+            Require(licenseAgreement.VariableId, "LicenseAgreement.VariableId");
+            RequireWixIdentifier(licenseAgreement.VariableId, "LicenseAgreement.VariableId");
+            if (!string.Equals(licenseAgreement.VariableId.Trim(), DefaultLicenseAgreementVariableId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"LicenseAgreement.VariableId must be '{DefaultLicenseAgreementVariableId}' when using the generated WixUI flow.");
+            }
+        }
 
         EnsureUnique(
             definition.Inputs.Select(input => input.Id),
@@ -56,6 +83,17 @@ internal static class PowerForgeInstallerDefinitionValidator
         EnsureUnique(
             definition.Dialogs.Select(dialog => dialog.Id),
             "installer dialog ID");
+        foreach (var dialog in definition.Dialogs)
+        {
+            EnsureUnique(
+                dialog.Actions.Select(action => action.Id),
+                $"installer dialog '{dialog.Id}' action ID");
+        }
+
+        EnsureUnique(
+            definition.ExecutableActions.Select(action => action.Id),
+            "installer executable action ID");
+        ValidateExecutableActionIds(definition);
         // Reserve the whole generated-dialog prefix case-insensitively so authored dialogs cannot
         // collide with future generated validation prompts such as PowerForgeRequiredInputDlg2.
         if (definition.Dialogs.Any(dialog =>
@@ -78,10 +116,6 @@ internal static class PowerForgeInstallerDefinitionValidator
         EnsureUnique(
             definition.Components.Select(component => component.Id),
             "installer component ID");
-
-        var inputIds = new HashSet<string>(
-            definition.Inputs.Select(input => input.Id),
-            StringComparer.OrdinalIgnoreCase);
 
         foreach (var input in definition.Inputs)
         {
@@ -106,20 +140,20 @@ internal static class PowerForgeInstallerDefinitionValidator
                 Require(input.RegistrySearch.Type, $"input '{input.Id}' registry search type");
             }
 
-            if (input.Kind == PowerForgeInstallerInputKind.RadioGroup && input.Choices.Count == 0)
-                throw new InvalidOperationException($"Input '{input.Id}' is a radio group but has no choices.");
-            if (input.Required && input.Kind == PowerForgeInstallerInputKind.RadioGroup)
+            if (InputKindRequiresChoices(input.Kind) && input.Choices.Count == 0)
+                throw new InvalidOperationException($"Input '{input.Id}' is a {DescribeInputKind(input.Kind)} input but has no choices.");
+            if (input.Required && InputKindRequiresChoices(input.Kind))
             {
                 if (string.IsNullOrWhiteSpace(input.DefaultValue))
                 {
                     throw new InvalidOperationException(
-                        $"Input '{input.Id}' is a required radio group but has no default value.");
+                        $"Input '{input.Id}' is a required {DescribeInputKind(input.Kind)} input but has no default value.");
                 }
 
                 if (!input.Choices.Any(choice => string.Equals(choice.Value, input.DefaultValue, StringComparison.Ordinal)))
                 {
                     throw new InvalidOperationException(
-                        $"Input '{input.Id}' is a required radio group but its default value does not match any choice.");
+                        $"Input '{input.Id}' is a required {DescribeInputKind(input.Kind)} input but its default value does not match any choice.");
                 }
             }
         }
@@ -129,11 +163,54 @@ internal static class PowerForgeInstallerDefinitionValidator
             Require(dialog.Id, nameof(dialog.Id));
             RequireWixIdentifier(dialog.Id, $"dialog '{dialog.Id}' ID");
             Require(dialog.Title, nameof(dialog.Title));
+            if (dialog.Actions.Count > 3)
+            {
+                throw new InvalidOperationException(
+                    $"Dialog '{dialog.Id}' supports at most 3 actions.");
+            }
+
+            var dialogInputs = new List<PowerForgeInstallerInput>();
             foreach (var inputId in dialog.InputIds)
             {
-                if (!inputIds.Contains(inputId))
+                var input = definition.Inputs.FirstOrDefault(item => string.Equals(item.Id, inputId, StringComparison.OrdinalIgnoreCase));
+                if (input is null)
                     throw new InvalidOperationException($"Dialog '{dialog.Id}' references unknown input '{inputId}'.");
+
+                dialogInputs.Add(input);
             }
+
+            ValidateDialogActionControlIds(dialog, dialogInputs);
+            foreach (var action in dialog.Actions)
+            {
+                Require(action.Id, $"dialog '{dialog.Id}' action ID");
+                RequireWixIdentifier(action.Id, $"dialog '{dialog.Id}' action '{action.Id}' ID");
+                Require(action.Text, $"dialog '{dialog.Id}' action '{action.Id}' Text");
+                Require(action.Target, $"dialog '{dialog.Id}' action '{action.Id}' Target");
+                Require(action.Condition, $"dialog '{dialog.Id}' action '{action.Id}' Condition");
+            }
+        }
+
+        foreach (var action in definition.ExecutableActions)
+        {
+            Require(action.Id, "installer executable action ID");
+            RequireWixIdentifier(action.Id, $"executable action '{action.Id}' ID");
+            Require(action.FileRef, $"executable action '{action.Id}' FileRef");
+            RequireWixIdentifier(action.FileRef, $"executable action '{action.Id}' FileRef");
+            Require(action.Arguments, $"executable action '{action.Id}' Arguments");
+            Require(action.Condition, $"executable action '{action.Id}' Condition");
+            Require(action.Return, $"executable action '{action.Id}' Return");
+            ValidateExecutableActionReturn(action);
+            if (!string.IsNullOrWhiteSpace(action.Before) && !string.IsNullOrWhiteSpace(action.After))
+            {
+                throw new InvalidOperationException(
+                    $"Executable action '{action.Id}' cannot set both Before and After.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(action.Before))
+                RequireWixIdentifier(action.Before, $"executable action '{action.Id}' Before");
+            if (!string.IsNullOrWhiteSpace(action.After))
+                RequireWixIdentifier(action.After, $"executable action '{action.Id}' After");
+            ValidateExecutableActionSchedule(action);
         }
 
         foreach (var tree in definition.Directories)
@@ -231,6 +308,109 @@ internal static class PowerForgeInstallerDefinitionValidator
         }
     }
 
+    private static void ValidateExecutableActionIds(PowerForgeInstallerDefinition definition)
+    {
+        var emittedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "PowerForgeLaunchOnExit",
+            "PowerForgeDialogShellExecute"
+        };
+
+        foreach (var service in definition.Components.OfType<PowerForgeInstallerServiceComponent>())
+        {
+            foreach (var generatedId in PowerForgeWixInstallerServiceScriptEmitter.GetGeneratedActionIds(service))
+            {
+                emittedIds.Add(generatedId);
+            }
+        }
+
+        foreach (var action in definition.ExecutableActions)
+        {
+            if (string.IsNullOrWhiteSpace(action.Id))
+                continue;
+
+            var id = action.Id.Trim();
+            if (!emittedIds.Add(id))
+            {
+                throw new InvalidOperationException(
+                    $"Executable action '{id}' collides with a generated installer custom action ID.");
+            }
+
+            var setDataId = id + ".SetData";
+            RequireWixIdentifier(setDataId, $"executable action '{id}' generated SetData action ID");
+            if (!emittedIds.Add(setDataId))
+            {
+                throw new InvalidOperationException(
+                    $"Executable action '{id}' generated SetData action '{setDataId}' collides with another installer custom action ID.");
+            }
+        }
+    }
+
+    private static void ValidateDialogActionControlIds(
+        PowerForgeInstallerDialog dialog,
+        IReadOnlyList<PowerForgeInstallerInput> dialogInputs)
+    {
+        var emittedControlIds = new HashSet<string>(DialogReservedControlIds, StringComparer.OrdinalIgnoreCase);
+        foreach (var input in dialogInputs)
+        {
+            if (!string.IsNullOrWhiteSpace(input.Id))
+            {
+                var inputId = input.Id.Trim();
+                emittedControlIds.Add(inputId);
+                emittedControlIds.Add(inputId + "Label");
+            }
+        }
+
+        foreach (var action in dialog.Actions)
+        {
+            if (string.IsNullOrWhiteSpace(action.Id))
+                continue;
+
+            var actionId = action.Id.Trim();
+            if (emittedControlIds.Contains(actionId))
+            {
+                throw new InvalidOperationException(
+                    $"Dialog '{dialog.Id}' action ID '{actionId}' collides with a generated dialog control ID.");
+            }
+        }
+    }
+
+    private static void ValidateExecutableActionReturn(PowerForgeInstallerExecutableAction action)
+    {
+        if (!WixCustomActionReturnValues.Contains(action.Return.Trim()))
+        {
+            throw new InvalidOperationException(
+                $"Executable action '{action.Id}' Return must be one of: check, ignore, asyncWait, asyncNoWait.");
+        }
+    }
+
+    private static void ValidateExecutableActionSchedule(PowerForgeInstallerExecutableAction action)
+    {
+        var id = action.Id.Trim();
+        var setDataId = id + ".SetData";
+        if (ReferencesEmittedExecutableAction(action.Before, id, setDataId))
+        {
+            throw new InvalidOperationException(
+                $"Executable action '{id}' Before cannot reference itself or its generated SetData action.");
+        }
+
+        if (ReferencesEmittedExecutableAction(action.After, id, setDataId))
+        {
+            throw new InvalidOperationException(
+                $"Executable action '{id}' After cannot reference itself or its generated SetData action.");
+        }
+    }
+
+    private static bool ReferencesEmittedExecutableAction(string? value, string actionId, string setDataId)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value!.Trim();
+        return string.Equals(trimmed, actionId, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(trimmed, setDataId, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void ValidateInputValidationMetadata(PowerForgeInstallerInput input)
     {
         var hasValidationRule = input.MinLength.HasValue ||
@@ -293,6 +473,17 @@ internal static class PowerForgeInstallerDefinitionValidator
            kind == PowerForgeInstallerInputKind.FilePath ||
            kind == PowerForgeInstallerInputKind.FolderPath ||
            kind == PowerForgeInstallerInputKind.LicenseKey;
+
+    private static bool InputKindRequiresChoices(PowerForgeInstallerInputKind kind)
+        => kind == PowerForgeInstallerInputKind.RadioGroup ||
+           kind == PowerForgeInstallerInputKind.ComboBox;
+
+    private static string DescribeInputKind(PowerForgeInstallerInputKind kind)
+        => kind == PowerForgeInstallerInputKind.RadioGroup
+            ? "radio group"
+            : kind == PowerForgeInstallerInputKind.ComboBox
+                ? "combo box"
+                : kind.ToString();
 
     private static void ValidateInputDefaultValue(PowerForgeInstallerInput input, Regex? validationRegex)
     {

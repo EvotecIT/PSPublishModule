@@ -34,18 +34,6 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
     }
 
     [Fact]
-    public void Validate_RejectsEnabledLicenseAgreementWithoutPath()
-    {
-        var definition = CreateValidDefinition();
-        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement();
-
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            PowerForgeInstallerDefinitionValidator.Validate(definition));
-
-        Assert.Contains("Path", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Validate_RejectsLowercasePublicMsiProperties()
     {
         var definition = CreateValidDefinition();
@@ -80,6 +68,53 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
             PowerForgeInstallerDefinitionValidator.Validate(definition));
 
         Assert.Contains("reserved", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsEnabledLicenseAgreementWithoutPath()
+    {
+        var definition = CreateValidDefinition();
+        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("LicenseAgreement.Path", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_RejectsLicenseAgreementVariableOverrideForGeneratedUi()
+    {
+        var definition = CreateValidDefinition();
+        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
+        {
+            Path = "License.rtf",
+            VariableId = "CustomLicenseRtf"
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("WixUILicenseRtf", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_RejectsComboBoxWithoutChoices()
+    {
+        var definition = CreateValidDefinition();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "Preset",
+            PropertyName = "PRESET",
+            Label = "Preset",
+            Kind = PowerForgeInstallerInputKind.ComboBox
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("combo box", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("choices", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -253,6 +288,75 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
     }
 
     [Fact]
+    public void Validate_AllowsDialogActionIdsToRepeatAcrossDialogs()
+    {
+        var definition = CreateValidDefinition();
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            Actions = { CreateDialogAction("OpenSettings") }
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "DatabaseDlg",
+            Title = "Database",
+            Actions = { CreateDialogAction("OpenSettings") }
+        });
+
+        PowerForgeInstallerDefinitionValidator.Validate(definition);
+    }
+
+    [Fact]
+    public void Validate_RejectsDuplicateDialogActionIdsInsideSameDialog()
+    {
+        var definition = CreateValidDefinition();
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            Actions =
+            {
+                CreateDialogAction("OpenSettings"),
+                CreateDialogAction("opensettings")
+            }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("Duplicate installer dialog 'ConfigurationDlg' action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("Next")]
+    [InlineData("Title")]
+    [InlineData("InstallPath")]
+    [InlineData("InstallPathLabel")]
+    public void Validate_RejectsDialogActionIdsThatCollideWithGeneratedControls(string actionId)
+    {
+        var definition = CreateValidDefinition();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "InstallPath",
+            PropertyName = "INSTALL_PATH",
+            Label = "Install path"
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            InputIds = { "InstallPath" },
+            Actions = { CreateDialogAction(actionId) }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("collides with a generated dialog control ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Validate_RejectsValidationMessageWithoutValidationRule()
     {
         var definition = CreateValidDefinition();
@@ -322,6 +426,150 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
         PowerForgeInstallerDefinitionValidator.Validate(definition);
     }
 
+    [Fact]
+    public void Validate_RejectsExecutableActionGeneratedSetDataCollision()
+    {
+        var definition = CreateValidDefinition();
+        definition.ExecutableActions.Add(CreateExecutableAction("Configure"));
+        definition.ExecutableActions.Add(CreateExecutableAction("Configure.SetData"));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("SetData", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("collides", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsExecutableActionWhenGeneratedSetDataIdIsTooLong()
+    {
+        var definition = CreateValidDefinition();
+        definition.ExecutableActions.Add(CreateExecutableAction("A" + new string('b', 71)));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("generated SetData action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsUnsupportedExecutableActionReturn()
+    {
+        var definition = CreateValidDefinition();
+        var action = CreateExecutableAction("Configure");
+        action.Return = "wait";
+        definition.ExecutableActions.Add(action);
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("Return must be one of", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("check")]
+    [InlineData("ignore")]
+    [InlineData("asyncWait")]
+    [InlineData("asyncNoWait")]
+    public void Validate_AllowsSupportedExecutableActionReturns(string returnMode)
+    {
+        var definition = CreateValidDefinition();
+        var action = CreateExecutableAction("Configure");
+        action.Return = returnMode;
+        definition.ExecutableActions.Add(action);
+
+        PowerForgeInstallerDefinitionValidator.Validate(definition);
+    }
+
+    [Theory]
+    [InlineData("Before", "Configure")]
+    [InlineData("Before", "Configure.SetData")]
+    [InlineData("After", "Configure")]
+    [InlineData("After", "Configure.SetData")]
+    public void Validate_RejectsSelfReferentialExecutableActionScheduling(string propertyName, string scheduleTarget)
+    {
+        var definition = CreateValidDefinition();
+        var action = CreateExecutableAction("Configure");
+        if (propertyName == "Before")
+        {
+            action.Before = scheduleTarget;
+        }
+        else
+        {
+            action.Before = null;
+            action.After = scheduleTarget;
+        }
+        definition.ExecutableActions.Add(action);
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("cannot reference itself", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("PowerForgeLaunchOnExit")]
+    [InlineData("PowerForgeDialogShellExecute")]
+    public void Validate_RejectsExecutableActionBuiltInIdCollision(string actionId)
+    {
+        var definition = CreateValidDefinition();
+        definition.ExecutableActions.Add(CreateExecutableAction(actionId));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("generated installer custom action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsExecutableActionServiceScriptIdCollision()
+    {
+        var definition = CreateValidDefinition();
+        definition.Components.Add(new PowerForgeInstallerServiceComponent
+        {
+            Id = "SyncService",
+            DirectoryRefId = "INSTALLFOLDER",
+            FileId = "SyncServiceExe",
+            Source = "SyncService.exe",
+            ServiceName = "SyncService",
+            DisplayName = "Sync Service",
+            ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+            {
+                Command = "sc.exe config SyncService binPath= \"[#SyncServiceExe]\"",
+                Condition = "NOT REMOVE"
+            }
+        });
+        definition.ExecutableActions.Add(CreateExecutableAction("SyncService.InstallService"));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("generated installer custom action ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsDialogActionsBeyondRenderedLimit()
+    {
+        var definition = CreateValidDefinition();
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            Actions =
+            {
+                CreateDialogAction("OpenOne"),
+                CreateDialogAction("OpenTwo"),
+                CreateDialogAction("OpenThree"),
+                CreateDialogAction("OpenFour")
+            }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("at most 3 actions", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PowerForgeInstallerDefinition CreateValidDefinition()
     {
         var definition = new PowerForgeInstallerDefinition
@@ -346,4 +594,24 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
 
         return definition;
     }
+
+    private static PowerForgeInstallerExecutableAction CreateExecutableAction(string id)
+        => new()
+        {
+            Id = id,
+            FileRef = "ToolExe",
+            Arguments = "configure",
+            Condition = "NOT Installed",
+            Return = "check",
+            Before = "InstallFinalize"
+        };
+
+    private static PowerForgeInstallerDialogAction CreateDialogAction(string id)
+        => new()
+        {
+            Id = id,
+            Text = id,
+            Target = "https://example.test/",
+            Condition = "1"
+        };
 }

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 
 namespace PowerForge;
 
@@ -111,7 +112,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 args.AddRange(new[] { "/kc", sign.KeyContainer! });
 
             args.Add(file);
-            var res = RunProcess(signToolPath, runDir, args);
+            var timeout = TimeSpan.FromSeconds(Math.Max(1, sign.TimeoutSeconds));
+            var res = RunProcessWithTimeout(signToolPath, runDir, args, timeout);
             if (res.ExitCode != 0)
             {
                 var details = TailLines(res.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
@@ -308,6 +310,23 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static (int ExitCode, string StdOut, string StdErr) RunProcess(string fileName, string workingDir, IReadOnlyList<string> args)
     {
+        var result = RunProcessCore(fileName, workingDir, args, timeout: null);
+        return (result.ExitCode, result.StdOut, result.StdErr);
+    }
+
+    private static (int ExitCode, string StdOut, string StdErr, bool TimedOut) RunProcessWithTimeout(
+        string fileName,
+        string workingDir,
+        IReadOnlyList<string> args,
+        TimeSpan timeout)
+        => RunProcessCore(fileName, workingDir, args, timeout);
+
+    private static (int ExitCode, string StdOut, string StdErr, bool TimedOut) RunProcessCore(
+        string fileName,
+        string workingDir,
+        IReadOnlyList<string> args,
+        TimeSpan? timeout)
+    {
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
@@ -326,10 +345,81 @@ public sealed partial class DotNetPublishPipelineRunner
 #endif
 
         using var p = Process.Start(psi)!;
+        if (timeout.HasValue && timeout.Value > TimeSpan.Zero && timeout.Value != Timeout.InfiniteTimeSpan)
+        {
+            var stdoutBuilder = new StringBuilder();
+            var stderrBuilder = new StringBuilder();
+            using var stdoutDone = new ManualResetEventSlim(false);
+            using var stderrDone = new ManualResetEventSlim(false);
+            p.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is null)
+                    stdoutDone.Set();
+                else
+                    stdoutBuilder.AppendLine(e.Data);
+            };
+            p.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data is null)
+                    stderrDone.Set();
+                else
+                    stderrBuilder.AppendLine(e.Data);
+            };
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+
+            var timeoutMs = ToTimeoutMilliseconds(timeout.Value);
+            if (!p.WaitForExit(timeoutMs))
+            {
+                TryKillProcessTree(p);
+                var timeoutMessage = $"Process timed out after {Math.Ceiling(timeout.Value.TotalSeconds)} second(s).";
+                if (stderrBuilder.Length > 0)
+                    stderrBuilder.AppendLine();
+                stderrBuilder.Append(timeoutMessage);
+                return (-1, stdoutBuilder.ToString(), stderrBuilder.ToString(), true);
+            }
+
+            p.WaitForExit();
+            stdoutDone.Wait(TimeSpan.FromSeconds(5));
+            stderrDone.Wait(TimeSpan.FromSeconds(5));
+            return (p.ExitCode, stdoutBuilder.ToString(), stderrBuilder.ToString(), false);
+        }
+
         var stdout = p.StandardOutput.ReadToEnd();
         var stderr = p.StandardError.ReadToEnd();
         p.WaitForExit();
-        return (p.ExitCode, stdout, stderr);
+        return (p.ExitCode, stdout, stderr, false);
+    }
+
+    private static int ToTimeoutMilliseconds(TimeSpan timeout)
+    {
+        var milliseconds = timeout.TotalMilliseconds;
+        if (milliseconds >= int.MaxValue) return int.MaxValue;
+        return Math.Max(1, (int)Math.Ceiling(milliseconds));
+    }
+
+    private static void TryKillProcessTree(Process process)
+    {
+        try
+        {
+#if NET472
+            process.Kill();
+#else
+            process.Kill(entireProcessTree: true);
+#endif
+        }
+        catch
+        {
+            // best effort
+        }
+        try
+        {
+            process.WaitForExit(5000);
+        }
+        catch
+        {
+            // best effort
+        }
     }
 
 #if NET472

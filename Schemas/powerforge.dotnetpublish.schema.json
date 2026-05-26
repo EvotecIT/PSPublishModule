@@ -130,7 +130,7 @@
     },
     "PowerForgeInstallerInputKind": {
       "type": "string",
-      "enum": ["Text", "Password", "FilePath", "FolderPath", "Checkbox", "RadioGroup", "LicenseKey"]
+      "enum": ["Text", "Password", "FilePath", "FolderPath", "Checkbox", "RadioGroup", "ComboBox", "LicenseKey"]
     },
     "PowerForgeInstallerProduct": {
       "type": "object",
@@ -153,6 +153,27 @@
         "Text": { "type": "string", "minLength": 1 }
       },
       "required": ["Value", "Text"]
+    },
+    "PowerForgeInstallerExitLaunch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Text": { "type": "string", "minLength": 1 },
+        "Target": { "type": "string", "minLength": 1 },
+        "Condition": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Target"]
+    },
+    "PowerForgeInstallerLicenseAgreement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Path": { "type": "string", "minLength": 1 },
+        "VariableId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Path"]
     },
     "PowerForgeInstallerRegistrySearch": {
       "type": "object",
@@ -218,27 +239,40 @@
         "InputIds": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
+        },
+        "Actions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerDialogAction" }
         }
       },
       "required": ["Id", "Title"]
     },
-    "PowerForgeInstallerExitLaunch": {
+    "PowerForgeInstallerDialogAction": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "Enabled": { "type": "boolean" },
+        "Id": { "type": "string", "minLength": 1 },
         "Text": { "type": "string", "minLength": 1 },
         "Target": { "type": "string", "minLength": 1 },
         "Condition": { "type": "string", "minLength": 1 }
-      }
+      },
+      "required": ["Id", "Text", "Target"]
     },
-    "PowerForgeInstallerLicenseAgreement": {
+    "PowerForgeInstallerExecutableAction": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "Enabled": { "type": "boolean" },
-        "Path": { "type": "string", "minLength": 1 }
-      }
+        "Id": { "type": "string", "minLength": 1 },
+        "FileRef": { "type": "string", "minLength": 1 },
+        "Arguments": { "type": "string", "minLength": 1 },
+        "Condition": { "type": "string", "minLength": 1 },
+        "Before": { "type": ["string", "null"] },
+        "After": { "type": ["string", "null"] },
+        "ImpersonateNo": { "type": "boolean" },
+        "HideTarget": { "type": "boolean" },
+        "Return": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Id", "FileRef", "Arguments"]
     },
     "PowerForgeInstallerDirectorySegment": {
       "type": "object",
@@ -436,6 +470,18 @@
         "UseCompanyFolder": { "type": "boolean" },
         "InstallDirectoryName": { "type": "string", "minLength": 1 },
         "PayloadComponentGroupId": { "type": ["string", "null"] },
+        "ExitLaunch": {
+          "anyOf": [
+            { "$ref": "#/$defs/PowerForgeInstallerExitLaunch" },
+            { "type": "null" }
+          ]
+        },
+        "LicenseAgreement": {
+          "anyOf": [
+            { "$ref": "#/$defs/PowerForgeInstallerLicenseAgreement" },
+            { "type": "null" }
+          ]
+        },
         "Inputs": {
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerInput" }
@@ -444,8 +490,6 @@
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerDialog" }
         },
-        "ExitLaunch": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerExitLaunch" }, { "type": "null" }] },
-        "LicenseAgreement": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerLicenseAgreement" }, { "type": "null" }] },
         "Directories": {
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerDirectoryTree" }
@@ -453,6 +497,10 @@
         "Components": {
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerComponent" }
+        },
+        "ExecutableActions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerExecutableAction" }
         }
       },
       "required": ["Product"]
@@ -501,6 +549,7 @@
         "ToolPath": { "type": ["string", "null"] },
         "OnMissingTool": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
         "OnSignFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1 },
         "Thumbprint": { "type": ["string", "null"] },
         "SubjectName": { "type": ["string", "null"] },
         "TimestampUrl": { "type": ["string", "null"] },
@@ -519,6 +568,7 @@
         "ToolPath": { "type": ["string", "null"] },
         "OnMissingTool": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishPolicyMode" }, { "type": "null" }] },
         "OnSignFailure": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishPolicyMode" }, { "type": "null" }] },
+        "TimeoutSeconds": { "type": ["integer", "null"], "minimum": 1 },
         "Thumbprint": { "type": ["string", "null"] },
         "SubjectName": { "type": ["string", "null"] },
         "TimestampUrl": { "type": ["string", "null"] },
@@ -735,6 +785,7 @@
         "BuildMode": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStoreBuildMode" }, { "type": "null" }] },
         "Bundle": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStoreBundleMode" }, { "type": "null" }] },
         "GenerateAppInstaller": { "type": "boolean" },
+        "AppInstaller": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishAppInstallerOptions" }, { "type": "null" }] },
         "MsBuildProperties": {
           "type": ["object", "null"],
           "additionalProperties": { "type": "string" }
@@ -745,6 +796,27 @@
         { "required": ["PackagingProjectPath"] },
         { "required": ["PackagingProjectId"] }
       ]
+    },
+    "DotNetPublishAppInstallerOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Uri": { "type": ["string", "null"] },
+        "HoursBetweenUpdateChecks": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+        "ShowPrompt": { "type": ["boolean", "null"] },
+        "UpdateBlocksActivation": { "type": ["boolean", "null"] },
+        "AutomaticBackgroundTask": { "type": "boolean" },
+        "ForceUpdateFromAnyVersion": { "type": ["boolean", "null"] },
+        "UpdateUris": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "SchemaVersion": {
+          "type": "string",
+          "enum": ["2017/2", "2021"]
+        }
+      }
     },
     "DotNetPublishBundleInclude": {
       "type": "object",

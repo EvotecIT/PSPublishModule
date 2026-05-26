@@ -193,9 +193,9 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new InvalidOperationException($"Installer project path not configured for installer '{installerId}'.");
 
         var definition = CloneInstallerDefinition(installer.Authoring)!;
+        ResolveGeneratedInstallerAuthoringPaths(plan, definition);
         if (!string.IsNullOrWhiteSpace(productVersion))
             definition.Product.Version = productVersion!;
-        ResolveGeneratedInstallerLicenseAgreementPath(definition, plan.ProjectRoot);
         if (string.IsNullOrWhiteSpace(definition.PayloadComponentGroupId) &&
             !string.IsNullOrWhiteSpace(prepare.HarvestComponentGroupId))
         {
@@ -227,17 +227,18 @@ public sealed partial class DotNetPublishPipelineRunner
         return workspace.ProjectPath;
     }
 
-    private static void ResolveGeneratedInstallerLicenseAgreementPath(
-        PowerForgeInstallerDefinition definition,
-        string projectRoot)
+    private static void ResolveGeneratedInstallerAuthoringPaths(
+        DotNetPublishPlan plan,
+        PowerForgeInstallerDefinition definition)
     {
         if (definition.LicenseAgreement is not { Enabled: true } licenseAgreement ||
-            string.IsNullOrWhiteSpace(licenseAgreement.Path))
+            string.IsNullOrWhiteSpace(licenseAgreement.Path) ||
+            Path.IsPathRooted(licenseAgreement.Path))
         {
             return;
         }
 
-        licenseAgreement.Path = ResolvePath(projectRoot, licenseAgreement.Path);
+        licenseAgreement.Path = ResolvePath(plan.ProjectRoot, licenseAgreement.Path);
     }
 
     private static bool IsGeneratedInstallerProject(

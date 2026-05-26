@@ -54,6 +54,7 @@
           "Enabled": true,
           "OnMissingTool": "Warn",
           "OnSignFailure": "Fail",
+          "TimeoutSeconds": 300,
           "TimestampUrl": "http://timestamp.digicert.com"
         },
         "Service": {
@@ -115,6 +116,7 @@
         "Enabled": true,
         "OnMissingTool": "Warn",
         "OnSignFailure": "Fail",
+        "TimeoutSeconds": 300,
         "TimestampUrl": "http://timestamp.digicert.com"
       }
     }

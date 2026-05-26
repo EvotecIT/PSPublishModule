@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Xml.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -124,6 +125,128 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             Assert.Equal("net8.0", storeStep.Framework);
             Assert.Equal("win-arm64", storeStep.Runtime);
             Assert.Equal(DotNetPublishStyle.FrameworkDependent, storeStep.Style);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_PreservesTypedAppInstallerOptions()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var packaging = CreateProject(root, "Store/Package.wapproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.StorePackages = new[]
+            {
+                new DotNetPublishStorePackage
+                {
+                    Id = "app.store",
+                    PrepareFromTarget = "app",
+                    PackagingProjectPath = packaging,
+                    AppInstaller = new DotNetPublishAppInstallerOptions
+                    {
+                        Uri = "https://downloads.contoso.test/app/app.appinstaller",
+                        HoursBetweenUpdateChecks = 4,
+                        ShowPrompt = true,
+                        UpdateBlocksActivation = true,
+                        UpdateUris = new[]
+                        {
+                            "https://fallback.contoso.test/app.appinstaller",
+                            "https://fallback.contoso.test/App.appinstaller"
+                        }
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var storePackage = Assert.Single(plan.StorePackages);
+
+            Assert.NotNull(storePackage.AppInstaller);
+            Assert.Equal("https://downloads.contoso.test/app/app.appinstaller", storePackage.AppInstaller!.Uri);
+            Assert.Equal(4, storePackage.AppInstaller.HoursBetweenUpdateChecks);
+            Assert.True(storePackage.AppInstaller.ShowPrompt);
+            Assert.True(storePackage.AppInstaller.UpdateBlocksActivation);
+            Assert.Equal("2021", storePackage.AppInstaller.SchemaVersion);
+            Assert.Equal(2, storePackage.AppInstaller.UpdateUris.Length);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("2017")]
+    [InlineData("2022")]
+    public void Plan_RejectsUnsupportedAppInstallerSchemaVersion(string schemaVersion)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var packaging = CreateProject(root, "Store/Package.wapproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.StorePackages = new[]
+            {
+                new DotNetPublishStorePackage
+                {
+                    Id = "app.store",
+                    PrepareFromTarget = "app",
+                    PackagingProjectPath = packaging,
+                    AppInstaller = new DotNetPublishAppInstallerOptions
+                    {
+                        SchemaVersion = schemaVersion
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<ArgumentException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("AppInstaller.SchemaVersion", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("2021 or 2017/2", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_AcceptsSchemaListedAppInstallerVersion()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var packaging = CreateProject(root, "Store/Package.wapproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.StorePackages = new[]
+            {
+                new DotNetPublishStorePackage
+                {
+                    Id = "app.store",
+                    PrepareFromTarget = "app",
+                    PackagingProjectPath = packaging,
+                    AppInstaller = new DotNetPublishAppInstallerOptions
+                    {
+                        SchemaVersion = "2017/2"
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var storePackage = Assert.Single(plan.StorePackages);
+
+            Assert.Equal("2017/2", storePackage.AppInstaller!.SchemaVersion);
         }
         finally
         {
@@ -274,6 +397,291 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
     }
 
     [Fact]
+    public void Run_StorePackage_RejectsStaleFallbackOutputs()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagingProject = CreateFakeStorePackagingProject(root, writeToDefaultAppPackages: true, writeOutputs: false);
+            var configuredOutputDir = Path.Combine(root, "Artifacts", "Store", "app.store");
+            var defaultAppPackages = Path.Combine(Path.GetDirectoryName(packagingProject)!, "AppPackages");
+            Directory.CreateDirectory(defaultAppPackages);
+            var stalePackage = Path.Combine(defaultAppPackages, "Stale.msixbundle");
+            File.WriteAllText(stalePackage, "stale", new UTF8Encoding(false));
+            File.SetLastWriteTimeUtc(stalePackage, DateTime.UtcNow.AddMinutes(-10));
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Restore = true,
+                Build = false,
+                StorePackages = new[]
+                {
+                    new DotNetPublishStorePackagePlan
+                    {
+                        Id = "app.store",
+                        PrepareFromTarget = "app",
+                        PackagingProjectPath = packagingProject,
+                        OutputPath = configuredOutputDir,
+                        BuildMode = DotNetPublishStoreBuildMode.StoreUpload,
+                        Bundle = DotNetPublishStoreBundleMode.Always
+                    }
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "store.package:app.store:app:net8.0-windows10.0.19041.0:win-x64:FrameworkDependent",
+                        Kind = DotNetPublishStepKind.StorePackage,
+                        Title = "Store package",
+                        StorePackageId = "app.store",
+                        TargetName = "app",
+                        Framework = "net8.0-windows10.0.19041.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.FrameworkDependent,
+                        StorePackageProjectPath = packagingProject,
+                        StorePackageOutputPath = configuredOutputDir
+                    }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("no *.msix/*.appx/*.msixupload outputs were detected", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(result.StorePackages);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Run_StorePackage_AllowsExistingOutputsWhenClearOutputIsDisabled()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagingProject = CreateFakeStorePackagingProject(root, writeToDefaultAppPackages: true, writeOutputs: false);
+            var configuredOutputDir = Path.Combine(root, "Artifacts", "Store", "app.store");
+            var defaultAppPackages = Path.Combine(Path.GetDirectoryName(packagingProject)!, "AppPackages");
+            Directory.CreateDirectory(defaultAppPackages);
+            var existingPackage = Path.Combine(defaultAppPackages, "Existing.msixbundle");
+            File.WriteAllText(existingPackage, "existing", new UTF8Encoding(false));
+            File.SetLastWriteTimeUtc(existingPackage, DateTime.UtcNow.AddMinutes(-10));
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Restore = true,
+                Build = false,
+                StorePackages = new[]
+                {
+                    new DotNetPublishStorePackagePlan
+                    {
+                        Id = "app.store",
+                        PrepareFromTarget = "app",
+                        PackagingProjectPath = packagingProject,
+                        OutputPath = configuredOutputDir,
+                        BuildMode = DotNetPublishStoreBuildMode.StoreUpload,
+                        Bundle = DotNetPublishStoreBundleMode.Always,
+                        ClearOutput = false
+                    }
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "store.package:app.store:app:net8.0-windows10.0.19041.0:win-x64:FrameworkDependent",
+                        Kind = DotNetPublishStepKind.StorePackage,
+                        Title = "Store package",
+                        StorePackageId = "app.store",
+                        TargetName = "app",
+                        Framework = "net8.0-windows10.0.19041.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.FrameworkDependent,
+                        StorePackageProjectPath = packagingProject,
+                        StorePackageOutputPath = configuredOutputDir
+                    }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            var store = Assert.Single(result.StorePackages);
+            Assert.Equal(existingPackage, Assert.Single(store.OutputFiles));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void NormalizeAppInstallerFile_UpgradesSchemaAndWritesUpdateSettings()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var appInstaller = Path.Combine(root, "Contoso.appinstaller");
+            File.WriteAllText(appInstaller, """
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2" Version="1.0.0.0" Uri="https://old.example/app.appinstaller">
+  <MainBundle Name="Contoso.App" Publisher="CN=Contoso" Version="1.0.0.0" Uri="https://old.example/app.msixbundle" />
+</AppInstaller>
+""", new UTF8Encoding(false));
+
+            DotNetPublishPipelineRunner.NormalizeAppInstallerFile(
+                appInstaller,
+                new DotNetPublishAppInstallerOptions
+                {
+                    Uri = "https://downloads.contoso.test/app.appinstaller",
+                    HoursBetweenUpdateChecks = 2,
+                    ShowPrompt = true,
+                    UpdateBlocksActivation = true,
+                    AutomaticBackgroundTask = true,
+                    ForceUpdateFromAnyVersion = true,
+                    UpdateUris = new[] { "https://fallback.contoso.test/app.appinstaller" }
+                });
+
+            var document = XDocument.Load(appInstaller);
+            var ns = XNamespace.Get("http://schemas.microsoft.com/appx/appinstaller/2021");
+            var rootElement = document.Root!;
+            var onLaunch = rootElement.Element(ns + "UpdateSettings")!.Element(ns + "OnLaunch")!;
+
+            Assert.Equal(ns + "AppInstaller", rootElement.Name);
+            Assert.Equal("https://downloads.contoso.test/app.appinstaller", rootElement.Attribute("Uri")!.Value);
+            Assert.Equal("2", onLaunch.Attribute("HoursBetweenUpdateChecks")!.Value);
+            Assert.Equal("true", onLaunch.Attribute("ShowPrompt")!.Value);
+            Assert.Equal("true", onLaunch.Attribute("UpdateBlocksActivation")!.Value);
+            Assert.NotNull(rootElement.Element(ns + "UpdateSettings")!.Element(ns + "AutomaticBackgroundTask"));
+            Assert.Equal("true", rootElement.Element(ns + "UpdateSettings")!.Element(ns + "ForceUpdateFromAnyVersion")!.Value);
+            Assert.Equal("https://fallback.contoso.test/app.appinstaller", rootElement.Element(ns + "UpdateUris")!.Element(ns + "UpdateUri")!.Value);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void NormalizeAppInstallerFile_UsesS4NamespaceForForceUpdateIn2017Schema()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var appInstaller = Path.Combine(root, "Contoso.appinstaller");
+            File.WriteAllText(appInstaller, """
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2" Version="1.0.0.0" Uri="https://old.example/app.appinstaller">
+  <MainBundle Name="Contoso.App" Publisher="CN=Contoso" Version="1.0.0.0" Uri="https://old.example/app.msixbundle" />
+</AppInstaller>
+""", new UTF8Encoding(false));
+
+            DotNetPublishPipelineRunner.NormalizeAppInstallerFile(
+                appInstaller,
+                new DotNetPublishAppInstallerOptions
+                {
+                    SchemaVersion = "2017/2",
+                    ForceUpdateFromAnyVersion = true
+                });
+
+            var document = XDocument.Load(appInstaller);
+            var ns = document.Root!.Name.Namespace;
+            var s4 = XNamespace.Get("http://schemas.microsoft.com/appx/appinstaller/2021");
+            var updateSettings = document.Root!.Element(ns + "UpdateSettings")!;
+
+            Assert.Equal("true", updateSettings.Element(s4 + "ForceUpdateFromAnyVersion")!.Value);
+            Assert.Null(updateSettings.Element(ns + "ForceUpdateFromAnyVersion"));
+            Assert.Equal("s4", document.Root!.Attribute("IgnorableNamespaces")!.Value);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Run_StorePackage_NormalizesExistingAppInstallerFiles()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagingProject = CreateFakeStorePackagingProject(root, writeToDefaultAppPackages: true);
+            var configuredOutputDir = Path.Combine(root, "Artifacts", "Store", "app.store");
+            var defaultAppPackages = Path.Combine(Path.GetDirectoryName(packagingProject)!, "AppPackages");
+            Directory.CreateDirectory(defaultAppPackages);
+            var existingAppInstaller = Path.Combine(defaultAppPackages, "Existing.appinstaller");
+            File.WriteAllText(existingAppInstaller, """
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2" Version="1.0.0.0" Uri="https://old.example/app.appinstaller">
+  <MainBundle Name="Contoso.App" Publisher="CN=Contoso" Version="1.0.0.0" Uri="https://old.example/app.msixbundle" />
+</AppInstaller>
+""", new UTF8Encoding(false));
+            File.SetLastWriteTimeUtc(existingAppInstaller, DateTime.UtcNow.AddMinutes(-10));
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Restore = true,
+                Build = false,
+                StorePackages = new[]
+                {
+                    new DotNetPublishStorePackagePlan
+                    {
+                        Id = "app.store",
+                        PrepareFromTarget = "app",
+                        PackagingProjectPath = packagingProject,
+                        OutputPath = configuredOutputDir,
+                        BuildMode = DotNetPublishStoreBuildMode.StoreUpload,
+                        Bundle = DotNetPublishStoreBundleMode.Always,
+                        AppInstaller = new DotNetPublishAppInstallerOptions
+                        {
+                            Uri = "https://downloads.contoso.test/app.appinstaller",
+                            HoursBetweenUpdateChecks = 2
+                        }
+                    }
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "store.package:app.store:app:net8.0-windows10.0.19041.0:win-x64:FrameworkDependent",
+                        Kind = DotNetPublishStepKind.StorePackage,
+                        Title = "Store package",
+                        StorePackageId = "app.store",
+                        TargetName = "app",
+                        Framework = "net8.0-windows10.0.19041.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.FrameworkDependent,
+                        StorePackageProjectPath = packagingProject,
+                        StorePackageOutputPath = configuredOutputDir
+                    }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            var store = Assert.Single(result.StorePackages);
+            Assert.Equal(existingAppInstaller, Assert.Single(store.AppInstallerFiles));
+            var document = XDocument.Load(existingAppInstaller);
+            var ns = document.Root!.Name.Namespace;
+            Assert.Equal("https://downloads.contoso.test/app.appinstaller", document.Root!.Attribute("Uri")!.Value);
+            Assert.Equal("2", document.Root.Element(ns + "UpdateSettings")!.Element(ns + "OnLaunch")!.Attribute("HoursBetweenUpdateChecks")!.Value);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void DetermineStoreOutputDir_UsesCommonParentForMultiRootOutputs()
     {
         var root = CreateTempRoot();
@@ -301,6 +709,20 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void DetermineStoreOutputDir_PreservesWindowsDriveRootForMultiRootOutputs()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var detected = DotNetPublishPipelineRunner.DetermineStoreOutputDir(
+            @"C:\Build\Artifacts\Store\unused",
+            new[] { @"C:\Build\Store\AppPackages\Contoso_1.0.0.0_Test\Contoso.msixbundle" },
+            new[] { @"C:\Build\Store\AppPackages\Contoso_1.0.0.0_x64_bundle.msixupload" });
+
+        Assert.Equal(@"C:\Build\Store\AppPackages", detected);
     }
 
     private static DotNetPublishSpec CreateBaseSpec(string root, string projectPath)
@@ -339,18 +761,14 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
         return fullPath;
     }
 
-    private static string CreateFakeStorePackagingProject(string root, bool writeToDefaultAppPackages = false)
+    private static string CreateFakeStorePackagingProject(string root, bool writeToDefaultAppPackages = false, bool writeOutputs = true)
     {
         var path = Path.Combine(root, "Store", "FakeStore.csproj");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var outputRootExpression = writeToDefaultAppPackages
             ? "$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'AppPackages'))"
             : "$(AppxPackageDir)";
-        File.WriteAllText(path, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-  </PropertyGroup>
+        var outputTarget = writeOutputs ? """
   <Target Name="PowerForgeFakeStoreOutputs" AfterTargets="Build">
     <PropertyGroup>
       <PowerForgeStoreOutputRoot>OUTPUT_ROOT_TOKEN</PowerForgeStoreOutputRoot>
@@ -363,8 +781,20 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
     <WriteLinesToFile File="$(PowerForgeUploadPath)" Lines="upload" Overwrite="true" />
     <WriteLinesToFile File="$(PowerForgeSymbolsPath)" Lines="symbols" Overwrite="true" />
   </Target>
+""" : """
+  <Target Name="PowerForgeFakeStoreOutputs" AfterTargets="Build">
+    <Message Text="No store outputs requested." Importance="High" />
+  </Target>
+""";
+        File.WriteAllText(path, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+OUTPUT_TARGET_TOKEN
 </Project>
-""".Replace("OUTPUT_ROOT_TOKEN", outputRootExpression, StringComparison.Ordinal), new UTF8Encoding(false));
+""".Replace("OUTPUT_TARGET_TOKEN", outputTarget, StringComparison.Ordinal)
+    .Replace("OUTPUT_ROOT_TOKEN", outputRootExpression, StringComparison.Ordinal), new UTF8Encoding(false));
         return path;
     }
 
