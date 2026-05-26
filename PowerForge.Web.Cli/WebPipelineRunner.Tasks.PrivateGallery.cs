@@ -61,14 +61,34 @@ internal static partial class WebPipelineRunner
             Token = token,
             TokenEnvironmentVariable = tokenEnv,
             AuthenticationKind = authentication,
-            TempDirectory = ResolvePath(baseDir, GetString(step, "tempDirectory") ?? GetString(step, "temp-directory"))
+            TempDirectory = ResolvePath(baseDir, GetString(step, "tempDirectory") ?? GetString(step, "temp-directory")),
+            ProjectCatalogPath = ResolvePath(baseDir,
+                GetString(step, "projectCatalog") ??
+                GetString(step, "project-catalog") ??
+                GetString(step, "projectCatalogPath") ??
+                GetString(step, "project-catalog-path")),
+            ProjectCatalogRoutePrefix =
+                GetString(step, "projectCatalogRoutePrefix") ??
+                GetString(step, "project-catalog-route-prefix") ??
+                "/projects",
+            ProjectCatalogContentMode =
+                GetString(step, "projectCatalogContentMode") ??
+                GetString(step, "project-catalog-content-mode") ??
+                "hybrid",
+            ProjectCatalogMerge =
+                GetBool(step, "projectCatalogMerge") ??
+                GetBool(step, "project-catalog-merge") ??
+                true
         });
 
         var warningNote = result.Warnings.Length > 0
             ? $"; warnings={result.Warnings.Length}"
             : string.Empty;
+        var projectCatalogNote = !string.IsNullOrWhiteSpace(result.ProjectCatalogPath)
+            ? $"; projectCatalog={result.ProjectCatalogProjectCount}"
+            : string.Empty;
         stepResult.Success = true;
-        stepResult.Message = $"private-gallery-index ok: packages={result.PackageCount}; versions={result.VersionCount}; commands={result.CommandCount}; feed={result.FeedPath}; search={result.SearchPath}{warningNote}";
+        stepResult.Message = $"private-gallery-index ok: packages={result.PackageCount}; versions={result.VersionCount}; commands={result.CommandCount}; feed={result.FeedPath}; search={result.SearchPath}{projectCatalogNote}{warningNote}";
     }
 
     private static PrivateGalleryAuthenticationKind ParseAuthenticationKind(string? value)

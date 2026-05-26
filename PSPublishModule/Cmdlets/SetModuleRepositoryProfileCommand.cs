@@ -36,12 +36,12 @@ public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
+    /// <summary>Private gallery provider.</summary>
     [Parameter]
     public PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;
 
     /// <summary>Azure DevOps organization name.</summary>
-    [Parameter(Mandatory = true)]
+    [Parameter]
     [Alias("Organization")]
     [ValidateNotNullOrEmpty]
     public string AzureDevOpsOrganization { get; set; } = string.Empty;
@@ -52,15 +52,38 @@ public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
     public string? AzureDevOpsProject { get; set; }
 
     /// <summary>Azure Artifacts feed name.</summary>
-    [Parameter(Mandatory = true)]
+    [Parameter]
     [Alias("Feed")]
     [ValidateNotNullOrEmpty]
     public string AzureArtifactsFeed { get; set; } = string.Empty;
 
-    /// <summary>Optional local repository name override. Defaults to the feed name.</summary>
+    /// <summary>Provider repository/feed id. For Azure this is the feed when AzureArtifactsFeed is omitted; for JFrog this is the Artifactory NuGet repository key.</summary>
     [Parameter]
-    [Alias("Repository")]
+    public string? Repository { get; set; }
+
+    /// <summary>Optional local repository name override. Defaults to the provider repository/feed id.</summary>
+    [Parameter]
     public string? RepositoryName { get; set; }
+
+    /// <summary>PSResourceGet v3 repository URI for generic/JFrog feeds.</summary>
+    [Parameter]
+    public string? RepositoryUri { get; set; }
+
+    /// <summary>PowerShellGet source URI for generic/JFrog feeds.</summary>
+    [Parameter]
+    public string? RepositorySourceUri { get; set; }
+
+    /// <summary>PowerShellGet publish URI for generic/JFrog feeds.</summary>
+    [Parameter]
+    public string? RepositoryPublishUri { get; set; }
+
+    /// <summary>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.</summary>
+    [Parameter]
+    public string? JFrogBaseUri { get; set; }
+
+    /// <summary>JFrog NuGet repository key. Defaults from Repository when omitted.</summary>
+    [Parameter]
+    public string? JFrogRepository { get; set; }
 
     /// <summary>Registration strategy saved in the profile. Defaults to PSResourceGet for Entra-first Azure Artifacts use.</summary>
     [Parameter]
@@ -97,12 +120,20 @@ public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
             AzureDevOpsOrganization = AzureDevOpsOrganization,
             AzureDevOpsProject = AzureDevOpsProject,
             AzureArtifactsFeed = AzureArtifactsFeed,
+            Repository = Repository ?? string.Empty,
             RepositoryName = RepositoryName ?? string.Empty,
+            RepositoryUri = RepositoryUri ?? string.Empty,
+            RepositorySourceUri = RepositorySourceUri ?? string.Empty,
+            RepositoryPublishUri = RepositoryPublishUri ?? string.Empty,
+            JFrogBaseUri = JFrogBaseUri ?? string.Empty,
+            JFrogRepository = JFrogRepository ?? string.Empty,
             Tool = Tool,
             BootstrapMode = BootstrapMode,
             Trusted = Trusted,
             Priority = Priority,
-            AuthenticationMode = "AzureArtifactsCredentialProvider"
+            AuthenticationMode = Provider == PrivateGalleryProvider.AzureArtifacts
+                ? "AzureArtifactsCredentialProvider"
+                : "CredentialPrompt"
         });
 
         if (!ShouldProcess(profile.Name, "Save module repository profile"))

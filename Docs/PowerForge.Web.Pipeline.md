@@ -628,7 +628,9 @@ Generates private PowerShell gallery data from an Azure Artifacts feed.
   "maxDocumentContentBytes": 262144,
   "tokenEnv": "AZURE_DEVOPS_TOKEN",
   "auth": "bearer",
-  "out": "./data/private-gallery"
+  "out": "./data/private-gallery",
+  "projectCatalog": "./data/projects/catalog.json",
+  "projectCatalogRoutePrefix": "/projects"
 }
 ```
 
@@ -642,6 +644,13 @@ Notes:
   - `modules/<module>.json`
   - `modules/<module>/<version>.json`
   - `search.json`
+- When `projectCatalog` / `projectCatalogPath` is set, the task also creates
+  or merges standard `project-catalog` entries from the private feed packages.
+  This is the preferred reusable path for portal sites: Azure Artifacts provides
+  package/version/install facts, while the existing project catalog, docs sync,
+  API docs, changelog, and downloads surfaces render the website.
+- `projectCatalogRoutePrefix` defaults to `/projects`; use `/modules` only when
+  the site intentionally exposes module-first routes.
 - Azure Artifacts is used for feed/package/version inventory.
 - When `includePackageContent` is true, the task downloads selected `.nupkg`
   files through the feed's NuGet V3 endpoint and inspects static package

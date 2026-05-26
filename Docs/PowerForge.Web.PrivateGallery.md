@@ -100,9 +100,20 @@ Expected outputs:
 - `data/private-gallery/modules/<module>.json`
 - `data/private-gallery/modules/<module>/<version>.json`
 - `data/private-gallery/search.json`
+- optional merge into `data/projects/catalog.json` using the standard
+  `project-catalog` contract
 - `content/modules/<module>/index.md`
 - `content/modules/<module>/versions/<version>.md`
 - optional command pages under `content/modules/<module>/commands/`
+
+Important boundary: the private gallery index is a provider/adapter layer, not
+the long-term page model. Azure Artifacts contributes package, version, metric,
+documentation, command, dependency, and install facts. Reusable PowerForge.Web
+surfaces such as `project-catalog`, `project-docs-sync`, `project-apidocs`,
+`release-hub`, downloads, search, and theme layouts should render those facts.
+Private-gallery-only pages are acceptable as starter/demo output, but shared
+portal sites should prefer mapping packages into the generic project/module
+catalog.
 
 ### PowerForge.Web.Cli
 

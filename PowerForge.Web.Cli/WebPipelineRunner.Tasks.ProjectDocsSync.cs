@@ -325,7 +325,7 @@ internal static partial class WebPipelineRunner
                 copiedFiles++;
             }
 
-            StampProjectDocsMetadata(targetDocsRoot, slug, GetProjectDisplayName(project.GitHubRepoUrl, slug));
+            StampProjectDocsMetadata(targetDocsRoot, slug, GetProjectDisplayName(project.GitHubRepoUrl, slug), project.HubPath);
 
             if (generateToc)
             {
@@ -571,13 +571,13 @@ internal static partial class WebPipelineRunner
             .Any(static path => !string.IsNullOrWhiteSpace(Path.GetFileName(path)));
     }
 
-    private static void StampProjectDocsMetadata(string targetDocsRoot, string slug, string projectName)
+    private static void StampProjectDocsMetadata(string targetDocsRoot, string slug, string projectName, string? projectHubPath)
     {
         if (string.IsNullOrWhiteSpace(targetDocsRoot) || !Directory.Exists(targetDocsRoot) || string.IsNullOrWhiteSpace(slug))
             return;
 
         var normalizedSlug = slug.Trim().ToLowerInvariant();
-        var hubPath = $"/projects/{normalizedSlug}/";
+        var hubPath = NormalizeProjectDocsHubPath(projectHubPath, normalizedSlug);
         var docsPath = hubPath + "docs/";
 
         foreach (var markdownPath in Directory.EnumerateFiles(targetDocsRoot, "*", SearchOption.AllDirectories).Where(static path => IsMarkdownExtension(Path.GetExtension(path))))
@@ -794,16 +794,16 @@ internal static partial class WebPipelineRunner
             File.WriteAllText(indexPath, string.Join(Environment.NewLine, lines), Encoding.UTF8);
         }
 
-        StampProjectExampleMetadata(targetExamplesRoot, slug, projectName);
+        StampProjectExampleMetadata(targetExamplesRoot, slug, projectName, project.HubPath);
     }
 
-    private static void StampProjectExampleMetadata(string targetExamplesRoot, string slug, string projectName)
+    private static void StampProjectExampleMetadata(string targetExamplesRoot, string slug, string projectName, string? projectHubPath)
     {
         if (string.IsNullOrWhiteSpace(targetExamplesRoot) || !Directory.Exists(targetExamplesRoot) || string.IsNullOrWhiteSpace(slug))
             return;
 
         var normalizedSlug = slug.Trim().ToLowerInvariant();
-        var hubPath = $"/projects/{normalizedSlug}/";
+        var hubPath = NormalizeProjectDocsHubPath(projectHubPath, normalizedSlug);
         var examplesPath = hubPath + "examples/";
 
         foreach (var markdownPath in Directory.EnumerateFiles(targetExamplesRoot, "*", SearchOption.AllDirectories).Where(static path => IsMarkdownExtension(Path.GetExtension(path))))
@@ -1192,6 +1192,7 @@ internal static partial class WebPipelineRunner
             var slug = GetString(projectElement, "slug");
             var mode = GetString(projectElement, "mode");
             var contentMode = GetString(projectElement, "contentMode");
+            var hubPath = GetString(projectElement, "hubPath");
             var hasDocsSurface = false;
             var hasApiDotNetSurface = false;
             var hasApiPowerShellSurface = false;
@@ -1259,6 +1260,7 @@ internal static partial class WebPipelineRunner
             projects.Add(new ProjectDocsCatalogItem
             {
                 Slug = slug ?? string.Empty,
+                HubPath = hubPath,
                 ContentMode = normalizedContentMode,
                 HasDocsSurface = hasDocsSurface,
                 HasApiDotNetSurface = hasApiDotNetSurface,
@@ -1305,6 +1307,18 @@ internal static partial class WebPipelineRunner
         }
 
         return "hybrid";
+    }
+
+    private static string NormalizeProjectDocsHubPath(string? hubPath, string slug)
+    {
+        var normalized = string.IsNullOrWhiteSpace(hubPath)
+            ? $"/projects/{slug}/"
+            : hubPath.Trim().Replace('\\', '/');
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized;
+        if (!normalized.EndsWith("/", StringComparison.Ordinal))
+            normalized += "/";
+        return normalized;
     }
 
     private static void HydrateProjectArtifactSources(
@@ -1743,6 +1757,7 @@ internal static partial class WebPipelineRunner
     private sealed class ProjectDocsCatalogItem
     {
         public string Slug { get; init; } = string.Empty;
+        public string? HubPath { get; init; }
         public string ContentMode { get; init; } = "hybrid";
         public bool HasDocsSurface { get; init; }
         public bool HasApiDotNetSurface { get; init; }

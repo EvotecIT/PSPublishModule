@@ -38,6 +38,8 @@ internal static class PrivateGalleryVersionPolicy
             return IsExistingSessionBootstrapReady(status);
         if (bootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
             return IsCredentialPromptBootstrapReady(status);
+        if (bootstrapMode == PrivateGalleryBootstrapMode.JFrogCli)
+            return status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion;
 
         return IsExistingSessionBootstrapReady(status) || IsCredentialPromptBootstrapReady(status);
     }
@@ -71,6 +73,8 @@ internal static class PrivateGalleryVersionPolicy
             return IsExistingSessionBootstrapReady(status);
         if (bootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
             return status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion;
+        if (bootstrapMode == PrivateGalleryBootstrapMode.JFrogCli)
+            return status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion;
 
         return IsExistingSessionBootstrapReady(status) ||
                (status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion);
@@ -79,6 +83,8 @@ internal static class PrivateGalleryVersionPolicy
     internal static bool IsPowerShellGetBootstrapReady(BootstrapPrerequisiteStatus status, PrivateGalleryBootstrapMode bootstrapMode)
     {
         if (bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession)
+            return false;
+        if (bootstrapMode == PrivateGalleryBootstrapMode.JFrogCli)
             return false;
 
         return status.PowerShellGetAvailable;

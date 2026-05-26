@@ -58,6 +58,18 @@ public sealed class WebPrivateGalleryOptions
 
     /// <summary>Optional temp directory for downloaded packages.</summary>
     public string? TempDirectory { get; set; }
+
+    /// <summary>Optional PowerForge project catalog path to create or merge from private gallery packages.</summary>
+    public string? ProjectCatalogPath { get; set; }
+
+    /// <summary>Route prefix used when private gallery packages are projected into project catalog entries.</summary>
+    public string ProjectCatalogRoutePrefix { get; set; } = "/projects";
+
+    /// <summary>Default content mode used for generated private gallery project catalog entries.</summary>
+    public string ProjectCatalogContentMode { get; set; } = "hybrid";
+
+    /// <summary>Whether existing project catalog entries with matching slugs should be replaced by private gallery data.</summary>
+    public bool ProjectCatalogMerge { get; set; } = true;
 }
 
 /// <summary>
@@ -79,6 +91,12 @@ public sealed class WebPrivateGalleryResult
 
     /// <summary>Number of commands discovered.</summary>
     public int CommandCount { get; set; }
+
+    /// <summary>Path to the project catalog file generated or updated from private gallery data.</summary>
+    public string? ProjectCatalogPath { get; set; }
+
+    /// <summary>Number of private gallery packages projected into project catalog entries.</summary>
+    public int ProjectCatalogProjectCount { get; set; }
 
     /// <summary>Warnings emitted during generation.</summary>
     public string[] Warnings { get; set; } = Array.Empty<string>();

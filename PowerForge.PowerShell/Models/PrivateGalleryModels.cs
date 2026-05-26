@@ -108,3 +108,26 @@ internal readonly struct CredentialProviderSessionPrimeResult
     internal string? ProviderPath { get; }
     internal string? Message { get; }
 }
+
+internal readonly struct JFrogCliLoginResult
+{
+    internal JFrogCliLoginResult(
+        bool attempted,
+        bool succeeded,
+        bool skipped,
+        string? executablePath,
+        string? message)
+    {
+        Attempted = attempted;
+        Succeeded = succeeded;
+        Skipped = skipped;
+        ExecutablePath = executablePath;
+        Message = message;
+    }
+
+    internal bool Attempted { get; }
+    internal bool Succeeded { get; }
+    internal bool Skipped { get; }
+    internal string? ExecutablePath { get; }
+    internal string? Message { get; }
+}

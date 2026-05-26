@@ -478,6 +478,7 @@ public class WebPipelineRunnerProjectApiDocsTests
                       "description": "Zeta project description.",
                       "githubRepo": "EvotecIT/Zeta",
                       "mode": "hub-full",
+                      "hubPath": "modules\\zeta",
                       "surfaces": {
                         "docs": true,
                         "apiPowerShell": true
@@ -530,8 +531,8 @@ public class WebPipelineRunnerProjectApiDocsTests
             var indexPath = Path.Combine(root, "_site", "projects", "zeta", "api", "index.html");
             var html = File.ReadAllText(indexPath);
             Assert.Contains("Zeta project description.", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("href=\"/projects/zeta/\"", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("href=\"/projects/zeta/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/modules/zeta/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/modules/zeta/docs/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"https://github.com/EvotecIT/Zeta\"", html, StringComparison.OrdinalIgnoreCase);
         }
         finally

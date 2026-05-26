@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using PowerForge;
 using PowerForge.Web;
 
@@ -408,6 +409,311 @@ public sealed class PrivateGalleryEngineTests
         Assert.Contains(search.Entries, entry => entry.Kind == "version" && entry.Version == "1.0.0");
         Assert.Contains(search.Entries, entry => entry.Kind == "command" && entry.Title == "Get-ContosoTool" && entry.Summary == "Gets a tool.");
         Assert.Contains(search.Entries, entry => entry.Kind == "document" && entry.Title == "README");
+    }
+
+    [Fact]
+    public void WebPrivateGalleryProjectCatalogMapper_ProjectsPackagesIntoProjectCatalog()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    { "slug": "existing", "name": "Existing", "mode": "hub-full" }
+                  ]
+                }
+                """);
+
+            var document = new PrivateGalleryDocument
+            {
+                Provider = PrivateGalleryIndexProvider.AzureArtifacts,
+                Feed = new PrivateGalleryFeed
+                {
+                    Organization = "evotecpl",
+                    Project = "PowerShellGallery",
+                    Name = "PowerShellGalleryFeed",
+                    RepositoryName = "EvotecPowerShellGallery"
+                },
+                Packages =
+                {
+                    new PrivateGalleryPackage
+                    {
+                        Id = "provider-package-id",
+                        Name = "Contoso.Tools",
+                        Description = "Internal tools",
+                        WebUrl = "https://dev.azure.com/evotecpl/PowerShellGallery/_artifacts/feed/PowerShellGalleryFeed/package/Contoso.Tools",
+                        LatestVersion = "1.2.3",
+                        Metrics = new PrivateGalleryPackageMetrics { DownloadCount = 42 },
+                        Versions =
+                        {
+                            new PrivateGalleryPackageVersion
+                            {
+                                Id = "version-id",
+                                Version = "1.2.3",
+                                IsLatest = true,
+                                IsListed = true,
+                                Module = new PrivateGalleryModuleMetadata
+                                {
+                                    Name = "Contoso.Tools",
+                                    Description = "Package module description",
+                                    Commands =
+                                    {
+                                        new PrivateGalleryCommandMetadata { Name = "Get-ContosoTool" }
+                                    },
+                                    Documents =
+                                    {
+                                        new PrivateGalleryDocumentAsset { Path = "README.md", Kind = "readme" },
+                                        new PrivateGalleryDocumentAsset { Path = "examples/demo.ps1", Kind = "example" }
+                                    },
+                                    RequiredModules =
+                                    {
+                                        new PrivateGalleryDependency { Name = "Pester", VersionRange = "5.7.1" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var count = WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                document,
+                catalogPath,
+                new WebPrivateGalleryOptions
+                {
+                    ProjectCatalogPath = catalogPath,
+                    ProjectCatalogRoutePrefix = "/modules"
+                });
+
+            Assert.Equal(1, count);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var projects = json.RootElement.GetProperty("projects").EnumerateArray().ToList();
+            Assert.Contains(projects, project => project.GetProperty("slug").GetString() == "existing");
+
+            var projected = Assert.Single(projects, project => project.GetProperty("slug").GetString() == "contoso-tools");
+            Assert.Equal("Contoso.Tools", projected.GetProperty("name").GetString());
+            Assert.Equal("/modules/contoso-tools/", projected.GetProperty("hubPath").GetString());
+            Assert.Equal("provider-package-id", projected.GetProperty("privateGallery").GetProperty("packageId").GetString());
+            Assert.True(projected.GetProperty("surfaces").GetProperty("docs").GetBoolean());
+            Assert.True(projected.GetProperty("surfaces").GetProperty("apiPowerShell").GetBoolean());
+            Assert.True(projected.GetProperty("surfaces").GetProperty("examples").GetBoolean());
+            Assert.Equal(42, projected.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
+            Assert.Equal("Install-PrivateModule -Repository 'EvotecPowerShellGallery' -Name 'Contoso.Tools' -InstallPrerequisites",
+                projected.GetProperty("privateGallery").GetProperty("installCommand").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void WebPrivateGalleryProjectCatalogMapper_HandlesCollidingSlugsAndExternalMode()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-collisions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            var document = new PrivateGalleryDocument
+            {
+                Feed = new PrivateGalleryFeed { RepositoryName = "PrivateFeed" },
+                Packages =
+                {
+                    new PrivateGalleryPackage
+                    {
+                        Id = "package-one-id",
+                        Name = "Foo.Bar",
+                        WebUrl = "https://example.test/packages/foo.bar",
+                        Module = new PrivateGalleryModuleMetadata { Name = "Foo.Bar" }
+                    },
+                    new PrivateGalleryPackage
+                    {
+                        Id = "package-two-id",
+                        Name = "Foo-Bar",
+                        WebUrl = "https://example.test/packages/foo-bar",
+                        Module = new PrivateGalleryModuleMetadata { Name = "Foo-Bar" }
+                    }
+                }
+            };
+
+            var count = WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                document,
+                catalogPath,
+                new WebPrivateGalleryOptions
+                {
+                    ProjectCatalogContentMode = "external",
+                    ProjectCatalogRoutePrefix = @"modules\internal"
+                });
+
+            Assert.Equal(2, count);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var projects = json.RootElement.GetProperty("projects").EnumerateArray().ToList();
+            Assert.Contains(projects, project => project.GetProperty("slug").GetString() == "foo-bar");
+            Assert.Contains(projects, project => project.GetProperty("slug").GetString() == "foo-bar-2");
+            Assert.All(projects, project =>
+            {
+                Assert.Equal("external", project.GetProperty("contentMode").GetString());
+                Assert.True(project.TryGetProperty("externalUrl", out var externalUrl));
+                Assert.StartsWith("https://example.test/packages/", externalUrl.GetString(), StringComparison.Ordinal);
+                Assert.StartsWith("/modules/internal/", project.GetProperty("hubPath").GetString(), StringComparison.Ordinal);
+            });
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void WebPrivateGalleryProjectCatalogMapper_FailsMergeForInvalidCatalogJson()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-invalid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            File.WriteAllText(catalogPath, "{ invalid json");
+
+            var document = new PrivateGalleryDocument
+            {
+                Packages =
+                {
+                    new PrivateGalleryPackage { Name = "Contoso.Tools" }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                    document,
+                    catalogPath,
+                    new WebPrivateGalleryOptions { ProjectCatalogMerge = true }));
+
+            Assert.Contains("invalid project catalog JSON", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("[]", "non-object")]
+    [InlineData("""{"projects":{}}""", "projects")]
+    public void WebPrivateGalleryProjectCatalogMapper_FailsMergeForInvalidCatalogShape(string catalogJson, string expectedMessage)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-shape-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            File.WriteAllText(catalogPath, catalogJson);
+
+            var document = new PrivateGalleryDocument
+            {
+                Packages =
+                {
+                    new PrivateGalleryPackage { Name = "Contoso.Tools" }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                    document,
+                    catalogPath,
+                    new WebPrivateGalleryOptions { ProjectCatalogMerge = true }));
+
+            Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void WebPrivateGalleryProjectCatalogMapper_RemovesStalePrivateGalleryEntriesWhenCollisionsChange()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-stale-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "foo-bar",
+                      "name": "Foo.Bar",
+                      "privateGallery": {
+                        "provider": "AzureArtifacts",
+                        "organization": "evotecpl",
+                        "project": "PowerShellGallery",
+                        "feed": "PowerShellGalleryFeed",
+                        "repositoryName": "OldGalleryAlias"
+                      }
+                    },
+                    {
+                      "slug": "foo-bar-2",
+                      "name": "Foo-Bar",
+                      "privateGallery": {
+                        "provider": "AzureArtifacts",
+                        "organization": "evotecpl",
+                        "project": "PowerShellGallery",
+                        "feed": "PowerShellGalleryFeed"
+                      }
+                    },
+                    { "slug": "manual", "name": "Manual" }
+                  ]
+                }
+                """);
+
+            var document = new PrivateGalleryDocument
+            {
+                Provider = PrivateGalleryIndexProvider.AzureArtifacts,
+                Feed = new PrivateGalleryFeed
+                {
+                    Organization = "evotecpl",
+                    Project = "PowerShellGallery",
+                    Name = "PowerShellGalleryFeed",
+                    RepositoryName = "EvotecPowerShellGallery"
+                },
+                Packages =
+                {
+                    new PrivateGalleryPackage { Name = "Foo.Bar", Module = new PrivateGalleryModuleMetadata { Name = "Foo.Bar" } }
+                }
+            };
+
+            WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                document,
+                catalogPath,
+                new WebPrivateGalleryOptions { ProjectCatalogMerge = true });
+
+            using var json = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var slugs = json.RootElement.GetProperty("projects").EnumerateArray()
+                .Select(project => project.GetProperty("slug").GetString())
+                .ToArray();
+
+            Assert.Contains("manual", slugs);
+            Assert.Contains("foo-bar", slugs);
+            Assert.DoesNotContain("foo-bar-2", slugs);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
     }
 
     private static void AddEntry(ZipArchive archive, string path, string content)

@@ -90,7 +90,7 @@ public class WebPipelineRunnerProjectCatalogTests
                       "slug": "pspublishmodule",
                       "name": "PSPublishModule",
                       "mode": "hub-full",
-                      "hubPath": "/projects/pspublishmodule/",
+                      "hubPath": "projects\\pspublishmodule",
                       "githubRepo": "EvotecIT/PSPublishModule",
                       "status": "active",
                       "listed": false,
@@ -119,7 +119,7 @@ public class WebPipelineRunnerProjectCatalogTests
                       "applyCuration": false,
                       "mergeTelemetry": false,
                       "mergeReleaseTelemetry": false,
-                      "generatePages": false,
+                      "generatePages": true,
                       "generateSections": false,
                       "validate": true,
                       "failOnWarnings": true
@@ -134,6 +134,8 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Single(result.Steps);
             Assert.True(result.Steps[0].Success);
             Assert.Contains("project-catalog ok", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            var page = File.ReadAllText(Path.Combine(root, "content", "projects", "pspublishmodule.md"));
+            Assert.Contains("meta.project_hub_path: \"/projects/pspublishmodule/\"", page, StringComparison.Ordinal);
         }
         finally
         {

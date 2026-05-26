@@ -36,24 +36,32 @@ internal sealed class PrivateModuleWorkflowService
         var repositoryName = request.RepositoryName;
         RepositoryCredential? credential = null;
         var preferPowerShellGet = false;
-        var useAzureArtifacts = request.UseAzureArtifacts;
+        var usePrivateGallery = request.UseAzureArtifacts;
         var useMicrosoftArtifactRegistry = request.UseMicrosoftArtifactRegistry;
 
-        if (useAzureArtifacts && useMicrosoftArtifactRegistry)
-            throw new ArgumentException("Choose either Azure Artifacts or Microsoft Artifact Registry, not both.", nameof(request));
+        if (usePrivateGallery && useMicrosoftArtifactRegistry)
+            throw new ArgumentException("Choose either a private gallery provider or Microsoft Artifact Registry, not both.", nameof(request));
 
-        if (useAzureArtifacts)
+        if (usePrivateGallery)
         {
             _privateGalleryService.EnsureProviderSupported(request.Provider);
 
-            var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+            var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+                request.Provider,
                 request.AzureDevOpsOrganization,
                 request.AzureDevOpsProject,
                 request.AzureArtifactsFeed,
-                request.RepositoryName);
+                request.RepositoryName,
+                request.Repository,
+                request.RepositoryUri,
+                request.RepositorySourceUri,
+                request.RepositoryPublishUri,
+                request.JFrogBaseUri,
+                request.JFrogRepository);
             var prerequisiteInstall = _privateGalleryService.EnsureBootstrapPrerequisites(
                 request.InstallPrerequisites,
-                request.BootstrapMode);
+                request.BootstrapMode,
+                includeAzureArtifactsCredentialProvider: endpoint.Provider == PrivateGalleryProvider.AzureArtifacts);
             repositoryName = endpoint.RepositoryName;
 
             var credentialResolution = _privateGalleryService.ResolveCredential(
@@ -64,7 +72,8 @@ internal sealed class PrivateModuleWorkflowService
                 request.CredentialSecretFilePath,
                 request.PromptForCredential,
                 prerequisiteInstall.Status,
-                !_host.IsWhatIfRequested);
+                !_host.IsWhatIfRequested,
+                endpoint.Provider);
             credential = credentialResolution.Credential;
 
             var registration = _privateGalleryService.EnsureAzureArtifactsRepositoryRegistered(
@@ -80,7 +89,14 @@ internal sealed class PrivateModuleWorkflowService
                 credentialResolution.CredentialSource,
                 credential,
                 prerequisiteInstall.Status,
-                shouldProcessAction: GetRepositoryAction(request.Operation, request.Tool));
+                shouldProcessAction: GetRepositoryAction(request.Operation, request.Tool),
+                provider: endpoint.Provider,
+                repository: request.Repository,
+                repositoryUri: request.RepositoryUri,
+                repositorySourceUri: request.RepositorySourceUri,
+                repositoryPublishUri: request.RepositoryPublishUri,
+                jfrogBaseUri: request.JFrogBaseUri,
+                jfrogRepository: request.JFrogRepository);
             registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
             registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 
@@ -109,9 +125,9 @@ internal sealed class PrivateModuleWorkflowService
                     ? $"Repository access probe failed via {probe.Tool}."
                     : $"Repository access probe failed via {probe.Tool}: {probe.Message}";
                 var refreshCommand = string.IsNullOrWhiteSpace(request.ProfileName)
-                    ? "Initialize-ModuleRepository for this Azure Artifacts feed"
+                    ? "Initialize-ModuleRepository for this private gallery"
                     : $"Initialize-ModuleRepository -ProfileName '{request.ProfileName}' -InstallPrerequisites";
-                throw new InvalidOperationException($"{message} Re-run {refreshCommand} or retry the command in an interactive shell to refresh the Azure Artifacts Credential Provider session.");
+                throw new InvalidOperationException($"{message} Re-run {refreshCommand} or retry the command with valid private gallery credentials.");
             }
 
             _host.WriteVerbose($"Repository '{registration.RepositoryName}' is ready for {GetOperationNoun(request.Operation)}.");
@@ -184,7 +200,7 @@ internal sealed class PrivateModuleWorkflowService
             };
         }
 
-        if (!useAzureArtifacts && !useMicrosoftArtifactRegistry)
+        if (!usePrivateGallery && !useMicrosoftArtifactRegistry)
         {
             credential = _privateGalleryService.ResolveOptionalCredential(
                 repositoryName,
@@ -236,10 +252,10 @@ internal sealed class PrivateModuleWorkflowService
 
     private static string GetRepositoryAction(PrivateModuleWorkflowOperation operation, RepositoryRegistrationTool tool)
     {
-        var verb = operation == PrivateModuleWorkflowOperation.Install ? "Register" : "Update";
+        var verb = operation == PrivateModuleWorkflowOperation.Install ? "Ensure" : "Update";
         return tool == RepositoryRegistrationTool.Auto
-            ? $"{verb} module repository using Auto (prefer PSResourceGet, fall back to PowerShellGet)"
-            : $"{verb} module repository using {tool}";
+            ? $"{verb} module repository registration using Auto (prefer PSResourceGet, fall back to PowerShellGet)"
+            : $"{verb} module repository registration using {tool}";
     }
 
     private static string GetSkippedRegistrationMessage(PrivateModuleWorkflowOperation operation, string repositoryName)
