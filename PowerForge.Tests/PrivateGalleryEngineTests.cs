@@ -606,6 +606,117 @@ public sealed class PrivateGalleryEngineTests
         }
     }
 
+    [Theory]
+    [InlineData("[]", "non-object")]
+    [InlineData("""{"projects":{}}""", "projects")]
+    public void WebPrivateGalleryProjectCatalogMapper_FailsMergeForInvalidCatalogShape(string catalogJson, string expectedMessage)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-shape-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            File.WriteAllText(catalogPath, catalogJson);
+
+            var document = new PrivateGalleryDocument
+            {
+                Packages =
+                {
+                    new PrivateGalleryPackage { Name = "Contoso.Tools" }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                    document,
+                    catalogPath,
+                    new WebPrivateGalleryOptions { ProjectCatalogMerge = true }));
+
+            Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void WebPrivateGalleryProjectCatalogMapper_RemovesStalePrivateGalleryEntriesWhenCollisionsChange()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-catalog-stale-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var catalogPath = Path.Combine(root, "catalog.json");
+
+        try
+        {
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "foo-bar",
+                      "name": "Foo.Bar",
+                      "privateGallery": {
+                        "provider": "AzureArtifacts",
+                        "organization": "evotecpl",
+                        "project": "PowerShellGallery",
+                        "feed": "PowerShellGalleryFeed",
+                        "repositoryName": "EvotecPowerShellGallery"
+                      }
+                    },
+                    {
+                      "slug": "foo-bar-2",
+                      "name": "Foo-Bar",
+                      "privateGallery": {
+                        "provider": "AzureArtifacts",
+                        "organization": "evotecpl",
+                        "project": "PowerShellGallery",
+                        "feed": "PowerShellGalleryFeed",
+                        "repositoryName": "EvotecPowerShellGallery"
+                      }
+                    },
+                    { "slug": "manual", "name": "Manual" }
+                  ]
+                }
+                """);
+
+            var document = new PrivateGalleryDocument
+            {
+                Provider = PrivateGalleryIndexProvider.AzureArtifacts,
+                Feed = new PrivateGalleryFeed
+                {
+                    Organization = "evotecpl",
+                    Project = "PowerShellGallery",
+                    Name = "PowerShellGalleryFeed",
+                    RepositoryName = "EvotecPowerShellGallery"
+                },
+                Packages =
+                {
+                    new PrivateGalleryPackage { Name = "Foo.Bar", Module = new PrivateGalleryModuleMetadata { Name = "Foo.Bar" } }
+                }
+            };
+
+            WebPrivateGalleryProjectCatalogMapper.WriteProjectCatalog(
+                document,
+                catalogPath,
+                new WebPrivateGalleryOptions { ProjectCatalogMerge = true });
+
+            using var json = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var slugs = json.RootElement.GetProperty("projects").EnumerateArray()
+                .Select(project => project.GetProperty("slug").GetString())
+                .ToArray();
+
+            Assert.Contains("manual", slugs);
+            Assert.Contains("foo-bar", slugs);
+            Assert.DoesNotContain("foo-bar-2", slugs);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void AddEntry(ZipArchive archive, string path, string content)
     {
         var entry = archive.CreateEntry(path);

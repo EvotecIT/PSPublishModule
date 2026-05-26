@@ -39,19 +39,10 @@ public static class WebPrivateGalleryProjectCatalogMapper
         var slugs = entries
             .Select(entry => entry["slug"]?.GetValue<string>())
             .Where(static slug => !string.IsNullOrWhiteSpace(slug))
+            .Select(static slug => slug!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        if (slugs.Count > 0)
-        {
-            for (var index = projects.Count - 1; index >= 0; index--)
-            {
-                if (projects[index] is not JsonObject existing)
-                    continue;
-                var existingSlug = existing["slug"]?.GetValue<string>();
-                if (!string.IsNullOrWhiteSpace(existingSlug) && slugs.Contains(existingSlug))
-                    projects.RemoveAt(index);
-            }
-        }
+        RemoveExistingPrivateGalleryEntries(projects, document, slugs);
 
         foreach (var entry in entries)
             projects.Add(entry);
@@ -76,7 +67,8 @@ public static class WebPrivateGalleryProjectCatalogMapper
 
         try
         {
-            return JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new JsonObject();
+            return JsonNode.Parse(File.ReadAllText(path)) as JsonObject ??
+                   throw new InvalidOperationException($"Cannot merge private gallery into non-object project catalog JSON: {path}");
         }
         catch (JsonException ex)
         {
@@ -89,10 +81,47 @@ public static class WebPrivateGalleryProjectCatalogMapper
         if (catalog["projects"] is JsonArray projects)
             return projects;
 
+        if (catalog["projects"] is not null)
+            throw new InvalidOperationException("Project catalog 'projects' value must be an array.");
+
         projects = new JsonArray();
         catalog["projects"] = projects;
         return projects;
     }
+
+    private static void RemoveExistingPrivateGalleryEntries(JsonArray projects, PrivateGalleryDocument document, ISet<string> slugs)
+    {
+        for (var index = projects.Count - 1; index >= 0; index--)
+        {
+            if (projects[index] is not JsonObject existing)
+                continue;
+
+            var existingSlug = existing["slug"]?.GetValue<string>();
+            if (!string.IsNullOrWhiteSpace(existingSlug) && slugs.Contains(existingSlug))
+            {
+                projects.RemoveAt(index);
+                continue;
+            }
+
+            if (IsPrivateGalleryEntryForFeed(existing, document))
+                projects.RemoveAt(index);
+        }
+    }
+
+    private static bool IsPrivateGalleryEntryForFeed(JsonObject entry, PrivateGalleryDocument document)
+    {
+        if (entry["privateGallery"] is not JsonObject privateGallery)
+            return false;
+
+        return EqualsJsonString(privateGallery, "provider", document.Provider.ToString()) &&
+               EqualsJsonString(privateGallery, "organization", document.Feed.Organization) &&
+               EqualsJsonString(privateGallery, "project", document.Feed.Project) &&
+               EqualsJsonString(privateGallery, "feed", document.Feed.Name) &&
+               EqualsJsonString(privateGallery, "repositoryName", document.Feed.RepositoryName);
+    }
+
+    private static bool EqualsJsonString(JsonObject json, string name, string? expected)
+        => string.Equals(json[name]?.GetValue<string>() ?? string.Empty, expected ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
     private static JsonObject BuildProjectEntry(PrivateGalleryDocument document, PrivateGalleryPackage package, WebPrivateGalleryOptions options, string slug, string displayName)
     {

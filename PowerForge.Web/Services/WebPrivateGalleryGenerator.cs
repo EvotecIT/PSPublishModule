@@ -53,6 +53,8 @@ public static class WebPrivateGalleryGenerator
         File.WriteAllText(feedPath, JsonSerializer.Serialize(result.Document, WebJson.Options));
 
         var moduleDirectory = Path.Combine(outputDirectory, "modules");
+        if (Directory.Exists(moduleDirectory))
+            Directory.Delete(moduleDirectory, recursive: true);
         Directory.CreateDirectory(moduleDirectory);
         foreach (var package in result.Document.Packages)
         {
