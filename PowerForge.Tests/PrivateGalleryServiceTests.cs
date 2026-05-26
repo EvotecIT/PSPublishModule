@@ -115,6 +115,41 @@ public sealed class PrivateGalleryServiceTests
     }
 
     [Fact]
+    public void ResolveCredential_AutoUsesCredentialPromptForNonAzureProviders()
+    {
+        var service = new PrivateGalleryService(new FakePrivateGalleryHost());
+        var status = new BootstrapPrerequisiteStatus(
+            psResourceGetAvailable: true,
+            psResourceGetVersion: "1.2.0",
+            psResourceGetMeetsMinimumVersion: true,
+            psResourceGetSupportsExistingSessionBootstrap: true,
+            psResourceGetMessage: null,
+            powerShellGetAvailable: true,
+            powerShellGetVersion: "2.2.5",
+            powerShellGetMessage: null,
+            credentialProviderDetection: new AzureArtifactsCredentialProviderDetectionResult
+            {
+                IsDetected = true,
+                Paths = new[] { "CredentialProvider.Microsoft.dll" }
+            },
+            readinessMessages: Array.Empty<string>());
+
+        var result = service.ResolveCredential(
+            repositoryName: "Company",
+            bootstrapMode: PrivateGalleryBootstrapMode.Auto,
+            credentialUserName: null,
+            credentialSecret: null,
+            credentialSecretFilePath: null,
+            promptForCredential: false,
+            prerequisiteStatus: status,
+            allowInteractivePrompt: false,
+            provider: PrivateGalleryProvider.JFrog);
+
+        Assert.Equal(PrivateGalleryBootstrapMode.CredentialPrompt, result.BootstrapModeUsed);
+        Assert.Equal(PrivateGalleryCredentialSource.None, result.CredentialSource);
+    }
+
+    [Fact]
     public void ResolveCredential_RejectsExplicitCredentialWithJFrogCliMode()
     {
         var service = new PrivateGalleryService(new FakePrivateGalleryHost());

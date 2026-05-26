@@ -72,7 +72,8 @@ internal sealed class PrivateModuleWorkflowService
                 request.CredentialSecretFilePath,
                 request.PromptForCredential,
                 prerequisiteInstall.Status,
-                !_host.IsWhatIfRequested);
+                !_host.IsWhatIfRequested,
+                endpoint.Provider);
             credential = credentialResolution.Credential;
 
             var registration = _privateGalleryService.EnsureAzureArtifactsRepositoryRegistered(

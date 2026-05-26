@@ -22,6 +22,20 @@ public sealed class PrivateGalleryRepositoryEndpointsTests
     }
 
     [Fact]
+    public void Create_AzureArtifactsFeedAndRepository_PreservesRepositoryAsLocalAlias()
+    {
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            PrivateGalleryProvider.AzureArtifacts,
+            azureDevOpsOrganization: "contoso",
+            azureDevOpsProject: "Platform",
+            azureArtifactsFeed: "Modules",
+            repository: "CompanyModules");
+
+        Assert.Equal("CompanyModules", endpoint.RepositoryName);
+        Assert.Equal("Modules", endpoint.Repository);
+    }
+
+    [Fact]
     public void Create_JFrogBaseAndRepository_ReturnsV2AndV3Uris()
     {
         var endpoint = PrivateGalleryRepositoryEndpoints.Create(
@@ -61,6 +75,17 @@ public sealed class PrivateGalleryRepositoryEndpointsTests
             repositoryName: "Company"));
 
         Assert.Contains("RepositoryUri", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Create_RejectsUnknownProviderValues()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => PrivateGalleryRepositoryEndpoints.Create(
+            (PrivateGalleryProvider)999,
+            repositoryName: "Company",
+            repositoryUri: "https://example.test/v3/index.json"));
+
+        Assert.Contains("not supported", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]

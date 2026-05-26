@@ -695,7 +695,7 @@ Describe 'Private gallery command metadata' {
         $profile = Set-ModuleRepositoryProfile -Name 'JFrogCompany' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory'
 
         $profile.Name | Should -Be 'JFrogCompany'
-        $profile.Provider | Should -Be ([PowerForge.PrivateGalleryProvider]::JFrog)
+        $profile.Provider.ToString() | Should -Be 'JFrog'
         $profile.Repository | Should -Be 'powershell-virtual'
         $profile.RepositoryName | Should -Be 'powershell-virtual'
         $profile.RepositoryUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'

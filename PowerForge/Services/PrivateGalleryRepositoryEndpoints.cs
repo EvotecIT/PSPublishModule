@@ -26,11 +26,12 @@ public static class PrivateGalleryRepositoryEndpoints
         if (provider == PrivateGalleryProvider.AzureArtifacts)
         {
             var feed = string.IsNullOrWhiteSpace(azureArtifactsFeed) ? repository : azureArtifactsFeed;
+            var localRepositoryName = string.IsNullOrWhiteSpace(azureArtifactsFeed) ? repositoryName : repositoryName ?? repository;
             var endpoint = AzureArtifactsRepositoryEndpoints.Create(
                 azureDevOpsOrganization ?? string.Empty,
                 azureDevOpsProject,
                 feed ?? string.Empty,
-                repositoryName);
+                localRepositoryName);
 
             return new PrivateGalleryRepositoryEndpoint(
                 PrivateGalleryProvider.AzureArtifacts,
@@ -85,6 +86,9 @@ public static class PrivateGalleryRepositoryEndpoints
                 baseUri,
                 remoteRepository);
         }
+
+        if (provider != PrivateGalleryProvider.NuGet)
+            throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, NuGet.", nameof(provider));
 
         var genericName = ResolveRepositoryName(repositoryName, repository);
         if (string.IsNullOrWhiteSpace(genericName))

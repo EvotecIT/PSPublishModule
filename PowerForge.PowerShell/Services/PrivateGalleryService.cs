@@ -50,7 +50,8 @@ internal sealed class PrivateGalleryService
         string? credentialSecretFilePath,
         bool promptForCredential,
         BootstrapPrerequisiteStatus? prerequisiteStatus = null,
-        bool allowInteractivePrompt = true)
+        bool allowInteractivePrompt = true,
+        PrivateGalleryProvider provider = PrivateGalleryProvider.AzureArtifacts)
     {
         var hasCredentialSecretFile = !string.IsNullOrWhiteSpace(credentialSecretFilePath);
         var hasCredentialSecret = !string.IsNullOrWhiteSpace(credentialSecret);
@@ -92,7 +93,9 @@ internal sealed class PrivateGalleryService
             var detectedPrerequisites = prerequisiteStatus ?? GetBootstrapPrerequisiteStatus();
             effectiveMode = promptForCredential || hasExplicitCredential
                 ? PrivateGalleryBootstrapMode.CredentialPrompt
-                : PrivateGalleryVersionPolicy.GetRecommendedBootstrapMode(detectedPrerequisites);
+                : provider == PrivateGalleryProvider.AzureArtifacts
+                    ? PrivateGalleryVersionPolicy.GetRecommendedBootstrapMode(detectedPrerequisites)
+                    : PrivateGalleryBootstrapMode.CredentialPrompt;
 
             if (effectiveMode == PrivateGalleryBootstrapMode.Auto)
             {

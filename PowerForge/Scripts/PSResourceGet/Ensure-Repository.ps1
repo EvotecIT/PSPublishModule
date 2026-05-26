@@ -24,7 +24,7 @@ try { $registeredRepositories = @(Get-PSResourceRepository -ErrorAction Silently
 
 $commonParams = @{ ErrorAction = 'Stop' }
 $commonParams.Name = $Name
-if ($TrustedFlag -eq '1') { $commonParams.Trusted = $true }
+if (-not [string]::IsNullOrWhiteSpace($TrustedFlag)) { $commonParams.Trusted = ($TrustedFlag -eq '1') }
 if (-not [string]::IsNullOrWhiteSpace($Priority)) { $commonParams.Priority = [int]$Priority }
 if (-not [string]::IsNullOrWhiteSpace($ApiVersion)) { $commonParams.ApiVersion = $ApiVersion }
 
@@ -79,6 +79,15 @@ function Get-RepositoryUri {
   return Normalize-RepositoryUri $Repository.Uri
 }
 
+function Get-RepositoryCredentialProvider {
+  param([object]$Repository)
+
+  if ($null -eq $Repository) { return '' }
+  $property = $Repository.PSObject.Properties['CredentialProvider']
+  if ($null -eq $property -or $null -eq $property.Value) { return '' }
+  return ([string]$property.Value).Trim()
+}
+
 function Assert-NoRepositoryUriConflict {
   param(
     [string]$TargetName,
@@ -120,7 +129,8 @@ function Test-RepositoryMatches {
     [string]$TargetUri,
     [string]$TrustedFlag,
     [string]$Priority,
-    [string]$ApiVersion
+    [string]$ApiVersion,
+    [string]$CredentialProvider
   )
 
   if ($null -eq $Repository) { return $false }
@@ -131,10 +141,16 @@ function Test-RepositoryMatches {
     return $false
   }
 
-  if ($TrustedFlag -eq '1') {
+  if (-not [string]::IsNullOrWhiteSpace($TrustedFlag)) {
     try {
-      if (-not [bool]$Repository.Trusted) { return $false }
+      if ([bool]$Repository.Trusted -ne ($TrustedFlag -eq '1')) { return $false }
     } catch {
+      return $false
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($CredentialProvider)) {
+    if (-not [string]::Equals((Get-RepositoryCredentialProvider $Repository), $CredentialProvider, [System.StringComparison]::OrdinalIgnoreCase)) {
       return $false
     }
   }
@@ -205,9 +221,10 @@ try {
     if ($isAzureArtifacts) {
       $params.CredentialProvider = 'AzArtifacts'
     }
+    $requiredCredentialProvider = if ($isAzureArtifacts) { 'AzArtifacts' } else { '' }
 
     if ($existing) {
-      if (-not (Test-RepositoryMatches -Repository $existing -TargetUri $Uri -TrustedFlag $TrustedFlag -Priority $Priority -ApiVersion $ApiVersion)) {
+      if (-not (Test-RepositoryMatches -Repository $existing -TargetUri $Uri -TrustedFlag $TrustedFlag -Priority $Priority -ApiVersion $ApiVersion -CredentialProvider $requiredCredentialProvider)) {
         Invoke-RepositoryCommand -CommandName 'Set-PSResourceRepository' -Parameters $params
       }
     } else {

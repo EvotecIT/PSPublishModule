@@ -71,6 +71,8 @@ public sealed class PrivateGalleryBootstrapReadinessTests
         Assert.Contains("pkgs\\.dev\\.azure\\.com", scriptText, StringComparison.Ordinal);
         Assert.Contains("Assert-NoRepositoryUriConflict", scriptText, StringComparison.Ordinal);
         Assert.Contains("Test-RepositoryMatches", scriptText, StringComparison.Ordinal);
+        Assert.Contains("Get-RepositoryCredentialProvider", scriptText, StringComparison.Ordinal);
+        Assert.Contains("Trusted = ($TrustedFlag -eq '1')", scriptText, StringComparison.Ordinal);
     }
 
     [Fact]

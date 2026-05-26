@@ -325,7 +325,8 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             CredentialSecretFilePath,
             PromptForCredential,
             prerequisiteInstall.Status,
-            !host.IsWhatIfRequested);
+            !host.IsWhatIfRequested,
+            endpoint.Provider);
 
         var registration = service.EnsureAzureArtifactsRepositoryRegistered(
             profile.AzureDevOpsOrganization,

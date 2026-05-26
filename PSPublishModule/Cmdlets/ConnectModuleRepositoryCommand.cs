@@ -246,7 +246,8 @@ public sealed class ConnectModuleRepositoryCommand : PSCmdlet
             CredentialSecretFilePath,
             PromptForCredential,
             prerequisiteInstall.Status,
-            allowInteractivePrompt);
+            allowInteractivePrompt,
+            endpoint.Provider);
 
         var result = service.EnsureAzureArtifactsRepositoryRegistered(
             organization,
