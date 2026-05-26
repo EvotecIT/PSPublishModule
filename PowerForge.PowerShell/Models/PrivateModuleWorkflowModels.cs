@@ -20,6 +20,12 @@ internal sealed class PrivateModuleWorkflowRequest
     internal string AzureDevOpsOrganization { get; set; } = string.Empty;
     internal string? AzureDevOpsProject { get; set; }
     internal string AzureArtifactsFeed { get; set; } = string.Empty;
+    internal string Repository { get; set; } = string.Empty;
+    internal string RepositoryUri { get; set; } = string.Empty;
+    internal string RepositorySourceUri { get; set; } = string.Empty;
+    internal string RepositoryPublishUri { get; set; } = string.Empty;
+    internal string JFrogBaseUri { get; set; } = string.Empty;
+    internal string JFrogRepository { get; set; } = string.Empty;
     internal RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.Auto;
     internal PrivateGalleryBootstrapMode BootstrapMode { get; set; } = PrivateGalleryBootstrapMode.Auto;
     internal bool Trusted { get; set; } = true;

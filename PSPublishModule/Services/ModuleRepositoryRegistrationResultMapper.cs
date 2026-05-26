@@ -25,6 +25,7 @@ internal static class ModuleRepositoryRegistrationResultMapper
             PowerShellGetCreated = result.PowerShellGetCreated,
             PSResourceGetCreated = result.PSResourceGetCreated,
             Trusted = result.Trusted,
+            Priority = result.Priority,
             CredentialUsed = result.CredentialUsed,
             RegistrationPerformed = result.RegistrationPerformed,
             PSResourceGetRegistered = result.PSResourceGetRegistered,
@@ -51,7 +52,12 @@ internal static class ModuleRepositoryRegistrationResultMapper
             CredentialProviderSessionPrimeSucceeded = result.CredentialProviderSessionPrimeSucceeded,
             CredentialProviderSessionPrimeSkipped = result.CredentialProviderSessionPrimeSkipped,
             CredentialProviderSessionPrimePath = result.CredentialProviderSessionPrimePath,
-            CredentialProviderSessionPrimeMessage = result.CredentialProviderSessionPrimeMessage
+            CredentialProviderSessionPrimeMessage = result.CredentialProviderSessionPrimeMessage,
+            JFrogCliLoginAttempted = result.JFrogCliLoginAttempted,
+            JFrogCliLoginSucceeded = result.JFrogCliLoginSucceeded,
+            JFrogCliLoginSkipped = result.JFrogCliLoginSkipped,
+            JFrogCliPath = result.JFrogCliPath,
+            JFrogCliLoginMessage = result.JFrogCliLoginMessage
         };
     }
 }

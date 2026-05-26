@@ -95,20 +95,28 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
 
                 var prerequisites = privateGallery.EnsureBootstrapPrerequisites(
                     InstallPrerequisites.IsPresent,
-                    profile.BootstrapMode);
+                    profile.BootstrapMode,
+                    includeAzureArtifactsCredentialProvider: profile.Provider == PrivateGalleryProvider.AzureArtifacts);
                 foreach (var message in prerequisites.Messages)
                     WriteVerbose(message);
 
-                var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+                var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+                    profile.Provider,
                     profile.AzureDevOpsOrganization,
                     profile.AzureDevOpsProject,
                     profile.AzureArtifactsFeed,
-                    profile.RepositoryName);
+                    profile.RepositoryName,
+                    profile.Repository,
+                    profile.RepositoryUri,
+                    profile.RepositorySourceUri,
+                    profile.RepositoryPublishUri,
+                    profile.JFrogBaseUri,
+                    profile.JFrogRepository);
 
                 source = endpoint.PSResourceGetUri;
                 repositoryName = endpoint.RepositoryName;
                 profileName = profile.Name;
-                if (string.IsNullOrWhiteSpace(apiKey))
+                if (string.IsNullOrWhiteSpace(apiKey) && endpoint.Provider == PrivateGalleryProvider.AzureArtifacts)
                     apiKey = AzureArtifactsApiKeyPlaceholder;
             }
 

@@ -60,6 +60,9 @@ public sealed class ModuleRepositoryRegistrationResult
     /// <summary>Whether the repository is trusted.</summary>
     public bool Trusted { get; set; }
 
+    /// <summary>PSResourceGet repository priority used for registration.</summary>
+    public int? Priority { get; set; }
+
     /// <summary>Whether a credential was supplied for registration.</summary>
     public bool CredentialUsed { get; set; }
 
@@ -141,13 +144,33 @@ public sealed class ModuleRepositoryRegistrationResult
     /// <summary>Outcome message from Azure Artifacts Credential Provider session priming.</summary>
     public string? CredentialProviderSessionPrimeMessage { get; set; }
 
+    /// <summary>Whether PSPublishModule attempted JFrog CLI browser login.</summary>
+    public bool JFrogCliLoginAttempted { get; set; }
+
+    /// <summary>Whether JFrog CLI browser login completed successfully.</summary>
+    public bool JFrogCliLoginSucceeded { get; set; }
+
+    /// <summary>Whether JFrog CLI browser login was skipped.</summary>
+    public bool JFrogCliLoginSkipped { get; set; }
+
+    /// <summary>JFrog CLI executable path used for browser login.</summary>
+    public string? JFrogCliPath { get; set; }
+
+    /// <summary>Outcome message from JFrog CLI browser login.</summary>
+    public string? JFrogCliLoginMessage { get; set; }
+
     private bool IsMicrosoftArtifactRegistry
         => string.Equals(Provider, "MicrosoftArtifactRegistry", StringComparison.OrdinalIgnoreCase);
+    private bool IsCredentialBasedPrivateGallery
+        => string.Equals(Provider, "JFrog", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(Provider, "NuGet", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether the existing-session/device-login bootstrap path is ready.</summary>
     public bool ExistingSessionBootstrapReady
         => IsMicrosoftArtifactRegistry
             ? PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion
+            : IsCredentialBasedPrivateGallery
+                ? false
             : PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
 
     /// <summary>Whether the credential-prompt bootstrap path is available.</summary>
@@ -162,9 +185,11 @@ public sealed class ModuleRepositoryRegistrationResult
             {
                 PrivateGalleryBootstrapMode.ExistingSession => ExistingSessionBootstrapReady,
                 PrivateGalleryBootstrapMode.CredentialPrompt => PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion,
+                PrivateGalleryBootstrapMode.JFrogCli => PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion,
                 _ => ExistingSessionBootstrapReady || (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion)
             };
-            var powerShellGetReady = BootstrapModeRequested == PrivateGalleryBootstrapMode.ExistingSession
+            var powerShellGetReady = BootstrapModeRequested == PrivateGalleryBootstrapMode.ExistingSession ||
+                                     BootstrapModeRequested == PrivateGalleryBootstrapMode.JFrogCli
                 ? false
                 : PowerShellGetAvailable;
 
@@ -183,7 +208,9 @@ public sealed class ModuleRepositoryRegistrationResult
 
     /// <summary>Suggested bootstrap mode based on detected prerequisites.</summary>
     public PrivateGalleryBootstrapMode RecommendedBootstrapMode
-        => IsMicrosoftArtifactRegistry
+        => IsCredentialBasedPrivateGallery && BootstrapModeRequested == PrivateGalleryBootstrapMode.JFrogCli
+            ? PrivateGalleryBootstrapMode.JFrogCli
+            : IsMicrosoftArtifactRegistry
             ? PrivateGalleryBootstrapMode.ExistingSession
             : ExistingSessionBootstrapReady
             ? PrivateGalleryBootstrapMode.ExistingSession
@@ -192,7 +219,7 @@ public sealed class ModuleRepositoryRegistrationResult
                 : PrivateGalleryBootstrapMode.Auto;
 
     /// <summary>Whether native Install-PSResource is ready to use with this repository.</summary>
-    public bool InstallPSResourceReady => PSResourceGetRegistered && (IsMicrosoftArtifactRegistry || ExistingSessionBootstrapReady);
+    public bool InstallPSResourceReady => PSResourceGetRegistered && (IsMicrosoftArtifactRegistry || IsCredentialBasedPrivateGallery || ExistingSessionBootstrapReady);
 
     /// <summary>Whether native Install-Module is ready to use with this repository.</summary>
     public bool InstallModuleReady => PowerShellGetRegistered;
@@ -251,6 +278,42 @@ public sealed class ModuleRepositoryRegistrationResult
                     !MicrosoftArtifactRegistryRepository.IsDefaultName(RepositoryName))
                     marParts.Add($"-Name '{RepositoryName}'");
                 return string.Join(" ", marParts);
+            }
+
+            if (IsCredentialBasedPrivateGallery)
+            {
+                var privateGalleryParts = new List<string>
+                {
+                    "Register-ModuleRepository",
+                    $"-Provider {Provider}"
+                };
+
+                if (!string.IsNullOrWhiteSpace(AzureArtifactsFeed))
+                    privateGalleryParts.Add($"-Repository '{AzureArtifactsFeed}'");
+
+                if (!string.IsNullOrWhiteSpace(PSResourceGetUri))
+                    privateGalleryParts.Add($"-RepositoryUri '{PSResourceGetUri}'");
+
+                if (!string.IsNullOrWhiteSpace(RepositoryName) &&
+                    !string.Equals(RepositoryName, AzureArtifactsFeed, StringComparison.OrdinalIgnoreCase))
+                {
+                    privateGalleryParts.Add($"-Name '{RepositoryName}'");
+                }
+
+                if (InstallPrerequisitesRecommended)
+                    privateGalleryParts.Add("-InstallPrerequisites");
+
+                if (RecommendedBootstrapMode == PrivateGalleryBootstrapMode.JFrogCli)
+                {
+                    privateGalleryParts.Add("-BootstrapMode JFrogCli");
+                }
+                else if (RecommendedBootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
+                {
+                    privateGalleryParts.Add("-BootstrapMode CredentialPrompt");
+                    privateGalleryParts.Add("-Interactive");
+                }
+
+                return string.Join(" ", privateGalleryParts);
             }
 
             if (string.IsNullOrWhiteSpace(AzureDevOpsOrganization) || string.IsNullOrWhiteSpace(AzureArtifactsFeed))

@@ -19,6 +19,8 @@ try {
 
 $existing = $null
 try { $existing = Get-PSResourceRepository -Name $Name -ErrorAction SilentlyContinue } catch { $existing = $null }
+$registeredRepositories = @()
+try { $registeredRepositories = @(Get-PSResourceRepository -ErrorAction SilentlyContinue) } catch { $registeredRepositories = @() }
 
 $commonParams = @{ ErrorAction = 'Stop' }
 $commonParams.Name = $Name
@@ -54,6 +56,106 @@ function Invoke-RepositoryCommand {
 
     throw
   }
+}
+
+function Normalize-RepositoryUri {
+  param([object]$Value)
+
+  if ($null -eq $Value) { return '' }
+  return ([string]$Value).Trim().TrimEnd('/').ToLowerInvariant()
+}
+
+function Get-RepositoryName {
+  param([object]$Repository)
+
+  if ($null -eq $Repository) { return '' }
+  return ([string]$Repository.Name).Trim()
+}
+
+function Get-RepositoryUri {
+  param([object]$Repository)
+
+  if ($null -eq $Repository) { return '' }
+  return Normalize-RepositoryUri $Repository.Uri
+}
+
+function Assert-NoRepositoryUriConflict {
+  param(
+    [string]$TargetName,
+    [string]$TargetUri,
+    [object]$ExistingRepository,
+    [object[]]$Repositories
+  )
+
+  $normalizedName = if ([string]::IsNullOrWhiteSpace($TargetName)) { '' } else { $TargetName.Trim() }
+  $normalizedUri = Normalize-RepositoryUri $TargetUri
+  if ([string]::IsNullOrWhiteSpace($normalizedName) -or [string]::IsNullOrWhiteSpace($normalizedUri)) {
+    return
+  }
+
+  $conflicts = @($Repositories | Where-Object {
+    $repoName = Get-RepositoryName $_
+    -not [string]::IsNullOrWhiteSpace($repoName) -and
+      -not [string]::Equals($repoName, $normalizedName, [System.StringComparison]::OrdinalIgnoreCase) -and
+      [string]::Equals((Get-RepositoryUri $_), $normalizedUri, [System.StringComparison]::OrdinalIgnoreCase)
+  })
+
+  if ($conflicts.Count -eq 0) {
+    return
+  }
+
+  $existingUri = Get-RepositoryUri $ExistingRepository
+  if ($null -ne $ExistingRepository -and
+      [string]::Equals($existingUri, $normalizedUri, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return
+  }
+
+  $conflictNames = ($conflicts | ForEach-Object { "'" + (Get-RepositoryName $_) + "'" }) -join ', '
+  throw "Repository URI '$TargetUri' is already registered as $conflictNames. Use -RepositoryName with the existing repository name or unregister the duplicate alias before registering '$TargetName'."
+}
+
+function Test-RepositoryMatches {
+  param(
+    [object]$Repository,
+    [string]$TargetUri,
+    [string]$TrustedFlag,
+    [string]$Priority,
+    [string]$ApiVersion
+  )
+
+  if ($null -eq $Repository) { return $false }
+
+  $normalizedTargetUri = Normalize-RepositoryUri $TargetUri
+  if (-not [string]::IsNullOrWhiteSpace($normalizedTargetUri) -and
+      -not [string]::Equals((Get-RepositoryUri $Repository), $normalizedTargetUri, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $false
+  }
+
+  if ($TrustedFlag -eq '1') {
+    try {
+      if (-not [bool]$Repository.Trusted) { return $false }
+    } catch {
+      return $false
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($Priority)) {
+    try {
+      if ([int]$Repository.Priority -ne [int]$Priority) { return $false }
+    } catch {
+      return $false
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($ApiVersion)) {
+    try {
+      if (-not [string]::Equals([string]$Repository.ApiVersion, $ApiVersion, [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
+    } catch {
+      return $false
+    }
+  }
+
+  return $true
 }
 
 try {
@@ -96,6 +198,8 @@ try {
       }
     }
   } else {
+    Assert-NoRepositoryUriConflict -TargetName $Name -TargetUri $Uri -ExistingRepository $existing -Repositories $registeredRepositories
+
     $params = $commonParams.Clone()
     $params.Uri = $Uri
     if ($isAzureArtifacts) {
@@ -103,7 +207,9 @@ try {
     }
 
     if ($existing) {
-      Invoke-RepositoryCommand -CommandName 'Set-PSResourceRepository' -Parameters $params
+      if (-not (Test-RepositoryMatches -Repository $existing -TargetUri $Uri -TrustedFlag $TrustedFlag -Priority $Priority -ApiVersion $ApiVersion)) {
+        Invoke-RepositoryCommand -CommandName 'Set-PSResourceRepository' -Parameters $params
+      }
     } else {
       $created = $true
       $params.Force = $true

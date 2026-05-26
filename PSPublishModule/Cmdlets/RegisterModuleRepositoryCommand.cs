@@ -40,7 +40,7 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string ProfileName { get; set; } = string.Empty;
 
-    /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
+    /// <summary>Private gallery provider.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;
 
@@ -49,7 +49,7 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
     public SwitchParameter MicrosoftArtifactRegistry { get; set; }
 
     /// <summary>Azure DevOps organization name.</summary>
-    [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Organization")]
     [ValidateNotNullOrEmpty]
     public string AzureDevOpsOrganization { get; set; } = string.Empty;
@@ -60,7 +60,7 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
     public string? AzureDevOpsProject { get; set; }
 
     /// <summary>Azure Artifacts feed name.</summary>
-    [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Feed")]
     [ValidateNotNullOrEmpty]
     public string AzureArtifactsFeed { get; set; } = string.Empty;
@@ -68,8 +68,31 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
     /// <summary>Optional repository name override. Defaults to the feed name.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
-    [Alias("Repository")]
     public string? Name { get; set; }
+
+    /// <summary>Provider repository/feed id. For Azure this is the feed when AzureArtifactsFeed is omitted; for JFrog this is the Artifactory NuGet repository key.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? Repository { get; set; }
+
+    /// <summary>PSResourceGet v3 repository URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositoryUri { get; set; }
+
+    /// <summary>PowerShellGet source URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositorySourceUri { get; set; }
+
+    /// <summary>PowerShellGet publish URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositoryPublishUri { get; set; }
+
+    /// <summary>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? JFrogBaseUri { get; set; }
+
+    /// <summary>JFrog NuGet repository key. Defaults from Repository when omitted.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? JFrogRepository { get; set; }
 
     /// <summary>Registration strategy. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
@@ -155,6 +178,12 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
         var bootstrapMode = BootstrapMode;
         var trusted = Trusted;
         var priority = Priority;
+        var repository = Repository ?? string.Empty;
+        var repositoryUri = RepositoryUri ?? string.Empty;
+        var repositorySourceUri = RepositorySourceUri ?? string.Empty;
+        var repositoryPublishUri = RepositoryPublishUri ?? string.Empty;
+        var jfrogBaseUri = JFrogBaseUri ?? string.Empty;
+        var jfrogRepository = JFrogRepository ?? string.Empty;
 
         if (ParameterSetName == ParameterSetProfile)
         {
@@ -164,6 +193,12 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
             project = profile.AzureDevOpsProject;
             feed = profile.AzureArtifactsFeed;
             repositoryName = profile.RepositoryName;
+            repository = profile.Repository;
+            repositoryUri = profile.RepositoryUri;
+            repositorySourceUri = profile.RepositorySourceUri;
+            repositoryPublishUri = profile.RepositoryPublishUri;
+            jfrogBaseUri = profile.JFrogBaseUri;
+            jfrogRepository = profile.JFrogRepository;
             tool = profile.Tool;
             bootstrapMode = profile.BootstrapMode;
             trusted = profile.Trusted;
@@ -172,14 +207,22 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
 
         service.EnsureProviderSupported(provider);
 
-        var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            provider,
             organization,
             project,
             feed,
-            repositoryName);
+            repositoryName,
+            repository,
+            repositoryUri,
+            repositorySourceUri,
+            repositoryPublishUri,
+            jfrogBaseUri,
+            jfrogRepository);
         var prerequisiteInstall = service.EnsureBootstrapPrerequisites(
             InstallPrerequisites.IsPresent,
-            bootstrapMode);
+            bootstrapMode,
+            includeAzureArtifactsCredentialProvider: provider == PrivateGalleryProvider.AzureArtifacts);
         var allowInteractivePrompt = !host.IsWhatIfRequested;
 
         var credentialResolution = service.ResolveCredential(
@@ -207,7 +250,14 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
             prerequisiteInstall.Status,
             shouldProcessAction: tool == RepositoryRegistrationTool.Auto
                 ? "Register module repository using Auto (prefer PSResourceGet, fall back to PowerShellGet)"
-                : $"Register module repository using {tool}");
+                : $"Register module repository using {tool}",
+            provider: provider,
+            repository: repository,
+            repositoryUri: repositoryUri,
+            repositorySourceUri: repositorySourceUri,
+            repositoryPublishUri: repositoryPublishUri,
+            jfrogBaseUri: jfrogBaseUri,
+            jfrogRepository: jfrogRepository);
         result.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
         result.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 

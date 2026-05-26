@@ -96,6 +96,40 @@ public sealed class PrivateGalleryServiceTests
         Assert.Equal("1.2.0", requiredVersion);
     }
 
+    [Fact]
+    public void ResolveCredential_JFrogCliModeDoesNotCollectCredential()
+    {
+        var service = new PrivateGalleryService(new FakePrivateGalleryHost());
+
+        var result = service.ResolveCredential(
+            repositoryName: "Company",
+            bootstrapMode: PrivateGalleryBootstrapMode.JFrogCli,
+            credentialUserName: null,
+            credentialSecret: null,
+            credentialSecretFilePath: null,
+            promptForCredential: false);
+
+        Assert.Null(result.Credential);
+        Assert.Equal(PrivateGalleryBootstrapMode.JFrogCli, result.BootstrapModeUsed);
+        Assert.Equal(PrivateGalleryCredentialSource.JFrogCli, result.CredentialSource);
+    }
+
+    [Fact]
+    public void ResolveCredential_RejectsExplicitCredentialWithJFrogCliMode()
+    {
+        var service = new PrivateGalleryService(new FakePrivateGalleryHost());
+
+        var ex = Assert.Throws<ArgumentException>(() => service.ResolveCredential(
+            repositoryName: "Company",
+            bootstrapMode: PrivateGalleryBootstrapMode.JFrogCli,
+            credentialUserName: "user@example.com",
+            credentialSecret: "secret",
+            credentialSecretFilePath: null,
+            promptForCredential: false));
+
+        Assert.Contains("BootstrapMode JFrogCli", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class FakePrivateGalleryHost : IPrivateGalleryHost
     {
         private readonly bool _shouldProcess;

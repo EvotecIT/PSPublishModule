@@ -82,6 +82,7 @@ Describe 'Private gallery command metadata' {
         $script:PrivateGalleryProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'profiles.json'
         $script:PrivateGalleryMachineProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'machine-profiles.json'
         $script:PrivateGalleryLiveValidationRunnerPath = Join-Path $PSScriptRoot 'Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1'
+        $script:PrivateGalleryJFrogValidationRunnerPath = Join-Path $PSScriptRoot 'Invoke-PrivateGalleryJFrogSsoValidation.ps1'
         $script:PrivateGalleryLiveEvidenceSummaryPath = Join-Path $PSScriptRoot 'Convert-PrivateGalleryLiveEvidenceToMarkdown.ps1'
         $script:PrivateGalleryGitHubConfigurationPath = Join-Path $PSScriptRoot 'Test-PrivateGalleryGitHubLiveValidationConfiguration.ps1'
         $script:PrivateGalleryRepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
@@ -101,7 +102,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'keeps the Azure Artifacts live validation runner parseable' {
-        foreach ($scriptPath in @($script:PrivateGalleryLiveValidationRunnerPath, $script:PrivateGalleryLiveEvidenceSummaryPath, $script:PrivateGalleryGitHubConfigurationPath)) {
+        foreach ($scriptPath in @($script:PrivateGalleryLiveValidationRunnerPath, $script:PrivateGalleryJFrogValidationRunnerPath, $script:PrivateGalleryLiveEvidenceSummaryPath, $script:PrivateGalleryGitHubConfigurationPath)) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref] $tokens, [ref] $errors) | Out-Null
@@ -594,6 +595,10 @@ Describe 'Private gallery command metadata' {
         $register.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $register.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $register.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
+        $register.Parameters.Keys | Should -Contain 'Repository'
+        $register.Parameters.Keys | Should -Contain 'RepositoryUri'
+        $register.Parameters.Keys | Should -Contain 'JFrogBaseUri'
+        $register.Parameters.Keys | Should -Contain 'JFrogRepository'
         $register.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
         $register.ParameterSets.Name | Should -Contain 'Profile'
 
@@ -604,6 +609,9 @@ Describe 'Private gallery command metadata' {
         $install.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $install.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $install.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
+        $install.Parameters.Keys | Should -Contain 'RepositoryUri'
+        $install.Parameters.Keys | Should -Contain 'JFrogBaseUri'
+        $install.Parameters.Keys | Should -Contain 'JFrogRepository'
         $install.ParameterSets.Name | Should -Contain 'Profile'
 
         $update = $module.ExportedCmdlets['Update-PrivateModule']
@@ -612,6 +620,9 @@ Describe 'Private gallery command metadata' {
         $update.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $update.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $update.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
+        $update.Parameters.Keys | Should -Contain 'RepositoryUri'
+        $update.Parameters.Keys | Should -Contain 'JFrogBaseUri'
+        $update.Parameters.Keys | Should -Contain 'JFrogRepository'
         $update.ParameterSets.Name | Should -Contain 'Profile'
 
         $profile = $module.ExportedCmdlets['Set-ModuleRepositoryProfile']
@@ -620,6 +631,10 @@ Describe 'Private gallery command metadata' {
         $profile.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
         $profile.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
         $profile.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
+        $profile.Parameters.Keys | Should -Contain 'Repository'
+        $profile.Parameters.Keys | Should -Contain 'RepositoryUri'
+        $profile.Parameters.Keys | Should -Contain 'JFrogBaseUri'
+        $profile.Parameters.Keys | Should -Contain 'JFrogRepository'
         $profile.Parameters.Keys | Should -Contain 'Scope'
 
         $exportProfile = $module.ExportedCmdlets['Export-ModuleRepositoryProfile']
@@ -642,6 +657,10 @@ Describe 'Private gallery command metadata' {
         $initialize.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
         $initialize.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $initialize.Parameters.Keys | Should -Contain 'SkipConnect'
+        $initialize.Parameters.Keys | Should -Contain 'Repository'
+        $initialize.Parameters.Keys | Should -Contain 'RepositoryUri'
+        $initialize.Parameters.Keys | Should -Contain 'JFrogBaseUri'
+        $initialize.Parameters.Keys | Should -Contain 'JFrogRepository'
         $initialize.Parameters.Keys | Should -Contain 'Scope'
 
         $bootstrap = $module.ExportedCmdlets['New-ModuleRepositoryBootstrap']
@@ -665,10 +684,25 @@ Describe 'Private gallery command metadata' {
 
         $profile.Name | Should -Be 'Company'
         $profile.RepositoryName | Should -Be 'Modules'
+        $profile.Priority | Should -Be 40
         $profile.Tool | Should -Be ([PowerForge.RepositoryRegistrationTool]::PSResourceGet)
         $profile.BootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
         Test-Path -LiteralPath $script:PrivateGalleryProfilePath | Should -BeTrue
+    }
+
+    It 'saves JFrog profiles with credential-prompt defaults' {
+        $profile = Set-ModuleRepositoryProfile -Name 'JFrogCompany' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory'
+
+        $profile.Name | Should -Be 'JFrogCompany'
+        $profile.Provider | Should -Be ([PowerForge.PrivateGalleryProvider]::JFrog)
+        $profile.Repository | Should -Be 'powershell-virtual'
+        $profile.RepositoryName | Should -Be 'powershell-virtual'
+        $profile.RepositoryUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'
+        $profile.RepositorySourceUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
+        $profile.JFrogRepository | Should -Be 'powershell-virtual'
+        $profile.BootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
+        $profile.AuthenticationMode | Should -Be 'CredentialPrompt'
     }
 
     It 'resolves machine-wide profiles for other users without sharing credentials' {
@@ -817,8 +851,10 @@ Describe 'Private gallery command metadata' {
         $result.ConnectAttempted | Should -BeFalse
         $result.ConnectSkipped | Should -BeTrue
         $result.Succeeded | Should -BeTrue
-        $result.Profile.RepositoryName | Should -Be 'Modules'
-        $result.Readiness.RepositoryName | Should -Be 'Modules'
+        $result.Profile.RepositoryName | Should -Be 'CompanyInit'
+        $result.Profile.Priority | Should -Be 40
+        $result.Readiness.RepositoryName | Should -Be 'CompanyInit'
+        $result.Readiness.Priority | Should -Be 40
         $result.RecommendedInstallCommand | Should -Be "Install-PrivateModule -ProfileName 'CompanyInit' -Name <ModuleName>"
         $result.RecommendedUpdateCommand | Should -Be "Update-PrivateModule -ProfileName 'CompanyInit' -Name <ModuleName>"
 
@@ -834,7 +870,8 @@ Describe 'Private gallery command metadata' {
         $result.Profile.AzureDevOpsOrganization | Should -Be 'contoso'
 
         $profile = Get-ModuleRepositoryProfile -Name 'CompanyCanonical'
-        $profile.RepositoryName | Should -Be 'Modules'
+        $profile.RepositoryName | Should -Be 'CompanyCanonical'
+        $profile.Priority | Should -Be 40
     }
 
     It 'initializes from a managed profile file in one command without connecting when requested' {
@@ -945,6 +982,19 @@ Describe 'Private gallery command metadata' {
         $publish.Configuration.RepositoryName | Should -Be 'Modules'
         $publish.Configuration.Tool | Should -Be ([PowerForge.PublishTool]::PSResourceGet)
         $publish.Configuration.Repository.Uri | Should -Be 'https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json'
+        $publish.Configuration.Repository.Credential | Should -BeNullOrEmpty
+    }
+
+    It 'uses saved JFrog profiles for publish configuration' {
+        Set-ModuleRepositoryProfile -Name 'JFrogCompany' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
+
+        $publish = New-ConfigurationPublish -ProfileName 'JFrogCompany' -Enabled
+
+        $publish.Configuration.RepositoryName | Should -Be 'powershell-virtual'
+        $publish.Configuration.Tool | Should -Be ([PowerForge.PublishTool]::PSResourceGet)
+        $publish.Configuration.Repository.Uri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'
+        $publish.Configuration.Repository.SourceUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
+        $publish.Configuration.Repository.PublishUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
         $publish.Configuration.Repository.Credential | Should -BeNullOrEmpty
     }
 

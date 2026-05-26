@@ -58,12 +58,12 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetImport)]
     public SwitchParameter Overwrite { get; set; }
 
-    /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
+    /// <summary>Private gallery provider.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;
 
     /// <summary>Azure DevOps organization name.</summary>
-    [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Organization")]
     [ValidateNotNullOrEmpty]
     public string AzureDevOpsOrganization { get; set; } = string.Empty;
@@ -74,15 +74,38 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     public string? AzureDevOpsProject { get; set; }
 
     /// <summary>Azure Artifacts feed name.</summary>
-    [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Feed")]
     [ValidateNotNullOrEmpty]
     public string AzureArtifactsFeed { get; set; } = string.Empty;
 
-    /// <summary>Optional local repository name override. Defaults to the feed name.</summary>
+    /// <summary>Provider repository/feed id. For Azure this is the feed when AzureArtifactsFeed is omitted; for JFrog this is the Artifactory NuGet repository key.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
-    [Alias("Repository")]
+    public string? Repository { get; set; }
+
+    /// <summary>Optional local repository name override. Defaults to the profile name for new Azure Artifacts profiles.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public string? RepositoryName { get; set; }
+
+    /// <summary>PSResourceGet v3 repository URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositoryUri { get; set; }
+
+    /// <summary>PowerShellGet source URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositorySourceUri { get; set; }
+
+    /// <summary>PowerShellGet publish URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositoryPublishUri { get; set; }
+
+    /// <summary>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? JFrogBaseUri { get; set; }
+
+    /// <summary>JFrog NuGet repository key. Defaults from Repository when omitted.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? JFrogRepository { get; set; }
 
     /// <summary>Registration strategy saved in a new profile. Defaults to PSResourceGet for Entra-first Azure Artifacts use.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
@@ -224,12 +247,20 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
                 AzureDevOpsOrganization = AzureDevOpsOrganization,
                 AzureDevOpsProject = AzureDevOpsProject,
                 AzureArtifactsFeed = AzureArtifactsFeed,
-                RepositoryName = RepositoryName ?? string.Empty,
+                Repository = Repository ?? string.Empty,
+                RepositoryName = RepositoryName ?? ProfileName ?? string.Empty,
+                RepositoryUri = RepositoryUri ?? string.Empty,
+                RepositorySourceUri = RepositorySourceUri ?? string.Empty,
+                RepositoryPublishUri = RepositoryPublishUri ?? string.Empty,
+                JFrogBaseUri = JFrogBaseUri ?? string.Empty,
+                JFrogRepository = JFrogRepository ?? string.Empty,
                 Tool = Tool,
                 BootstrapMode = BootstrapMode,
                 Trusted = Trusted,
                 Priority = Priority,
-                AuthenticationMode = "AzureArtifactsCredentialProvider"
+                AuthenticationMode = Provider == PrivateGalleryProvider.AzureArtifacts
+                    ? "AzureArtifactsCredentialProvider"
+                    : "CredentialPrompt"
             });
 
             if (!ShouldProcess(profile.Name, "Save and initialize module repository profile"))
@@ -272,12 +303,20 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
 
         var prerequisiteInstall = service.EnsureBootstrapPrerequisites(
             InstallPrerequisites.IsPresent,
-            profile.BootstrapMode);
-        var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+            profile.BootstrapMode,
+            includeAzureArtifactsCredentialProvider: profile.Provider == PrivateGalleryProvider.AzureArtifacts);
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            profile.Provider,
             profile.AzureDevOpsOrganization,
             profile.AzureDevOpsProject,
             profile.AzureArtifactsFeed,
-            profile.RepositoryName);
+            profile.RepositoryName,
+            profile.Repository,
+            profile.RepositoryUri,
+            profile.RepositorySourceUri,
+            profile.RepositoryPublishUri,
+            profile.JFrogBaseUri,
+            profile.JFrogRepository);
         var credentialResolution = service.ResolveCredential(
             endpoint.RepositoryName,
             profile.BootstrapMode,
@@ -303,7 +342,14 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             prerequisiteInstall.Status,
             shouldProcessAction: profile.Tool == RepositoryRegistrationTool.Auto
                 ? "Initialize module repository using Auto (prefer PSResourceGet, fall back to PowerShellGet)"
-                : $"Initialize module repository using {profile.Tool}");
+                : $"Initialize module repository using {profile.Tool}",
+            provider: profile.Provider,
+            repository: profile.Repository,
+            repositoryUri: profile.RepositoryUri,
+            repositorySourceUri: profile.RepositorySourceUri,
+            repositoryPublishUri: profile.RepositoryPublishUri,
+            jfrogBaseUri: profile.JFrogBaseUri,
+            jfrogRepository: profile.JFrogRepository);
         registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
         registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 

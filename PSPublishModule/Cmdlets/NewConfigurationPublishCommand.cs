@@ -200,15 +200,14 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         var repositoryTrusted = RepositoryTrusted;
         var repositoryPriority = RepositoryPriority;
         var repositoryApiVersion = RepositoryApiVersion;
+        var repositoryUri = RepositoryUri;
+        var repositorySourceUri = RepositorySourceUri;
+        var repositoryPublishUri = RepositoryPublishUri;
 
         if (ParameterSetName == "Profile")
         {
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
-            parameterSetName = "AzureArtifacts";
             type = PowerForge.PublishDestination.PowerShellGallery;
-            azureDevOpsOrganization = profile.AzureDevOpsOrganization;
-            azureDevOpsProject = profile.AzureDevOpsProject;
-            azureArtifactsFeed = profile.AzureArtifactsFeed;
             repositoryName = profile.RepositoryName;
             tool = profile.Tool switch
             {
@@ -219,6 +218,21 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             repositoryTrusted = profile.Trusted;
             repositoryPriority = profile.Priority;
             repositoryApiVersion = PowerForge.RepositoryApiVersion.V3;
+
+            if (profile.Provider == PowerForge.PrivateGalleryProvider.AzureArtifacts)
+            {
+                parameterSetName = "AzureArtifacts";
+                azureDevOpsOrganization = profile.AzureDevOpsOrganization;
+                azureDevOpsProject = profile.AzureDevOpsProject;
+                azureArtifactsFeed = profile.AzureArtifactsFeed;
+            }
+            else
+            {
+                parameterSetName = "ApiKey";
+                repositoryUri = profile.RepositoryUri;
+                repositorySourceUri = profile.RepositorySourceUri;
+                repositoryPublishUri = profile.RepositoryPublishUri;
+            }
         }
 
         var settings = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
@@ -233,9 +247,9 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             UserName = UserName,
             RepositoryName = repositoryName,
             Tool = tool,
-            RepositoryUri = RepositoryUri,
-            RepositorySourceUri = RepositorySourceUri,
-            RepositoryPublishUri = RepositoryPublishUri,
+            RepositoryUri = repositoryUri,
+            RepositorySourceUri = repositorySourceUri,
+            RepositoryPublishUri = repositoryPublishUri,
             RepositoryTrusted = repositoryTrusted,
             RepositoryPriority = repositoryPriority,
             RepositoryApiVersion = repositoryApiVersion,

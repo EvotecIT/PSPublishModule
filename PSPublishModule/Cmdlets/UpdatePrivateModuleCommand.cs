@@ -36,8 +36,9 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
 
-    /// <summary>Name of an already registered repository.</summary>
+    /// <summary>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetRepository)]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [ValidateNotNullOrEmpty]
     public string Repository { get; set; } = string.Empty;
 
@@ -47,7 +48,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string ProfileName { get; set; } = string.Empty;
 
-    /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
+    /// <summary>Private gallery provider used for automatic repository registration.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;
 
@@ -56,7 +57,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     public SwitchParameter MicrosoftArtifactRegistry { get; set; }
 
     /// <summary>Azure DevOps organization name.</summary>
-    [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Organization")]
     [ValidateNotNullOrEmpty]
     public string AzureDevOpsOrganization { get; set; } = string.Empty;
@@ -67,10 +68,30 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     public string? AzureDevOpsProject { get; set; }
 
     /// <summary>Azure Artifacts feed name.</summary>
-    [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Feed")]
     [ValidateNotNullOrEmpty]
     public string AzureArtifactsFeed { get; set; } = string.Empty;
+
+    /// <summary>PSResourceGet v3 repository URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositoryUri { get; set; }
+
+    /// <summary>PowerShellGet source URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositorySourceUri { get; set; }
+
+    /// <summary>PowerShellGet publish URI for generic/JFrog feeds.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? RepositoryPublishUri { get; set; }
+
+    /// <summary>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? JFrogBaseUri { get; set; }
+
+    /// <summary>JFrog NuGet repository key. Defaults from Repository when omitted.</summary>
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    public string? JFrogRepository { get; set; }
 
     /// <summary>Optional repository name override when Azure Artifacts details are supplied.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
@@ -151,6 +172,12 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
         var bootstrapMode = BootstrapMode;
         var trusted = Trusted;
         var priority = Priority;
+        var repository = ParameterSetName == ParameterSetAzureArtifacts ? Repository : string.Empty;
+        var repositoryUri = RepositoryUri ?? string.Empty;
+        var repositorySourceUri = RepositorySourceUri ?? string.Empty;
+        var repositoryPublishUri = RepositoryPublishUri ?? string.Empty;
+        var jfrogBaseUri = JFrogBaseUri ?? string.Empty;
+        var jfrogRepository = JFrogRepository ?? string.Empty;
 
         if (ParameterSetName == ParameterSetProfile)
         {
@@ -160,6 +187,12 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
             project = profile.AzureDevOpsProject;
             feed = profile.AzureArtifactsFeed;
             repositoryName = profile.RepositoryName;
+            repository = profile.Repository;
+            repositoryUri = profile.RepositoryUri;
+            repositorySourceUri = profile.RepositorySourceUri;
+            repositoryPublishUri = profile.RepositoryPublishUri;
+            jfrogBaseUri = profile.JFrogBaseUri;
+            jfrogRepository = profile.JFrogRepository;
             tool = profile.Tool;
             bootstrapMode = profile.BootstrapMode;
             trusted = profile.Trusted;
@@ -181,6 +214,12 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
                 AzureDevOpsOrganization = organization,
                 AzureDevOpsProject = project,
                 AzureArtifactsFeed = feed,
+                Repository = repository,
+                RepositoryUri = repositoryUri,
+                RepositorySourceUri = repositorySourceUri,
+                RepositoryPublishUri = repositoryPublishUri,
+                JFrogBaseUri = jfrogBaseUri,
+                JFrogRepository = jfrogRepository,
                 Tool = tool,
                 BootstrapMode = bootstrapMode,
                 Trusted = trusted,

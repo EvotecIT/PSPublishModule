@@ -26,6 +26,24 @@ public sealed class ModuleRepositoryProfileResult
     /// <summary>Local PowerShell repository name.</summary>
     public string RepositoryName { get; set; } = string.Empty;
 
+    /// <summary>Provider repository/feed id.</summary>
+    public string Repository { get; set; } = string.Empty;
+
+    /// <summary>PSResourceGet v3 repository URI.</summary>
+    public string RepositoryUri { get; set; } = string.Empty;
+
+    /// <summary>PowerShellGet source URI.</summary>
+    public string RepositorySourceUri { get; set; } = string.Empty;
+
+    /// <summary>PowerShellGet publish URI.</summary>
+    public string RepositoryPublishUri { get; set; } = string.Empty;
+
+    /// <summary>JFrog Artifactory base URI, when applicable.</summary>
+    public string JFrogBaseUri { get; set; } = string.Empty;
+
+    /// <summary>JFrog NuGet repository key, when applicable.</summary>
+    public string JFrogRepository { get; set; } = string.Empty;
+
     /// <summary>Registration tool selected for this profile.</summary>
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.PSResourceGet;
 

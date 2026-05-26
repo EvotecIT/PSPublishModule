@@ -27,10 +27,99 @@ public sealed class ModuleRepositoryProfileStoreTests
             Assert.Equal("Platform", saved.AzureDevOpsProject);
             Assert.Equal("Modules", saved.AzureArtifactsFeed);
             Assert.Equal("Modules", saved.RepositoryName);
+            Assert.Equal(PrivateGalleryDefaults.AzureArtifactsRepositoryPriority, saved.Priority);
             Assert.Equal(RepositoryRegistrationTool.PSResourceGet, saved.Tool);
             Assert.Equal(PrivateGalleryBootstrapMode.ExistingSession, saved.BootstrapMode);
             Assert.Equal("AzureArtifactsCredentialProvider", saved.AuthenticationMode);
             Assert.True(File.Exists(path));
+        }
+        finally
+        {
+            TryDelete(Path.GetDirectoryName(path));
+        }
+    }
+
+    [Fact]
+    public void SaveProfile_PreservesExplicitPriority()
+    {
+        var path = CreateTempFilePath();
+        try
+        {
+            var store = new ModuleRepositoryProfileStore(path);
+
+            var saved = store.SaveProfile(new ModuleRepositoryProfile
+            {
+                Name = "Company",
+                AzureDevOpsOrganization = "contoso",
+                AzureArtifactsFeed = "Modules",
+                Priority = 25
+            });
+
+            Assert.Equal(25, saved.Priority);
+        }
+        finally
+        {
+            TryDelete(Path.GetDirectoryName(path));
+        }
+    }
+
+    [Fact]
+    public void SaveProfile_NormalizesJFrogProfileWithCredentialPromptDefaults()
+    {
+        var path = CreateTempFilePath();
+        try
+        {
+            var store = new ModuleRepositoryProfileStore(path);
+
+            var saved = store.SaveProfile(new ModuleRepositoryProfile
+            {
+                Name = " Company ",
+                Provider = PrivateGalleryProvider.JFrog,
+                Repository = " powershell-virtual ",
+                JFrogBaseUri = " https://company.jfrog.io/artifactory/ ",
+                BootstrapMode = PrivateGalleryBootstrapMode.ExistingSession
+            });
+
+            Assert.Equal("Company", saved.Name);
+            Assert.Equal(PrivateGalleryProvider.JFrog, saved.Provider);
+            Assert.Equal(string.Empty, saved.AzureDevOpsOrganization);
+            Assert.Equal("powershell-virtual", saved.AzureArtifactsFeed);
+            Assert.Equal("powershell-virtual", saved.Repository);
+            Assert.Equal("powershell-virtual", saved.RepositoryName);
+            Assert.Equal("https://company.jfrog.io/artifactory", saved.JFrogBaseUri);
+            Assert.Equal("powershell-virtual", saved.JFrogRepository);
+            Assert.Equal("https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json", saved.RepositoryUri);
+            Assert.Equal("https://company.jfrog.io/artifactory/api/nuget/powershell-virtual", saved.RepositorySourceUri);
+            Assert.Equal("https://company.jfrog.io/artifactory/api/nuget/powershell-virtual", saved.RepositoryPublishUri);
+            Assert.Equal(PrivateGalleryBootstrapMode.CredentialPrompt, saved.BootstrapMode);
+            Assert.Equal("CredentialPrompt", saved.AuthenticationMode);
+            Assert.Equal(PrivateGalleryDefaults.AzureArtifactsRepositoryPriority, saved.Priority);
+        }
+        finally
+        {
+            TryDelete(Path.GetDirectoryName(path));
+        }
+    }
+
+    [Fact]
+    public void SaveProfile_PreservesJFrogCliBootstrapModeForJFrogProfiles()
+    {
+        var path = CreateTempFilePath();
+        try
+        {
+            var store = new ModuleRepositoryProfileStore(path);
+
+            var saved = store.SaveProfile(new ModuleRepositoryProfile
+            {
+                Name = "Company",
+                Provider = PrivateGalleryProvider.JFrog,
+                Repository = "powershell-virtual",
+                JFrogBaseUri = "https://company.jfrog.io/artifactory",
+                BootstrapMode = PrivateGalleryBootstrapMode.JFrogCli
+            });
+
+            Assert.Equal(PrivateGalleryBootstrapMode.JFrogCli, saved.BootstrapMode);
+            Assert.Equal("CredentialPrompt", saved.AuthenticationMode);
         }
         finally
         {

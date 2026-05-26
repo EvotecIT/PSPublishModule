@@ -25,6 +25,7 @@ internal sealed class ModuleRepositoryRegistrationResult
     public bool PowerShellGetCreated { get; set; }
     public bool PSResourceGetCreated { get; set; }
     public bool Trusted { get; set; }
+    public int? Priority { get; set; }
     public bool CredentialUsed { get; set; }
     public bool RegistrationPerformed { get; set; }
     public bool PSResourceGetRegistered { get; set; }
@@ -52,13 +53,23 @@ internal sealed class ModuleRepositoryRegistrationResult
     public bool CredentialProviderSessionPrimeSkipped { get; set; }
     public string? CredentialProviderSessionPrimePath { get; set; }
     public string? CredentialProviderSessionPrimeMessage { get; set; }
+    public bool JFrogCliLoginAttempted { get; set; }
+    public bool JFrogCliLoginSucceeded { get; set; }
+    public bool JFrogCliLoginSkipped { get; set; }
+    public string? JFrogCliPath { get; set; }
+    public string? JFrogCliLoginMessage { get; set; }
 
     private bool IsMicrosoftArtifactRegistry
         => string.Equals(Provider, "MicrosoftArtifactRegistry", StringComparison.OrdinalIgnoreCase);
+    private bool IsCredentialBasedPrivateGallery
+        => string.Equals(Provider, "JFrog", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(Provider, "NuGet", StringComparison.OrdinalIgnoreCase);
 
     public bool ExistingSessionBootstrapReady
         => IsMicrosoftArtifactRegistry
             ? PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion
+            : IsCredentialBasedPrivateGallery
+                ? false
             : PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
     public bool CredentialPromptBootstrapReady => (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion) || PowerShellGetAvailable;
     public bool InstallPrerequisitesRecommended
@@ -88,11 +99,12 @@ internal sealed class ModuleRepositoryRegistrationResult
         }
     }
     public PrivateGalleryBootstrapMode RecommendedBootstrapMode
-        => IsMicrosoftArtifactRegistry ? PrivateGalleryBootstrapMode.ExistingSession
+        => IsCredentialBasedPrivateGallery && BootstrapModeRequested == PrivateGalleryBootstrapMode.JFrogCli ? PrivateGalleryBootstrapMode.JFrogCli
+            : IsMicrosoftArtifactRegistry ? PrivateGalleryBootstrapMode.ExistingSession
             : ExistingSessionBootstrapReady ? PrivateGalleryBootstrapMode.ExistingSession
             : CredentialPromptBootstrapReady ? PrivateGalleryBootstrapMode.CredentialPrompt
             : PrivateGalleryBootstrapMode.Auto;
-    public bool InstallPSResourceReady => PSResourceGetRegistered && (IsMicrosoftArtifactRegistry || ExistingSessionBootstrapReady);
+    public bool InstallPSResourceReady => PSResourceGetRegistered && (IsMicrosoftArtifactRegistry || IsCredentialBasedPrivateGallery || ExistingSessionBootstrapReady);
     public bool InstallModuleReady => PowerShellGetRegistered;
     public string[] ReadyCommands
     {
@@ -129,6 +141,42 @@ internal sealed class ModuleRepositoryRegistrationResult
                     !MicrosoftArtifactRegistryRepository.IsDefaultName(RepositoryName))
                     marParts.Add($"-Name '{RepositoryName}'");
                 return string.Join(" ", marParts);
+            }
+
+            if (IsCredentialBasedPrivateGallery)
+            {
+                var privateGalleryParts = new List<string>
+                {
+                    "Register-ModuleRepository",
+                    $"-Provider {Provider}"
+                };
+
+                if (!string.IsNullOrWhiteSpace(AzureArtifactsFeed))
+                    privateGalleryParts.Add($"-Repository '{AzureArtifactsFeed}'");
+
+                if (!string.IsNullOrWhiteSpace(PSResourceGetUri))
+                    privateGalleryParts.Add($"-RepositoryUri '{PSResourceGetUri}'");
+
+                if (!string.IsNullOrWhiteSpace(RepositoryName) &&
+                    !string.Equals(RepositoryName, AzureArtifactsFeed, StringComparison.OrdinalIgnoreCase))
+                {
+                    privateGalleryParts.Add($"-Name '{RepositoryName}'");
+                }
+
+                if (InstallPrerequisitesRecommended)
+                    privateGalleryParts.Add("-InstallPrerequisites");
+
+                if (RecommendedBootstrapMode == PrivateGalleryBootstrapMode.JFrogCli)
+                {
+                    privateGalleryParts.Add("-BootstrapMode JFrogCli");
+                }
+                else if (RecommendedBootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
+                {
+                    privateGalleryParts.Add("-BootstrapMode CredentialPrompt");
+                    privateGalleryParts.Add("-Interactive");
+                }
+
+                return string.Join(" ", privateGalleryParts);
             }
 
             if (string.IsNullOrWhiteSpace(AzureDevOpsOrganization) || string.IsNullOrWhiteSpace(AzureArtifactsFeed))
