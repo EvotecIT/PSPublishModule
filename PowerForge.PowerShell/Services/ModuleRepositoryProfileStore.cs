@@ -214,34 +214,77 @@ internal sealed class ModuleRepositoryProfileStore
 
     internal static ModuleRepositoryProfile Normalize(ModuleRepositoryProfile profile)
     {
-        if (profile.Provider != PrivateGalleryProvider.AzureArtifacts)
-            throw new ArgumentException($"Provider '{profile.Provider}' is not supported yet. Supported value: AzureArtifacts.", nameof(profile));
-
         var name = NormalizeName(profile.Name);
-        var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+        var provider = NormalizeProvider(profile.Provider);
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            provider,
             profile.AzureDevOpsOrganization,
             profile.AzureDevOpsProject,
             profile.AzureArtifactsFeed,
-            profile.RepositoryName);
+            profile.RepositoryName,
+            profile.Repository,
+            profile.RepositoryUri,
+            profile.RepositorySourceUri,
+            profile.RepositoryPublishUri,
+            profile.JFrogBaseUri,
+            profile.JFrogRepository);
 
         return new ModuleRepositoryProfile
         {
             Name = name,
-            Provider = profile.Provider,
-            AzureDevOpsOrganization = endpoint.Organization,
-            AzureDevOpsProject = endpoint.Project,
-            AzureArtifactsFeed = endpoint.Feed,
+            Provider = endpoint.Provider,
+            AzureDevOpsOrganization = endpoint.AzureDevOpsOrganization ?? string.Empty,
+            AzureDevOpsProject = endpoint.AzureDevOpsProject,
+            AzureArtifactsFeed = endpoint.Repository,
+            Repository = endpoint.Repository,
             RepositoryName = endpoint.RepositoryName,
+            RepositoryUri = endpoint.PSResourceGetUri,
+            RepositorySourceUri = endpoint.PowerShellGetSourceUri,
+            RepositoryPublishUri = endpoint.PowerShellGetPublishUri,
+            JFrogBaseUri = endpoint.JFrogBaseUri ?? string.Empty,
+            JFrogRepository = endpoint.JFrogRepository ?? string.Empty,
             Tool = profile.Tool,
-            BootstrapMode = profile.BootstrapMode,
+            BootstrapMode = ResolveBootstrapMode(endpoint.Provider, profile.BootstrapMode),
             Trusted = profile.Trusted,
-            Priority = profile.Priority,
-            AuthenticationMode = string.IsNullOrWhiteSpace(profile.AuthenticationMode)
-                ? "AzureArtifactsCredentialProvider"
-                : profile.AuthenticationMode.Trim(),
+            Priority = profile.Priority ?? PrivateGalleryDefaults.AzureArtifactsRepositoryPriority,
+            AuthenticationMode = ResolveAuthenticationMode(endpoint.Provider, profile.AuthenticationMode),
             CreatedAtUtc = profile.CreatedAtUtc,
             UpdatedAtUtc = profile.UpdatedAtUtc
         };
+    }
+
+    private static PrivateGalleryProvider NormalizeProvider(PrivateGalleryProvider provider)
+        => provider == PrivateGalleryProvider.AzureArtifacts
+            ? PrivateGalleryProvider.AzureArtifacts
+            : provider;
+
+    private static PrivateGalleryBootstrapMode ResolveBootstrapMode(PrivateGalleryProvider provider, PrivateGalleryBootstrapMode mode)
+        => provider == PrivateGalleryProvider.AzureArtifacts
+            ? mode
+            : provider == PrivateGalleryProvider.JFrog && mode == PrivateGalleryBootstrapMode.JFrogCli
+                ? PrivateGalleryBootstrapMode.JFrogCli
+                : mode == PrivateGalleryBootstrapMode.Auto || mode == PrivateGalleryBootstrapMode.ExistingSession
+                    ? PrivateGalleryBootstrapMode.CredentialPrompt
+                    : mode;
+
+    private static string GetDefaultAuthenticationMode(PrivateGalleryProvider provider)
+        => provider == PrivateGalleryProvider.AzureArtifacts
+            ? "AzureArtifactsCredentialProvider"
+            : "CredentialPrompt";
+
+    private static string ResolveAuthenticationMode(PrivateGalleryProvider provider, string? authenticationMode)
+    {
+        if (string.IsNullOrWhiteSpace(authenticationMode))
+            return GetDefaultAuthenticationMode(provider);
+
+        var normalized = authenticationMode!.Trim();
+        if (provider != PrivateGalleryProvider.AzureArtifacts &&
+            string.Equals(normalized, "AzureArtifactsCredentialProvider", StringComparison.OrdinalIgnoreCase))
+        {
+            return GetDefaultAuthenticationMode(provider);
+        }
+
+        return normalized;
     }
 
     internal static string NormalizeName(string name)

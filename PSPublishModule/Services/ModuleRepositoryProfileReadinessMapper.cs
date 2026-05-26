@@ -15,13 +15,21 @@ internal static class ModuleRepositoryProfileReadinessMapper
     {
         if (profile is null) throw new ArgumentNullException(nameof(profile));
 
-        var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            profile.Provider,
             profile.AzureDevOpsOrganization,
             profile.AzureDevOpsProject,
             profile.AzureArtifactsFeed,
-            profile.RepositoryName);
+            profile.RepositoryName,
+            profile.Repository,
+            profile.RepositoryUri,
+            profile.RepositorySourceUri,
+            profile.RepositoryPublishUri,
+            profile.JFrogBaseUri,
+            profile.JFrogRepository);
 
-        var existingSessionReady = PrivateGalleryVersionPolicy.IsExistingSessionBootstrapReady(status);
+        var existingSessionReady = endpoint.Provider == PrivateGalleryProvider.AzureArtifacts &&
+                                   PrivateGalleryVersionPolicy.IsExistingSessionBootstrapReady(status);
         var credentialPromptReady = PrivateGalleryVersionPolicy.IsCredentialPromptBootstrapReady(status);
         var installPrerequisitesRecommended = PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(
             status,
@@ -33,10 +41,16 @@ internal static class ModuleRepositoryProfileReadinessMapper
             Name = profile.Name,
             ProfileFound = true,
             Provider = profile.Provider,
-            AzureDevOpsOrganization = endpoint.Organization,
-            AzureDevOpsProject = endpoint.Project,
-            AzureArtifactsFeed = endpoint.Feed,
+            AzureDevOpsOrganization = endpoint.AzureDevOpsOrganization ?? string.Empty,
+            AzureDevOpsProject = endpoint.AzureDevOpsProject,
+            AzureArtifactsFeed = endpoint.Repository,
             RepositoryName = endpoint.RepositoryName,
+            Repository = endpoint.Repository,
+            RepositoryUri = endpoint.PSResourceGetUri,
+            RepositorySourceUri = endpoint.PowerShellGetSourceUri,
+            RepositoryPublishUri = endpoint.PowerShellGetPublishUri,
+            JFrogBaseUri = endpoint.JFrogBaseUri ?? string.Empty,
+            JFrogRepository = endpoint.JFrogRepository ?? string.Empty,
             PowerShellGetSourceUri = endpoint.PowerShellGetSourceUri,
             PowerShellGetPublishUri = endpoint.PowerShellGetPublishUri,
             PSResourceGetUri = endpoint.PSResourceGetUri,

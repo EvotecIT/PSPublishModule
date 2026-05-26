@@ -10,18 +10,21 @@ internal sealed class PrivateGalleryService
     private const string MinimumPSResourceGetVersion = "1.1.1";
     private const string MinimumPSResourceGetExistingSessionVersion = "1.2.0";
     private const string CredentialProviderTimeoutMinutesEnvironmentVariable = "POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES";
+    private const string JFrogCliTimeoutMinutesEnvironmentVariable = "POWERFORGE_JFROG_CLI_LOGIN_TIMEOUT_MINUTES";
 
     private readonly IPrivateGalleryHost _host;
+    private readonly IProcessRunner _processRunner;
 
-    public PrivateGalleryService(IPrivateGalleryHost host)
+    public PrivateGalleryService(IPrivateGalleryHost host, IProcessRunner? processRunner = null)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
+        _processRunner = processRunner ?? new ProcessRunner();
     }
 
     public void EnsureProviderSupported(PrivateGalleryProvider provider)
     {
-        if (provider != PrivateGalleryProvider.AzureArtifacts)
-            throw new ArgumentException($"Provider '{provider}' is not supported yet. Supported value: AzureArtifacts.", nameof(provider));
+        if (provider is not (PrivateGalleryProvider.AzureArtifacts or PrivateGalleryProvider.JFrog or PrivateGalleryProvider.NuGet))
+            throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, NuGet.", nameof(provider));
     }
 
     public IReadOnlyList<ModuleDependency> BuildDependencies(IEnumerable<string> names)
@@ -47,7 +50,8 @@ internal sealed class PrivateGalleryService
         string? credentialSecretFilePath,
         bool promptForCredential,
         BootstrapPrerequisiteStatus? prerequisiteStatus = null,
-        bool allowInteractivePrompt = true)
+        bool allowInteractivePrompt = true,
+        PrivateGalleryProvider provider = PrivateGalleryProvider.AzureArtifacts)
     {
         var hasCredentialSecretFile = !string.IsNullOrWhiteSpace(credentialSecretFilePath);
         var hasCredentialSecret = !string.IsNullOrWhiteSpace(credentialSecret);
@@ -67,6 +71,18 @@ internal sealed class PrivateGalleryService
             throw new ArgumentException("BootstrapMode ExistingSession cannot be combined with interactive or explicit credential parameters.", nameof(bootstrapMode));
         }
 
+        if (bootstrapMode == PrivateGalleryBootstrapMode.JFrogCli &&
+            (promptForCredential || hasExplicitCredential))
+        {
+            throw new ArgumentException("BootstrapMode JFrogCli cannot be combined with interactive or explicit credential parameters. Use CredentialPrompt for token/basic authentication.", nameof(bootstrapMode));
+        }
+
+        if (bootstrapMode == PrivateGalleryBootstrapMode.JFrogCli &&
+            provider != PrivateGalleryProvider.JFrog)
+        {
+            throw new ArgumentException("BootstrapMode JFrogCli can only be used with the JFrog private gallery provider.", nameof(bootstrapMode));
+        }
+
         var resolvedSecret = string.Empty;
         if (hasCredentialSecretFile)
         {
@@ -83,7 +99,9 @@ internal sealed class PrivateGalleryService
             var detectedPrerequisites = prerequisiteStatus ?? GetBootstrapPrerequisiteStatus();
             effectiveMode = promptForCredential || hasExplicitCredential
                 ? PrivateGalleryBootstrapMode.CredentialPrompt
-                : PrivateGalleryVersionPolicy.GetRecommendedBootstrapMode(detectedPrerequisites);
+                : provider == PrivateGalleryProvider.AzureArtifacts
+                    ? PrivateGalleryVersionPolicy.GetRecommendedBootstrapMode(detectedPrerequisites)
+                    : PrivateGalleryBootstrapMode.CredentialPrompt;
 
             if (effectiveMode == PrivateGalleryBootstrapMode.Auto)
             {
@@ -100,6 +118,14 @@ internal sealed class PrivateGalleryService
                 credential: null,
                 bootstrapModeUsed: PrivateGalleryBootstrapMode.ExistingSession,
                 credentialSource: PrivateGalleryCredentialSource.None);
+        }
+
+        if (effectiveMode == PrivateGalleryBootstrapMode.JFrogCli)
+        {
+            return new CredentialResolutionResult(
+                credential: null,
+                bootstrapModeUsed: PrivateGalleryBootstrapMode.JFrogCli,
+                credentialSource: PrivateGalleryCredentialSource.JFrogCli);
         }
 
         if (hasExplicitCredential)
@@ -122,7 +148,7 @@ internal sealed class PrivateGalleryService
                 credentialSource: PrivateGalleryCredentialSource.None);
         }
 
-        var promptedCredential = _host.PromptForCredential("Private gallery authentication", $"Enter Azure Artifacts credentials or PAT for '{repositoryName}'.");
+        var promptedCredential = _host.PromptForCredential("Private gallery authentication", $"Enter private gallery credentials or token for '{repositoryName}'.");
         if (promptedCredential is null)
         {
             return new CredentialResolutionResult(
@@ -176,29 +202,46 @@ internal sealed class PrivateGalleryService
         PrivateGalleryCredentialSource credentialSource,
         RepositoryCredential? credential,
         BootstrapPrerequisiteStatus prerequisiteStatus,
-        string shouldProcessAction)
+        string shouldProcessAction,
+        PrivateGalleryProvider provider = PrivateGalleryProvider.AzureArtifacts,
+        string? repository = null,
+        string? repositoryUri = null,
+        string? repositorySourceUri = null,
+        string? repositoryPublishUri = null,
+        string? jfrogBaseUri = null,
+        string? jfrogRepository = null)
     {
-        var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            provider,
             azureDevOpsOrganization,
             azureDevOpsProject,
             azureArtifactsFeed,
-            repositoryName);
+            repositoryName,
+            repository,
+            repositoryUri,
+            repositorySourceUri,
+            repositoryPublishUri,
+            jfrogBaseUri,
+            jfrogRepository);
 
         var effectiveTool = tool;
+        var effectivePriority = priority ?? PrivateGalleryDefaults.AzureArtifactsRepositoryPriority;
         var result = new ModuleRepositoryRegistrationResult
         {
             RepositoryName = endpoint.RepositoryName,
-            Provider = "AzureArtifacts",
+            Provider = endpoint.Provider == PrivateGalleryProvider.JFrog ? "JFrog" :
+                endpoint.Provider == PrivateGalleryProvider.NuGet ? "NuGet" : "AzureArtifacts",
             BootstrapModeRequested = bootstrapModeRequested,
             BootstrapModeUsed = bootstrapModeUsed,
             CredentialSource = credentialSource,
-            AzureDevOpsOrganization = endpoint.Organization,
-            AzureDevOpsProject = endpoint.Project,
-            AzureArtifactsFeed = endpoint.Feed,
+            AzureDevOpsOrganization = endpoint.AzureDevOpsOrganization ?? string.Empty,
+            AzureDevOpsProject = endpoint.AzureDevOpsProject,
+            AzureArtifactsFeed = endpoint.Repository,
             PowerShellGetSourceUri = endpoint.PowerShellGetSourceUri,
             PowerShellGetPublishUri = endpoint.PowerShellGetPublishUri,
             PSResourceGetUri = endpoint.PSResourceGetUri,
             Trusted = trusted,
+            Priority = effectivePriority,
             CredentialUsed = credential is not null,
             ToolRequested = tool,
             Tool = tool,
@@ -255,7 +298,7 @@ internal sealed class PrivateGalleryService
                     result.RepositoryName,
                     endpoint.PSResourceGetUri,
                     trusted,
-                    priority,
+                    effectivePriority,
                     apiVersion: RepositoryApiVersion.V3,
                     timeout: TimeSpan.FromMinutes(2));
 
@@ -263,7 +306,7 @@ internal sealed class PrivateGalleryService
                 result.PSResourceGetCreated = created;
                 messages.Add(created
                     ? $"Registered PSResourceGet repository '{result.RepositoryName}'."
-                    : $"PSResourceGet repository '{result.RepositoryName}' already existed and was refreshed.");
+                    : $"PSResourceGet repository '{result.RepositoryName}' already existed and was verified.");
             }
             catch (PowerShellToolNotAvailableException ex)
             {
@@ -293,7 +336,7 @@ internal sealed class PrivateGalleryService
                 result.PowerShellGetCreated = created;
                 messages.Add(created
                     ? $"Registered PowerShellGet repository '{result.RepositoryName}'."
-                    : $"PowerShellGet repository '{result.RepositoryName}' already existed and was refreshed.");
+                    : $"PowerShellGet repository '{result.RepositoryName}' already existed and was verified.");
             }
             catch (PowerShellToolNotAvailableException ex)
             {
@@ -546,7 +589,7 @@ internal sealed class PrivateGalleryService
 
         const string probeName = "__PowerForgePrivateGalleryConnectionProbe__";
         var runner = new PowerShellRunner();
-        var logger = new PrivateGalleryHostLogger(_host);
+        var logger = new NullLogger();
         var tool = PrivateGalleryVersionPolicy.SelectAccessProbeTool(registration, credential);
 
         try
@@ -587,6 +630,44 @@ internal sealed class PrivateGalleryService
             throw new ArgumentNullException(nameof(registration));
 
         var probe = ProbeRepositoryAccess(registration, credential);
+        if (!probe.Succeeded &&
+            credential is null &&
+            allowInteractiveCredentialProviderPrime &&
+            string.Equals(registration.Provider, "JFrog", StringComparison.OrdinalIgnoreCase) &&
+            registration.BootstrapModeUsed == PrivateGalleryBootstrapMode.JFrogCli &&
+            registration.PSResourceGetRegistered)
+        {
+            var login = RunJFrogCliLogin(registration);
+            registration.JFrogCliLoginAttempted = login.Attempted;
+            registration.JFrogCliLoginSucceeded = login.Succeeded;
+            registration.JFrogCliLoginSkipped = login.Skipped;
+            registration.JFrogCliPath = login.ExecutablePath;
+            registration.JFrogCliLoginMessage = login.Message;
+
+            if (!login.Succeeded)
+            {
+                var loginMessage = string.IsNullOrWhiteSpace(login.Message)
+                    ? "JFrog CLI browser login did not complete successfully."
+                    : login.Message;
+                return new RepositoryAccessProbeResult(
+                    false,
+                    probe.Tool,
+                    $"Repository access probe failed before/after JFrog CLI login. {loginMessage} Original probe: {probe.Message}".Trim());
+            }
+
+            var jfrogRetry = ProbeRepositoryAccess(registration, credential);
+            if (jfrogRetry.Succeeded)
+                return jfrogRetry;
+
+            var jfrogMessage = string.IsNullOrWhiteSpace(jfrogRetry.Message)
+                ? "Repository access probe still failed after JFrog CLI browser login."
+                : $"Repository access probe still failed after JFrog CLI browser login. {jfrogRetry.Message}";
+            return new RepositoryAccessProbeResult(
+                false,
+                jfrogRetry.Tool,
+                jfrogMessage + " This means JFrog CLI SSO succeeded, but PSResourceGet/PowerShellGet did not consume the JFrog CLI session. Use CredentialPrompt/token authentication or configure a NuGet-compatible credential bridge.");
+        }
+
         if (probe.Succeeded ||
             credential is not null ||
             !allowInteractiveCredentialProviderPrime ||
@@ -745,6 +826,89 @@ internal sealed class PrivateGalleryService
                 text.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
+    internal JFrogCliLoginResult RunJFrogCliLogin(
+        ModuleRepositoryRegistrationResult registration,
+        TimeSpan? timeout = null)
+    {
+        if (registration is null)
+            throw new ArgumentNullException(nameof(registration));
+
+        if (!string.Equals(registration.Provider, "JFrog", StringComparison.OrdinalIgnoreCase))
+        {
+            return new JFrogCliLoginResult(
+                attempted: false,
+                succeeded: false,
+                skipped: true,
+                executablePath: null,
+                message: "JFrog CLI login is only used for JFrog private galleries.");
+        }
+
+        if (IsHeadlessAutomation())
+        {
+            return new JFrogCliLoginResult(
+                attempted: false,
+                succeeded: false,
+                skipped: true,
+                executablePath: null,
+                message: "JFrog CLI browser login was skipped because the current process appears to be CI/headless.");
+        }
+
+        var executable = ResolveOnPath(Path.DirectorySeparatorChar == '\\' ? "jf.exe" : "jf") ??
+                         ResolveOnPath("jf");
+        if (string.IsNullOrWhiteSpace(executable))
+        {
+            return new JFrogCliLoginResult(
+                attempted: false,
+                succeeded: false,
+                skipped: true,
+                executablePath: null,
+                message: "JFrog CLI executable 'jf' was not found on PATH.");
+        }
+
+        if (!_host.ShouldProcess(registration.RepositoryName, "Run JFrog CLI browser login"))
+        {
+            return new JFrogCliLoginResult(
+                attempted: false,
+                succeeded: false,
+                skipped: true,
+                executablePath: executable,
+                message: "JFrog CLI browser login was skipped by ShouldProcess.");
+        }
+
+        _host.WriteWarning("PSPublishModule will run 'jf login'. Complete the JFrog browser/SSO flow, then PSPublishModule will retry the repository probe to see whether PSResourceGet can use that session.");
+        var effectiveTimeout = timeout ?? GetJFrogCliLoginTimeout();
+        var result = _processRunner.RunAsync(
+            new ProcessRunRequest(
+                executable!,
+                Environment.CurrentDirectory,
+                new[] { "login" },
+                effectiveTimeout,
+                captureOutput: true,
+                captureError: true)).GetAwaiter().GetResult();
+
+        var message = BuildProcessMessage(result);
+        if (result.Succeeded)
+        {
+            return new JFrogCliLoginResult(
+                attempted: true,
+                succeeded: true,
+                skipped: false,
+                executable,
+                string.IsNullOrWhiteSpace(message)
+                    ? "JFrog CLI browser login completed successfully."
+                    : message);
+        }
+
+        return new JFrogCliLoginResult(
+            attempted: true,
+            succeeded: false,
+            skipped: false,
+            executable,
+            string.IsNullOrWhiteSpace(message)
+                ? $"JFrog CLI browser login failed with exit code {result.ExitCode}."
+                : message);
+    }
+
     public void WriteRegistrationSummary(ModuleRepositoryRegistrationResult result)
     {
         if (result is null)
@@ -797,6 +961,13 @@ internal sealed class PrivateGalleryService
             _host.WriteWarning(result.CredentialProviderSessionPrimeMessage ?? "Azure Artifacts Credential Provider session priming did not succeed.");
         else if (result.CredentialProviderSessionPrimeSkipped && !string.IsNullOrWhiteSpace(result.CredentialProviderSessionPrimeMessage))
             _host.WriteVerbose(result.CredentialProviderSessionPrimeMessage!);
+
+        if (result.JFrogCliLoginAttempted && result.JFrogCliLoginSucceeded)
+            _host.WriteVerbose(result.JFrogCliLoginMessage ?? "JFrog CLI browser login succeeded.");
+        else if (result.JFrogCliLoginAttempted)
+            _host.WriteWarning(result.JFrogCliLoginMessage ?? "JFrog CLI browser login did not succeed.");
+        else if (result.JFrogCliLoginSkipped && !string.IsNullOrWhiteSpace(result.JFrogCliLoginMessage))
+            _host.WriteVerbose(result.JFrogCliLoginMessage!);
 
         _host.WriteVerbose($"Bootstrap mode used: {result.BootstrapModeUsed}; credential source: {result.CredentialSource}.");
         _host.WriteVerbose($"Repository registration requested {result.ToolRequested}; successful path: {result.ToolUsed}.");
@@ -906,6 +1077,53 @@ internal sealed class PrivateGalleryService
             return TimeSpan.FromMinutes(Math.Min(minutes, 1440));
 
         return TimeSpan.FromMinutes(10);
+    }
+
+    private static TimeSpan GetJFrogCliLoginTimeout()
+    {
+        var raw = Environment.GetEnvironmentVariable(JFrogCliTimeoutMinutesEnvironmentVariable);
+        if (int.TryParse(raw, out var minutes) && minutes > 0)
+            return TimeSpan.FromMinutes(Math.Min(minutes, 1440));
+
+        return TimeSpan.FromMinutes(7);
+    }
+
+    private static string? ResolveOnPath(string fileName)
+    {
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var directory in path.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(directory, fileName);
+                if (File.Exists(candidate))
+                    return Path.GetFullPath(candidate);
+            }
+            catch
+            {
+                // Ignore malformed PATH segments.
+            }
+        }
+
+        return File.Exists(fileName) ? Path.GetFullPath(fileName) : null;
+    }
+
+    private static string BuildProcessMessage(ProcessRunResult result)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(result.StdOut))
+            parts.Add(result.StdOut.Trim());
+        if (!string.IsNullOrWhiteSpace(result.StdErr))
+            parts.Add(result.StdErr.Trim());
+        if (result.TimedOut)
+            parts.Add("Process timed out.");
+        if (!result.Succeeded)
+            parts.Add($"ExitCode={result.ExitCode}.");
+
+        return string.Join(" ", parts)
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Trim();
     }
 
     private static string? SelectCredentialProviderPath(IEnumerable<string>? paths)

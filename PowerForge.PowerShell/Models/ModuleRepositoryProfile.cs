@@ -9,7 +9,13 @@ internal sealed class ModuleRepositoryProfile
     public string AzureDevOpsOrganization { get; set; } = string.Empty;
     public string? AzureDevOpsProject { get; set; }
     public string AzureArtifactsFeed { get; set; } = string.Empty;
+    public string Repository { get; set; } = string.Empty;
     public string RepositoryName { get; set; } = string.Empty;
+    public string RepositoryUri { get; set; } = string.Empty;
+    public string RepositorySourceUri { get; set; } = string.Empty;
+    public string RepositoryPublishUri { get; set; } = string.Empty;
+    public string JFrogBaseUri { get; set; } = string.Empty;
+    public string JFrogRepository { get; set; } = string.Empty;
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.PSResourceGet;
     public PrivateGalleryBootstrapMode BootstrapMode { get; set; } = PrivateGalleryBootstrapMode.ExistingSession;
     public bool Trusted { get; set; } = true;

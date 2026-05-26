@@ -49,7 +49,13 @@ public enum RepositoryRegistrationTool
 public enum PrivateGalleryProvider
 {
     /// <summary>Azure Artifacts / Azure DevOps private feed.</summary>
-    AzureArtifacts
+    AzureArtifacts = 0,
+    /// <summary>Alias for Azure Artifacts / Azure DevOps private feed.</summary>
+    Azure = 0,
+    /// <summary>JFrog Artifactory NuGet/PowerShell repository.</summary>
+    JFrog = 1,
+    /// <summary>Generic NuGet-backed PowerShell repository.</summary>
+    NuGet = 2
 }
 
 /// <summary>
@@ -68,7 +74,11 @@ public enum PrivateGalleryBootstrapMode
     /// <summary>
     /// Use credentials supplied to the cmdlet or prompt interactively for them.
     /// </summary>
-    CredentialPrompt
+    CredentialPrompt,
+    /// <summary>
+    /// Use JFrog CLI browser login before probing a JFrog private gallery. This validates whether the local JFrog CLI session can bridge to NuGet/PSResourceGet.
+    /// </summary>
+    JFrogCli
 }
 
 /// <summary>
@@ -81,7 +91,9 @@ public enum PrivateGalleryCredentialSource
     /// <summary>A credential or token was supplied directly to the cmdlet.</summary>
     Supplied,
     /// <summary>A credential was collected by prompting the user.</summary>
-    Prompt
+    Prompt,
+    /// <summary>An external JFrog CLI browser-login session was used.</summary>
+    JFrogCli
 }
 
 /// <summary>

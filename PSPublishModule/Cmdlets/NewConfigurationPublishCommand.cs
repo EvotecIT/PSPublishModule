@@ -59,10 +59,12 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
 
     /// <summary>API key to be used for publishing in clear text in a file.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "Profile")]
     public string FilePath { get; set; } = string.Empty;
 
     /// <summary>API key to be used for publishing in clear text.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "Profile")]
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>GitHub username (required for GitHub publishing).</summary>
@@ -131,18 +133,21 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
     public string? RepositoryCredentialUserName { get; set; }
 
     /// <summary>Repository credential secret (password/token) in clear text.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
     public string? RepositoryCredentialSecret { get; set; }
 
     /// <summary>Repository credential secret (password/token) in a clear-text file.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
     public string? RepositoryCredentialSecretFilePath { get; set; }
 
     /// <summary>Enable publishing to the chosen destination.</summary>
@@ -200,15 +205,14 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         var repositoryTrusted = RepositoryTrusted;
         var repositoryPriority = RepositoryPriority;
         var repositoryApiVersion = RepositoryApiVersion;
+        var repositoryUri = RepositoryUri;
+        var repositorySourceUri = RepositorySourceUri;
+        var repositoryPublishUri = RepositoryPublishUri;
 
         if (ParameterSetName == "Profile")
         {
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
-            parameterSetName = "AzureArtifacts";
             type = PowerForge.PublishDestination.PowerShellGallery;
-            azureDevOpsOrganization = profile.AzureDevOpsOrganization;
-            azureDevOpsProject = profile.AzureDevOpsProject;
-            azureArtifactsFeed = profile.AzureArtifactsFeed;
             repositoryName = profile.RepositoryName;
             tool = profile.Tool switch
             {
@@ -219,6 +223,34 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             repositoryTrusted = profile.Trusted;
             repositoryPriority = profile.Priority;
             repositoryApiVersion = PowerForge.RepositoryApiVersion.V3;
+
+            if (profile.Provider == PowerForge.PrivateGalleryProvider.AzureArtifacts)
+            {
+                parameterSetName = "AzureArtifacts";
+                azureDevOpsOrganization = profile.AzureDevOpsOrganization;
+                azureDevOpsProject = profile.AzureDevOpsProject;
+                azureArtifactsFeed = profile.AzureArtifactsFeed;
+            }
+            else
+            {
+                var apiKeySpecified = MyInvocation.BoundParameters.ContainsKey(nameof(ApiKey)) && !string.IsNullOrWhiteSpace(ApiKey);
+                var filePathSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(FilePath)) && !string.IsNullOrWhiteSpace(FilePath);
+                var repositoryCredentialSpecified =
+                    !string.IsNullOrWhiteSpace(RepositoryCredentialUserName) &&
+                    (!string.IsNullOrWhiteSpace(RepositoryCredentialSecret) ||
+                     !string.IsNullOrWhiteSpace(RepositoryCredentialSecretFilePath));
+
+                if (apiKeySpecified && filePathSpecified)
+                    throw new ArgumentException("Specify either ApiKey or FilePath for profile-based private gallery publishing, not both.", nameof(FilePath));
+
+                if (Enabled.IsPresent && !apiKeySpecified && !filePathSpecified && !repositoryCredentialSpecified)
+                    throw new ArgumentException("ApiKey, FilePath, or repository credentials are required when enabling publish configuration from a non-Azure private gallery profile.", nameof(ProfileName));
+
+                parameterSetName = filePathSpecified ? "ApiFromFile" : "ApiKey";
+                repositoryUri = profile.RepositoryUri;
+                repositorySourceUri = profile.RepositorySourceUri;
+                repositoryPublishUri = profile.RepositoryPublishUri;
+            }
         }
 
         var settings = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
@@ -233,9 +265,9 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             UserName = UserName,
             RepositoryName = repositoryName,
             Tool = tool,
-            RepositoryUri = RepositoryUri,
-            RepositorySourceUri = RepositorySourceUri,
-            RepositoryPublishUri = RepositoryPublishUri,
+            RepositoryUri = repositoryUri,
+            RepositorySourceUri = repositorySourceUri,
+            RepositoryPublishUri = repositoryPublishUri,
             RepositoryTrusted = repositoryTrusted,
             RepositoryPriority = repositoryPriority,
             RepositoryApiVersion = repositoryApiVersion,

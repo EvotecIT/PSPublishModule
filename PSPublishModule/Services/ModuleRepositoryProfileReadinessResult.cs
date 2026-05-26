@@ -26,9 +26,11 @@ public sealed class ModuleRepositoryProfileReadinessResult
             {
                 PrivateGalleryBootstrapMode.ExistingSession => ExistingSessionBootstrapReady,
                 PrivateGalleryBootstrapMode.CredentialPrompt => PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion,
+                PrivateGalleryBootstrapMode.JFrogCli => PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion,
                 _ => ExistingSessionBootstrapReady || (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion)
             };
-            var powerShellGetReady = BootstrapMode == PrivateGalleryBootstrapMode.ExistingSession
+            var powerShellGetReady = BootstrapMode == PrivateGalleryBootstrapMode.ExistingSession ||
+                                     BootstrapMode == PrivateGalleryBootstrapMode.JFrogCli
                 ? false
                 : PowerShellGetAvailable;
 
@@ -56,6 +58,24 @@ public sealed class ModuleRepositoryProfileReadinessResult
 
     /// <summary>Local PowerShell repository name.</summary>
     public string RepositoryName { get; set; } = string.Empty;
+
+    /// <summary>Provider repository/feed id.</summary>
+    public string Repository { get; set; } = string.Empty;
+
+    /// <summary>PSResourceGet v3 repository URI.</summary>
+    public string RepositoryUri { get; set; } = string.Empty;
+
+    /// <summary>PowerShellGet source URI.</summary>
+    public string RepositorySourceUri { get; set; } = string.Empty;
+
+    /// <summary>PowerShellGet publish URI.</summary>
+    public string RepositoryPublishUri { get; set; } = string.Empty;
+
+    /// <summary>JFrog Artifactory base URI, when applicable.</summary>
+    public string JFrogBaseUri { get; set; } = string.Empty;
+
+    /// <summary>JFrog NuGet repository key, when applicable.</summary>
+    public string JFrogRepository { get; set; } = string.Empty;
 
     /// <summary>Resolved NuGet v2 source URI used by PowerShellGet.</summary>
     public string PowerShellGetSourceUri { get; set; } = string.Empty;
