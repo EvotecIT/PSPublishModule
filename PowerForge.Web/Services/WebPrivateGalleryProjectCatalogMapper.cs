@@ -116,8 +116,7 @@ public static class WebPrivateGalleryProjectCatalogMapper
         return EqualsJsonString(privateGallery, "provider", document.Provider.ToString()) &&
                EqualsJsonString(privateGallery, "organization", document.Feed.Organization) &&
                EqualsJsonString(privateGallery, "project", document.Feed.Project) &&
-               EqualsJsonString(privateGallery, "feed", document.Feed.Name) &&
-               EqualsJsonString(privateGallery, "repositoryName", document.Feed.RepositoryName);
+               EqualsJsonString(privateGallery, "feed", document.Feed.Name);
     }
 
     private static bool EqualsJsonString(JsonObject json, string name, string? expected)

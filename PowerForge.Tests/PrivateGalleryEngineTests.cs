@@ -662,7 +662,7 @@ public sealed class PrivateGalleryEngineTests
                         "organization": "evotecpl",
                         "project": "PowerShellGallery",
                         "feed": "PowerShellGalleryFeed",
-                        "repositoryName": "EvotecPowerShellGallery"
+                        "repositoryName": "OldGalleryAlias"
                       }
                     },
                     {
@@ -672,8 +672,7 @@ public sealed class PrivateGalleryEngineTests
                         "provider": "AzureArtifacts",
                         "organization": "evotecpl",
                         "project": "PowerShellGallery",
-                        "feed": "PowerShellGalleryFeed",
-                        "repositoryName": "EvotecPowerShellGallery"
+                        "feed": "PowerShellGalleryFeed"
                       }
                     },
                     { "slug": "manual", "name": "Manual" }
