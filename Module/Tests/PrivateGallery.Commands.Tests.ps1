@@ -985,17 +985,24 @@ Describe 'Private gallery command metadata' {
         $publish.Configuration.Repository.Credential | Should -BeNullOrEmpty
     }
 
-    It 'uses saved JFrog profiles for publish configuration' {
+    It 'uses saved JFrog profiles with repository credentials for publish configuration' {
         Set-ModuleRepositoryProfile -Name 'JFrogCompany' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
 
-        $publish = New-ConfigurationPublish -ProfileName 'JFrogCompany' -Enabled
+        $publish = New-ConfigurationPublish -ProfileName 'JFrogCompany' -RepositoryCredentialUserName 'publisher' -RepositoryCredentialSecret 'token' -Enabled
 
         $publish.Configuration.RepositoryName | Should -Be 'powershell-virtual'
         $publish.Configuration.Tool | Should -Be ([PowerForge.PublishTool]::PSResourceGet)
         $publish.Configuration.Repository.Uri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'
         $publish.Configuration.Repository.SourceUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
         $publish.Configuration.Repository.PublishUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
-        $publish.Configuration.Repository.Credential | Should -BeNullOrEmpty
+        $publish.Configuration.Repository.Credential.UserName | Should -Be 'publisher'
+        $publish.Configuration.Repository.Credential.Secret | Should -Be 'token'
+    }
+
+    It 'requires publish auth when enabling saved JFrog profiles for publish configuration' {
+        Set-ModuleRepositoryProfile -Name 'JFrogCompanyNoAuth' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
+
+        { New-ConfigurationPublish -ProfileName 'JFrogCompanyNoAuth' -Enabled } | Should -Throw '*ApiKey, FilePath, or repository credentials are required*'
     }
 
     It 'uses saved profiles for Azure Artifacts NuGet package publishing' {

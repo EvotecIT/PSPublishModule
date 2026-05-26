@@ -107,11 +107,47 @@ public sealed class PrivateGalleryServiceTests
             credentialUserName: null,
             credentialSecret: null,
             credentialSecretFilePath: null,
-            promptForCredential: false);
+            promptForCredential: false,
+            provider: PrivateGalleryProvider.JFrog);
 
         Assert.Null(result.Credential);
         Assert.Equal(PrivateGalleryBootstrapMode.JFrogCli, result.BootstrapModeUsed);
         Assert.Equal(PrivateGalleryCredentialSource.JFrogCli, result.CredentialSource);
+    }
+
+    [Theory]
+    [InlineData(PrivateGalleryProvider.AzureArtifacts)]
+    [InlineData(PrivateGalleryProvider.NuGet)]
+    public void ResolveCredential_RejectsJFrogCliModeForNonJFrogProviders(PrivateGalleryProvider provider)
+    {
+        var service = new PrivateGalleryService(new FakePrivateGalleryHost());
+
+        var ex = Assert.Throws<ArgumentException>(() => service.ResolveCredential(
+            repositoryName: "Company",
+            bootstrapMode: PrivateGalleryBootstrapMode.JFrogCli,
+            credentialUserName: null,
+            credentialSecret: null,
+            credentialSecretFilePath: null,
+            promptForCredential: false,
+            provider: provider));
+
+        Assert.Contains("JFrog", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RegistrationResult_JFrogCliModeDoesNotTreatPowerShellGetAsReady()
+    {
+        var result = new ModuleRepositoryRegistrationResult
+        {
+            Provider = "JFrog",
+            BootstrapModeUsed = PrivateGalleryBootstrapMode.JFrogCli,
+            PowerShellGetRegistered = true,
+            PSResourceGetRegistered = false
+        };
+
+        Assert.False(result.InstallModuleReady);
+        Assert.Empty(result.ReadyCommands);
+        Assert.Equal(string.Empty, result.PreferredInstallCommand);
     }
 
     [Fact]

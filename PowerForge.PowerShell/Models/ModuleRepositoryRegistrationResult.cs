@@ -105,7 +105,7 @@ internal sealed class ModuleRepositoryRegistrationResult
             : CredentialPromptBootstrapReady ? PrivateGalleryBootstrapMode.CredentialPrompt
             : PrivateGalleryBootstrapMode.Auto;
     public bool InstallPSResourceReady => PSResourceGetRegistered && (IsMicrosoftArtifactRegistry || IsCredentialBasedPrivateGallery || ExistingSessionBootstrapReady);
-    public bool InstallModuleReady => PowerShellGetRegistered;
+    public bool InstallModuleReady => PowerShellGetRegistered && BootstrapModeUsed != PrivateGalleryBootstrapMode.JFrogCli;
     public string[] ReadyCommands
     {
         get

@@ -222,7 +222,7 @@ public sealed class ModuleRepositoryRegistrationResult
     public bool InstallPSResourceReady => PSResourceGetRegistered && (IsMicrosoftArtifactRegistry || IsCredentialBasedPrivateGallery || ExistingSessionBootstrapReady);
 
     /// <summary>Whether native Install-Module is ready to use with this repository.</summary>
-    public bool InstallModuleReady => PowerShellGetRegistered;
+    public bool InstallModuleReady => PowerShellGetRegistered && BootstrapModeUsed != PrivateGalleryBootstrapMode.JFrogCli;
 
     /// <summary>Names of the native commands that are ready for this repository.</summary>
     public string[] ReadyCommands

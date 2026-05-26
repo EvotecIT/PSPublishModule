@@ -77,6 +77,12 @@ internal sealed class PrivateGalleryService
             throw new ArgumentException("BootstrapMode JFrogCli cannot be combined with interactive or explicit credential parameters. Use CredentialPrompt for token/basic authentication.", nameof(bootstrapMode));
         }
 
+        if (bootstrapMode == PrivateGalleryBootstrapMode.JFrogCli &&
+            provider != PrivateGalleryProvider.JFrog)
+        {
+            throw new ArgumentException("BootstrapMode JFrogCli can only be used with the JFrog private gallery provider.", nameof(bootstrapMode));
+        }
+
         var resolvedSecret = string.Empty;
         if (hasCredentialSecretFile)
         {

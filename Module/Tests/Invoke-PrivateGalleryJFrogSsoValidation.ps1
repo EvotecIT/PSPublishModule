@@ -342,7 +342,7 @@ if ($RunJFrogCliLogin.IsPresent) {
         }
     } else {
         try {
-            $login = Invoke-CapturedNativeCommand -FilePath $jfCommand.Source -ArgumentList @('login', $normalizedBaseUri)
+            $login = Invoke-CapturedNativeCommand -FilePath $jfCommand.Source -ArgumentList @('login')
             $succeeded = $login.ExitCode -eq 0
             if (-not $succeeded) {
                 $errors.Add("JFrogCliLogin: jf login returned exit code $($login.ExitCode).")
