@@ -151,6 +151,28 @@ public sealed class PrivateGalleryServiceTests
     }
 
     [Fact]
+    public void RegistrationResult_PrivateGalleryBootstrapCommandIncludesPowerShellGetUris()
+    {
+        var result = new ModuleRepositoryRegistrationResult
+        {
+            Provider = "JFrog",
+            AzureArtifactsFeed = "powershell-virtual",
+            RepositoryName = "JFrogCompany",
+            PSResourceGetUri = "https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json",
+            PowerShellGetSourceUri = "https://company.jfrog.io/artifactory/api/nuget/powershell-virtual",
+            PowerShellGetPublishUri = "https://company.jfrog.io/artifactory/api/nuget/powershell-virtual",
+            PSResourceGetAvailable = true,
+            PSResourceGetMeetsMinimumVersion = true,
+            BootstrapModeRequested = PrivateGalleryBootstrapMode.CredentialPrompt,
+            BootstrapModeUsed = PrivateGalleryBootstrapMode.CredentialPrompt
+        };
+
+        Assert.Contains("-RepositoryUri 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'", result.RecommendedBootstrapCommand, StringComparison.Ordinal);
+        Assert.Contains("-RepositorySourceUri 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'", result.RecommendedBootstrapCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("-RepositoryPublishUri", result.RecommendedBootstrapCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ResolveCredential_AutoUsesCredentialPromptForNonAzureProviders()
     {
         var service = new PrivateGalleryService(new FakePrivateGalleryHost());

@@ -294,6 +294,15 @@ public sealed class ModuleRepositoryRegistrationResult
                 if (!string.IsNullOrWhiteSpace(PSResourceGetUri))
                     privateGalleryParts.Add($"-RepositoryUri '{PSResourceGetUri}'");
 
+                if (!string.IsNullOrWhiteSpace(PowerShellGetSourceUri) &&
+                    !string.Equals(PowerShellGetSourceUri, PSResourceGetUri, StringComparison.OrdinalIgnoreCase))
+                    privateGalleryParts.Add($"-RepositorySourceUri '{PowerShellGetSourceUri}'");
+
+                if (!string.IsNullOrWhiteSpace(PowerShellGetPublishUri) &&
+                    !string.Equals(PowerShellGetPublishUri, PSResourceGetUri, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(PowerShellGetPublishUri, PowerShellGetSourceUri, StringComparison.OrdinalIgnoreCase))
+                    privateGalleryParts.Add($"-RepositoryPublishUri '{PowerShellGetPublishUri}'");
+
                 if (!string.IsNullOrWhiteSpace(RepositoryName) &&
                     !string.Equals(RepositoryName, AzureArtifactsFeed, StringComparison.OrdinalIgnoreCase))
                 {

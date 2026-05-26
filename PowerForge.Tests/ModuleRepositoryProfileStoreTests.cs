@@ -32,6 +32,10 @@ public sealed class ModuleRepositoryProfileStoreTests
             Assert.Equal(PrivateGalleryBootstrapMode.ExistingSession, saved.BootstrapMode);
             Assert.Equal("AzureArtifactsCredentialProvider", saved.AuthenticationMode);
             Assert.True(File.Exists(path));
+
+            var json = File.ReadAllText(path);
+            Assert.Contains("\"Provider\": \"AzureArtifacts\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Provider\": \"Azure\"", json, StringComparison.Ordinal);
         }
         finally
         {

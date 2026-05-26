@@ -49,9 +49,9 @@ public enum RepositoryRegistrationTool
 public enum PrivateGalleryProvider
 {
     /// <summary>Azure Artifacts / Azure DevOps private feed.</summary>
-    Azure = 0,
-    /// <summary>Azure Artifacts / Azure DevOps private feed.</summary>
     AzureArtifacts = 0,
+    /// <summary>Alias for Azure Artifacts / Azure DevOps private feed.</summary>
+    Azure = 0,
     /// <summary>JFrog Artifactory NuGet/PowerShell repository.</summary>
     JFrog = 1,
     /// <summary>Generic NuGet-backed PowerShell repository.</summary>

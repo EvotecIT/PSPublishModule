@@ -1102,6 +1102,25 @@ Describe 'Private gallery command metadata' {
         $result.PrerequisiteInstallMessages | Should -Contain 'PSResourceGet prerequisite handled via PowerShellGet (Installed).'
     }
 
+    It 'includes PowerShellGet v2 URIs in private gallery bootstrap recommendations' {
+        $type = $script:PrivateGalleryTestAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
+        $result = [System.Activator]::CreateInstance($type)
+        $result.Provider = 'JFrog'
+        $result.RepositoryName = 'JFrogCompany'
+        $result.AzureArtifactsFeed = 'powershell-virtual'
+        $result.PSResourceGetUri = 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'
+        $result.PowerShellGetSourceUri = 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
+        $result.PowerShellGetPublishUri = 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
+        $result.PSResourceGetAvailable = $true
+        $result.PSResourceGetMeetsMinimumVersion = $true
+        $result.BootstrapModeRequested = [PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt
+        $result.BootstrapModeUsed = [PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt
+
+        $result.RecommendedBootstrapCommand | Should -Match "-RepositoryUri 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'"
+        $result.RecommendedBootstrapCommand | Should -Match "-RepositorySourceUri 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'"
+        $result.RecommendedBootstrapCommand | Should -Not -Match '-RepositoryPublishUri'
+    }
+
     It 'recommends prerequisite installation when bootstrap dependencies are missing or outdated' {
         $type = $script:PrivateGalleryTestAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
         $result = [System.Activator]::CreateInstance($type)
