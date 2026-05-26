@@ -1023,6 +1023,19 @@ Describe 'Private gallery command metadata' {
         $result.Failed | Should -BeNullOrEmpty
     }
 
+    It 'requires an API key when publishing packages to saved JFrog profiles' {
+        Set-ModuleRepositoryProfile -Name 'JFrogPackagePublish' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
+        $packageRoot = Join-Path $script:PrivateGalleryProfileRoot 'jfrog-packages'
+        New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+        $packagePath = Join-Path $packageRoot 'Company.Tools.1.0.0.nupkg'
+        Set-Content -LiteralPath $packagePath -Value 'placeholder' -NoNewline
+
+        $result = Publish-NugetPackage -Path $packageRoot -ProfileName 'JFrogPackagePublish' -SkipDuplicate -WhatIf
+
+        $result.Success | Should -BeFalse
+        $result.ErrorMessage | Should -BeLike '*ApiKey is required*JFrog*'
+    }
+
     It 'reports readiness information on the registration result type' {
         $type = $script:PrivateGalleryTestAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
         $result = [System.Activator]::CreateInstance($type)

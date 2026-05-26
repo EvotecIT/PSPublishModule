@@ -117,7 +117,13 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                 repositoryName = endpoint.RepositoryName;
                 profileName = profile.Name;
                 if (string.IsNullOrWhiteSpace(apiKey) && endpoint.Provider == PrivateGalleryProvider.AzureArtifacts)
+                {
                     apiKey = AzureArtifactsApiKeyPlaceholder;
+                }
+                else if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    throw new ArgumentException($"ApiKey is required when publishing NuGet packages to a {endpoint.Provider} profile.", nameof(ApiKey));
+                }
             }
 
             var logger = new CmdletLogger(this, MyInvocation?.BoundParameters.ContainsKey("Verbose") == true);
