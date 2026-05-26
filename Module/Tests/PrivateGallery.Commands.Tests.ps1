@@ -584,6 +584,7 @@ Describe 'Private gallery command metadata' {
         $connect.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $connect.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $connect.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
+        $connect.Parameters['Repository'].ParameterSets.Keys | Should -Contain 'MicrosoftArtifactRegistry'
         $connect.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
         $connect.ParameterSets.Name | Should -Contain 'Profile'
 
@@ -596,11 +597,15 @@ Describe 'Private gallery command metadata' {
         $register.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $register.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
         $register.Parameters.Keys | Should -Contain 'Repository'
+        $register.Parameters['Repository'].ParameterSets.Keys | Should -Contain 'MicrosoftArtifactRegistry'
         $register.Parameters.Keys | Should -Contain 'RepositoryUri'
         $register.Parameters.Keys | Should -Contain 'JFrogBaseUri'
         $register.Parameters.Keys | Should -Contain 'JFrogRepository'
         $register.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
         $register.ParameterSets.Name | Should -Contain 'Profile'
+
+        $updateRepository = $module.ExportedCmdlets['Update-ModuleRepository']
+        $updateRepository.Parameters['Repository'].ParameterSets.Keys | Should -Contain 'MicrosoftArtifactRegistry'
 
         $install = $module.ExportedCmdlets['Install-PrivateModule']
         $install.Parameters['Name'].Aliases | Should -Contain 'ModuleName'

@@ -62,7 +62,7 @@ function Normalize-RepositoryUri {
   param([object]$Value)
 
   if ($null -eq $Value) { return '' }
-  return ([string]$Value).Trim().TrimEnd('/').ToLowerInvariant()
+  return ([string]$Value).Trim().TrimEnd('/')
 }
 
 function Get-RepositoryName {
@@ -106,7 +106,7 @@ function Assert-NoRepositoryUriConflict {
     $repoName = Get-RepositoryName $_
     -not [string]::IsNullOrWhiteSpace($repoName) -and
       -not [string]::Equals($repoName, $normalizedName, [System.StringComparison]::OrdinalIgnoreCase) -and
-      [string]::Equals((Get-RepositoryUri $_), $normalizedUri, [System.StringComparison]::OrdinalIgnoreCase)
+      [string]::Equals((Get-RepositoryUri $_), $normalizedUri, [System.StringComparison]::Ordinal)
   })
 
   if ($conflicts.Count -eq 0) {
@@ -115,7 +115,7 @@ function Assert-NoRepositoryUriConflict {
 
   $existingUri = Get-RepositoryUri $ExistingRepository
   if ($null -ne $ExistingRepository -and
-      [string]::Equals($existingUri, $normalizedUri, [System.StringComparison]::OrdinalIgnoreCase)) {
+      [string]::Equals($existingUri, $normalizedUri, [System.StringComparison]::Ordinal)) {
     return
   }
 
@@ -137,7 +137,7 @@ function Test-RepositoryMatches {
 
   $normalizedTargetUri = Normalize-RepositoryUri $TargetUri
   if (-not [string]::IsNullOrWhiteSpace($normalizedTargetUri) -and
-      -not [string]::Equals((Get-RepositoryUri $Repository), $normalizedTargetUri, [System.StringComparison]::OrdinalIgnoreCase)) {
+      -not [string]::Equals((Get-RepositoryUri $Repository), $normalizedTargetUri, [System.StringComparison]::Ordinal)) {
     return $false
   }
 

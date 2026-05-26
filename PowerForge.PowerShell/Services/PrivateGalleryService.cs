@@ -225,7 +225,6 @@ internal sealed class PrivateGalleryService
             jfrogRepository);
 
         var effectiveTool = tool;
-        var effectivePriority = priority ?? PrivateGalleryDefaults.AzureArtifactsRepositoryPriority;
         var result = new ModuleRepositoryRegistrationResult
         {
             RepositoryName = endpoint.RepositoryName,
@@ -241,7 +240,7 @@ internal sealed class PrivateGalleryService
             PowerShellGetPublishUri = endpoint.PowerShellGetPublishUri,
             PSResourceGetUri = endpoint.PSResourceGetUri,
             Trusted = trusted,
-            Priority = effectivePriority,
+            Priority = priority,
             CredentialUsed = credential is not null,
             ToolRequested = tool,
             Tool = tool,
@@ -298,7 +297,7 @@ internal sealed class PrivateGalleryService
                     result.RepositoryName,
                     endpoint.PSResourceGetUri,
                     trusted,
-                    effectivePriority,
+                    priority,
                     apiVersion: RepositoryApiVersion.V3,
                     timeout: TimeSpan.FromMinutes(2));
 

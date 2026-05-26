@@ -73,6 +73,8 @@ public sealed class PrivateGalleryBootstrapReadinessTests
         Assert.Contains("Test-RepositoryMatches", scriptText, StringComparison.Ordinal);
         Assert.Contains("Get-RepositoryCredentialProvider", scriptText, StringComparison.Ordinal);
         Assert.Contains("Trusted = ($TrustedFlag -eq '1')", scriptText, StringComparison.Ordinal);
+        Assert.DoesNotContain("return ([string]$Value).Trim().TrimEnd('/').ToLowerInvariant()", scriptText, StringComparison.Ordinal);
+        Assert.Contains("System.StringComparison]::Ordinal)", scriptText, StringComparison.Ordinal);
     }
 
     [Fact]

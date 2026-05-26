@@ -22,6 +22,40 @@ public sealed class PrivateGalleryServiceTests
         Assert.Equal("credentialUserName", ex.ParamName);
     }
 
+    [Fact]
+    public void EnsureAzureArtifactsRepositoryRegistered_PreservesNullPriority()
+    {
+        var service = new PrivateGalleryService(new FakePrivateGalleryHost(shouldProcess: false));
+        var status = new BootstrapPrerequisiteStatus(
+            psResourceGetAvailable: true,
+            psResourceGetVersion: "1.2.0",
+            psResourceGetMeetsMinimumVersion: true,
+            psResourceGetSupportsExistingSessionBootstrap: true,
+            psResourceGetMessage: null,
+            powerShellGetAvailable: true,
+            powerShellGetVersion: "2.2.5",
+            powerShellGetMessage: null,
+            credentialProviderDetection: new AzureArtifactsCredentialProviderDetectionResult(),
+            readinessMessages: Array.Empty<string>());
+
+        var result = service.EnsureAzureArtifactsRepositoryRegistered(
+            azureDevOpsOrganization: "contoso",
+            azureDevOpsProject: "Platform",
+            azureArtifactsFeed: "Modules",
+            repositoryName: null,
+            tool: RepositoryRegistrationTool.PSResourceGet,
+            trusted: true,
+            priority: null,
+            bootstrapModeRequested: PrivateGalleryBootstrapMode.CredentialPrompt,
+            bootstrapModeUsed: PrivateGalleryBootstrapMode.CredentialPrompt,
+            credentialSource: PrivateGalleryCredentialSource.None,
+            credential: null,
+            prerequisiteStatus: status,
+            shouldProcessAction: "Register module repository");
+
+        Assert.Null(result.Priority);
+    }
+
     [Theory]
     [InlineData("Package with name '__PowerForgePrivateGalleryConnectionProbe__' could not be found in repository 'Company'.")]
     [InlineData("No match was found for __PowerForgePrivateGalleryConnectionProbe__.")]

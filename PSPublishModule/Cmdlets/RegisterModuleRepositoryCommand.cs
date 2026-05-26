@@ -72,6 +72,7 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
 
     /// <summary>Provider repository/feed id. For Azure this is the feed when AzureArtifactsFeed is omitted; for JFrog this is the Artifactory NuGet repository key.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     public string? Repository { get; set; }
 
     /// <summary>PSResourceGet v3 repository URI for generic/JFrog feeds.</summary>
@@ -153,7 +154,7 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
             var prerequisites = service.EnsureMicrosoftArtifactRegistryPrerequisites(
                 InstallPrerequisites.IsPresent);
             var marResult = service.EnsureMicrosoftArtifactRegistryRegistered(
-                Name,
+                Name ?? Repository,
                 Tool,
                 Trusted,
                 Priority,
