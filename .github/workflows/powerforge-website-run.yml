@@ -236,14 +236,12 @@ jobs:
           Write-Host "::group::Archive Pages artifact"
           $tarArgs = @(
             '--dereference',
-            '--hard-dereference',
             '--directory',
             $env:PAGES_ARTIFACT_PATH,
             '-cf',
             (Join-Path $env:RUNNER_TEMP 'artifact.tar'),
             '--exclude=.git',
             '--exclude=.github',
-            '--force-local',
             '.'
           )
           tar @tarArgs
