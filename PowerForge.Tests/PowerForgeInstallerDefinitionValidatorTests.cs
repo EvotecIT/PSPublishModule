@@ -83,6 +83,22 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
     }
 
     [Fact]
+    public void Validate_RejectsLicenseAgreementVariableOverrideForGeneratedUi()
+    {
+        var definition = CreateValidDefinition();
+        definition.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
+        {
+            Path = "License.rtf",
+            VariableId = "CustomLicenseRtf"
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("WixUILicenseRtf", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_RejectsComboBoxWithoutChoices()
     {
         var definition = CreateValidDefinition();

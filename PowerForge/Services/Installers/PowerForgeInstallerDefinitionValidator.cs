@@ -8,6 +8,7 @@ namespace PowerForge;
 internal static class PowerForgeInstallerDefinitionValidator
 {
     internal const string RequiredInputDialogIdPrefix = "PowerForgeRequiredInputDlg";
+    internal const string DefaultLicenseAgreementVariableId = "WixUILicenseRtf";
 
     private static readonly Regex WixIdentifierPattern = new(
         "^[A-Za-z_][A-Za-z0-9_.]{0,71}$",
@@ -63,6 +64,11 @@ internal static class PowerForgeInstallerDefinitionValidator
             Require(licenseAgreement.Path, "LicenseAgreement.Path");
             Require(licenseAgreement.VariableId, "LicenseAgreement.VariableId");
             RequireWixIdentifier(licenseAgreement.VariableId, "LicenseAgreement.VariableId");
+            if (!string.Equals(licenseAgreement.VariableId.Trim(), DefaultLicenseAgreementVariableId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"LicenseAgreement.VariableId must be '{DefaultLicenseAgreementVariableId}' when using the generated WixUI flow.");
+            }
         }
 
         EnsureUnique(

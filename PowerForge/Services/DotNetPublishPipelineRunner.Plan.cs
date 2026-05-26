@@ -2053,7 +2053,6 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsSupportedAppInstallerSchemaVersion(string schemaVersion)
         => string.Equals(schemaVersion, "2021", StringComparison.OrdinalIgnoreCase) ||
-           string.Equals(schemaVersion, "2017", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(schemaVersion, "2017/2", StringComparison.OrdinalIgnoreCase);
 
     private static string ResolveStorePackagingProjectPath(

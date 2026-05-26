@@ -258,7 +258,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             var previousDialogId = i == 0 ? "InstallDirDlg" : dialogs[i - 1].Id;
             var nextDialogId = i == dialogs.Length - 1 ? "VerifyReadyDlg" : dialogs[i + 1].Id;
             requiredDialogIds.TryGetValue(dialogs[i].Id, out var requiredDialogId);
-            ui.Add(EmitDialog(dialogs[i], dialogInputs[dialogs[i].Id], previousDialogId, nextDialogId, requiredDialogId));
+            ui.Add(EmitDialog(dialogs[i], dialogInputs[dialogs[i].Id], previousDialogId, nextDialogId, requiredDialogId, definition.ExitLaunch));
         }
 
         ui.Add(EmitDialogSequence(dialogs));
@@ -381,7 +381,8 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         IReadOnlyList<PowerForgeInstallerInput> dialogInputs,
         string previousDialogId,
         string nextDialogId,
-        string? requiredDialogId)
+        string? requiredDialogId,
+        PowerForgeInstallerExitLaunch? exitLaunch)
     {
         var element = new XElement(
             WixNamespace + "Dialog",
@@ -425,7 +426,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         }
 
         var nextPublishes = BuildNextDialogPublishes(dialogInputs, nextDialogId, requiredDialogId);
-        AddDialogActionControls(element, dialog.Actions);
+        AddDialogActionControls(element, dialog.Actions, exitLaunch);
 
         element.Add(
             new XElement(
@@ -472,7 +473,10 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         return element;
     }
 
-    private static void AddDialogActionControls(XElement dialog, IReadOnlyList<PowerForgeInstallerDialogAction> actions)
+    private static void AddDialogActionControls(
+        XElement dialog,
+        IReadOnlyList<PowerForgeInstallerDialogAction> actions,
+        PowerForgeInstallerExitLaunch? exitLaunch)
     {
         var visibleActions = actions
             .Where(action => action is not null)
@@ -509,8 +513,24 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                     new XAttribute("Event", "DoAction"),
                     new XAttribute("Value", "PowerForgeDialogShellExecute"),
                     new XAttribute("Order", "2"),
-                    new XAttribute("Condition", action.Condition))));
+                    new XAttribute("Condition", action.Condition)),
+                CreateExitLaunchTargetRestorePublish(exitLaunch, action.Condition)));
         }
+    }
+
+    private static XElement? CreateExitLaunchTargetRestorePublish(
+        PowerForgeInstallerExitLaunch? exitLaunch,
+        string condition)
+    {
+        if (exitLaunch is not { Enabled: true } || string.IsNullOrWhiteSpace(exitLaunch.Target))
+            return null;
+
+        return new XElement(
+            WixNamespace + "Publish",
+            new XAttribute("Property", "WixShellExecTarget"),
+            new XAttribute("Value", exitLaunch.Target),
+            new XAttribute("Order", "3"),
+            new XAttribute("Condition", string.IsNullOrWhiteSpace(condition) ? "1" : condition));
     }
 
     private static IEnumerable<XElement> BuildNextDialogPublishes(

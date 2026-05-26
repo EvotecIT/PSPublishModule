@@ -177,8 +177,10 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
         }
     }
 
-    [Fact]
-    public void Plan_RejectsUnsupportedAppInstallerSchemaVersion()
+    [Theory]
+    [InlineData("2017")]
+    [InlineData("2022")]
+    public void Plan_RejectsUnsupportedAppInstallerSchemaVersion(string schemaVersion)
     {
         var root = CreateTempRoot();
         try
@@ -196,7 +198,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
                     PackagingProjectPath = packaging,
                     AppInstaller = new DotNetPublishAppInstallerOptions
                     {
-                        SchemaVersion = "2022"
+                        SchemaVersion = schemaVersion
                     }
                 }
             };

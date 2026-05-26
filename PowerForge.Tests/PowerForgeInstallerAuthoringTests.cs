@@ -278,6 +278,42 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_RestoresExitLaunchTargetAfterDialogAction()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open monitoring",
+            Target = "http://127.0.0.1:9000/"
+        };
+        var dialog = definition.Dialogs.Single(dialog => dialog.Id == "ConfigurationDlg");
+        dialog.Actions.Add(new PowerForgeInstallerDialogAction
+        {
+            Id = "OpenStudio",
+            Text = "Open Studio",
+            Target = "http://127.0.0.1:58433/studio"
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+        var action = doc.Descendants(Wix + "Control").Single(e =>
+            (string?)e.Attribute("Id") == "OpenStudio");
+
+        Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)e.Attribute("Value") == "http://127.0.0.1:58433/studio" &&
+            (string?)e.Attribute("Order") == "1"));
+        Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Event") == "DoAction" &&
+            (string?)e.Attribute("Value") == "PowerForgeDialogShellExecute" &&
+            (string?)e.Attribute("Order") == "2"));
+        Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)e.Attribute("Value") == "http://127.0.0.1:9000/" &&
+            (string?)e.Attribute("Order") == "3"));
+    }
+
+    [Fact]
     public void EmitSource_UsesUniqueScriptServiceActionIdsForLongComponentNames()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
