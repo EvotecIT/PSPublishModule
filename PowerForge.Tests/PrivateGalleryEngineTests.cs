@@ -504,7 +504,7 @@ public sealed class PrivateGalleryEngineTests
             Assert.True(projected.GetProperty("surfaces").GetProperty("apiPowerShell").GetBoolean());
             Assert.True(projected.GetProperty("surfaces").GetProperty("examples").GetBoolean());
             Assert.Equal(42, projected.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
-            Assert.Equal("Install-PrivateModule -ProfileName 'EvotecPowerShellGallery' -Name 'Contoso.Tools' -InstallPrerequisites",
+            Assert.Equal("Install-PrivateModule -Repository 'EvotecPowerShellGallery' -Name 'Contoso.Tools' -InstallPrerequisites",
                 projected.GetProperty("privateGallery").GetProperty("installCommand").GetString());
         }
         finally
