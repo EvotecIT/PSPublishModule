@@ -64,10 +64,6 @@
       "type": "string",
       "enum": ["Internals", "Root", "Both", "None"]
     },
-    "DocumentationTool": {
-      "type": "string",
-      "enum": ["PlatyPS", "HelpOut", "PowerForge"]
-    },
     "TestExecutionWhen": {
       "type": "string",
       "enum": ["AfterMerge"]

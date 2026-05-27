@@ -25,7 +25,7 @@ Legend:
 | PlaceHolder | Custom placeholders used during merge/build | Applied to merged PSM1 | [OK] |
 | PlaceHolderOption | Skip built-in replacements | Applied during placeholder replacement | [OK] |
 | Documentation (paths) | Emits `Documentation` segment (Path/Readme) | `ConfigurationDocumentationSegment` | [OK] |
-| Documentation (build) | `BuildDocumentation` segment, PlatyPS/HelpOut checks | `ConfigurationBuildDocumentationSegment` + C# docs engine; no module availability check | [PARTIAL] (no pre-check) |
+| Documentation (build) | `BuildDocumentation` segment | `ConfigurationBuildDocumentationSegment` + built-in PowerForge docs engine | [OK] |
 | Delivery metadata | Options.Delivery with internals bundle + repo paths | `ConfigurationOptionsSegment` + delivery metadata written in pipeline | [OK] plus Install/Update command generation |
 | Publish | Gallery/GitHub publish settings | `ConfigurationPublishSegment` + repository registration options | [OK] plus repo/tool controls |
 | Formatting | `Invoke-Formatter` options applied to merge/standard | `ConfigurationFormattingSegment` + formatter settings | [OK] |

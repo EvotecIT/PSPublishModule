@@ -616,7 +616,7 @@ internal static partial class Program
 
                 if (plan.DocumentationBuild is not null && plan.DocumentationBuild.Enable)
                 {
-                    logger.Info($"Docs: {plan.Documentation?.Path} ({plan.DocumentationBuild.Tool})");
+                    logger.Info($"Docs: {plan.Documentation?.Path}");
                 }
 
                 if (plan.Artefacts.Length > 0) logger.Info($"Artefacts: {plan.Artefacts.Length}");

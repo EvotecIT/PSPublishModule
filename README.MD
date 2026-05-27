@@ -142,7 +142,7 @@ Compatibility aliases from PSMaintenance are preserved: `Show-Documentation`, `I
 
 PowerForge can generate PowerShell help from a built module:
 
-- Markdown help (PlatyPS-compatible): `Docs/*.md`
+- Markdown help: `Docs/*.md`
 - External help for `Get-Help` (MAML): `<culture>/<ModuleName>-help.xml` (default culture: `en-US`)
 - About topics (from `about_*.help.txt` / `about_*.txt`): converted to `Docs/About/*.md` and listed in `Docs/Readme.md`
 

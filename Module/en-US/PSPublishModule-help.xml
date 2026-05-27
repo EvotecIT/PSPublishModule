@@ -16176,23 +16176,6 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Tool</maml:name>
-          <maml:description>
-            <maml:para>Documentation engine (legacy parameter; kept for compatibility).</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">DocumentationTool</command:parameterValue>
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">PlatyPS</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">HelpOut</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">PowerForge</command:parameterValue>
-          </command:parameterValueGroup>
-          <dev:type>
-            <maml:name>DocumentationTool</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UpdateWhenNew</maml:name>
           <maml:description>
             <maml:para>When enabled, generated documentation is also synced back to the project folder&#xD;
@@ -16338,23 +16321,6 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Tool</maml:name>
-        <maml:description>
-          <maml:para>Documentation engine (legacy parameter; kept for compatibility).</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">DocumentationTool</command:parameterValue>
-        <command:parameterValueGroup>
-          <command:parameterValue required="false" variableLength="false">PlatyPS</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">HelpOut</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">PowerForge</command:parameterValue>
-        </command:parameterValueGroup>
-        <dev:type>
-          <maml:name>DocumentationTool</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

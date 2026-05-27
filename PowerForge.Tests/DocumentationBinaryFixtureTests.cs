@@ -131,6 +131,94 @@ public sealed class DocumentationBinaryFixtureTests
         return outputDirectory;
     }
 
+    [Fact]
+    public void DocumentationEngine_HandlesCommandParameterNamedKeys()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "pf-docs-keys-parameter-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            const string moduleName = "KeyCollisionModule";
+            var modulePath = Path.Combine(tempRoot, moduleName + ".psm1");
+            var manifestPath = Path.Combine(tempRoot, moduleName + ".psd1");
+
+            File.WriteAllText(modulePath, """
+function Invoke-KeyCollision {
+    <#
+    .SYNOPSIS
+    Invokes a documentation extraction fixture.
+
+    .PARAMETER Keys
+    Key names that exercise dictionary key/member collision handling.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]] $Keys
+    )
+
+    $Keys
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            File.WriteAllText(manifestPath, """
+@{
+    RootModule = 'KeyCollisionModule.psm1'
+    ModuleVersion = '1.0.0'
+    GUID = '77777777-7777-7777-7777-777777777777'
+    Author = 'PowerForge.Tests'
+    Description = 'Script fixture module for documentation extraction key collision tests.'
+    FunctionsToExport = @('Invoke-KeyCollision')
+    CmdletsToExport = @()
+    AliasesToExport = @()
+    VariablesToExport = @()
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
+            var result = engine.Build(
+                moduleName: moduleName,
+                stagingPath: tempRoot,
+                moduleManifestPath: manifestPath,
+                documentation: new DocumentationConfiguration
+                {
+                    Path = "Docs",
+                    PathReadme = Path.Combine("Docs", "Readme.md")
+                },
+                buildDocumentation: new BuildDocumentationConfiguration
+                {
+                    Enable = true,
+                    StartClean = true,
+                    GenerateExternalHelp = true,
+                    IncludeAboutTopics = false,
+                    GenerateFallbackExamples = true
+                });
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+
+            var markdownPath = Path.Combine(tempRoot, "Docs", "Invoke-KeyCollision.md");
+            Assert.True(File.Exists(markdownPath), $"Expected generated markdown help at '{markdownPath}'.");
+
+            var markdown = File.ReadAllText(markdownPath);
+            Assert.Contains("### -Keys", markdown);
+            Assert.Contains("Key names that exercise dictionary key/member collision handling.", markdown);
+            Assert.DoesNotContain("ParameterType", markdown);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, true);
+            }
+            catch
+            {
+                // Best effort cleanup; do not mask assertion failures.
+            }
+        }
+    }
+
     private static string NormalizeText(string text)
         => (text ?? string.Empty).Replace("\r\n", "\n").Trim();
 }

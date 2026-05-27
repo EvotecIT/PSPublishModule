@@ -247,19 +247,6 @@ public enum DeliveryBundleDestination
 }
 
 /// <summary>
-/// Documentation tool used by documentation configuration.
-/// </summary>
-public enum DocumentationTool
-{
-    /// <summary>Legacy: Use PlatyPS to generate markdown help.</summary>
-    PlatyPS,
-    /// <summary>Legacy: Use HelpOut to generate markdown help.</summary>
-    HelpOut,
-    /// <summary>Use PowerForge built-in generator.</summary>
-    PowerForge
-}
-
-/// <summary>
 /// Artefact type for artefact configuration.
 /// </summary>
 public enum ArtefactType

@@ -11,7 +11,7 @@ Enables or disables creation of documentation from the module using PowerForge.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [-Tool <DocumentationTool>] [<CommonParameters>]
+New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -215,22 +215,6 @@ Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Tool
-Documentation engine (legacy parameter; kept for compatibility).
-
-```yaml
-Type: DocumentationTool
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: PlatyPS, HelpOut, PowerForge
 
 Required: False
 Position: named

@@ -5,7 +5,7 @@ using System.Linq;
 namespace PowerForge;
 
 /// <summary>
-/// Writes markdown help files in a PlatyPS-compatible structure.
+/// Writes PowerShell command markdown help files.
 /// </summary>
 internal sealed class MarkdownHelpWriter
 {
