@@ -110,7 +110,38 @@ public sealed class GitHubArtifactCleanupServiceTests
         Assert.Equal(22, result.Planned[0].Id);
     }
 
-    private static FakeArtifact Artifact(long id, string name, int daysAgo)
+    [Fact]
+    public void Prune_ExpiredArtifacts_AreDeletionCandidatesEvenInsideKeepWindow()
+    {
+        var artifacts = new[]
+        {
+            Artifact(id: 31, name: "github-pages", daysAgo: 1, expired: true),
+            Artifact(id: 32, name: "github-pages", daysAgo: 2, expired: false)
+        };
+
+        var handler = new FakeGitHubArtifactsHandler(artifacts);
+        using var client = new HttpClient(handler);
+        var service = new GitHubArtifactCleanupService(new NullLogger(), client);
+
+        var result = service.Prune(new GitHubArtifactCleanupSpec
+        {
+            Repository = "EvotecIT/TestimoX",
+            Token = "test-token",
+            KeepLatestPerName = 1,
+            MaxAgeDays = 1,
+            MaxDelete = 10,
+            DryRun = true
+        });
+
+        Assert.True(result.Success);
+        Assert.Equal(2, result.MatchedArtifacts);
+        Assert.Single(result.Planned);
+        Assert.Equal(31, result.Planned[0].Id);
+        Assert.Equal("expired", result.Planned[0].Reason);
+        Assert.Equal(1, result.KeptByRecentWindow);
+    }
+
+    private static FakeArtifact Artifact(long id, string name, int daysAgo, bool expired = false)
     {
         var timestamp = DateTimeOffset.UtcNow.AddDays(-daysAgo);
         return new FakeArtifact
@@ -119,7 +150,8 @@ public sealed class GitHubArtifactCleanupServiceTests
             Name = name,
             SizeInBytes = 1024 + id,
             CreatedAt = timestamp,
-            UpdatedAt = timestamp
+            UpdatedAt = timestamp,
+            Expired = expired
         };
     }
 
@@ -152,7 +184,7 @@ public sealed class GitHubArtifactCleanupServiceTests
                         id = a.Id,
                         name = a.Name,
                         size_in_bytes = a.SizeInBytes,
-                        expired = false,
+                        expired = a.Expired,
                         created_at = a.CreatedAt.ToString("O"),
                         updated_at = a.UpdatedAt.ToString("O"),
                         workflow_run = new { id = 1000 + a.Id }
@@ -199,5 +231,6 @@ public sealed class GitHubArtifactCleanupServiceTests
         public long SizeInBytes { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset UpdatedAt { get; set; }
+        public bool Expired { get; set; }
     }
 }

@@ -58,7 +58,6 @@ public sealed class GitHubArtifactCleanupService
             : (DateTimeOffset?)null;
 
         var matched = allArtifacts
-            .Where(a => !a.Expired)
             .Where(a => MatchesAnyPattern(a.Name, normalized.IncludeNames, defaultWhenEmpty: true))
             .Where(a => !MatchesAnyPattern(a.Name, normalized.ExcludeNames, defaultWhenEmpty: false))
             .ToArray();
@@ -73,15 +72,24 @@ public sealed class GitHubArtifactCleanupService
                 .OrderByDescending(GetSortTimestamp)
                 .ThenByDescending(a => a.Id)
                 .ToArray();
+            var nonExpiredIndex = 0;
 
             for (var index = 0; index < ordered.Length; index++)
             {
                 var artifact = ordered[index];
-                if (index < normalized.KeepLatestPerName)
+                if (artifact.Expired)
                 {
-                    keptByRecentWindow++;
+                    planned.Add(ToItem(artifact, reason: "expired"));
                     continue;
                 }
+
+                if (nonExpiredIndex < normalized.KeepLatestPerName)
+                {
+                    keptByRecentWindow++;
+                    nonExpiredIndex++;
+                    continue;
+                }
+                nonExpiredIndex++;
 
                 if (ageCutoff is not null && GetSortTimestamp(artifact) > ageCutoff.Value)
                 {
