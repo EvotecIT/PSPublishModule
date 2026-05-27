@@ -73,6 +73,10 @@ on:
         required: false
         type: boolean
         default: false
+      validate_pages_artifact:
+        required: false
+        type: boolean
+        default: false
       pages_artifact_path:
         required: false
         type: string
@@ -195,8 +199,16 @@ jobs:
             ./${{ inputs.website_root }}/_site/_reports/**
           if-no-files-found: ignore
 
+      - name: Cleanup Playwright cache before Pages artifact
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact) && inputs.use_playwright_cache }}
+        shell: pwsh
+        run: |
+          if (-not [string]::IsNullOrWhiteSpace($env:PLAYWRIGHT_BROWSERS_PATH) -and (Test-Path -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH)) {
+            Remove-Item -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH -Recurse -Force
+          }
+
       - name: Archive Pages artifact
-        if: ${{ inputs.upload_pages_artifact && runner.os == 'Linux' }}
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact) && runner.os == 'Linux' }}
         shell: sh
         env:
           PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
@@ -212,7 +224,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Archive Pages artifact
-        if: ${{ inputs.upload_pages_artifact && runner.os == 'macOS' }}
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact) && runner.os == 'macOS' }}
         shell: sh
         env:
           PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
@@ -228,16 +240,30 @@ jobs:
           echo "::endgroup::"
 
       - name: Archive Pages artifact
-        if: ${{ inputs.upload_pages_artifact && runner.os == 'Windows' }}
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact) && runner.os == 'Windows' }}
         shell: pwsh
         env:
           PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
         run: |
           Write-Host "::group::Archive Pages artifact"
+          $resolvedArtifactPath = [System.IO.Path]::GetFullPath($env:PAGES_ARTIFACT_PATH)
+          if (-not (Test-Path -LiteralPath $resolvedArtifactPath)) {
+            throw "Pages artifact path not found: $resolvedArtifactPath"
+          }
+
+          $tempRoot = [System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)
+          $freeBytes = ([System.IO.DriveInfo]::new($tempRoot)).AvailableFreeSpace
+          $sourceBytes = (Get-ChildItem -LiteralPath $resolvedArtifactPath -Recurse -Force -File | Measure-Object -Property Length -Sum).Sum
+          $requiredBytes = [Math]::Max(1GB, [int64]($sourceBytes * 1.1))
+          Write-Host ("Pages artifact source: {0:n0} bytes; runner temp free: {1:n0} bytes; required estimate: {2:n0} bytes" -f $sourceBytes, $freeBytes, $requiredBytes)
+          if ($freeBytes -lt $requiredBytes) {
+            throw "Not enough free space on $tempRoot to archive Pages artifact. Free $freeBytes bytes, estimated need $requiredBytes bytes for $resolvedArtifactPath."
+          }
+
           $tarArgs = @(
             '--dereference',
             '--directory',
-            $env:PAGES_ARTIFACT_PATH,
+            $resolvedArtifactPath,
             '-cf',
             (Join-Path $env:RUNNER_TEMP 'artifact.tar'),
             '--exclude=.git',

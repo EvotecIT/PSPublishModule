@@ -90,7 +90,6 @@ $env:PSPUBLISHMODULE_TEST_SOURCE_ROOT = $script:SourceRoot
 $PSDInformation = Import-PowerShellDataFile -Path $PrimaryModule.FullName
 $RequiredModules = @(
     'Pester'
-    'PSWriteColor'
     if ($PSDInformation.RequiredModules) {
         $PSDInformation.RequiredModules
     }
@@ -106,6 +105,30 @@ foreach ($Module in $RequiredModules) {
         $Exists = Get-Module -ListAvailable $Module -ErrorAction SilentlyContinue
         if (-not $Exists) {
             Install-Module -Name $Module -Force -SkipPublisherCheck
+        }
+    }
+}
+
+if (-not (Get-Command -Name Write-Color -ErrorAction SilentlyContinue)) {
+    function Write-Color {
+        param(
+            [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
+            [AllowEmptyCollection()]
+            [object[]] $Text,
+
+            [object[]] $Color,
+
+            [int] $LinesBefore = 0
+        )
+
+        for ($index = 0; $index -lt $LinesBefore; $index++) {
+            Write-Host
+        }
+
+        if ($Text -and $Text.Count -gt 0) {
+            Write-Host (($Text | ForEach-Object { [string] $_ }) -join '')
+        } else {
+            Write-Host
         }
     }
 }
