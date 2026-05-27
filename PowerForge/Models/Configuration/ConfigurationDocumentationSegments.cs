@@ -57,9 +57,6 @@ public sealed class BuildDocumentationConfiguration
     /// </summary>
     public bool SyncExternalHelpToProjectRoot { get; set; }
 
-    /// <summary>Documentation tool selection.</summary>
-    public DocumentationTool Tool { get; set; } = DocumentationTool.PowerForge;
-
     /// <summary>
     /// When enabled, converts <c>about_*.help.txt</c> / <c>about_*.txt</c> / <c>about_*.md</c> / <c>about_*.markdown</c> topic files found in the module
     /// into markdown pages under <c>Docs/About</c>.

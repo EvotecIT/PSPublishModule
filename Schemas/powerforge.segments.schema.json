@@ -120,7 +120,6 @@
         "StartClean": { "type": "boolean" },
         "UpdateWhenNew": { "type": "boolean" },
         "SyncExternalHelpToProjectRoot": { "type": "boolean" },
-        "Tool": { "$ref": "powerforge.common.schema.json#/$defs/DocumentationTool" },
         "IncludeAboutTopics": { "type": "boolean" },
         "GenerateFallbackExamples": { "type": "boolean" },
         "GenerateExternalHelp": { "type": "boolean" },

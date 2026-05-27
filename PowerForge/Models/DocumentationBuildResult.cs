@@ -8,9 +8,6 @@ public sealed class DocumentationBuildResult
     /// <summary>True when documentation generation was enabled.</summary>
     public bool Enabled { get; }
 
-    /// <summary>Tool used to generate documentation.</summary>
-    public DocumentationTool Tool { get; }
-
     /// <summary>Full path to the docs output folder.</summary>
     public string DocsPath { get; }
 
@@ -40,7 +37,6 @@ public sealed class DocumentationBuildResult
     /// </summary>
     public DocumentationBuildResult(
         bool enabled,
-        DocumentationTool tool,
         string docsPath,
         string readmePath,
         bool succeeded,
@@ -50,7 +46,6 @@ public sealed class DocumentationBuildResult
         string? errorMessage)
     {
         Enabled = enabled;
-        Tool = tool;
         DocsPath = docsPath;
         ReadmePath = readmePath;
         Succeeded = succeeded;

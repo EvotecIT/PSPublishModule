@@ -101,7 +101,11 @@ try {
 
     $commonParamNames = @('Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable','InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable','WhatIf','Confirm','ProgressAction')
     $paramNames = @()
-    try { if ($c -and $c.Parameters) { $paramNames = @($c.Parameters.Keys) } } catch { $paramNames = @() }
+    try {
+      if ($c -and $c.Parameters) {
+        $paramNames = @($c.Parameters.GetEnumerator() | ForEach-Object { [string]$_.Key })
+      }
+    } catch { $paramNames = @() }
     foreach ($hp in $helpParameters) { try { $paramNames += [string]$hp.Name } catch {
       # best effort: keep extracting other parameters even when one help node is incomplete
     } }
@@ -138,8 +142,8 @@ try {
 
       try {
         if ($pmeta -and $pmeta.ParameterSets) {
-          foreach ($setName in @($pmeta.ParameterSets.Keys)) {
-            $psm = $pmeta.ParameterSets[$setName]
+          foreach ($setEntry in @($pmeta.ParameterSets.GetEnumerator())) {
+            $psm = $setEntry.Value
             if ($psm) {
               if ($psm.IsMandatory) { $required = $true }
               $pPos = [int]$psm.Position
@@ -323,8 +327,8 @@ try {
 
         $supportsPipeline = $false
         try {
-          foreach ($setName in @($pmeta.ParameterSets.Keys)) {
-            $psm = $pmeta.ParameterSets[$setName]
+          foreach ($setEntry in @($pmeta.ParameterSets.GetEnumerator())) {
+            $psm = $setEntry.Value
             if ($psm -and ($psm.ValueFromPipeline -or $psm.ValueFromPipelineByPropertyName)) {
               $supportsPipeline = $true
               break

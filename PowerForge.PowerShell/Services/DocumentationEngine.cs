@@ -95,7 +95,6 @@ public sealed class DocumentationEngine
         {
             return new DocumentationBuildResult(
                 enabled: false,
-                tool: DocumentationTool.PowerForge,
                 docsPath: ResolvePath(stagingPath, documentation.Path),
                 readmePath: ResolvePath(stagingPath, documentation.PathReadme, optional: true),
                 succeeded: true,
@@ -233,7 +232,6 @@ public sealed class DocumentationEngine
 
             return new DocumentationBuildResult(
                 enabled: true,
-                tool: DocumentationTool.PowerForge,
                 docsPath: docsPath,
                 readmePath: readmePath,
                 succeeded: true,
@@ -248,7 +246,6 @@ public sealed class DocumentationEngine
 
             return new DocumentationBuildResult(
                 enabled: true,
-                tool: DocumentationTool.PowerForge,
                 docsPath: docsPath,
                 readmePath: readmePath,
                 succeeded: false,

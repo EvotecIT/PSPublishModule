@@ -41,7 +41,6 @@ internal sealed class DocumentationConfigurationFactory
                     StartClean = request.StartClean,
                     UpdateWhenNew = request.UpdateWhenNew,
                     SyncExternalHelpToProjectRoot = request.SyncExternalHelpToProjectRoot,
-                    Tool = DocumentationTool.PowerForge,
                     IncludeAboutTopics = !request.SkipAboutTopics,
                     GenerateFallbackExamples = !request.SkipFallbackExamples,
                     GenerateExternalHelp = !request.SkipExternalHelp,

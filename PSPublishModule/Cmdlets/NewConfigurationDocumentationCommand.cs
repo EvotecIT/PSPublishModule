@@ -78,9 +78,6 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// <summary>Path to the readme file that will be used for the documentation.</summary>
     [Parameter(Mandatory = true)] public string PathReadme { get; set; } = string.Empty;
 
-    /// <summary>Documentation engine (legacy parameter; kept for compatibility).</summary>
-    [Parameter(DontShow = true)] public PowerForge.DocumentationTool Tool { get; set; } = PowerForge.DocumentationTool.PowerForge;
-
     /// <summary>Emits documentation configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
