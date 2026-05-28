@@ -441,8 +441,9 @@ public sealed class DocumentationEngine
 
             var text = ReadMarkdownHeader(path);
             return text.Contains("external help file:", StringComparison.OrdinalIgnoreCase) ||
-                   text.Contains("Module Name:", StringComparison.OrdinalIgnoreCase) ||
                    text.Contains("generated: true", StringComparison.OrdinalIgnoreCase) ||
+                   (text.Contains("Module Name:", StringComparison.OrdinalIgnoreCase) &&
+                    text.Contains("schema:", StringComparison.OrdinalIgnoreCase)) ||
                    (text.Contains("topic:", StringComparison.OrdinalIgnoreCase) &&
                     text.Contains("schema: 1.0.0", StringComparison.OrdinalIgnoreCase));
         }

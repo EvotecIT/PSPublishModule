@@ -61,6 +61,7 @@ public sealed class DocumentationEngineSafetyTests
             Directory.CreateDirectory(assetsPath);
             File.WriteAllText(Path.Combine(docsPath, "Old-Command.md"), GeneratedCommandMarkdown("Old-Command"));
             File.WriteAllText(Path.Combine(docsPath, "usage.md"), "# Usage guide");
+            File.WriteAllText(Path.Combine(docsPath, "guide.md"), "Module Name: Contoso");
             File.WriteAllText(Path.Combine(assetsPath, "logo.png"), "asset");
 
             var manifestPath = Path.Combine(stagingRoot, "TestModule.psd1");
@@ -101,6 +102,7 @@ public sealed class DocumentationEngineSafetyTests
             Assert.True(File.Exists(Path.Combine(docsPath, "Readme.md")));
             Assert.False(File.Exists(Path.Combine(docsPath, "Old-Command.md")));
             Assert.True(File.Exists(Path.Combine(docsPath, "usage.md")));
+            Assert.True(File.Exists(Path.Combine(docsPath, "guide.md")));
             Assert.True(File.Exists(Path.Combine(assetsPath, "logo.png")));
         }
         finally

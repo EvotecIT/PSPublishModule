@@ -60,6 +60,7 @@ public sealed class ModulePipelineDocumentationSyncTests
             Directory.CreateDirectory(Path.Combine(targetDocs, "assets"));
             File.WriteAllText(Path.Combine(targetDocs, "Old-Command.md"), GeneratedCommandMarkdown("Old-Command"));
             File.WriteAllText(Path.Combine(targetDocs, "usage.md"), "# Usage guide");
+            File.WriteAllText(Path.Combine(targetDocs, "guide.md"), "Module Name: Contoso");
             File.WriteAllText(Path.Combine(targetDocs, "assets", "logo.png"), "asset");
 
             var sourceDocs = Path.Combine(root.FullName, "Staging", "Docs");
@@ -86,6 +87,7 @@ public sealed class ModulePipelineDocumentationSyncTests
             Assert.True(File.Exists(Path.Combine(targetDocs, "Readme.md")));
             Assert.False(File.Exists(Path.Combine(targetDocs, "Old-Command.md")));
             Assert.True(File.Exists(Path.Combine(targetDocs, "usage.md")));
+            Assert.True(File.Exists(Path.Combine(targetDocs, "guide.md")));
             Assert.True(File.Exists(Path.Combine(targetDocs, "assets", "logo.png")));
         }
         finally
@@ -146,6 +148,38 @@ public sealed class ModulePipelineDocumentationSyncTests
                 moduleName,
                 projectRoot,
                 Path.Combine(projectRoot, "Readme.md"));
+
+            var exception = Assert.Throws<TargetInvocationException>(() => InvokeNormalizeDocumentationForStaging(plan, stagingRoot));
+            Assert.Contains("project root", exception.InnerException?.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    public void NormalizeDocumentationForStaging_RejectsRelativeProjectRootDocsPath(string docsPath)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var projectRoot = Path.Combine(root.FullName, "Project");
+            var stagingRoot = Path.Combine(root.FullName, "Staging");
+            Directory.CreateDirectory(projectRoot);
+            Directory.CreateDirectory(stagingRoot);
+            ModulePipelineMissingAnalysisServiceTests.WriteMinimalModule(projectRoot, moduleName, "1.0.0");
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = CreatePlan(
+                runner,
+                projectRoot,
+                moduleName,
+                docsPath,
+                "Readme.md");
 
             var exception = Assert.Throws<TargetInvocationException>(() => InvokeNormalizeDocumentationForStaging(plan, stagingRoot));
             Assert.Contains("project root", exception.InnerException?.Message, StringComparison.OrdinalIgnoreCase);

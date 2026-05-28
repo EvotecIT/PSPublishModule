@@ -134,25 +134,31 @@ public sealed partial class ModulePipelineRunner
 
         return new DocumentationConfiguration
         {
-            Path = NormalizeProjectPathForStaging(plan.ProjectRoot, plan.Documentation.Path),
-            PathReadme = NormalizeProjectPathForStaging(plan.ProjectRoot, plan.Documentation.PathReadme)
+            Path = NormalizeProjectPathForStaging(plan.ProjectRoot, plan.Documentation.Path, rejectProjectRoot: true),
+            PathReadme = NormalizeProjectPathForStaging(plan.ProjectRoot, plan.Documentation.PathReadme, rejectProjectRoot: false)
         };
     }
 
-    private static string NormalizeProjectPathForStaging(string projectRoot, string configuredPath)
+    private static string NormalizeProjectPathForStaging(string projectRoot, string configuredPath, bool rejectProjectRoot)
     {
         var value = (configuredPath ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(value) || !Path.IsPathRooted(value))
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (rejectProjectRoot)
+                throw new InvalidOperationException("Documentation.Path resolves to the project root. Refusing to build documentation to avoid overwriting project files. Set Documentation.Path to a folder (e.g. 'Docs').");
+
             return value;
+        }
 
         try
         {
             var fullProjectRoot = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var fullPath = Path.GetFullPath(value).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (SamePath(fullProjectRoot, fullPath))
+            var fullPath = Path.GetFullPath(Path.IsPathRooted(value) ? value : Path.Combine(fullProjectRoot, value))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (rejectProjectRoot && SamePath(fullProjectRoot, fullPath))
                 throw new InvalidOperationException("Documentation.Path resolves to the project root. Refusing to build documentation to avoid overwriting project files. Set Documentation.Path to a folder (e.g. 'Docs').");
 
-            if (!IsSameOrChildPath(fullProjectRoot, fullPath))
+            if (!Path.IsPathRooted(value) || !IsSameOrChildPath(fullProjectRoot, fullPath))
                 return value;
 
             return GetRelativePathFromDirectory(fullProjectRoot, fullPath);
@@ -234,8 +240,9 @@ public sealed partial class ModulePipelineRunner
 
             var text = ReadMarkdownHeader(path);
             return text.Contains("external help file:", StringComparison.OrdinalIgnoreCase) ||
-                   text.Contains("Module Name:", StringComparison.OrdinalIgnoreCase) ||
                    text.Contains("generated: true", StringComparison.OrdinalIgnoreCase) ||
+                   (text.Contains("Module Name:", StringComparison.OrdinalIgnoreCase) &&
+                    text.Contains("schema:", StringComparison.OrdinalIgnoreCase)) ||
                    (text.Contains("topic:", StringComparison.OrdinalIgnoreCase) &&
                     text.Contains("schema: 1.0.0", StringComparison.OrdinalIgnoreCase));
         }
