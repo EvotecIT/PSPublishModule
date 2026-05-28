@@ -106,7 +106,6 @@ public sealed class DocumentationEngine
 
         var docsPath = ResolvePath(stagingPath, documentation.Path);
         var readmePath = ResolvePath(stagingPath, documentation.PathReadme, optional: true);
-        var startClean = buildDocumentation.StartClean;
 
         void SafeStart(ModulePipelineStep? step)
         {
@@ -128,15 +127,8 @@ public sealed class DocumentationEngine
 
         try
         {
-            if (startClean)
-            {
-                SafeDeleteDocsFolder(stagingPath, docsPath);
-                SafeDeleteExistingExternalHelpFile(stagingPath, moduleName, buildDocumentation);
-            }
-
-            Directory.CreateDirectory(docsPath);
-            if (!string.IsNullOrWhiteSpace(readmePath))
-                Directory.CreateDirectory(Path.GetDirectoryName(readmePath)!);
+            ValidateDocsPathBeforeBuild(stagingPath, docsPath);
+            SafeDeleteExistingExternalHelpFile(stagingPath, moduleName, buildDocumentation);
 
             DocumentationExtractionPayload extracted;
             SafeStart(extractStep);
@@ -179,6 +171,11 @@ public sealed class DocumentationEngine
             SafeStart(writeStep);
             try
             {
+                SafeDeleteDocsFolder(stagingPath, docsPath);
+                Directory.CreateDirectory(docsPath);
+                if (!string.IsNullOrWhiteSpace(readmePath))
+                    Directory.CreateDirectory(Path.GetDirectoryName(readmePath)!);
+
                 writer.WriteCommandHelpFiles(extracted, moduleName, docsPath);
                 if (buildDocumentation.IncludeAboutTopics)
                 {
@@ -371,15 +368,97 @@ public sealed class DocumentationEngine
         var fullStaging = Path.GetFullPath(stagingPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (string.Equals(fullDocs, fullStaging, StringComparison.OrdinalIgnoreCase))
         {
-            // Never delete the whole staging folder; clean markdown files only.
+            // Never delete the whole staging folder; clean generated markdown only.
             foreach (var md in Directory.EnumerateFiles(fullDocs, "*.md", SearchOption.AllDirectories))
             {
+                if (!IsGeneratedDocumentationMarkdown(md))
+                    continue;
+
                 try { File.Delete(md); } catch { /* best effort */ }
             }
             return;
         }
 
-        try { Directory.Delete(fullDocs, recursive: true); } catch { /* best effort */ }
+        if (LooksLikeProjectRoot(fullDocs))
+            throw new InvalidOperationException("Documentation.Path resolves to a project root. Refusing to clean documentation output to avoid deleting source files. Set Documentation.Path to a folder (e.g. 'Docs').");
+
+        foreach (var md in Directory.EnumerateFiles(fullDocs, "*.md", SearchOption.AllDirectories))
+        {
+            if (!IsGeneratedDocumentationMarkdown(md))
+                continue;
+
+            try { File.Delete(md); } catch { /* best effort */ }
+        }
+
+        RemoveEmptyDirectories(fullDocs);
+    }
+
+    private static void ValidateDocsPathBeforeBuild(string stagingPath, string docsPath)
+    {
+        if (string.IsNullOrWhiteSpace(docsPath) || !Directory.Exists(docsPath)) return;
+
+        var fullDocs = Path.GetFullPath(docsPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullStaging = Path.GetFullPath(stagingPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(fullDocs, fullStaging, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (LooksLikeProjectRoot(fullDocs))
+            throw new InvalidOperationException("Documentation.Path resolves to a project root. Refusing to clean documentation output to avoid deleting source files. Set Documentation.Path to a folder (e.g. 'Docs').");
+    }
+
+    private static bool LooksLikeProjectRoot(string path)
+    {
+        if (!Directory.Exists(path))
+            return false;
+
+        return Directory.Exists(Path.Combine(path, ".git")) ||
+               Directory.EnumerateFiles(path, "*.sln", SearchOption.TopDirectoryOnly).Any() ||
+               Directory.EnumerateFiles(path, "*.csproj", SearchOption.TopDirectoryOnly).Any() ||
+               Directory.EnumerateFiles(path, "*.psd1", SearchOption.TopDirectoryOnly).Any();
+    }
+
+    private static void RemoveEmptyDirectories(string root)
+    {
+        if (!Directory.Exists(root))
+            return;
+
+        foreach (var directory in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
+                     .OrderByDescending(static path => path.Length))
+        {
+            if (Directory.EnumerateFileSystemEntries(directory).Any())
+                continue;
+
+            try { Directory.Delete(directory); } catch { /* best effort */ }
+        }
+    }
+
+    private static bool IsGeneratedDocumentationMarkdown(string path)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return false;
+
+            var text = ReadMarkdownHeader(path);
+            return text.Contains("external help file:", StringComparison.OrdinalIgnoreCase) ||
+                   text.Contains("generated: true", StringComparison.OrdinalIgnoreCase) ||
+                   (text.Contains("Module Name:", StringComparison.OrdinalIgnoreCase) &&
+                    text.Contains("schema:", StringComparison.OrdinalIgnoreCase)) ||
+                   (text.Contains("topic:", StringComparison.OrdinalIgnoreCase) &&
+                    text.Contains("schema: 1.0.0", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string ReadMarkdownHeader(string path)
+    {
+        using var reader = new StreamReader(path);
+        var buffer = new char[2048];
+        var read = reader.Read(buffer, 0, buffer.Length);
+        return new string(buffer, 0, read);
     }
 
     private static void SafeDeleteExistingExternalHelpFile(

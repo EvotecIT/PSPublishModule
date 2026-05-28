@@ -45,7 +45,7 @@ bundled into the output artefact.
 ### EXAMPLE 1
 ```powershell
 Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-    New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+    New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md'
 }
 ```
 

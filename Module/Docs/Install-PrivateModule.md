@@ -14,14 +14,14 @@ Installs one or more modules from a private repository, optionally bootstrapping
 Install-PrivateModule [-Name] <string[]> -Repository <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### AzureArtifacts
+```powershell
+Install-PrivateModule [-Name] <string[]> [-Repository <string>] [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ### Profile
 ```powershell
 Install-PrivateModule [-Name] <string[]> -ProfileName <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
-```
-
-### AzureArtifacts
-```powershell
-Install-PrivateModule [-Name] <string[]> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### MicrosoftArtifactRegistry
@@ -59,7 +59,7 @@ Parameter Sets: AzureArtifacts
 Aliases: Feed
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -75,7 +75,7 @@ Parameter Sets: AzureArtifacts
 Aliases: Organization
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -105,7 +105,7 @@ Bootstrap/authentication mode used when Azure Artifacts details are supplied. Au
 Type: PrivateGalleryBootstrapMode
 Parameter Sets: AzureArtifacts
 Aliases: Mode
-Possible values: Auto, ExistingSession, CredentialPrompt
+Possible values: Auto, ExistingSession, CredentialPrompt, JFrogCli
 
 Required: False
 Position: named
@@ -119,7 +119,7 @@ Optional repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, AzureArtifacts, Profile
 Aliases: Password, Token
 Possible values:
 
@@ -135,7 +135,7 @@ Optional path to a file containing the repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, AzureArtifacts, Profile
 Aliases: CredentialPath, TokenPath
 Possible values:
 
@@ -151,7 +151,7 @@ Optional repository credential username.
 
 ```yaml
 Type: String
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, AzureArtifacts, Profile
 Aliases: UserName
 Possible values:
 
@@ -167,7 +167,7 @@ Forces reinstall even when a matching version is already present.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, Profile, AzureArtifacts, MicrosoftArtifactRegistry
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -183,7 +183,39 @@ Installs missing private-gallery prerequisites before automatic registration, in
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Profile, AzureArtifacts, MicrosoftArtifactRegistry
+Parameter Sets: AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -JFrogBaseUri
+JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -JFrogRepository
+JFrog NuGet repository key. Defaults from Repository when omitted.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
 Aliases: None
 Possible values:
 
@@ -215,7 +247,7 @@ Module names to install.
 
 ```yaml
 Type: String[]
-Parameter Sets: Repository, Profile, AzureArtifacts, MicrosoftArtifactRegistry
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
 Aliases: ModuleName
 Possible values:
 
@@ -231,7 +263,7 @@ Includes prerelease versions when supported by the selected installer.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, Profile, AzureArtifacts, MicrosoftArtifactRegistry
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -279,7 +311,7 @@ Prompts interactively for repository credentials.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, Profile, AzureArtifacts
+Parameter Sets: Repository, AzureArtifacts, Profile
 Aliases: Interactive
 Possible values:
 
@@ -291,13 +323,13 @@ Accept wildcard characters: True
 ```
 
 ### -Provider
-Private gallery provider. Currently only AzureArtifacts is supported.
+Private gallery provider used for automatic repository registration.
 
 ```yaml
 Type: PrivateGalleryProvider
 Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: AzureArtifacts
+Possible values: AzureArtifacts, Azure, JFrog, NuGet
 
 Required: False
 Position: named
@@ -307,11 +339,11 @@ Accept wildcard characters: True
 ```
 
 ### -Repository
-Name of an already registered repository.
+Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.
 
 ```yaml
 Type: String
-Parameter Sets: Repository
+Parameter Sets: Repository, AzureArtifacts
 Aliases: None
 Possible values:
 
@@ -328,6 +360,54 @@ Optional repository name override when Azure Artifacts details are supplied.
 ```yaml
 Type: String
 Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryPublishUri
+PowerShellGet publish URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositorySourceUri
+PowerShellGet source URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryUri
+PSResourceGet v3 repository URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
 Aliases: None
 Possible values:
 

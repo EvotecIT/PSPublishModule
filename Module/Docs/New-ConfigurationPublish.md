@@ -26,7 +26,7 @@ New-ConfigurationPublish -AzureDevOpsOrganization <string> -AzureArtifactsFeed <
 
 ### Profile
 ```powershell
-New-ConfigurationPublish -ProfileName <string> [-Enabled] [-Force] [-ID <string>] [<CommonParameters>]
+New-ConfigurationPublish -ProfileName <string> [-FilePath <string>] [-ApiKey <string>] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-Force] [-ID <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -65,7 +65,7 @@ API key to be used for publishing in clear text.
 
 ```yaml
 Type: String
-Parameter Sets: ApiKey
+Parameter Sets: ApiKey, Profile
 Aliases: None
 Possible values:
 
@@ -177,7 +177,7 @@ API key to be used for publishing in clear text in a file.
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile
+Parameter Sets: ApiFromFile, Profile
 Aliases: None
 Possible values:
 
@@ -289,7 +289,7 @@ Repository credential secret (password/token) in clear text.
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -305,7 +305,7 @@ Repository credential secret (password/token) in a clear-text file.
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -321,7 +321,7 @@ Repository credential username (basic auth).
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 

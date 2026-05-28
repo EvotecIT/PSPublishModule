@@ -14,8 +14,6 @@ It is adapted from `Docs/PSPublishModule.ModuleDocumentation.md`.
 Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings {
     New-ConfigurationDocumentation `
         -Enable `
-        -StartClean `
-        -UpdateWhenNew `
         -Path 'Docs' `
         -PathReadme 'Docs\Readme.md' `
         -AboutTopicsSourcePath 'Help\About' `
@@ -32,4 +30,3 @@ Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings {
 ## Source
 
 - [PSPublishModule.ModuleDocumentation.md](https://github.com/EvotecIT/PSPublishModule/blob/master/Docs/PSPublishModule.ModuleDocumentation.md)
-

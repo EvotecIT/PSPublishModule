@@ -228,11 +228,34 @@ PAT/basic credential parameters remain available for legacy or constrained envir
 preferred enterprise path. Prefer the Azure Artifacts Credential Provider whenever Azure DevOps Services and
 workstation policy allow it.
 
-OTHER PRIVATE FEEDS
+JFROG AND OTHER PRIVATE FEEDS
 
-The profile model is provider-shaped, but the only managed provider implemented today is Azure Artifacts.
-JFrog and generic NuGet v3 feeds should be added as explicit providers/adapters with their own credential
-policy instead of overloading Azure Artifacts behavior.
+JFrog and generic NuGet feeds use the same profile surface, but they do not use the Azure Artifacts
+Credential Provider. A JFrog profile can be created with:
+
+Set-ModuleRepositoryProfile -Name CompanyJfrog -Provider JFrog -Repository powershell-virtual -JFrogBaseUri https://company.jfrog.io/artifactory
+
+For credential-based usage, pass CredentialUserName plus CredentialSecret/CredentialSecretFilePath, or prompt
+interactively. If the JFrog instance is SAML/SSO-backed, the web login may be used to obtain or refresh a
+JFrog token, but PowerShellGet and PSResourceGet still need NuGet-compatible authentication unless the local
+environment provides a working bridge.
+
+PSPublishModule also supports an explicit experimental JFrog CLI bridge mode:
+
+Initialize-ModuleRepository -ProfileName CompanyJfrog -Provider JFrog -Repository powershell-virtual -JFrogBaseUri https://company.jfrog.io/artifactory -BootstrapMode JFrogCli -InstallPrerequisites
+
+This mode runs jf login interactively and then retries the repository probe. If JFrog CLI login succeeds but
+PSResourceGet still cannot read the NuGet feed, the connection result reports JFrogCliLoginSucceeded = True
+and AccessProbeSucceeded = False with a message explaining that the JFrog CLI session was not consumed by
+PowerShellGet/PSResourceGet. That gives support a precise error boundary instead of silently falling back.
+
+To prove whether JFrog CLI browser login can bridge to PSResourceGet on a real workstation, run:
+
+.\Module\Tests\Invoke-PrivateGalleryJFrogSsoValidation.ps1 -JFrogBaseUri https://company.jfrog.io/artifactory -Repository powershell-virtual -ModuleName ModuleA -RunJFrogCliLogin -EvidenceFile .\jfrog-sso.evidence.json -MarkdownFile .\jfrog-sso.evidence.md
+
+The helper writes non-secret JSON/Markdown evidence showing whether jf login succeeded, whether PSResourceGet
+could find the module without explicit credentials, and whether the explicit credential fallback works when
+CredentialUserName plus CredentialSecret/CredentialSecretFilePath are supplied.
 
 ## Examples
 

@@ -87,20 +87,12 @@ public sealed partial class ModulePipelineRunner
         if (string.Equals(fullTargetDocs, fullProjectRoot, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Documentation.Path resolves to the project root. Refusing to sync documentation to avoid overwriting project files. Set Documentation.Path to a folder (e.g. 'Docs').");
 
-        if (plan.DocumentationBuild.StartClean)
+        var fullSourceDocs = Path.GetFullPath(sourceDocs).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!SamePath(fullSourceDocs, fullTargetDocs))
         {
-            try
-            {
-                if (Directory.Exists(fullTargetDocs))
-                    Directory.Delete(fullTargetDocs, recursive: true);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn($"Failed to clean project docs folder '{fullTargetDocs}'. Error: {ex.Message}");
-            }
+            PruneStaleGeneratedMarkdown(sourceDocs, fullTargetDocs);
+            DirectoryCopy(sourceDocs, fullTargetDocs);
         }
-
-        DirectoryCopy(sourceDocs, fullTargetDocs);
 
         if (!string.IsNullOrWhiteSpace(documentationResult.ReadmePath) &&
             File.Exists(documentationResult.ReadmePath) &&
@@ -109,7 +101,8 @@ public sealed partial class ModulePipelineRunner
             var destDir = Path.GetDirectoryName(Path.GetFullPath(targetReadme));
             if (!string.IsNullOrWhiteSpace(destDir))
                 Directory.CreateDirectory(destDir);
-            File.Copy(documentationResult.ReadmePath, targetReadme, overwrite: true);
+            if (!SamePath(documentationResult.ReadmePath, targetReadme))
+                File.Copy(documentationResult.ReadmePath, targetReadme, overwrite: true);
         }
 
         if (plan.DocumentationBuild.GenerateExternalHelp &&
@@ -126,10 +119,177 @@ public sealed partial class ModulePipelineRunner
             Directory.CreateDirectory(targetCultureDir);
 
             var targetHelpFile = Path.Combine(targetCultureDir, Path.GetFileName(documentationResult.ExternalHelpFilePath));
-            File.Copy(documentationResult.ExternalHelpFilePath, targetHelpFile, overwrite: true);
+            if (!SamePath(documentationResult.ExternalHelpFilePath, targetHelpFile))
+                File.Copy(documentationResult.ExternalHelpFilePath, targetHelpFile, overwrite: true);
         }
 
         _logger.Success($"Updated project documentation at '{targetDocs}'.");
+    }
+
+    private static DocumentationConfiguration NormalizeDocumentationForStaging(ModulePipelinePlan plan, string stagingPath)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (plan.Documentation is null) throw new ArgumentException("Plan does not contain documentation configuration.", nameof(plan));
+        if (string.IsNullOrWhiteSpace(stagingPath)) throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
+
+        return new DocumentationConfiguration
+        {
+            Path = NormalizeProjectPathForStaging(plan.ProjectRoot, plan.Documentation.Path, rejectProjectRoot: true),
+            PathReadme = NormalizeProjectPathForStaging(plan.ProjectRoot, plan.Documentation.PathReadme, rejectProjectRoot: false)
+        };
+    }
+
+    private static string NormalizeProjectPathForStaging(string projectRoot, string configuredPath, bool rejectProjectRoot)
+    {
+        var value = (configuredPath ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (rejectProjectRoot)
+                throw new InvalidOperationException("Documentation.Path resolves to the project root. Refusing to build documentation to avoid overwriting project files. Set Documentation.Path to a folder (e.g. 'Docs').");
+
+            return value;
+        }
+
+        try
+        {
+            var fullProjectRoot = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var fullPath = Path.GetFullPath(Path.IsPathRooted(value) ? value : Path.Combine(fullProjectRoot, value))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (rejectProjectRoot && SamePath(fullProjectRoot, fullPath))
+                throw new InvalidOperationException("Documentation.Path resolves to the project root. Refusing to build documentation to avoid overwriting project files. Set Documentation.Path to a folder (e.g. 'Docs').");
+
+            if (!Path.IsPathRooted(value) || !IsSameOrChildPath(fullProjectRoot, fullPath))
+                return value;
+
+            return GetRelativePathFromDirectory(fullProjectRoot, fullPath);
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch
+        {
+            return value;
+        }
+    }
+
+    private static string GetRelativePathFromDirectory(string root, string path)
+    {
+        if (SamePath(root, path))
+            return ".";
+
+        var rootUri = new Uri(EnsureTrailingSeparator(root));
+        var pathUri = new Uri(path);
+        var relative = Uri.UnescapeDataString(rootUri.MakeRelativeUri(pathUri).ToString())
+            .Replace('/', Path.DirectorySeparatorChar);
+
+        return string.IsNullOrWhiteSpace(relative) ? "." : relative;
+    }
+
+    private static string EnsureTrailingSeparator(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return path;
+
+        return path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+               path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? path
+            : path + Path.DirectorySeparatorChar;
+    }
+
+    private void PruneStaleGeneratedMarkdown(string sourceDocs, string targetDocs)
+    {
+        var source = Path.GetFullPath(sourceDocs).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var target = Path.GetFullPath(targetDocs).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (!Directory.Exists(target))
+            return;
+
+        var sourceFiles = new HashSet<string>(
+            Directory.EnumerateFiles(source, "*.md", SearchOption.AllDirectories)
+                .Select(file => GetRelativePath(source, file)),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in Directory.EnumerateFiles(target, "*.md", SearchOption.AllDirectories))
+        {
+            var relativePath = GetRelativePath(target, file);
+            if (sourceFiles.Contains(relativePath))
+                continue;
+            if (!IsGeneratedDocumentationMarkdown(file))
+                continue;
+
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Failed to remove stale generated documentation file '{file}'. Error: {ex.Message}");
+            }
+        }
+
+        RemoveEmptyDirectories(target);
+    }
+
+    private static bool IsGeneratedDocumentationMarkdown(string path)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return false;
+
+            var text = ReadMarkdownHeader(path);
+            return text.Contains("external help file:", StringComparison.OrdinalIgnoreCase) ||
+                   text.Contains("generated: true", StringComparison.OrdinalIgnoreCase) ||
+                   (text.Contains("Module Name:", StringComparison.OrdinalIgnoreCase) &&
+                    text.Contains("schema:", StringComparison.OrdinalIgnoreCase)) ||
+                   (text.Contains("topic:", StringComparison.OrdinalIgnoreCase) &&
+                    text.Contains("schema: 1.0.0", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string ReadMarkdownHeader(string path)
+    {
+        using var reader = new StreamReader(path);
+        var buffer = new char[2048];
+        var read = reader.Read(buffer, 0, buffer.Length);
+        return new string(buffer, 0, read);
+    }
+
+    private static void RemoveEmptyDirectories(string root)
+    {
+        if (!Directory.Exists(root))
+            return;
+
+        foreach (var directory in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
+                     .OrderByDescending(static path => path.Length))
+        {
+            if (Directory.EnumerateFileSystemEntries(directory).Any())
+                continue;
+
+            Directory.Delete(directory);
+        }
+    }
+
+    private static bool SamePath(string left, string right)
+        => string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+
+    private static string GetRelativePath(string root, string file)
+    {
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullFile = Path.GetFullPath(file);
+        var prefix = fullRoot + Path.DirectorySeparatorChar;
+
+        return fullFile.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? fullFile.Substring(prefix.Length)
+            : Path.GetFileName(fullFile) ?? fullFile;
     }
 
     private static string ResolvePath(string baseDir, string path, bool optional = false)

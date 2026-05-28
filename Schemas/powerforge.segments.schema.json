@@ -117,8 +117,6 @@
       "additionalProperties": false,
       "properties": {
         "Enable": { "type": "boolean" },
-        "StartClean": { "type": "boolean" },
-        "UpdateWhenNew": { "type": "boolean" },
         "SyncExternalHelpToProjectRoot": { "type": "boolean" },
         "IncludeAboutTopics": { "type": "boolean" },
         "GenerateFallbackExamples": { "type": "boolean" },

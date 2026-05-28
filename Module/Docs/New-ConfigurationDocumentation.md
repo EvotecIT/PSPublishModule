@@ -11,13 +11,14 @@ Enables or disables creation of documentation from the module using PowerForge.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [<CommonParameters>]
+New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
 This cmdlet emits documentation configuration segments that are consumed by Invoke-ModuleBuild / Build-Module.
 It controls markdown generation (in -Path), optional external help generation (MAML, e.g. en-US\<ModuleName>-help.xml),
-and whether generated documentation should be synced back to the project root.
+and project-root documentation sync. When -Enable is used, PowerForge generates documentation, cleans stale files in the configured docs folder,
+and updates the project documentation path by default.
 
 About topics are supported via about_*.help.txt / about_*.txt / about_*.md / about_*.markdown files present in the module source. When enabled,
 these are converted into markdown pages under Docs\About. Additional source roots can be provided via
@@ -27,7 +28,7 @@ AboutTopicsSourcePath.
 
 ### EXAMPLE 1
 ```powershell
-New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot
+New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot
 ```
 
 
@@ -190,42 +191,9 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -StartClean
-Removes all files from the documentation folder before creating new documentation.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -SyncExternalHelpToProjectRoot
-When enabled and UpdateWhenNew is set, the generated external help file is also synced
+When enabled, the generated external help file is also synced
 back to the project root (e.g. en-US\<ModuleName>-help.xml).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -UpdateWhenNew
-When enabled, generated documentation is also synced back to the project folder
-(not only to the staging build output).
 
 ```yaml
 Type: SwitchParameter

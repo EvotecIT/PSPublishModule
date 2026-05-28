@@ -94,11 +94,12 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
+            var documentationForBuild = NormalizeDocumentationForStaging(plan, buildResult.StagingPath);
             state.DocumentationResult = _hostedOperations.BuildDocumentation(
                 moduleName: plan.ModuleName,
                 stagingPath: buildResult.StagingPath,
                 moduleManifestPath: buildResult.ManifestPath,
-                documentation: plan.Documentation,
+                documentation: documentationForBuild,
                 buildDocumentation: plan.DocumentationBuild,
                 progress: reporter,
                 extractStep: session.DocsExtractStep,
@@ -109,8 +110,7 @@ public sealed partial class ModulePipelineRunner
                 throw new InvalidOperationException($"Documentation generation failed. {state.DocumentationResult.ErrorMessage}");
 
             if (state.DocumentationResult is not null &&
-                state.DocumentationResult.Succeeded &&
-                plan.DocumentationBuild.UpdateWhenNew)
+                state.DocumentationResult.Succeeded)
             {
                 try
                 {

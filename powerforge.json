@@ -41,10 +41,7 @@
       "Type": "BuildDocumentation",
       "Configuration": {
         "Enable": true,
-        "StartClean": true,
-        "UpdateWhenNew": true,
         "SyncExternalHelpToProjectRoot": false,
-        "Tool": "PowerForge",
         "GenerateExternalHelp": true,
         "ExternalHelpCulture": "en-US"
       }

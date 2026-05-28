@@ -161,7 +161,7 @@ That means:
 To enable it in your build config:
 
 - `New-ConfigurationDocumentation -Path 'Docs' -PathReadme 'Docs\\Readme.md'`
-- `New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\\Readme.md'`
+- `New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\\Readme.md'`
 - To also sync the generated external help file back into your project folder, add `-SyncExternalHelpToProjectRoot`
 
 Authoring C# cmdlets (recommended):
@@ -393,7 +393,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
 
     # configuration for documentation, at the same time it enables documentation processing
-    New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
+    New-ConfigurationDocumentation -Enable:$false -PathReadme 'Docs\Readme.md' -Path 'Docs'
 
     New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
 
@@ -622,9 +622,7 @@ $Configuration = @{
             LocalVersion            = $false # bumps version in PSD1 on every build
         }
         BuildDocumentation = @{
-            Enable        = $true # enables documentation processing
-            StartClean    = $true # always starts clean
-            UpdateWhenNew = $true # always updates right after update
+            Enable = $true # enables documentation processing, cleans stale docs, and syncs project docs
         }
         ImportModules      = @{
             Self            = $true

@@ -36,7 +36,7 @@ namespace PSPublishModule;
 /// <summary>Build a module (DSL) and keep docs in sync</summary>
 /// <code>
 /// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-///     New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+///     New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md'
 /// }
 /// </code>
 /// </example>

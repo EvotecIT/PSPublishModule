@@ -44,15 +44,9 @@ public sealed class BuildDocumentationConfiguration
     /// <summary>Enable documentation generation.</summary>
     public bool Enable { get; set; }
 
-    /// <summary>Remove files from docs folder before generating new docs.</summary>
-    public bool StartClean { get; set; }
-
-    /// <summary>Run a post-update step after generating new docs.</summary>
-    public bool UpdateWhenNew { get; set; }
-
     /// <summary>
     /// When enabled, also syncs the generated external help file back to the project root
-    /// (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>) during <c>UpdateWhenNew</c>.
+    /// (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>) when project docs are synced.
     /// By default, external help is generated in staging and included in artefacts, but not copied into the project.
     /// </summary>
     public bool SyncExternalHelpToProjectRoot { get; set; }
