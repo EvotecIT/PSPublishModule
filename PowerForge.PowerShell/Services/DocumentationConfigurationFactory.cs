@@ -21,8 +21,6 @@ internal sealed class DocumentationConfigurationFactory
 
         var emitBuildSegment =
             request.Enable ||
-            request.StartClean ||
-            request.UpdateWhenNew ||
             request.SyncExternalHelpToProjectRoot ||
             request.SkipExternalHelp ||
             request.SkipAboutTopics ||
@@ -38,8 +36,6 @@ internal sealed class DocumentationConfigurationFactory
                 Configuration = new BuildDocumentationConfiguration
                 {
                     Enable = request.Enable,
-                    StartClean = request.StartClean,
-                    UpdateWhenNew = request.UpdateWhenNew,
                     SyncExternalHelpToProjectRoot = request.SyncExternalHelpToProjectRoot,
                     IncludeAboutTopics = !request.SkipAboutTopics,
                     GenerateFallbackExamples = !request.SkipFallbackExamples,

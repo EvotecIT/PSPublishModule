@@ -14,10 +14,10 @@ For DotNet publish usage and command conventions, see:
 In this repo, module build uses:
 
 ```powershell
-New-ConfigurationDocumentation -Enable -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs' -AboutTopicsSourcePath 'Help\About'
+New-ConfigurationDocumentation -Enable -PathReadme 'Docs\Readme.md' -Path 'Docs' -AboutTopicsSourcePath 'Help\About'
 ```
 
-Because `-StartClean` and `-UpdateWhenNew` are enabled, manual edits in `Module/Docs` are not durable.
+Because documentation generation is enabled, PowerForge cleans stale generated docs and syncs new output back to `Module/Docs`. Manual edits in `Module/Docs` are not durable.
 
 ## Authoring Sources
 

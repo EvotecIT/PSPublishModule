@@ -68,7 +68,6 @@ public class DocumentationEngineCommentHelpTests
                 buildDocumentation: new BuildDocumentationConfiguration
                 {
                     Enable = true,
-                    StartClean = true,
                     GenerateExternalHelp = false,
                     IncludeAboutTopics = false,
                     GenerateFallbackExamples = false
@@ -90,4 +89,3 @@ public class DocumentationEngineCommentHelpTests
         }
     }
 }
-

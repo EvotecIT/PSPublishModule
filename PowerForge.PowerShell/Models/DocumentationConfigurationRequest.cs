@@ -3,8 +3,6 @@ namespace PowerForge;
 internal sealed class DocumentationConfigurationRequest
 {
     public bool Enable { get; set; }
-    public bool StartClean { get; set; }
-    public bool UpdateWhenNew { get; set; }
     public bool SyncExternalHelpToProjectRoot { get; set; }
     public bool SkipExternalHelp { get; set; }
     public bool SkipAboutTopics { get; set; }

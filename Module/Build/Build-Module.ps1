@@ -211,7 +211,7 @@ Invoke-ModuleBuild @buildParams -Settings {
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
 
     # configuration for documentation, at the same time it enables documentation processing
-    New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -SyncExternalHelpToProjectRoot -PathReadme 'Docs\Readme.md' -Path 'Docs' -AboutTopicsSourcePath 'Help\About'
+    New-ConfigurationDocumentation -Enable:$true -SyncExternalHelpToProjectRoot -PathReadme 'Docs\Readme.md' -Path 'Docs' -AboutTopicsSourcePath 'Help\About'
 
     # quality checks (non-blocking by default; add -FailOn* switches to hard-fail)
     $newConfigurationValidationSplat = @{

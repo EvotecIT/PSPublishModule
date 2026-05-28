@@ -11,7 +11,7 @@ Creates or updates a saved private module repository profile.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Set-ModuleRepositoryProfile [-Name] <string> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-ModuleRepositoryProfile [-Name] <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-Repository <string>] [-RepositoryName <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -47,7 +47,7 @@ Parameter Sets: __AllParameterSets
 Aliases: Feed
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -63,7 +63,7 @@ Parameter Sets: __AllParameterSets
 Aliases: Organization
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -93,7 +93,39 @@ Bootstrap/authentication mode saved in the profile. Defaults to ExistingSession 
 Type: PrivateGalleryBootstrapMode
 Parameter Sets: __AllParameterSets
 Aliases: Mode
-Possible values: Auto, ExistingSession, CredentialPrompt
+Possible values: Auto, ExistingSession, CredentialPrompt, JFrogCli
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -JFrogBaseUri
+JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -JFrogRepository
+JFrog NuGet repository key. Defaults from Repository when omitted.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -135,13 +167,29 @@ Accept wildcard characters: True
 ```
 
 ### -Provider
-Private gallery provider. Currently only AzureArtifacts is supported.
+Private gallery provider.
 
 ```yaml
 Type: PrivateGalleryProvider
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: AzureArtifacts
+Possible values: AzureArtifacts, Azure, JFrog, NuGet
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Repository
+Provider repository/feed id. For Azure this is the feed when AzureArtifactsFeed is omitted; for JFrog this is the Artifactory NuGet repository key.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -151,12 +199,60 @@ Accept wildcard characters: True
 ```
 
 ### -RepositoryName
-Optional local repository name override. Defaults to the feed name.
+Optional local repository name override. Defaults to the provider repository/feed id.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
-Aliases: Repository
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryPublishUri
+PowerShellGet publish URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositorySourceUri
+PowerShellGet source URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryUri
+PSResourceGet v3 repository URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False

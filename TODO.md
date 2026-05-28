@@ -102,7 +102,7 @@
 - `DocumentationEngine` service:
   - Source (MVP): out-of-proc `Get-Command` + `Get-Help` for script + cmdlet parity.
   - Emit (MVP): Markdown help files + module page (Readme.md) + external help MAML (`<culture>\<ModuleName>-help.xml`).
-  - `UpdateWhenNew` remains as the project-root sync switch.
+  - Project-root sync is automatic when documentation generation is enabled.
 - Documentation generation uses the built-in PowerForge engine only.
 
 **Phase 4 — CLI + GitHub Actions + VSCode**

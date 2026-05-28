@@ -53,7 +53,6 @@ public sealed class DocumentationBinaryFixtureTests
                 buildDocumentation: new BuildDocumentationConfiguration
                 {
                     Enable = true,
-                    StartClean = true,
                     GenerateExternalHelp = true,
                     IncludeAboutTopics = false,
                     GenerateFallbackExamples = true
@@ -189,7 +188,6 @@ function Invoke-KeyCollision {
                 buildDocumentation: new BuildDocumentationConfiguration
                 {
                     Enable = true,
-                    StartClean = true,
                     GenerateExternalHelp = true,
                     IncludeAboutTopics = false,
                     GenerateFallbackExamples = true

@@ -11,7 +11,7 @@ Refreshes or repairs an Azure Artifacts private PowerShell module repository reg
 ## SYNTAX
 ### AzureArtifacts (Default)
 ```powershell
-Update-ModuleRepository -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-Name <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-ModuleRepository [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-Name <string>] [-Repository <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Profile
@@ -21,7 +21,7 @@ Update-ModuleRepository -ProfileName <string> [-CredentialUserName <string>] [-C
 
 ### MicrosoftArtifactRegistry
 ```powershell
-Update-ModuleRepository -MicrosoftArtifactRegistry [-Name <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <int>] [-InstallPrerequisites] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-ModuleRepository -MicrosoftArtifactRegistry [-Name <string>] [-Repository <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <int>] [-InstallPrerequisites] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -51,7 +51,7 @@ Parameter Sets: AzureArtifacts
 Aliases: Feed
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -67,7 +67,7 @@ Parameter Sets: AzureArtifacts
 Aliases: Organization
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -97,7 +97,7 @@ Bootstrap/authentication mode. Auto uses supplied or prompted credentials when r
 Type: PrivateGalleryBootstrapMode
 Parameter Sets: AzureArtifacts
 Aliases: Mode
-Possible values: Auto, ExistingSession, CredentialPrompt
+Possible values: Auto, ExistingSession, CredentialPrompt, JFrogCli
 
 Required: False
 Position: named
@@ -170,6 +170,38 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -JFrogBaseUri
+JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -JFrogRepository
+JFrog NuGet repository key. Defaults from Repository when omitted.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -MicrosoftArtifactRegistry
 Refreshes Microsoft Artifact Registry registration for Microsoft-owned packages.
 
@@ -192,7 +224,7 @@ Optional repository name override. Defaults to the feed name.
 ```yaml
 Type: String
 Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
-Aliases: Repository
+Aliases: None
 Possible values:
 
 Required: False
@@ -251,13 +283,77 @@ Accept wildcard characters: True
 ```
 
 ### -Provider
-Private gallery provider. Currently only AzureArtifacts is supported.
+Private gallery provider.
 
 ```yaml
 Type: PrivateGalleryProvider
 Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: AzureArtifacts
+Possible values: AzureArtifacts, Azure, JFrog, NuGet
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Repository
+Provider repository/feed id. For Azure this is the feed when AzureArtifactsFeed is omitted; for JFrog this is the Artifactory NuGet repository key.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryPublishUri
+PowerShellGet publish URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositorySourceUri
+PowerShellGet source URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryUri
+PSResourceGet v3 repository URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

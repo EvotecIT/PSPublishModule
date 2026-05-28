@@ -10,7 +10,8 @@ namespace PSPublishModule;
 /// <para>
 /// This cmdlet emits documentation configuration segments that are consumed by <c>Invoke-ModuleBuild</c> / <c>Build-Module</c>.
 /// It controls markdown generation (in <c>-Path</c>), optional external help generation (MAML, e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>),
-/// and whether generated documentation should be synced back to the project root.
+/// and project-root documentation sync. When <c>-Enable</c> is used, PowerForge generates documentation, cleans stale files in the configured docs folder,
+/// and updates the project documentation path by default.
 /// </para>
 /// <para>
 /// About topics are supported via <c>about_*.help.txt</c> / <c>about_*.txt</c> / <c>about_*.md</c> / <c>about_*.markdown</c> files present in the module source. When enabled,
@@ -19,8 +20,8 @@ namespace PSPublishModule;
 /// </para>
 /// </remarks>
 /// <example>
-/// <summary>Generate markdown docs and external help, and sync back to project root</summary>
-/// <code>New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot</code>
+/// <summary>Generate markdown docs and external help, and update the project docs folder</summary>
+/// <code>New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot</code>
 /// </example>
 /// <example>
 /// <summary>Generate docs but skip about topics conversion and fallback examples</summary>
@@ -36,17 +37,8 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// <summary>Enables creation of documentation from the module.</summary>
     [Parameter] public SwitchParameter Enable { get; set; }
 
-    /// <summary>Removes all files from the documentation folder before creating new documentation.</summary>
-    [Parameter] public SwitchParameter StartClean { get; set; }
-
     /// <summary>
-    /// When enabled, generated documentation is also synced back to the project folder
-    /// (not only to the staging build output).
-    /// </summary>
-    [Parameter] public SwitchParameter UpdateWhenNew { get; set; }
-
-    /// <summary>
-    /// When enabled and <see cref="UpdateWhenNew"/> is set, the generated external help file is also synced
+    /// When enabled, the generated external help file is also synced
     /// back to the project root (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>).
     /// </summary>
     [Parameter] public SwitchParameter SyncExternalHelpToProjectRoot { get; set; }
@@ -84,8 +76,6 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
         foreach (var segment in new DocumentationConfigurationFactory().Create(new DocumentationConfigurationRequest
         {
             Enable = Enable.IsPresent,
-            StartClean = StartClean.IsPresent,
-            UpdateWhenNew = UpdateWhenNew.IsPresent,
             SyncExternalHelpToProjectRoot = SyncExternalHelpToProjectRoot.IsPresent,
             SkipExternalHelp = SkipExternalHelp.IsPresent,
             SkipAboutTopics = SkipAboutTopics.IsPresent,

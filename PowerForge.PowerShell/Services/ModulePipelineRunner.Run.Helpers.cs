@@ -172,7 +172,6 @@ public sealed partial class ModulePipelineRunner
 
         if (documentationResult is not null &&
             documentationResult.Succeeded &&
-            plan.DocumentationBuild?.UpdateWhenNew == true &&
             plan.Documentation is not null)
         {
             var docsPath = ResolvePath(plan.ProjectRoot, plan.Documentation.Path);

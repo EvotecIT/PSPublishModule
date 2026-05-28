@@ -1,4 +1,5 @@
 using PowerForge;
+using System.IO;
 
 namespace PowerForge.Tests;
 
@@ -21,6 +22,39 @@ public sealed class DocumentationConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_Enable_EmitsBuildDocumentationWithoutLegacyCleanSyncOptions()
+    {
+        var factory = new DocumentationConfigurationFactory();
+
+        var segments = factory.Create(new DocumentationConfigurationRequest
+        {
+            Enable = true,
+            Path = "Docs",
+            PathReadme = "Docs\\Readme.md"
+        });
+
+        Assert.Equal(2, segments.Count);
+
+        var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(segments[1]);
+        Assert.True(buildDocumentation.Configuration.Enable);
+        Assert.True(buildDocumentation.Configuration.IncludeAboutTopics);
+        Assert.True(buildDocumentation.Configuration.GenerateFallbackExamples);
+        Assert.True(buildDocumentation.Configuration.GenerateExternalHelp);
+        Assert.Null(typeof(BuildDocumentationConfiguration).GetProperty("StartClean"));
+        Assert.Null(typeof(BuildDocumentationConfiguration).GetProperty("UpdateWhenNew"));
+
+        var schemaPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Schemas", "powerforge.segments.schema.json"));
+        var schema = File.ReadAllText(schemaPath);
+        Assert.DoesNotContain("\"StartClean\"", schema, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"UpdateWhenNew\"", schema, StringComparison.Ordinal);
+
+        var configPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "powerforge.json"));
+        var config = File.ReadAllText(configPath);
+        Assert.DoesNotContain("\"StartClean\"", config, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"UpdateWhenNew\"", config, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Create_emits_build_documentation_segment_when_options_are_requested()
     {
         var factory = new DocumentationConfigurationFactory();
@@ -28,8 +62,6 @@ public sealed class DocumentationConfigurationFactoryTests
         var segments = factory.Create(new DocumentationConfigurationRequest
         {
             Enable = true,
-            StartClean = true,
-            UpdateWhenNew = true,
             SyncExternalHelpToProjectRoot = true,
             SkipAboutTopics = true,
             SkipFallbackExamples = true,
@@ -50,8 +82,6 @@ public sealed class DocumentationConfigurationFactoryTests
 
         var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(segments[1]);
         Assert.True(buildDocumentation.Configuration.Enable);
-        Assert.True(buildDocumentation.Configuration.StartClean);
-        Assert.True(buildDocumentation.Configuration.UpdateWhenNew);
         Assert.True(buildDocumentation.Configuration.SyncExternalHelpToProjectRoot);
         Assert.False(buildDocumentation.Configuration.IncludeAboutTopics);
         Assert.False(buildDocumentation.Configuration.GenerateFallbackExamples);

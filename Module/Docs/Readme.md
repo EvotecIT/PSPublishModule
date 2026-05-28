@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.13
+Help Version: 3.0.14
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -27,6 +27,11 @@ Exports saved private module repository profiles to a non-secret JSON file.
 
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
+
+### [Get-ModuleDocumentation](Get-ModuleDocumentation.md)
+Gets module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) and renders it in the console.
+
+Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.
 
 ### [Get-ModuleInformation](Get-ModuleInformation.md)
 Gets module manifest information from a project directory.
@@ -57,6 +62,15 @@ Imports private module repository profiles from a non-secret JSON file.
 
 ### [Initialize-ModuleRepository](Initialize-ModuleRepository.md)
 Performs one-command enterprise onboarding for a private module repository profile.
+
+### [Install-ModuleDocumentation](Install-ModuleDocumentation.md)
+Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.
+
+Resolves the module and copies its Internals folder and selected root files into a destination folder arranged by DocumentationLayout. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. When successful, returns the destination path.
+
+### [Install-ModuleScript](Install-ModuleScript.md)
+Copies only PowerShell scripts from a module's Internals\Scripts folder to a destination path.
+The destination is flattened (no Module/Version subfolders).
 
 ### [Install-PrivateModule](Install-PrivateModule.md)
 Installs one or more modules from a private repository, optionally bootstrapping Azure Artifacts registration first.
@@ -256,11 +270,21 @@ Removes specific files and folders from a project directory with safety features
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
 Creates a new release for the given GitHub repository and optionally uploads assets.
 
+### [Set-ModuleDocumentation](Set-ModuleDocumentation.md)
+Configures repository access for documentation (stores/revokes tokens).
+
+Stores Personal Access Tokens for GitHub and/or Azure DevOps under the current user profile so module documentation commands can access private repositories. On Windows, tokens are protected with DPAPI; on other platforms they are stored as Base64 (best effort).
+
 ### [Set-ModuleRepositoryProfile](Set-ModuleRepositoryProfile.md)
 Creates or updates a saved private module repository profile.
 
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
 Updates version numbers across multiple project files.
+
+### [Show-ModuleDocumentation](Show-ModuleDocumentation.md)
+Displays module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) in the console.
+
+Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.
 
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
