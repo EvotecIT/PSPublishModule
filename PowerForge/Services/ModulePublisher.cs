@@ -329,14 +329,14 @@ public sealed class ModulePublisher
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static RequiredModuleReference[] GetRequiredModulesForPublish(
+    internal static RequiredModuleReference[] GetRequiredModulesForPublish(
         ModuleBuildResult buildResult,
         ModulePipelinePlan plan)
     {
         if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
-            File.Exists(buildResult.ManifestPath) &&
-            ModuleManifestValueReader.ReadRequiredModules(buildResult.ManifestPath) is { Length: > 0 } manifestModules)
+            File.Exists(buildResult.ManifestPath))
         {
+            var manifestModules = ModuleManifestValueReader.ReadRequiredModules(buildResult.ManifestPath);
             return manifestModules
                 .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.ModuleName))
                 .ToArray()!;
