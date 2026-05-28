@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -89,5 +90,138 @@ public sealed class ModulePublisherRequiredModulesTests
         var shouldSkip = ModulePublisher.ShouldSkipRepositoryDependencyValidation(required, external);
 
         Assert.False(shouldSkip);
+    }
+
+    [Fact]
+    public void GetRequiredModulesForPublish_UsesExistingManifestEvenWhenRequiredModulesAreEmpty()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            MergeMissing = true
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "PSSharedGoods",
+                            ModuleVersion = "0.0.313.1"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "PSSharedGoods"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            Assert.Contains(plan.RequiredModules, module => string.Equals(module.ModuleName, "PSSharedGoods", StringComparison.OrdinalIgnoreCase));
+
+            var buildResult = new ModuleBuildResult(
+                stagingPath: root.FullName,
+                manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var requiredForPublish = ModulePublisher.GetRequiredModulesForPublish(buildResult, plan);
+
+            Assert.Empty(requiredForPublish);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void GetRequiredModulesForPublish_FallsBackToPlanWhenManifestIsMissing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "PSSharedGoods",
+                            ModuleVersion = "0.0.313.1"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var buildResult = new ModuleBuildResult(
+                stagingPath: root.FullName,
+                manifestPath: Path.Combine(root.FullName, "Missing.psd1"),
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var requiredForPublish = ModulePublisher.GetRequiredModulesForPublish(buildResult, plan);
+
+            var required = Assert.Single(requiredForPublish);
+            Assert.Equal("PSSharedGoods", required.ModuleName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
+    {
+        Directory.CreateDirectory(moduleRoot);
+        File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), string.Empty);
+
+        var psd1 = string.Join(Environment.NewLine, new[]
+        {
+            "@{",
+            $"    RootModule = '{moduleName}.psm1'",
+            $"    ModuleVersion = '{version}'",
+            "    FunctionsToExport = @()",
+            "    CmdletsToExport = @()",
+            "    AliasesToExport = @()",
+            "}"
+        }) + Environment.NewLine;
+
+        File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
     }
 }
