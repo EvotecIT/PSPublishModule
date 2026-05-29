@@ -785,6 +785,54 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void BuildRestoreArguments_DoesNotForceTopLevelFrameworkAcrossProjectReferences()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["UseLocalHtmlForgeX"] = "false"
+            },
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        ReadyToRun = true
+                    },
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-arm64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildRestoreArguments(
+            plan,
+            "Service.csproj",
+            "win-arm64",
+            "net10.0-windows");
+
+        Assert.Contains("/p:RuntimeIdentifiers=\"win-arm64;win-x64\"", args);
+        Assert.Contains("/p:PublishReadyToRun=true", args);
+        Assert.DoesNotContain("/p:TargetFramework=net10.0-windows", args);
+    }
+
+    [Fact]
     public void Run_CommandFailure_ReturnsTroubleshootingDetails()
     {
         if (!DotNetPublishPipelineRunner.IsWindows())
