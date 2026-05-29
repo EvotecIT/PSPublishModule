@@ -177,6 +177,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 $@"(?<prefix>(^|\s)[-/]+{escaped}\s+)(?<quote>[""']?)(?<value>[^\s""']+)(\k<quote>)",
                 match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            redacted = Regex.Replace(
+                redacted,
+                $@"(?<prefix>(^|\s)[-/]+{escaped}\s*[:=]\s*)(?<quote>[""']?)(?<value>[^\s""']+)(\k<quote>)",
+                match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
 
         return redacted;

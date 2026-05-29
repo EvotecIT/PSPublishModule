@@ -380,7 +380,7 @@ public sealed partial class ModulePipelineRunner
     {
         if (string.IsNullOrWhiteSpace(value)) return false;
 
-        var trimmed = value.Trim();
+        var trimmed = (value ?? string.Empty).Trim();
         return !trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase) &&
                !trimmed.Equals("Latest", StringComparison.OrdinalIgnoreCase);
     }

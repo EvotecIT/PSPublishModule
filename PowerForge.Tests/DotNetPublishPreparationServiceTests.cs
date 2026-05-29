@@ -125,6 +125,59 @@ public sealed class DotNetPublishPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_from_config_rejects_profile_with_no_selected_targets()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-profile-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "publish.json");
+            File.WriteAllText(configPath, """
+{
+  "dotNet": {
+    "projectRoot": "."
+  },
+  "profile": "tools",
+  "profiles": [
+    {
+      "name": "tools",
+      "default": true,
+      "targets": [ "Tool" ]
+    }
+  ],
+  "targets": [
+    {
+      "name": "App",
+      "projectPath": "src/App/App.csproj"
+    },
+    {
+      "name": "Tool",
+      "projectPath": "src/Tool/Tool.csproj"
+    }
+  ]
+}
+""");
+
+            var request = new DotNetPublishPreparationRequest
+            {
+                ParameterSetName = "Config",
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                ConfigPath = configPath,
+                Target = new[] { "App" }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => new DotNetPublishPreparationService(new NullLogger()).Prepare(request));
+
+            Assert.Contains("Profile 'tools' does not match target override", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Prepare_from_config_applies_project_root_override()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-root-" + Guid.NewGuid().ToString("N")));

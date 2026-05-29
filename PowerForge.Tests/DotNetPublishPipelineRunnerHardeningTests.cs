@@ -758,17 +758,19 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     [Fact]
     public void RedactCommandLineSecrets_RedactsSensitiveMsBuildAndSwitchValues()
     {
-        var commandLine = "dotnet publish /p:ApiKey=super-secret --password hunter2 -ClientSecret 'abc123' /p:Configuration=Release";
+        var commandLine = "dotnet publish /p:ApiKey=super-secret --password hunter2 -ClientSecret 'abc123' --Token=token-value /p:Configuration=Release";
 
         var redacted = DotNetPublishPipelineRunner.RedactCommandLineSecrets(commandLine);
 
         Assert.Contains("/p:ApiKey=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("--password <redacted>", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("-ClientSecret '<redacted>'", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--Token=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("/p:Configuration=Release", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("super-secret", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("hunter2", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("abc123", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("token-value", redacted, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -813,7 +815,7 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             "net10.0-windows");
 
         Assert.Equal(new[] { "win-arm64", "win-x64" }, runtimes);
-        Assert.Equal("\"win-arm64;win-x64\"", DotNetPublishPipelineRunner.BuildMsBuildListPropertyValue(runtimes));
+        Assert.Equal("win-arm64;win-x64", DotNetPublishPipelineRunner.BuildMsBuildListPropertyValue(runtimes));
     }
 
     [Fact]
@@ -859,7 +861,7 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             "win-arm64",
             "net10.0-windows");
 
-        Assert.Contains("/p:RuntimeIdentifiers=\"win-arm64;win-x64\"", args);
+        Assert.Contains("/p:RuntimeIdentifiers=win-arm64;win-x64", args);
         Assert.Contains("/p:PublishReadyToRun=true", args);
         Assert.DoesNotContain("/p:TargetFramework=net10.0-windows", args);
     }

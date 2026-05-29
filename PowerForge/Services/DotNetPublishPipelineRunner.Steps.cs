@@ -157,9 +157,9 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     internal static string BuildMsBuildListPropertyValue(IEnumerable<string> values)
-        => "\"" + string.Join(";", (values ?? Array.Empty<string>())
+        => string.Join(";", (values ?? Array.Empty<string>())
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value.Trim())) + "\"";
+            .Select(value => value.Trim()));
 
     private static bool IsPortableStyle(DotNetPublishStyle style)
     {

@@ -142,9 +142,16 @@ internal sealed class DotNetPublishPreparationService
                     if (profile?.Targets is not { Length: > 0 })
                         continue;
 
+                    var originalTargets = profile.Targets;
                     profile.Targets = profile.Targets
                         .Where(target => !string.IsNullOrWhiteSpace(target) && selected.Contains(target.Trim()))
                         .ToArray();
+                    if (profile.Targets.Length == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Profile '{profile.Name}' does not match target override value(s): {string.Join(", ", overrideTargets)}. " +
+                            $"Profile target(s): {string.Join(", ", originalTargets)}.");
+                    }
                 }
             }
 
