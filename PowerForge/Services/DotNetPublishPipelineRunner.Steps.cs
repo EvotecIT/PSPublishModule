@@ -139,6 +139,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
+        var baselineProperties = BuildRestoreMsBuildProperties(plan, projectPath, runtime, framework);
         var runtimes = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
             .Where(target => string.Equals(target.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
             .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
@@ -147,6 +148,9 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(combination => combination.Runtime)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(candidate => RestorePropertiesEquivalent(
+                baselineProperties,
+                BuildRestoreMsBuildProperties(plan, projectPath, candidate!, framework)))
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -154,6 +158,24 @@ public sealed partial class DotNetPublishPipelineRunner
             return new[] { runtime };
 
         return runtimes;
+    }
+
+    private static bool RestorePropertiesEquivalent(
+        IReadOnlyDictionary<string, string> left,
+        IReadOnlyDictionary<string, string> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        foreach (var property in left)
+        {
+            if (!right.TryGetValue(property.Key, out var value))
+                return false;
+            if (!string.Equals(property.Value, value, StringComparison.Ordinal))
+                return false;
+        }
+
+        return true;
     }
 
     internal static string BuildMsBuildListPropertyValue(IEnumerable<string> values)

@@ -258,7 +258,7 @@ public sealed partial class ModulePipelineRunner
                 var preferSourceMetadata = ShouldPreferTransitiveDependencySourceMetadata(
                     item.VersionSource,
                     publishVersionSource) &&
-                    !HasExplicitVersionConstraint(item.Reference);
+                    !HasExplicitDependencyConstraint(item.Reference);
                 return new RequiredModuleDraft(
                     item.Reference.ModuleName,
                     preferSourceMetadata ? "Latest" : item.Reference.ModuleVersion,
@@ -371,10 +371,19 @@ public sealed partial class ModulePipelineRunner
            versionSource == ModuleDependencyVersionSource.PublishRepository ||
            (versionSource == ModuleDependencyVersionSource.Auto && publishVersionSource is not null);
 
-    private static bool HasExplicitVersionConstraint(RequiredModuleReference reference)
+    private static bool HasExplicitDependencyConstraint(RequiredModuleReference reference)
         => HasExplicitVersionValue(reference.ModuleVersion) ||
            HasExplicitVersionValue(reference.RequiredVersion) ||
-           HasExplicitVersionValue(reference.MaximumVersion);
+           HasExplicitVersionValue(reference.MaximumVersion) ||
+           HasExplicitGuidValue(reference.Guid);
+
+    private static bool HasExplicitGuidValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var trimmed = (value ?? string.Empty).Trim();
+        return !trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool HasExplicitVersionValue(string? value)
     {

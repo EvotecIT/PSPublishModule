@@ -164,28 +164,27 @@ public sealed partial class DotNetPublishPipelineRunner
         if (string.IsNullOrWhiteSpace(commandLine)) return string.Empty;
 
         var redacted = commandLine!;
-        foreach (var key in SensitiveCommandLineKeys)
-        {
-            var escaped = Regex.Escape(key);
-            redacted = Regex.Replace(
-                redacted,
-                $@"(?<prefix>(^|\s)([-/]+p:)?{escaped}\s*[:=]\s*)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
-                match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            redacted = Regex.Replace(
-                redacted,
-                $@"(?<prefix>(^|\s)[-/]+{escaped}\s+)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
-                match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            redacted = Regex.Replace(
-                redacted,
-                $@"(?<prefix>(^|\s)[-/]+{escaped}\s*[:=]\s*)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
-                match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        }
+        redacted = Regex.Replace(
+            redacted,
+            $@"(?<prefix>(^|\s)([-/]+p:)?{SensitiveCommandLineKeyPattern}\s*[:=]\s*)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
+            RedactCommandLineSecretMatch,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        redacted = Regex.Replace(
+            redacted,
+            $@"(?<prefix>(^|\s)[-/]+{SensitiveCommandLineKeyPattern}\s+)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
+            RedactCommandLineSecretMatch,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        redacted = Regex.Replace(
+            redacted,
+            $@"(?<prefix>(^|\s)[-/]+{SensitiveCommandLineKeyPattern}\s*[:=]\s*)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
+            RedactCommandLineSecretMatch,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         return redacted;
     }
+
+    private static string RedactCommandLineSecretMatch(Match match)
+        => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}";
 
     private static readonly string[] SensitiveCommandLineKeys =
     {
@@ -201,6 +200,9 @@ public sealed partial class DotNetPublishPipelineRunner
         "Secret",
         "Token"
     };
+
+    private static readonly string SensitiveCommandLineKeyPattern =
+        $@"[A-Za-z0-9_.:-]*(?:{string.Join("|", SensitiveCommandLineKeys.Select(Regex.Escape))})";
 
     private static string? TryWriteFailureLog(DotNetPublishPlan plan, DotNetPublishStep step, DotNetPublishCommandException ex)
     {

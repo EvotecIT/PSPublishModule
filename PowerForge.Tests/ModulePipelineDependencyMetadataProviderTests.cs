@@ -517,8 +517,7 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                     ["Parent.Tools"] = new[]
                     {
                         new RequiredModuleReference(
-                            "Child.Tools",
-                            guid: "22222222-2222-2222-2222-222222222222")
+                            "Child.Tools")
                     }
                 });
 
@@ -529,6 +528,44 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
             Assert.Equal("2.5.0", child.ModuleVersion);
             Assert.Equal("55555555-5555-5555-5555-555555555555", child.Guid);
             Assert.Equal("PSGallery", provider.LastOnlineRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_PreservesTransitiveGuidConstraint_WhenInheritingRepositoryVersionSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Child.Tools"] = ("2.5.0", "55555555-5555-5555-5555-555555555555")
+                },
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[]
+                    {
+                        new RequiredModuleReference(
+                            "Child.Tools",
+                            guid: "22222222-2222-2222-2222-222222222222")
+                    }
+                });
+
+            var spec = CreateRequiredParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.PSGallery);
+            var plan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec);
+
+            var child = Assert.Single(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Child.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.Null(child.ModuleVersion);
+            Assert.Equal("22222222-2222-2222-2222-222222222222", child.Guid);
         }
         finally
         {

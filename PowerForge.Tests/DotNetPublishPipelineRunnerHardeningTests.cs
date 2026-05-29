@@ -758,7 +758,7 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     [Fact]
     public void RedactCommandLineSecrets_RedactsSensitiveMsBuildAndSwitchValues()
     {
-        var commandLine = "dotnet publish /p:ApiKey=super-secret --password \"correct horse\" -ClientSecret 'abc123' --Token=token-value /p:Configuration=Release";
+        var commandLine = "dotnet publish /p:ApiKey=super-secret --password \"correct horse\" -ClientSecret 'abc123' --Token=token-value -NuGetApiKey nuget-secret /p:GitHubToken=github-secret /p:Configuration=Release";
 
         var redacted = DotNetPublishPipelineRunner.RedactCommandLineSecrets(commandLine);
 
@@ -766,11 +766,15 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
         Assert.Contains("--password \"<redacted>\"", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("-ClientSecret '<redacted>'", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("--Token=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("-NuGetApiKey <redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/p:GitHubToken=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("/p:Configuration=Release", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("super-secret", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("correct horse", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("abc123", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("token-value", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("nuget-secret", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("github-secret", redacted, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -816,6 +820,44 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
 
         Assert.Equal(new[] { "win-arm64", "win-x64" }, runtimes);
         Assert.Equal("win-arm64;win-x64", DotNetPublishPipelineRunner.BuildMsBuildListPropertyValue(runtimes));
+    }
+
+    [Fact]
+    public void BuildRestoreRuntimeIdentifiers_ExcludesRuntimesWithDifferentRestoreProperties()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "linux-x64",
+                            Style = DotNetPublishStyle.AotSpeed
+                        }
+                    }
+                }
+            }
+        };
+
+        var runtimes = DotNetPublishPipelineRunner.BuildRestoreRuntimeIdentifiers(
+            plan,
+            "Service.csproj",
+            "win-x64",
+            "net10.0");
+
+        Assert.Equal(new[] { "win-x64" }, runtimes);
     }
 
     [Fact]
