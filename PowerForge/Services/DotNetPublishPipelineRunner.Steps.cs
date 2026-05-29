@@ -37,7 +37,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 _logger.Info($"Restore ({label}) -> {request.ProjectPath}");
 
                 var args = new List<string> { "restore", request.ProjectPath, "--nologo" };
-                args.AddRange(new[] { "-r", runtimeValue });
+                var runtimeIdentifiers = BuildRestoreRuntimeIdentifiers(plan, request.ProjectPath, runtimeValue, framework);
+                if (runtimeIdentifiers.Length <= 1)
+                    args.AddRange(new[] { "-r", runtimeValue });
+                else
+                    args.Add($"/p:RuntimeIdentifiers={BuildMsBuildListPropertyValue(runtimeIdentifiers)}");
                 args.AddRange(BuildMsBuildPropertyArgs(BuildRestoreMsBuildProperties(plan, request.ProjectPath, runtimeValue, framework)));
                 if (!string.IsNullOrWhiteSpace(framework))
                     args.Add($"/p:TargetFramework={framework}");
@@ -118,6 +122,36 @@ public sealed partial class DotNetPublishPipelineRunner
 
         return merged;
     }
+
+    internal static string[] BuildRestoreRuntimeIdentifiers(
+        DotNetPublishPlan plan,
+        string projectPath,
+        string runtime,
+        string? framework = null)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        var runtimes = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Where(target => string.Equals(target.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            .Where(combination => string.IsNullOrWhiteSpace(framework)
+                || string.Equals(combination.Framework, framework, StringComparison.OrdinalIgnoreCase))
+            .Select(combination => combination.Runtime)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (runtimes.Length == 0 && !string.IsNullOrWhiteSpace(runtime))
+            return new[] { runtime };
+
+        return runtimes;
+    }
+
+    internal static string BuildMsBuildListPropertyValue(IEnumerable<string> values)
+        => "\"" + string.Join(";", (values ?? Array.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())) + "\"";
 
     private static bool IsPortableStyle(DotNetPublishStyle style)
     {

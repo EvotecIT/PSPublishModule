@@ -135,6 +135,19 @@ internal sealed class DotNetPublishPreparationService
                 .Where(t => selected.Contains(t.Name))
                 .ToArray();
 
+            if (spec.Profiles is { Length: > 0 })
+            {
+                foreach (var profile in spec.Profiles)
+                {
+                    if (profile?.Targets is not { Length: > 0 })
+                        continue;
+
+                    profile.Targets = profile.Targets
+                        .Where(target => !string.IsNullOrWhiteSpace(target) && selected.Contains(target.Trim()))
+                        .ToArray();
+                }
+            }
+
             if (spec.Installers is { Length: > 0 })
             {
                 spec.Installers = spec.Installers

@@ -19,6 +19,14 @@ public sealed class DotNetPublishPreparationServiceTests
     "restore": true,
     "build": true
   },
+  "profile": "msi",
+  "profiles": [
+    {
+      "name": "msi",
+      "default": true,
+      "targets": [ "App", "Tool" ]
+    }
+  ],
   "targets": [
     {
       "name": "App",
@@ -70,6 +78,8 @@ public sealed class DotNetPublishPreparationServiceTests
             Assert.Equal(Path.Combine(root.FullName, "powerforge.dotnetpublish.generated.json"), context.JsonOutputPath);
             Assert.Single(context.Spec.Targets);
             Assert.Equal("App", context.Spec.Targets[0].Name);
+            Assert.Single(context.Spec.Profiles[0].Targets);
+            Assert.Equal("App", context.Spec.Profiles[0].Targets[0]);
             Assert.Single(context.Spec.Installers);
             Assert.Equal("AppInstaller", context.Spec.Installers[0].Id);
             Assert.Equal(new[] { "linux-x64" }, context.Spec.Targets[0].Publish.Runtimes);

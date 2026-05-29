@@ -26,6 +26,38 @@ public sealed partial class DotNetPublishPipelineRunner
         return (text ?? string.Empty).Trim();
     }
 
+    internal static string ExtractBestFailureLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        var lines = (text ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => (line ?? string.Empty).Trim())
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+        if (lines.Length == 0) return string.Empty;
+
+        var diagnostics = lines
+            .Where(IsDiagnosticFailureLine)
+            .ToArray();
+        if (diagnostics.Length > 0)
+            return diagnostics[^1];
+
+        return lines[^1];
+    }
+
+    private static bool IsDiagnosticFailureLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+
+        return line.Contains(": error ", StringComparison.OrdinalIgnoreCase)
+            || line.Contains(" error ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("error ", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("exception", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("failed", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string ToSafeFileName(string? input, string fallback)
     {
         var s = string.IsNullOrWhiteSpace(input) ? fallback : input!.Trim();
@@ -74,8 +106,38 @@ public sealed partial class DotNetPublishPipelineRunner
         failure.StdOutTail = TailLines(cmdEx.StdOut, maxLines: 80, maxChars: 8000);
         failure.StdErrTail = TailLines(cmdEx.StdErr, maxLines: 80, maxChars: 8000);
         failure.LogPath = TryWriteFailureLog(plan, stepEx.Step, cmdEx);
+        errorMessage = BuildCommandFailureMessage(stepEx.Step, cmdEx, failure);
 
         return failure;
+    }
+
+    private static string BuildCommandFailureMessage(
+        DotNetPublishStep step,
+        DotNetPublishCommandException command,
+        DotNetPublishFailure? failure)
+    {
+        if (step is null) throw new ArgumentNullException(nameof(step));
+        if (command is null) throw new ArgumentNullException(nameof(command));
+
+        var detail = ExtractBestFailureLine(!string.IsNullOrWhiteSpace(failure?.StdErrTail)
+            ? failure!.StdErrTail
+            : failure?.StdOutTail);
+        if (string.IsNullOrWhiteSpace(detail))
+            detail = command.Message;
+
+        var parts = new List<string>
+        {
+            $"Step '{step.Key}' ({step.Kind}) failed with exit code {command.ExitCode}.",
+            $"Command: {command.CommandLine}",
+            $"WorkingDirectory: {command.WorkingDirectory}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(failure?.LogPath))
+            parts.Add($"Log: {failure!.LogPath}");
+        if (!string.IsNullOrWhiteSpace(detail))
+            parts.Add($"Error: {detail}");
+
+        return string.Join(Environment.NewLine, parts);
     }
 
     private static string? TryWriteFailureLog(DotNetPublishPlan plan, DotNetPublishStep step, DotNetPublishCommandException ex)
