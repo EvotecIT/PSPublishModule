@@ -169,17 +169,17 @@ public sealed partial class DotNetPublishPipelineRunner
             var escaped = Regex.Escape(key);
             redacted = Regex.Replace(
                 redacted,
-                $@"(?<prefix>(^|\s)([-/]+p:)?{escaped}\s*[:=]\s*)(?<quote>[""']?)(?<value>[^\s""']+)(\k<quote>)",
+                $@"(?<prefix>(^|\s)([-/]+p:)?{escaped}\s*[:=]\s*)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
                 match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             redacted = Regex.Replace(
                 redacted,
-                $@"(?<prefix>(^|\s)[-/]+{escaped}\s+)(?<quote>[""']?)(?<value>[^\s""']+)(\k<quote>)",
+                $@"(?<prefix>(^|\s)[-/]+{escaped}\s+)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
                 match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             redacted = Regex.Replace(
                 redacted,
-                $@"(?<prefix>(^|\s)[-/]+{escaped}\s*[:=]\s*)(?<quote>[""']?)(?<value>[^\s""']+)(\k<quote>)",
+                $@"(?<prefix>(^|\s)[-/]+{escaped}\s*[:=]\s*)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
                 match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }

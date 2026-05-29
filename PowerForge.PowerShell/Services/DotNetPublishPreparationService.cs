@@ -137,10 +137,16 @@ internal sealed class DotNetPublishPreparationService
 
             if (spec.Profiles is { Length: > 0 })
             {
+                var activeProfileName = ResolveActiveProfileName(spec);
                 foreach (var profile in spec.Profiles)
                 {
                     if (profile?.Targets is not { Length: > 0 })
                         continue;
+                    if (string.IsNullOrWhiteSpace(activeProfileName) ||
+                        !string.Equals(profile.Name, activeProfileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
 
                     var originalTargets = profile.Targets;
                     profile.Targets = profile.Targets
@@ -203,6 +209,16 @@ internal sealed class DotNetPublishPreparationService
             spec.DotNet.Build = false;
             spec.DotNet.NoBuildInPublish = true;
         }
+    }
+
+    private static string? ResolveActiveProfileName(DotNetPublishSpec spec)
+    {
+        if (!string.IsNullOrWhiteSpace(spec.Profile))
+            return spec.Profile!.Trim();
+
+        var defaultProfile = (spec.Profiles ?? Array.Empty<DotNetPublishProfile>())
+            .FirstOrDefault(profile => profile is not null && profile.Default);
+        return defaultProfile?.Name;
     }
 
     private static string[] NormalizeStrings(string[]? values)

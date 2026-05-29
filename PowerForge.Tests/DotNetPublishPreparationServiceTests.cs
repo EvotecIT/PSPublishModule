@@ -178,6 +178,68 @@ public sealed class DotNetPublishPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_from_config_ignores_unselected_profiles_when_filtering_targets()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-profile-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "publish.json");
+            File.WriteAllText(configPath, """
+{
+  "dotNet": {
+    "projectRoot": "."
+  },
+  "profile": "app",
+  "profiles": [
+    {
+      "name": "app",
+      "default": true,
+      "targets": [ "App" ]
+    },
+    {
+      "name": "tools",
+      "targets": [ "Tool" ]
+    }
+  ],
+  "targets": [
+    {
+      "name": "App",
+      "projectPath": "src/App/App.csproj"
+    },
+    {
+      "name": "Tool",
+      "projectPath": "src/Tool/Tool.csproj"
+    }
+  ]
+}
+""");
+
+            var request = new DotNetPublishPreparationRequest
+            {
+                ParameterSetName = "Config",
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                ConfigPath = configPath,
+                Target = new[] { "App" }
+            };
+
+            var context = new DotNetPublishPreparationService(new NullLogger()).Prepare(request);
+
+            Assert.Single(context.Spec.Targets);
+            Assert.Equal("App", context.Spec.Targets[0].Name);
+            var appProfile = Assert.Single(context.Spec.Profiles, profile => string.Equals(profile.Name, "app", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(new[] { "App" }, appProfile.Targets);
+            var toolsProfile = Assert.Single(context.Spec.Profiles, profile => string.Equals(profile.Name, "tools", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(new[] { "Tool" }, toolsProfile.Targets);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Prepare_from_config_applies_project_root_override()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-root-" + Guid.NewGuid().ToString("N")));

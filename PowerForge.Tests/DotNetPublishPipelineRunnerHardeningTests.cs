@@ -758,17 +758,17 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     [Fact]
     public void RedactCommandLineSecrets_RedactsSensitiveMsBuildAndSwitchValues()
     {
-        var commandLine = "dotnet publish /p:ApiKey=super-secret --password hunter2 -ClientSecret 'abc123' --Token=token-value /p:Configuration=Release";
+        var commandLine = "dotnet publish /p:ApiKey=super-secret --password \"correct horse\" -ClientSecret 'abc123' --Token=token-value /p:Configuration=Release";
 
         var redacted = DotNetPublishPipelineRunner.RedactCommandLineSecrets(commandLine);
 
         Assert.Contains("/p:ApiKey=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("--password <redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--password \"<redacted>\"", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("-ClientSecret '<redacted>'", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("--Token=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("/p:Configuration=Release", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("super-secret", redacted, StringComparison.Ordinal);
-        Assert.DoesNotContain("hunter2", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("correct horse", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("abc123", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("token-value", redacted, StringComparison.Ordinal);
     }
