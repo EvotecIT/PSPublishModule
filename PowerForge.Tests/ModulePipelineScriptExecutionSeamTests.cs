@@ -149,8 +149,8 @@ public sealed class ModulePipelineScriptExecutionSeamTests
                     static name => new InstalledModuleMetadata(name, null, null, null),
                     StringComparer.OrdinalIgnoreCase);
 
-        public IReadOnlyList<string> GetRequiredModulesForInstalledModule(string moduleName)
-            => Array.Empty<string>();
+        public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
+            => Array.Empty<RequiredModuleReference>();
 
         public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
             IReadOnlyCollection<string> names,

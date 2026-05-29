@@ -65,10 +65,10 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
         return map;
     }
 
-    public IReadOnlyList<string> GetRequiredModulesForInstalledModule(string moduleName)
+    public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
     {
         if (string.IsNullOrWhiteSpace(moduleName))
-            return Array.Empty<string>();
+            return Array.Empty<RequiredModuleReference>();
 
         try
         {
@@ -79,20 +79,21 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
                 _logger.Warn($"Failed to resolve required modules for '{moduleName}'.");
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
-                return Array.Empty<string>();
+                return Array.Empty<RequiredModuleReference>();
             }
 
             return SplitLines(result.StdOut)
-                .Where(static name => !string.IsNullOrWhiteSpace(name))
-                .Select(static name => name.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(ParseRequiredModuleReferenceLine)
+                .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+                .GroupBy(static module => module!.ModuleName, StringComparer.OrdinalIgnoreCase)
+                .Select(static group => group.First()!)
                 .ToArray();
         }
         catch (Exception ex)
         {
             _logger.Warn($"Failed to resolve required modules for '{moduleName}': {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
-            return Array.Empty<string>();
+            return Array.Empty<RequiredModuleReference>();
         }
     }
 
@@ -176,6 +177,30 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
 
     private static IEnumerable<string> SplitLines(string? text)
         => (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+    private static RequiredModuleReference? ParseRequiredModuleReferenceLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return null;
+
+        if (!line.StartsWith("PFREQMOD::ITEM::", StringComparison.Ordinal))
+            return new RequiredModuleReference(line.Trim());
+
+        var parts = line.Split(new[] { "::" }, StringSplitOptions.None);
+        if (parts.Length < 7)
+            return null;
+
+        var name = Decode(parts[2]);
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        return new RequiredModuleReference(
+            name.Trim(),
+            moduleVersion: EmptyToNull(Decode(parts[3])),
+            requiredVersion: EmptyToNull(Decode(parts[4])),
+            maximumVersion: EmptyToNull(Decode(parts[5])),
+            guid: EmptyToNull(Decode(parts[6])));
+    }
 
     private static string EncodeLines(IEnumerable<string> lines)
     {

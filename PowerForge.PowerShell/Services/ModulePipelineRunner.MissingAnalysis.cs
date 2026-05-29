@@ -408,10 +408,12 @@ public sealed partial class ModulePipelineRunner
         var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(moduleName);
         foreach (var dep in required)
         {
-            if (string.IsNullOrWhiteSpace(dep))
+            var depName = dep?.ModuleName;
+            if (string.IsNullOrWhiteSpace(depName))
                 continue;
-            if (output.Add(dep))
-                CollectModuleDependencies(dep, visited, output);
+            var normalizedDepName = depName!.Trim();
+            if (output.Add(normalizedDepName))
+                CollectModuleDependencies(normalizedDepName, visited, output);
         }
     }
 
