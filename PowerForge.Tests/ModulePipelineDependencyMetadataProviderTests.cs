@@ -518,7 +518,6 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                     {
                         new RequiredModuleReference(
                             "Child.Tools",
-                            moduleVersion: "2.0.0",
                             guid: "22222222-2222-2222-2222-222222222222")
                     }
                 });
@@ -530,6 +529,58 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
             Assert.Equal("2.5.0", child.ModuleVersion);
             Assert.Equal("55555555-5555-5555-5555-555555555555", child.Guid);
             Assert.Equal("PSGallery", provider.LastOnlineRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_PreservesTransitiveVersionConstraints_WhenInheritingRepositoryVersionSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Exact.Child"] = ("5.0.0", "55555555-5555-5555-5555-555555555555"),
+                    ["Minimum.Child"] = ("6.0.0", "66666666-6666-6666-6666-666666666666")
+                },
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[]
+                    {
+                        new RequiredModuleReference(
+                            "Exact.Child",
+                            requiredVersion: "2.0.0",
+                            guid: "22222222-2222-2222-2222-222222222222"),
+                        new RequiredModuleReference(
+                            "Minimum.Child",
+                            moduleVersion: "3.0.0",
+                            maximumVersion: "3.9.9",
+                            guid: "33333333-3333-3333-3333-333333333333")
+                    }
+                });
+
+            var spec = CreateRequiredParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.PSGallery);
+            var plan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec);
+
+            var exact = Assert.Single(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Exact.Child", StringComparison.OrdinalIgnoreCase));
+            Assert.Null(exact.ModuleVersion);
+            Assert.Equal("2.0.0", exact.RequiredVersion);
+            Assert.Equal("22222222-2222-2222-2222-222222222222", exact.Guid);
+
+            var minimum = Assert.Single(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Minimum.Child", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("3.0.0", minimum.ModuleVersion);
+            Assert.Null(minimum.RequiredVersion);
+            Assert.Equal("3.9.9", minimum.MaximumVersion);
+            Assert.Equal("33333333-3333-3333-3333-333333333333", minimum.Guid);
         }
         finally
         {

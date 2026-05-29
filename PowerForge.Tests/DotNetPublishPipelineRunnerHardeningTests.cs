@@ -740,6 +740,38 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void ExtractBestFailureLine_PrefersFirstConcreteDiagnosticOverGenericFailureSummary()
+    {
+        var output = string.Join(
+            Environment.NewLine,
+            @"C:\src\App.csproj(12,5): error NETSDK1047: Assets file is missing a runtime target.",
+            "Build FAILED.",
+            "    0 Warning(s)",
+            "    1 Error(s)");
+
+        var line = DotNetPublishPipelineRunner.ExtractBestFailureLine(output);
+
+        Assert.Contains("NETSDK1047", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("Build FAILED", line, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RedactCommandLineSecrets_RedactsSensitiveMsBuildAndSwitchValues()
+    {
+        var commandLine = "dotnet publish /p:ApiKey=super-secret --password hunter2 -ClientSecret 'abc123' /p:Configuration=Release";
+
+        var redacted = DotNetPublishPipelineRunner.RedactCommandLineSecrets(commandLine);
+
+        Assert.Contains("/p:ApiKey=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--password <redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("-ClientSecret '<redacted>'", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/p:Configuration=Release", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("super-secret", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("hunter2", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc123", redacted, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildRestoreRuntimeIdentifiers_IncludesAllProjectFrameworkRuntimes()
     {
         var plan = new DotNetPublishPlan

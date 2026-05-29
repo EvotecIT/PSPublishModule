@@ -257,7 +257,8 @@ public sealed partial class ModulePipelineRunner
             {
                 var preferSourceMetadata = ShouldPreferTransitiveDependencySourceMetadata(
                     item.VersionSource,
-                    publishVersionSource);
+                    publishVersionSource) &&
+                    !HasExplicitVersionConstraint(item.Reference);
                 return new RequiredModuleDraft(
                     item.Reference.ModuleName,
                     preferSourceMetadata ? "Latest" : item.Reference.ModuleVersion,
@@ -369,6 +370,20 @@ public sealed partial class ModulePipelineRunner
         => versionSource == ModuleDependencyVersionSource.PSGallery ||
            versionSource == ModuleDependencyVersionSource.PublishRepository ||
            (versionSource == ModuleDependencyVersionSource.Auto && publishVersionSource is not null);
+
+    private static bool HasExplicitVersionConstraint(RequiredModuleReference reference)
+        => HasExplicitVersionValue(reference.ModuleVersion) ||
+           HasExplicitVersionValue(reference.RequiredVersion) ||
+           HasExplicitVersionValue(reference.MaximumVersion);
+
+    private static bool HasExplicitVersionValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var trimmed = value.Trim();
+        return !trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase) &&
+               !trimmed.Equals("Latest", StringComparison.OrdinalIgnoreCase);
+    }
 
     private sealed class RequiredModuleSetResolution
     {

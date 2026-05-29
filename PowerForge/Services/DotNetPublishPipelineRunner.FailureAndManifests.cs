@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -38,24 +39,42 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
         if (lines.Length == 0) return string.Empty;
 
-        var diagnostics = lines
-            .Where(IsDiagnosticFailureLine)
-            .ToArray();
-        if (diagnostics.Length > 0)
-            return diagnostics[diagnostics.Length - 1];
+        var diagnostic = lines.FirstOrDefault(IsConcreteErrorLine);
+        if (!string.IsNullOrWhiteSpace(diagnostic))
+            return diagnostic;
+
+        diagnostic = lines.FirstOrDefault(IsExceptionLine);
+        if (!string.IsNullOrWhiteSpace(diagnostic))
+            return diagnostic;
+
+        diagnostic = lines.FirstOrDefault(IsFailureLine);
+        if (!string.IsNullOrWhiteSpace(diagnostic))
+            return diagnostic;
 
         return lines[lines.Length - 1];
     }
 
-    private static bool IsDiagnosticFailureLine(string line)
+    private static bool IsConcreteErrorLine(string line)
     {
         if (string.IsNullOrWhiteSpace(line)) return false;
 
         return line.Contains(": error ", StringComparison.OrdinalIgnoreCase)
             || line.Contains(" error ", StringComparison.OrdinalIgnoreCase)
-            || line.StartsWith("error ", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("exception", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("failed", StringComparison.OrdinalIgnoreCase);
+            || line.StartsWith("error ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsExceptionLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+
+        return line.Contains("exception", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFailureLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+
+        return line.Contains("failed", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ToSafeFileName(string? input, string fallback)
@@ -128,7 +147,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var parts = new List<string>
         {
             $"Step '{step.Key}' ({step.Kind}) failed with exit code {command.ExitCode}.",
-            $"Command: {command.CommandLine}",
+            $"Command: {RedactCommandLineSecrets(command.CommandLine)}",
             $"WorkingDirectory: {command.WorkingDirectory}"
         };
 
@@ -139,6 +158,44 @@ public sealed partial class DotNetPublishPipelineRunner
 
         return string.Join(Environment.NewLine, parts);
     }
+
+    internal static string RedactCommandLineSecrets(string? commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine)) return string.Empty;
+
+        var redacted = commandLine!;
+        foreach (var key in SensitiveCommandLineKeys)
+        {
+            var escaped = Regex.Escape(key);
+            redacted = Regex.Replace(
+                redacted,
+                $@"(?<prefix>(^|\s)([-/]+p:)?{escaped}\s*[:=]\s*)(?<quote>[""']?)(?<value>[^\s""']+)(\k<quote>)",
+                match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            redacted = Regex.Replace(
+                redacted,
+                $@"(?<prefix>(^|\s)[-/]+{escaped}\s+)(?<quote>[""']?)(?<value>[^\s""']+)(\k<quote>)",
+                match => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        return redacted;
+    }
+
+    private static readonly string[] SensitiveCommandLineKeys =
+    {
+        "AccessKey",
+        "AccessToken",
+        "ApiKey",
+        "ApiToken",
+        "CertificatePFXPassword",
+        "ClientSecret",
+        "Password",
+        "PfxPassword",
+        "PublishApiKey",
+        "Secret",
+        "Token"
+    };
 
     private static string? TryWriteFailureLog(DotNetPublishPlan plan, DotNetPublishStep step, DotNetPublishCommandException ex)
     {
