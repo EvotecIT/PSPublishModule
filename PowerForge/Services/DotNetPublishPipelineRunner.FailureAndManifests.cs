@@ -42,9 +42,9 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(IsDiagnosticFailureLine)
             .ToArray();
         if (diagnostics.Length > 0)
-            return diagnostics[^1];
+            return diagnostics[diagnostics.Length - 1];
 
-        return lines[^1];
+        return lines[lines.Length - 1];
     }
 
     private static bool IsDiagnosticFailureLine(string line)
