@@ -633,55 +633,31 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(enabledPublishes);
 
-        var requiredModules = ResolveRequiredModules(
+        var approved = NormalizeApprovedModules(approvedModules);
+        ApplyMergeDefaultsForPlan(
+            refreshPsd1Only,
+            csproj,
+            approved,
+            mergeModuleSet,
+            mergeMissingSet,
+            ref mergeModule,
+            ref mergeMissing);
+
+        var requiredModuleSets = ResolveRequiredModuleSets(
             requiredModulesDraft,
+            requiredModulesDraftForPackaging,
+            approved,
+            mergeMissing,
+            importModules,
+            compatible,
             resolveMissingModulesOnline,
             warnIfRequiredModulesOutdated,
             installMissingModulesPrerelease,
             installMissingModulesRepository,
             installMissingModulesCredential,
             dependencyVersionSourceRepository);
-        if (importModules?.PreferBinaryConflictOrder == true)
-            requiredModules = ReorderRequiredModulesForBinaryConflicts(requiredModules, compatible);
-        var requiredModulesForPackaging = AreRequiredModuleDraftListsEquivalent(requiredModulesDraft, requiredModulesDraftForPackaging)
-            ? requiredModules.ToArray()
-            : ResolveRequiredModules(
-                requiredModulesDraftForPackaging,
-                resolveMissingModulesOnline,
-                warnIfRequiredModulesOutdated,
-                installMissingModulesPrerelease,
-                installMissingModulesRepository,
-                installMissingModulesCredential,
-                dependencyVersionSourceRepository);
-
-        var approved = approvedModules
-            .Where(m => !string.IsNullOrWhiteSpace(m))
-            .Select(m => m.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (refreshPsd1Only)
-        {
-            if (!string.IsNullOrWhiteSpace(csproj))
-                _logger.Info("RefreshPSD1Only enabled: skipping .NET publish/binary rebuild for this run.");
-
-            if (mergeModule)
-                _logger.Info("RefreshPSD1Only enabled: disabling merge for this run.");
-            mergeModule = false;
-            mergeMissing = false;
-        }
-        else if (!mergeModuleSet)
-        {
-            mergeModule = true;
-            _logger.Info("MergeModule not explicitly set; enabling by default for legacy compatibility.");
-        }
-
-        if (!mergeMissingSet && !mergeMissing && approved.Length > 0)
-        {
-            mergeMissing = true;
-            var context = mergeModule ? "and MergeModule is enabled" : "for approved-module inlining";
-            _logger.Info($"MergeMissing not explicitly set; enabling because approved modules are configured {context}.");
-        }
+        var requiredModules = requiredModuleSets.RequiredModules;
+        var requiredModulesForPackaging = requiredModuleSets.RequiredModulesForPackaging;
 
         if (delivery?.Sign == true)
         {

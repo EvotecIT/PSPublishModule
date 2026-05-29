@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -24,6 +25,56 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return (text ?? string.Empty).Trim();
+    }
+
+    internal static string ExtractBestFailureLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        var lines = (text ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => (line ?? string.Empty).Trim())
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+        if (lines.Length == 0) return string.Empty;
+
+        var diagnostic = lines.FirstOrDefault(IsConcreteErrorLine);
+        if (!string.IsNullOrWhiteSpace(diagnostic))
+            return diagnostic;
+
+        diagnostic = lines.FirstOrDefault(IsExceptionLine);
+        if (!string.IsNullOrWhiteSpace(diagnostic))
+            return diagnostic;
+
+        diagnostic = lines.FirstOrDefault(IsFailureLine);
+        if (!string.IsNullOrWhiteSpace(diagnostic))
+            return diagnostic;
+
+        return lines[lines.Length - 1];
+    }
+
+    private static bool IsConcreteErrorLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+
+        return line.Contains(": error ", StringComparison.OrdinalIgnoreCase)
+            || line.Contains(" error ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("error ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsExceptionLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+
+        return line.Contains("exception", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFailureLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+
+        return line.Contains("failed", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ToSafeFileName(string? input, string fallback)
@@ -74,9 +125,84 @@ public sealed partial class DotNetPublishPipelineRunner
         failure.StdOutTail = TailLines(cmdEx.StdOut, maxLines: 80, maxChars: 8000);
         failure.StdErrTail = TailLines(cmdEx.StdErr, maxLines: 80, maxChars: 8000);
         failure.LogPath = TryWriteFailureLog(plan, stepEx.Step, cmdEx);
+        errorMessage = BuildCommandFailureMessage(stepEx.Step, cmdEx, failure);
 
         return failure;
     }
+
+    private static string BuildCommandFailureMessage(
+        DotNetPublishStep step,
+        DotNetPublishCommandException command,
+        DotNetPublishFailure? failure)
+    {
+        if (step is null) throw new ArgumentNullException(nameof(step));
+        if (command is null) throw new ArgumentNullException(nameof(command));
+
+        var detail = ExtractBestFailureLine(!string.IsNullOrWhiteSpace(failure?.StdErrTail)
+            ? failure!.StdErrTail
+            : failure?.StdOutTail);
+        if (string.IsNullOrWhiteSpace(detail))
+            detail = command.Message;
+
+        var parts = new List<string>
+        {
+            $"Step '{step.Key}' ({step.Kind}) failed with exit code {command.ExitCode}.",
+            $"Command: {RedactCommandLineSecrets(command.CommandLine)}",
+            $"WorkingDirectory: {command.WorkingDirectory}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(failure?.LogPath))
+            parts.Add($"Log: {failure!.LogPath}");
+        if (!string.IsNullOrWhiteSpace(detail))
+            parts.Add($"Error: {detail}");
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    internal static string RedactCommandLineSecrets(string? commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine)) return string.Empty;
+
+        var redacted = commandLine!;
+        redacted = Regex.Replace(
+            redacted,
+            $@"(?<prefix>(^|\s)([-/]+p:)?{SensitiveCommandLineKeyPattern}\s*[:=]\s*)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
+            RedactCommandLineSecretMatch,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        redacted = Regex.Replace(
+            redacted,
+            $@"(?<prefix>(^|\s)[-/]+{SensitiveCommandLineKeyPattern}\s+)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
+            RedactCommandLineSecretMatch,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        redacted = Regex.Replace(
+            redacted,
+            $@"(?<prefix>(^|\s)[-/]+{SensitiveCommandLineKeyPattern}\s*[:=]\s*)(?:(?<quote>[""'])(?<value>.*?)\k<quote>|(?<value>[^\s""']+))",
+            RedactCommandLineSecretMatch,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        return redacted;
+    }
+
+    private static string RedactCommandLineSecretMatch(Match match)
+        => $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}<redacted>{match.Groups["quote"].Value}";
+
+    private static readonly string[] SensitiveCommandLineKeys =
+    {
+        "AccessKey",
+        "AccessToken",
+        "ApiKey",
+        "ApiToken",
+        "CertificatePFXPassword",
+        "ClientSecret",
+        "Password",
+        "PfxPassword",
+        "PublishApiKey",
+        "Secret",
+        "Token"
+    };
+
+    private static readonly string SensitiveCommandLineKeyPattern =
+        $@"[A-Za-z0-9_.:-]*(?:{string.Join("|", SensitiveCommandLineKeys.Select(Regex.Escape))})";
 
     private static string? TryWriteFailureLog(DotNetPublishPlan plan, DotNetPublishStep step, DotNetPublishCommandException ex)
     {

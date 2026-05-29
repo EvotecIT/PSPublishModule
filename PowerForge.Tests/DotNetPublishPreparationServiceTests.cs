@@ -19,6 +19,14 @@ public sealed class DotNetPublishPreparationServiceTests
     "restore": true,
     "build": true
   },
+  "profile": "msi",
+  "profiles": [
+    {
+      "name": "msi",
+      "default": true,
+      "targets": [ "App", "Tool" ]
+    }
+  ],
   "targets": [
     {
       "name": "App",
@@ -70,6 +78,8 @@ public sealed class DotNetPublishPreparationServiceTests
             Assert.Equal(Path.Combine(root.FullName, "powerforge.dotnetpublish.generated.json"), context.JsonOutputPath);
             Assert.Single(context.Spec.Targets);
             Assert.Equal("App", context.Spec.Targets[0].Name);
+            Assert.Single(context.Spec.Profiles[0].Targets);
+            Assert.Equal("App", context.Spec.Profiles[0].Targets[0]);
             Assert.Single(context.Spec.Installers);
             Assert.Equal("AppInstaller", context.Spec.Installers[0].Id);
             Assert.Equal(new[] { "linux-x64" }, context.Spec.Targets[0].Publish.Runtimes);
@@ -107,6 +117,121 @@ public sealed class DotNetPublishPreparationServiceTests
 
             Assert.Equal(Path.Combine(root.FullName, "powerforge.dotnetpublish.json"), context.JsonOutputPath);
             Assert.Empty(context.Spec.Targets);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_from_config_rejects_profile_with_no_selected_targets()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-profile-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "publish.json");
+            File.WriteAllText(configPath, """
+{
+  "dotNet": {
+    "projectRoot": "."
+  },
+  "profile": "tools",
+  "profiles": [
+    {
+      "name": "tools",
+      "default": true,
+      "targets": [ "Tool" ]
+    }
+  ],
+  "targets": [
+    {
+      "name": "App",
+      "projectPath": "src/App/App.csproj"
+    },
+    {
+      "name": "Tool",
+      "projectPath": "src/Tool/Tool.csproj"
+    }
+  ]
+}
+""");
+
+            var request = new DotNetPublishPreparationRequest
+            {
+                ParameterSetName = "Config",
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                ConfigPath = configPath,
+                Target = new[] { "App" }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => new DotNetPublishPreparationService(new NullLogger()).Prepare(request));
+
+            Assert.Contains("Profile 'tools' does not match target override", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_from_config_ignores_unselected_profiles_when_filtering_targets()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-profile-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "publish.json");
+            File.WriteAllText(configPath, """
+{
+  "dotNet": {
+    "projectRoot": "."
+  },
+  "profile": "app",
+  "profiles": [
+    {
+      "name": "app",
+      "default": true,
+      "targets": [ "App" ]
+    },
+    {
+      "name": "tools",
+      "targets": [ "Tool" ]
+    }
+  ],
+  "targets": [
+    {
+      "name": "App",
+      "projectPath": "src/App/App.csproj"
+    },
+    {
+      "name": "Tool",
+      "projectPath": "src/Tool/Tool.csproj"
+    }
+  ]
+}
+""");
+
+            var request = new DotNetPublishPreparationRequest
+            {
+                ParameterSetName = "Config",
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                ConfigPath = configPath,
+                Target = new[] { "App" }
+            };
+
+            var context = new DotNetPublishPreparationService(new NullLogger()).Prepare(request);
+
+            Assert.Single(context.Spec.Targets);
+            Assert.Equal("App", context.Spec.Targets[0].Name);
+            var appProfile = Assert.Single(context.Spec.Profiles, profile => string.Equals(profile.Name, "app", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(new[] { "App" }, appProfile.Targets);
+            var toolsProfile = Assert.Single(context.Spec.Profiles, profile => string.Equals(profile.Name, "tools", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(new[] { "Tool" }, toolsProfile.Targets);
         }
         finally
         {

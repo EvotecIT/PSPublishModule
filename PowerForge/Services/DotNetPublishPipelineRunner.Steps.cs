@@ -36,13 +36,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 var label = string.IsNullOrWhiteSpace(framework) ? runtimeValue : $"{runtimeValue}, {framework}";
                 _logger.Info($"Restore ({label}) -> {request.ProjectPath}");
 
-                var args = new List<string> { "restore", request.ProjectPath, "--nologo" };
-                args.AddRange(new[] { "-r", runtimeValue });
-                args.AddRange(BuildMsBuildPropertyArgs(BuildRestoreMsBuildProperties(plan, request.ProjectPath, runtimeValue, framework)));
-                if (!string.IsNullOrWhiteSpace(framework))
-                    args.Add($"/p:TargetFramework={framework}");
-
-                RunDotnet(workDir, args);
+                RunDotnet(workDir, BuildRestoreArguments(plan, request.ProjectPath, runtimeValue, framework));
             }
 
             return;
@@ -118,6 +112,76 @@ public sealed partial class DotNetPublishPipelineRunner
 
         return merged;
     }
+
+    internal static List<string> BuildRestoreArguments(
+        DotNetPublishPlan plan,
+        string projectPath,
+        string runtime,
+        string? framework = null)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        var args = new List<string> { "restore", projectPath, "--nologo" };
+        var runtimeIdentifiers = BuildRestoreRuntimeIdentifiers(plan, projectPath, runtime, framework);
+        if (runtimeIdentifiers.Length <= 1)
+            args.AddRange(new[] { "-r", runtime });
+        else
+            args.Add($"/p:RuntimeIdentifiers={BuildMsBuildListPropertyValue(runtimeIdentifiers)}");
+        args.AddRange(BuildMsBuildPropertyArgs(BuildRestoreMsBuildProperties(plan, projectPath, runtime, framework)));
+        return args;
+    }
+
+    internal static string[] BuildRestoreRuntimeIdentifiers(
+        DotNetPublishPlan plan,
+        string projectPath,
+        string runtime,
+        string? framework = null)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        var baselineProperties = BuildRestoreMsBuildProperties(plan, projectPath, runtime, framework);
+        var runtimes = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Where(target => string.Equals(target.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            .Where(combination => string.IsNullOrWhiteSpace(framework)
+                || string.Equals(combination.Framework, framework, StringComparison.OrdinalIgnoreCase))
+            .Select(combination => combination.Runtime)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(candidate => RestorePropertiesEquivalent(
+                baselineProperties,
+                BuildRestoreMsBuildProperties(plan, projectPath, candidate!, framework)))
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (runtimes.Length == 0 && !string.IsNullOrWhiteSpace(runtime))
+            return new[] { runtime };
+
+        return runtimes;
+    }
+
+    private static bool RestorePropertiesEquivalent(
+        IReadOnlyDictionary<string, string> left,
+        IReadOnlyDictionary<string, string> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        foreach (var property in left)
+        {
+            if (!right.TryGetValue(property.Key, out var value))
+                return false;
+            if (!string.Equals(property.Value, value, StringComparison.Ordinal))
+                return false;
+        }
+
+        return true;
+    }
+
+    internal static string BuildMsBuildListPropertyValue(IEnumerable<string> values)
+        => string.Join(";", (values ?? Array.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim()));
 
     private static bool IsPortableStyle(DotNetPublishStyle style)
     {

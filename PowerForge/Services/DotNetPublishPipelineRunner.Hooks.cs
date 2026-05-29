@@ -62,7 +62,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var stdoutTail = TailLines(result.StdOut, maxLines: 40, maxChars: 4000);
         var message = result.TimedOut
             ? $"Hook '{step.HookId}' timed out after {Math.Max(1, step.HookTimeoutSeconds)} seconds."
-            : ExtractLastNonEmptyLine(!string.IsNullOrWhiteSpace(stderrTail) ? stderrTail : stdoutTail);
+            : ExtractBestFailureLine(!string.IsNullOrWhiteSpace(stderrTail) ? stderrTail : stdoutTail);
         if (string.IsNullOrWhiteSpace(message))
             message = $"Hook '{step.HookId}' failed with exit code {result.ExitCode}.";
 

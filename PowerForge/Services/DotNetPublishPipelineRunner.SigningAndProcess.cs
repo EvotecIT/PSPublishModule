@@ -288,7 +288,7 @@ public sealed partial class DotNetPublishPipelineRunner
             var stderrTail = TailLines(stderr, maxLines: 80, maxChars: 8000);
             var stdoutTail = TailLines(stdout, maxLines: 80, maxChars: 8000);
 
-            var msg = ExtractLastNonEmptyLine(!string.IsNullOrWhiteSpace(stderrTail) ? stderrTail : stdoutTail);
+            var msg = ExtractBestFailureLine(!string.IsNullOrWhiteSpace(stderrTail) ? stderrTail : stdoutTail);
             if (string.IsNullOrWhiteSpace(msg)) msg = "dotnet failed.";
 
             throw new DotNetPublishCommandException(

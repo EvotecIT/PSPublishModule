@@ -723,6 +723,239 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void ExtractBestFailureLine_PrefersDiagnosticOverTimingFooter()
+    {
+        var output = string.Join(
+            Environment.NewLine,
+            "Build FAILED.",
+            @"C:\src\App.csproj(12,5): error NETSDK1047: Assets file is missing a runtime target.",
+            "    0 Warning(s)",
+            "    1 Error(s)",
+            "Time Elapsed 00:00:01.36");
+
+        var line = DotNetPublishPipelineRunner.ExtractBestFailureLine(output);
+
+        Assert.Contains("NETSDK1047", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("Time Elapsed", line, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ExtractBestFailureLine_PrefersFirstConcreteDiagnosticOverGenericFailureSummary()
+    {
+        var output = string.Join(
+            Environment.NewLine,
+            @"C:\src\App.csproj(12,5): error NETSDK1047: Assets file is missing a runtime target.",
+            "Build FAILED.",
+            "    0 Warning(s)",
+            "    1 Error(s)");
+
+        var line = DotNetPublishPipelineRunner.ExtractBestFailureLine(output);
+
+        Assert.Contains("NETSDK1047", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("Build FAILED", line, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RedactCommandLineSecrets_RedactsSensitiveMsBuildAndSwitchValues()
+    {
+        var commandLine = "dotnet publish /p:ApiKey=super-secret --password \"correct horse\" -ClientSecret 'abc123' --Token=token-value -NuGetApiKey nuget-secret /p:GitHubToken=github-secret /p:Configuration=Release";
+
+        var redacted = DotNetPublishPipelineRunner.RedactCommandLineSecrets(commandLine);
+
+        Assert.Contains("/p:ApiKey=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--password \"<redacted>\"", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("-ClientSecret '<redacted>'", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--Token=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("-NuGetApiKey <redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/p:GitHubToken=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/p:Configuration=Release", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("super-secret", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("correct horse", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc123", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("token-value", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("nuget-secret", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("github-secret", redacted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildRestoreRuntimeIdentifiers_IncludesAllProjectFrameworkRuntimes()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-arm64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net8.0",
+                            Runtime = "linux-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var runtimes = DotNetPublishPipelineRunner.BuildRestoreRuntimeIdentifiers(
+            plan,
+            "Service.csproj",
+            "win-arm64",
+            "net10.0-windows");
+
+        Assert.Equal(new[] { "win-arm64", "win-x64" }, runtimes);
+        Assert.Equal("win-arm64;win-x64", DotNetPublishPipelineRunner.BuildMsBuildListPropertyValue(runtimes));
+    }
+
+    [Fact]
+    public void BuildRestoreRuntimeIdentifiers_ExcludesRuntimesWithDifferentRestoreProperties()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "linux-x64",
+                            Style = DotNetPublishStyle.AotSpeed
+                        }
+                    }
+                }
+            }
+        };
+
+        var runtimes = DotNetPublishPipelineRunner.BuildRestoreRuntimeIdentifiers(
+            plan,
+            "Service.csproj",
+            "win-x64",
+            "net10.0");
+
+        Assert.Equal(new[] { "win-x64" }, runtimes);
+    }
+
+    [Fact]
+    public void BuildRestoreArguments_DoesNotForceTopLevelFrameworkAcrossProjectReferences()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["UseLocalHtmlForgeX"] = "false"
+            },
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        ReadyToRun = true
+                    },
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-arm64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildRestoreArguments(
+            plan,
+            "Service.csproj",
+            "win-arm64",
+            "net10.0-windows");
+
+        Assert.Contains("/p:RuntimeIdentifiers=win-arm64;win-x64", args);
+        Assert.Contains("/p:PublishReadyToRun=true", args);
+        Assert.DoesNotContain("/p:TargetFramework=net10.0-windows", args);
+    }
+
+    [Fact]
+    public void Run_CommandFailure_ReturnsTroubleshootingDetails()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "hook:test",
+                        Kind = DotNetPublishStepKind.CommandHook,
+                        Title = "Hook",
+                        HookId = "test",
+                        HookCommand = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                        HookArguments = new[] { "/c", "echo useful failure from hook 1>&2 & exit /b 7" },
+                        HookTimeoutSeconds = 10,
+                        HookRequired = true
+                    }
+                }
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var result = runner.Run(plan, progress: null);
+
+            Assert.False(result.Succeeded);
+            Assert.NotNull(result.Failure);
+            Assert.Equal(7, result.Failure!.ExitCode);
+            Assert.Contains("Step 'hook:test' (CommandHook) failed", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("Command:", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("WorkingDirectory:", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("Log:", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("useful failure from hook", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(result.Failure.LogPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void BuildPublishArguments_UsesSdkNativeAotPropertyForAotStyles()
     {
         var plan = new DotNetPublishPlan
