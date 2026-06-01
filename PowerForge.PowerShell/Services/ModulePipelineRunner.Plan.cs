@@ -107,6 +107,14 @@ public sealed partial class ModulePipelineRunner
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var externalModules = new List<string>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var baselineExternalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
+            .Where(static segment => segment is not null)
+            .ToArray();
+        var externalDependencyConfigurationIsAuthoritative = segments.Any(static segment =>
+            segment is ConfigurationModuleSegment moduleSegment &&
+            moduleSegment.Kind is ModuleDependencyKind.RequiredModule or ModuleDependencyKind.ExternalModule);
 
         var manifestBaseline = TryReadProjectManifestBaseline(projectRoot, moduleName);
         if (manifestBaseline is not null)
@@ -117,9 +125,18 @@ public sealed partial class ModulePipelineRunner
             {
                 if (string.IsNullOrWhiteSpace(external))
                     continue;
+                if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(external))
+                    continue;
 
-                var name = external.Trim();
-                TryAddExternalModuleDependency(name, externalIndex, externalModules);
+                baselineExternalIndex.Add(external.Trim());
+            }
+
+            if (!externalDependencyConfigurationIsAuthoritative)
+            {
+                foreach (var external in baselineExternalIndex)
+                {
+                    TryAddExternalModuleDependency(external, externalIndex, externalModules);
+                }
             }
 
             foreach (var module in manifestBaseline.RequiredModules)
@@ -130,7 +147,7 @@ public sealed partial class ModulePipelineRunner
                 var requiredModuleName = module.ModuleName.Trim();
                 if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(requiredModuleName))
                     continue;
-                if (externalIndex.Contains(requiredModuleName))
+                if (externalIndex.Contains(requiredModuleName) || baselineExternalIndex.Contains(requiredModuleName))
                     continue;
 
                 var draft = new RequiredModuleDraft(
@@ -177,7 +194,7 @@ public sealed partial class ModulePipelineRunner
                 projectUri = manifestBaseline.Manifest.ProjectUri;
         }
 
-        foreach (var segment in (spec.Segments ?? Array.Empty<IConfigurationSegment>()).Where(s => s is not null))
+        foreach (var segment in segments)
         {
             switch (segment)
             {
