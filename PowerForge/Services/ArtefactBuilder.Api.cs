@@ -100,7 +100,7 @@ public sealed partial class ArtefactBuilder
         {
             var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
             var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
-            foreach (var rm in (requiredModules ?? Array.Empty<RequiredModuleReference>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
+            foreach (var rm in FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName))
             {
                 var depEntry = SaveRequiredModuleToFolder(
                     rm,
@@ -167,7 +167,7 @@ public sealed partial class ArtefactBuilder
             {
                 var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
                 var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
-                foreach (var rm in (requiredModules ?? Array.Empty<RequiredModuleReference>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
+                foreach (var rm in FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName))
                 {
                     var depEntry = SaveRequiredModuleToFolder(
                         rm,
@@ -198,6 +198,39 @@ public sealed partial class ArtefactBuilder
         }
 
         return new ArtefactBuildResult(ArtefactType.Packed, cfg.ID, zipPath, modules.ToArray(), copied.ToArray());
+    }
+
+    private IReadOnlyList<RequiredModuleReference> FilterRequiredModulesForArtefact(
+        IReadOnlyList<RequiredModuleReference>? requiredModules,
+        IReadOnlyList<string>? excludedModuleNames)
+    {
+        var modules = (requiredModules ?? Array.Empty<RequiredModuleReference>())
+            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+            .ToArray();
+        if (modules.Length == 0)
+            return Array.Empty<RequiredModuleReference>();
+
+        var excluded = new HashSet<string>(
+            (excludedModuleNames ?? Array.Empty<string>())
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        if (excluded.Count == 0)
+            return modules;
+
+        var filtered = new List<RequiredModuleReference>(modules.Length);
+        foreach (var module in modules)
+        {
+            if (excluded.Contains(module.ModuleName!))
+            {
+                _logger.Info($"Skipping required module '{module.ModuleName}' for artefact because it is excluded.");
+                continue;
+            }
+
+            filtered.Add(module);
+        }
+
+        return filtered;
     }
 
     private ArtefactModuleEntry SaveRequiredModuleToFolder(

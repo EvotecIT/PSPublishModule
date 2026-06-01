@@ -466,6 +466,47 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void Run_IgnoresRuntimeProvidedTransitiveDependencies_WhenApprovedModuleIsMergedAway()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new("Parent.Tools", "1.0.0", null, @"C:\Modules\Parent.Tools\1.0.0")
+                },
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[]
+                    {
+                        new RequiredModuleReference("PackageManagement", moduleVersion: "1.0.0.1"),
+                        new RequiredModuleReference("PowerShellGet", moduleVersion: "1.0.0.1"),
+                        new RequiredModuleReference("PSReadLine", moduleVersion: "2.0.0")
+                    }
+                });
+
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+            var result = runner.Run(CreateApprovedParentSpec(root.FullName, moduleName));
+
+            Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
+            var requiredModules = required!;
+            Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "PackageManagement", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "PowerShellGet", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "PSReadLine", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_IncludesTransitiveDependenciesForPackaging_WhenParentRemainsRequired()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -489,6 +530,44 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
             Assert.DoesNotContain(plan.RequiredModules, module => string.Equals(module.ModuleName, "Child.Tools", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Child.Tools", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_IgnoresRuntimeProvidedTransitiveDependenciesForPackaging_WhenParentRemainsRequired()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[]
+                    {
+                        new RequiredModuleReference("Child.Tools", moduleVersion: "2.0.0"),
+                        new RequiredModuleReference("PackageManagement", moduleVersion: "1.0.0.1"),
+                        new RequiredModuleReference("PowerShellGet", moduleVersion: "1.0.0.1"),
+                        new RequiredModuleReference("PSReadLine", moduleVersion: "2.0.0")
+                    }
+                });
+
+            var spec = CreateRequiredParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Auto);
+            var plan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec);
+
+            Assert.Contains(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Child.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "PackageManagement", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "PowerShellGet", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "PSReadLine", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

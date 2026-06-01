@@ -94,7 +94,10 @@ New-ConfigurationArtefact -AddRequiredModules
 
 This packaging step only bundles RequiredModule dependencies. ExternalModule entries are intentionally excluded.
 Transitive RequiredModules discovered from bundled dependencies are included so offline artefacts keep the
-dependency chain intact.
+dependency chain intact. PowerShell runtime and module-manager dependencies such as Microsoft.PowerShell.*,
+PackageManagement, PowerShellGet, and PSReadLine are ignored when they are discovered transitively.
+Use New-ConfigurationArtefact -RequiredModulesExcludeModuleName when a project needs additional artefact-only
+exclusions without changing the generated module manifest.
 
 HOW REQUIREDMODULESSOURCE WORKS
 

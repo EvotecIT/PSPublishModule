@@ -86,6 +86,13 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     [Alias("RequiredModules")]
     public SwitchParameter AddRequiredModules { get; set; }
 
+    /// <summary>
+    /// Required module names that should not be copied into this artefact when <c>-AddRequiredModules</c> is enabled.
+    /// This only affects artefact bundling; it does not remove modules from the generated manifest.
+    /// </summary>
+    [Parameter]
+    public string[]? RequiredModulesExcludeModuleName { get; set; }
+
     /// <summary>Path where main module (or required module) will be copied to.</summary>
     [Parameter]
     public string? ModulesPath { get; set; }
@@ -194,6 +201,7 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
             RequiredModulesSource = MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesSource)) ? RequiredModulesSource : null,
             AddRequiredModulesSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AddRequiredModules)),
             AddRequiredModules = AddRequiredModules.IsPresent,
+            RequiredModulesExcludeModuleName = MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesExcludeModuleName)) ? RequiredModulesExcludeModuleName : null,
             RequiredModulesCredentialUserName = RequiredModulesCredentialUserName,
             RequiredModulesCredentialSecret = RequiredModulesCredentialSecret,
             RequiredModulesCredentialSecretFilePath = RequiredModulesCredentialSecretFilePath,
