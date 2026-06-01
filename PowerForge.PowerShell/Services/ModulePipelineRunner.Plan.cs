@@ -107,6 +107,7 @@ public sealed partial class ModulePipelineRunner
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var externalModules = new List<string>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var baselineExternalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
             .Where(static segment => segment is not null)
@@ -120,15 +121,21 @@ public sealed partial class ModulePipelineRunner
         {
             manifestConfiguration = manifestBaseline.Manifest;
 
+            foreach (var external in manifestBaseline.ExternalModuleDependencies)
+            {
+                if (string.IsNullOrWhiteSpace(external))
+                    continue;
+                if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(external))
+                    continue;
+
+                baselineExternalIndex.Add(external.Trim());
+            }
+
             if (!externalDependencyConfigurationIsAuthoritative)
             {
-                foreach (var external in manifestBaseline.ExternalModuleDependencies)
+                foreach (var external in baselineExternalIndex)
                 {
-                    if (string.IsNullOrWhiteSpace(external))
-                        continue;
-
-                    var name = external.Trim();
-                    TryAddExternalModuleDependency(name, externalIndex, externalModules);
+                    TryAddExternalModuleDependency(external, externalIndex, externalModules);
                 }
             }
 
@@ -140,7 +147,7 @@ public sealed partial class ModulePipelineRunner
                 var requiredModuleName = module.ModuleName.Trim();
                 if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(requiredModuleName))
                     continue;
-                if (externalIndex.Contains(requiredModuleName))
+                if (externalIndex.Contains(requiredModuleName) || baselineExternalIndex.Contains(requiredModuleName))
                     continue;
 
                 var draft = new RequiredModuleDraft(
