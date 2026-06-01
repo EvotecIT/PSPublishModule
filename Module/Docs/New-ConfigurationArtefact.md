@@ -20,8 +20,6 @@ Unpacked (folder) for inspection or offline installation.
 
 When -AddRequiredModules is enabled, required modules are copied from locally available modules (Get-Module -ListAvailable) and,
 when configured, downloaded (via Save-PSResource/Save-Module) before being copied into the artefact.
-Use -RequiredModulesExcludeModuleName to keep selected required modules out of a specific artefact without removing
-them from the generated manifest.
 
 Only RequiredModule dependencies participate in artefact bundling. ExternalModule dependencies are
 intentionally excluded because they represent dependencies that should remain separately installed on the target
@@ -80,23 +78,6 @@ Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
-```
-
-### -RequiredModulesExcludeModuleName
-Required module names that should not be copied into this artefact when -AddRequiredModules is enabled.
-This only affects artefact bundling; it does not remove modules from the generated manifest.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
 ```
 
 ### -ArtefactName
@@ -376,6 +357,23 @@ Repository credential username (basic auth) used when downloading required modul
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequiredModulesExcludeModuleName
+Required module names that should not be copied into this artefact when -AddRequiredModules is enabled.
+This only affects artefact bundling; it does not remove modules from the generated manifest.
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
