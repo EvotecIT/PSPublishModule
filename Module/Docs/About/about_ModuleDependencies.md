@@ -36,6 +36,11 @@ Not written as a manifest dependency.
 Used by merge and missing-function workflows so selected helper functions can be copied into the built module.
 Use this for helper libraries that should contribute functions, not for runtime dependency declaration.
 
+When a RequiredModule is also configured as an ApprovedModule and merge-missing behavior removes that parent
+module from the generated manifest, PowerForge preserves the parent's own RequiredModules as runtime
+dependencies. Installed module metadata is used by default; explicit dependency declarations and configured
+dependency version sources, such as PSGallery, take precedence when they are present.
+
 VERSION EXPECTATIONS
 
 You can describe version intent in one of two ways:
@@ -88,6 +93,8 @@ If you want the output artefact to contain the dependency modules, configure:
 New-ConfigurationArtefact -AddRequiredModules
 
 This packaging step only bundles RequiredModule dependencies. ExternalModule entries are intentionally excluded.
+Transitive RequiredModules discovered from bundled dependencies are included so offline artefacts keep the
+dependency chain intact.
 
 HOW REQUIREDMODULESSOURCE WORKS
 
