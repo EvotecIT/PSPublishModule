@@ -34,6 +34,8 @@ public sealed class ArtefactConfigurationRequest
     public bool AddRequiredModulesSpecified { get; set; }
     /// <summary>Enable required modules copying.</summary>
     public bool AddRequiredModules { get; set; }
+    /// <summary>Required module names that should not be copied into the artefact.</summary>
+    public string[]? RequiredModulesExcludeModuleName { get; set; }
 
     /// <summary>Repository credential username for required modules.</summary>
     public string? RequiredModulesCredentialUserName { get; set; }

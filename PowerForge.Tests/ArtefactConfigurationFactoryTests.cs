@@ -19,6 +19,7 @@ public sealed class ArtefactConfigurationFactoryTests
             Path = "Artefacts/Packed",
             ModulesPath = "Modules/Public",
             RequiredModulesPath = "Modules/Required",
+            RequiredModulesExcludeModuleName = new[] { " PackageManagement ", "PowerShellGet", "PackageManagement" },
             CopyDirectories = new[]
             {
                 new ArtefactCopyMapping { Source = "Docs/Help", Destination = "Internals/Help" }
@@ -39,6 +40,7 @@ public sealed class ArtefactConfigurationFactoryTests
         Assert.Equal(Normalize("Artefacts/Packed"), segment.Configuration.Path);
         Assert.Equal(Normalize("Modules/Public"), segment.Configuration.RequiredModules.ModulesPath);
         Assert.Equal(Normalize("Modules/Required"), segment.Configuration.RequiredModules.Path);
+        Assert.Equal(new[] { "PackageManagement", "PowerShellGet" }, segment.Configuration.RequiredModules.ExcludeModuleName);
         Assert.Equal(Normalize("Docs/Help"), segment.Configuration.DirectoryOutput![0].Source);
         Assert.Equal(Normalize("Internals/Help"), segment.Configuration.DirectoryOutput[0].Destination);
         Assert.Equal(Normalize("README.md"), segment.Configuration.FilesOutput![0].Source);

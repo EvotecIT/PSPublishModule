@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace PowerForge;
@@ -90,6 +91,15 @@ public sealed class ArtefactConfigurationFactory
 
         if (request.AddRequiredModulesSpecified)
             artefact.Configuration.RequiredModules.Enabled = request.AddRequiredModules;
+
+        if (request.RequiredModulesExcludeModuleName is { Length: > 0 })
+        {
+            artefact.Configuration.RequiredModules.ExcludeModuleName = request.RequiredModulesExcludeModuleName
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
 
         if (!string.IsNullOrWhiteSpace(request.ModulesPath))
         {

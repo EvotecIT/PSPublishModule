@@ -125,4 +125,18 @@ internal static class ModulePipelinePlanningHelpers
 
         return normalizedModuleName.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase);
     }
+
+    internal static bool ShouldSkipTransitiveRequiredDependencyModule(string? moduleName)
+    {
+        var normalizedModuleName = moduleName?.Trim();
+        if (normalizedModuleName is null || normalizedModuleName.Length == 0)
+            return true;
+
+        if (ShouldSkipManifestDependencyModule(normalizedModuleName))
+            return true;
+
+        return normalizedModuleName.Equals("PackageManagement", StringComparison.OrdinalIgnoreCase) ||
+               normalizedModuleName.Equals("PowerShellGet", StringComparison.OrdinalIgnoreCase) ||
+               normalizedModuleName.Equals("PSReadLine", StringComparison.OrdinalIgnoreCase);
+    }
 }

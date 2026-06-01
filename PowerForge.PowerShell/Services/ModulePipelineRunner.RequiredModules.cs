@@ -329,7 +329,7 @@ public sealed partial class ModulePipelineRunner
                 continue;
 
             var depName = dep.ModuleName.Trim();
-            if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(depName))
+            if (ModulePipelinePlanningHelpers.ShouldSkipTransitiveRequiredDependencyModule(depName))
                 continue;
 
             var childVersionSource = ResolveInheritedDependencyVersionSource(depName, sourceDrafts, inheritedVersionSource);
