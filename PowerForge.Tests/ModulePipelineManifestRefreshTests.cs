@@ -397,6 +397,59 @@ public sealed class ModulePipelineManifestRefreshTests
         }
     }
 
+    [Fact]
+    public void Run_ClearsBaselineDependencyMetadata_WhenModuleDependenciesAreConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteModuleWithStaleDependencyMetadata(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Fresh.Required",
+                            ModuleVersion = "1.2.3",
+                            Guid = "22222222-2222-2222-2222-222222222222"
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+            var manifestPath = result.BuildResult.ManifestPath;
+
+            Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? requiredModules));
+            Assert.Contains(requiredModules!, module => string.Equals(module.ModuleName, "LegacyOnly", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(requiredModules!, module => string.Equals(module.ModuleName, "Fresh.Required", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(ManifestEditor.TryGetPsDataStringArray(manifestPath, "ExternalModuleDependencies", out var externalModules));
+            Assert.Empty(externalModules!);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteModuleWithStaleManifest(string rootPath, string moduleName, string version)
     {
         File.WriteAllText(Path.Combine(rootPath, $"{moduleName}.psm1"), "function Test-Example { 'ok' }");

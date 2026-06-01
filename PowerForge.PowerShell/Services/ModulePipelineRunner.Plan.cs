@@ -108,18 +108,28 @@ public sealed partial class ModulePipelineRunner
         var externalModules = new List<string>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
+            .Where(static segment => segment is not null)
+            .ToArray();
+        var externalDependencyConfigurationIsAuthoritative = segments.Any(static segment =>
+            segment is ConfigurationModuleSegment moduleSegment &&
+            moduleSegment.Kind is ModuleDependencyKind.RequiredModule or ModuleDependencyKind.ExternalModule);
+
         var manifestBaseline = TryReadProjectManifestBaseline(projectRoot, moduleName);
         if (manifestBaseline is not null)
         {
             manifestConfiguration = manifestBaseline.Manifest;
 
-            foreach (var external in manifestBaseline.ExternalModuleDependencies)
+            if (!externalDependencyConfigurationIsAuthoritative)
             {
-                if (string.IsNullOrWhiteSpace(external))
-                    continue;
+                foreach (var external in manifestBaseline.ExternalModuleDependencies)
+                {
+                    if (string.IsNullOrWhiteSpace(external))
+                        continue;
 
-                var name = external.Trim();
-                TryAddExternalModuleDependency(name, externalIndex, externalModules);
+                    var name = external.Trim();
+                    TryAddExternalModuleDependency(name, externalIndex, externalModules);
+                }
             }
 
             foreach (var module in manifestBaseline.RequiredModules)
@@ -177,7 +187,7 @@ public sealed partial class ModulePipelineRunner
                 projectUri = manifestBaseline.Manifest.ProjectUri;
         }
 
-        foreach (var segment in (spec.Segments ?? Array.Empty<IConfigurationSegment>()).Where(s => s is not null))
+        foreach (var segment in segments)
         {
             switch (segment)
             {
