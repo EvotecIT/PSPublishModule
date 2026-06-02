@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.19
+Help Version: 3.0.20
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -56,6 +56,9 @@ Retrieves project version information from .csproj, .psd1, and build scripts.
 
 ### [Import-ConfigurationProject](Import-ConfigurationProject.md)
 Imports a PowerShell-authored project release object from JSON.
+
+### [Import-IsolatedModule](Import-IsolatedModule.md)
+Imports a known PowerShell module through a curated AssemblyLoadContext isolation profile.
 
 ### [Import-ModuleRepositoryProfile](Import-ModuleRepositoryProfile.md)
 Imports private module repository profiles from a non-secret JSON file.

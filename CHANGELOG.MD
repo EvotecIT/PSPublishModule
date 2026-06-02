@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### What's Changed
+- Added `Import-IsolatedModule` with a built-in `ExchangeOnlineManagement` profile that loads EXO binary assemblies through a module-scoped AssemblyLoadContext, allowing EXO's OData 7.22 dependency line to coexist with Az.Storage's OData 7.6 line in the same PowerShell 7 process.
+- Added a built-in `MicrosoftTeams` profile for `Import-IsolatedModule` that loads the Teams connect, Teams cmdlet, policy administration, and ConfigAPI binary surfaces through `MicrosoftTeams.ALC`.
 - Added opt-in module-scoped `UseAssemblyLoadContext` / `NETAssemblyLoadContext` loading for binary modules. The PowerShell Core export bridge uses the private `PSModuleInfo.AddExportedCmdlet` method when available and falls back to a warning if a future PowerShell version removes it.
 - Preserved binary module aliases in the module-scoped AssemblyLoadContext export bridge so forced re-imports keep DSL aliases available.
 - Updated core PSPublishModule/PowerForge package references used by the release build.
