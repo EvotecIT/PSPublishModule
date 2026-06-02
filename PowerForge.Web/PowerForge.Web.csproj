@@ -44,6 +44,8 @@
     <EmbeddedResource Include="Assets\ApiDocs\docs.js" />
     <EmbeddedResource Include="Assets\ApiDocs\api-header.html" />
     <EmbeddedResource Include="Assets\ApiDocs\api-footer.html" />
+    <EmbeddedResource Include="Assets\SitemapProtocol\sitemap.xsd" />
+    <EmbeddedResource Include="Assets\SitemapProtocol\siteindex.xsd" />
   </ItemGroup>
 
 </Project>

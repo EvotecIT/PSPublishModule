@@ -706,6 +706,42 @@ internal static partial class WebCliCommandHandlers
         return 0;
     }
 
+    private static int HandleSitemapSchemas(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        var outputDirectory = TryGetOptionValue(subArgs, "--out") ??
+                              TryGetOptionValue(subArgs, "--out-dir") ??
+                              TryGetOptionValue(subArgs, "--output-directory") ??
+                              TryGetOptionValue(subArgs, "--path");
+        var overwrite = !HasOption(subArgs, "--no-overwrite");
+
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+            return Fail("Missing required --out.", outputJson, logger, "web.sitemap_schemas");
+
+        var result = WebSitemapProtocolSchemas.ExportToDirectory(outputDirectory, overwrite);
+
+        if (outputJson)
+        {
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = outputSchemaVersion,
+                Command = "web.sitemap_schemas",
+                Success = true,
+                ExitCode = 0,
+                Result = WebCliJson.SerializeToElement(
+                    result,
+                    WebCliJson.Context.WebSitemapProtocolSchemaExportResult)
+            });
+            return 0;
+        }
+
+        logger.Success($"Sitemap protocol schemas exported: {result.OutputDirectory}");
+        logger.Info($"sitemap.xsd: {result.SitemapSchemaPath}");
+        logger.Info($"siteindex.xsd: {result.SitemapIndexSchemaPath}");
+        foreach (var note in result.Notes)
+            logger.Info(note);
+        return 0;
+    }
+
     private static int HandleXrefMerge(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
         var outPath = TryGetOptionValue(subArgs, "--out") ??
