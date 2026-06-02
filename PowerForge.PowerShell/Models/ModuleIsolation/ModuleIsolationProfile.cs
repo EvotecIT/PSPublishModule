@@ -34,8 +34,17 @@ public sealed class ModuleIsolationProfile
     /// <summary>Whether the generated wrapper should append the remaining source script body after the loader block.</summary>
     public bool IncludeSourceScriptBody { get; set; } = true;
 
+    /// <summary>Whether copied Authenticode signature blocks should be removed from the appended source body.</summary>
+    public bool RemoveSourceSignatureBlock { get; set; }
+
     /// <summary>Additional PowerShell script lines appended after the loader block and optional source script body.</summary>
     public string[] AdditionalScriptLines { get; set; } = Array.Empty<string>();
+
+    /// <summary>Source script lines containing these fragments are skipped when appending the source body.</summary>
+    public string[] SourceLineContainsToSkip { get; set; } = Array.Empty<string>();
+
+    /// <summary>Dependency assemblies to load into the shared context without importing them as PowerShell modules.</summary>
+    public string[] DependencyAssemblyImports { get; set; } = Array.Empty<string>();
 
     /// <summary>Binary module assemblies to import from the script folder through the shared load context.</summary>
     public string[] BinaryImports { get; set; } = Array.Empty<string>();
@@ -48,6 +57,9 @@ public sealed class ModuleIsolationProfile
 
     /// <summary>Stable load-context name used for the isolated module import.</summary>
     public string ContextName { get; set; } = string.Empty;
+
+    /// <summary>Whether copied manifests should clear NestedModules to prevent default-loader imports.</summary>
+    public bool RemoveManifestNestedModules { get; set; }
 
     /// <summary>Returns a built-in profile for ExchangeOnlineManagement.</summary>
     public static ModuleIsolationProfile ExchangeOnlineManagement { get; } = new()
@@ -109,5 +121,67 @@ public sealed class ModuleIsolationProfile
             "Microsoft.Teams."
         ],
         ContextName = "MicrosoftTeams.ALC"
+    };
+
+    /// <summary>Returns a built-in profile for Microsoft.Graph.Authentication.</summary>
+    public static ModuleIsolationProfile MicrosoftGraphAuthentication { get; } = new()
+    {
+        Name = "MicrosoftGraphAuthentication",
+        ModuleName = "Microsoft.Graph.Authentication",
+        MinimumVersion = new Version(2, 36, 0),
+        ScriptRelativePath = "Microsoft.Graph.Authentication.psm1",
+        IsolatedScriptName = "Microsoft.Graph.Authentication.ALC.psm1",
+        ManifestRelativePath = "Microsoft.Graph.Authentication.psd1",
+        IsolatedManifestName = "Microsoft.Graph.Authentication.ALC.psd1",
+        RemoveSourceSignatureBlock = true,
+        SourceLineContainsToSkip =
+        [
+            "Import-Module -Name $ModulePath",
+            "Export-ModuleMember -Cmdlet (Get-ModuleCmdlet -ModulePath $ModulePath)"
+        ],
+        AdditionalScriptLines =
+        [
+            "Export-ModuleMember -Cmdlet @('Add-MgEnvironment', 'Connect-MgGraph', 'Disconnect-MgGraph', 'Get-MgContext', 'Get-MgEnvironment', 'Get-MgGraphOption', 'Get-MgRequestContext', 'Invoke-MgGraphRequest', 'Remove-MgEnvironment', 'Set-MgEnvironment', 'Set-MgGraphOption', 'Set-MgRequestContext') -Alias @('Connect-Graph', 'Disconnect-Graph', 'Invoke-GraphRequest', 'Invoke-MgRestMethod')"
+        ],
+        RemoveManifestNestedModules = true,
+        DependencyAssemblyImports =
+        [
+            "Dependencies/Core/Azure.Core.dll",
+            "Dependencies/Core/Microsoft.Graph.Core.dll",
+            "Dependencies/Core/Microsoft.Identity.Client.dll",
+            "Dependencies/Core/Microsoft.Identity.Client.Extensions.Msal.dll",
+            "Dependencies/Core/Newtonsoft.Json.dll",
+            "Dependencies/Azure.Identity.dll",
+            "Dependencies/Azure.Identity.Broker.dll",
+            "Dependencies/Microsoft.Bcl.AsyncInterfaces.dll",
+            "Dependencies/Microsoft.Identity.Client.Broker.dll",
+            "Dependencies/Microsoft.Identity.Client.NativeInterop.dll",
+            "Dependencies/Microsoft.IdentityModel.Abstractions.dll",
+            "Dependencies/Microsoft.Kiota.Abstractions.dll",
+            "Dependencies/Microsoft.Kiota.Authentication.Azure.dll",
+            "Dependencies/Microsoft.Kiota.Http.HttpClientLibrary.dll",
+            "Dependencies/Microsoft.Kiota.Serialization.Form.dll",
+            "Dependencies/Microsoft.Kiota.Serialization.Json.dll",
+            "Dependencies/Microsoft.Kiota.Serialization.Text.dll",
+            "Dependencies/System.Buffers.dll",
+            "Dependencies/System.ClientModel.dll",
+            "Dependencies/System.Diagnostics.DiagnosticSource.dll",
+            "Dependencies/System.IO.Pipelines.dll",
+            "Dependencies/System.Memory.Data.dll",
+            "Dependencies/System.Memory.dll",
+            "Dependencies/System.Text.Encodings.Web.dll",
+            "Dependencies/System.Text.Json.dll",
+            "Dependencies/System.Threading.Tasks.Extensions.dll"
+        ],
+        BinaryImports =
+        [
+            "Microsoft.Graph.Authentication.Core.dll",
+            "Microsoft.Graph.Authentication.dll"
+        ],
+        TypeAcceleratorNamespaces =
+        [
+            "Microsoft.Graph."
+        ],
+        ContextName = "Microsoft.Graph.Authentication.ALC"
     };
 }

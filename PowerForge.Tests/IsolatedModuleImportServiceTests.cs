@@ -158,6 +158,52 @@ public sealed class IsolatedModuleImportServiceTests
     }
 
     [Fact]
+    public void Prepare_GraphProfile_RemovesNestedModulesAndSkipsDefaultBinaryImport()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var moduleBase = Path.Combine(root, "Microsoft.Graph.Authentication", "2.37.0");
+            Directory.CreateDirectory(Path.Combine(moduleBase, "Dependencies", "Core"));
+            Directory.CreateDirectory(Path.Combine(moduleBase, "Dependencies"));
+            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Graph.Authentication.psm1"), CreateGraphLikeScript());
+            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Graph.Authentication.psd1"), CreateGraphLikeManifest());
+            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Graph.Authentication.dll"), "not a real dll");
+            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Graph.Authentication.Core.dll"), "not a real dll");
+            File.WriteAllText(Path.Combine(moduleBase, "Dependencies", "Core", "Azure.Core.dll"), "not a real dll");
+            File.WriteAllText(Path.Combine(moduleBase, "Dependencies", "Microsoft.Kiota.Abstractions.dll"), "not a real dll");
+
+            var service = new IsolatedModuleImportService();
+            var plan = service.Prepare(new IsolatedModuleImportRequest
+            {
+                ProfileName = "MicrosoftGraphAuthentication",
+                Path = moduleBase,
+                WorkRoot = Path.Combine(root, "work")
+            });
+
+            Assert.Equal(plan.IsolatedManifestPath, plan.IsolatedImportPath);
+
+            var patched = File.ReadAllText(plan.IsolatedScriptPath);
+            Assert.Contains("$ModulePath = (Join-Path $PSScriptRoot 'Microsoft.Graph.Authentication.dll')", patched, StringComparison.Ordinal);
+            Assert.Contains("Export-ModuleMember -Cmdlet @('Add-MgEnvironment'", patched, StringComparison.Ordinal);
+            Assert.Contains("'Invoke-MgRestMethod'", patched, StringComparison.Ordinal);
+            Assert.Contains("'Dependencies/Core/Azure.Core.dll'", patched, StringComparison.Ordinal);
+            Assert.DoesNotContain("Export-ModuleMember -Cmdlet (Get-ModuleCmdlet -ModulePath $ModulePath)", patched, StringComparison.Ordinal);
+            Assert.DoesNotContain("$null = Import-Module -Name $ModulePath", patched, StringComparison.Ordinal);
+            Assert.DoesNotContain("# SIG # Begin signature block", patched, StringComparison.Ordinal);
+
+            var manifest = File.ReadAllText(plan.IsolatedManifestPath);
+            Assert.Contains("RootModule = './Microsoft.Graph.Authentication.ALC.psm1'", manifest, StringComparison.Ordinal);
+            Assert.Contains("NestedModules = @()", manifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("Microsoft.Graph.Authentication.Core.dll')", manifest, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Prepare_ExplicitPathBelowMinimumVersion_FailsBeforePatching()
     {
         var root = CreateTempDirectory();
@@ -206,6 +252,18 @@ public sealed class IsolatedModuleImportServiceTests
             "function Invoke-OriginalTeamsBootstrap { 'body' }"
         });
 
+    private static string CreateGraphLikeScript()
+        => string.Join(Environment.NewLine, new[]
+        {
+            "$ModulePath = (Join-Path $PSScriptRoot 'Microsoft.Graph.Authentication.dll')",
+            "$null = Import-Module -Name $ModulePath",
+            "Export-ModuleMember",
+            "Export-ModuleMember -Cmdlet (Get-ModuleCmdlet -ModulePath $ModulePath) -Alias (Get-ModuleCmdlet -ModulePath $ModulePath -AsAlias)",
+            "# SIG # Begin signature block",
+            "# signed payload",
+            "# SIG # End signature block"
+        });
+
     private static string CreateExchangeLikeManifest(string version)
         => string.Join(Environment.NewLine, new[]
         {
@@ -234,6 +292,21 @@ public sealed class IsolatedModuleImportServiceTests
             "GUID = 'd910df43-3ca6-4c9c-a2e3-e9f45a8e2ad9'",
             "FunctionsToExport = @('" + functionName + "')",
             "CmdletsToExport = @('Connect-MicrosoftTeams')",
+            "}"
+        });
+
+    private static string CreateGraphLikeManifest()
+        => string.Join(Environment.NewLine, new[]
+        {
+            "@{",
+            "RootModule = './Microsoft.Graph.Authentication.psm1'",
+            "ModuleVersion = '2.37.0'",
+            "GUID = '883916f2-9184-46ee-b1f8-b6a2fb784cee'",
+            "NestedModules = @('Microsoft.Graph.Authentication.dll',",
+            "               'Microsoft.Graph.Authentication.Core.dll')",
+            "FunctionsToExport = @('Find-MgGraphCommand', 'Find-MgGraphPermission')",
+            "CmdletsToExport = @('Connect-MgGraph', 'Disconnect-MgGraph', 'Get-MgContext')",
+            "AliasesToExport = @('Connect-Graph')",
             "}"
         });
 

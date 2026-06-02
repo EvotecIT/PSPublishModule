@@ -12,7 +12,8 @@ public sealed class ModuleIsolationProfileRegistry
     private static readonly ModuleIsolationProfile[] BuiltInProfiles =
     [
         ModuleIsolationProfile.ExchangeOnlineManagement,
-        ModuleIsolationProfile.MicrosoftTeams
+        ModuleIsolationProfile.MicrosoftTeams,
+        ModuleIsolationProfile.MicrosoftGraphAuthentication
     ];
 
     private readonly Dictionary<string, ModuleIsolationProfile> _profiles;
