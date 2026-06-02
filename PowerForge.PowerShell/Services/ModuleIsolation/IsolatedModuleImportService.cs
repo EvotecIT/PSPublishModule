@@ -39,7 +39,8 @@ public sealed class IsolatedModuleImportService
         EnsureSupportedRuntime();
 
         var profile = _profiles.Resolve(request.ProfileName);
-        var sourceModuleBase = ResolveModuleBase(request, profile);
+        var source = ResolveModuleSource(request, profile);
+        var sourceModuleBase = source.ModuleBase;
         var sourceScriptPath = Path.Combine(sourceModuleBase, NormalizeRelativePath(profile.ScriptRelativePath));
         if (!File.Exists(sourceScriptPath))
             throw new FileNotFoundException($"The profile '{profile.Name}' expected script module '{profile.ScriptRelativePath}' below '{sourceModuleBase}'.", sourceScriptPath);
@@ -48,11 +49,12 @@ public sealed class IsolatedModuleImportService
         var workPath = Path.Combine(workRoot, Guid.NewGuid().ToString("N"));
         var isolatedModuleBase = Path.Combine(workPath, profile.ModuleName);
         CopyDirectory(sourceModuleBase, isolatedModuleBase);
+        PatchCopiedBinaryImportScripts(isolatedModuleBase, profile);
 
         var isolatedScriptDirectory = Path.Combine(isolatedModuleBase, Path.GetDirectoryName(NormalizeRelativePath(profile.ScriptRelativePath)) ?? string.Empty);
         var isolatedScriptPath = Path.Combine(isolatedScriptDirectory, profile.IsolatedScriptName);
         _patcher.PatchFile(sourceScriptPath, isolatedScriptPath, profile);
-        var isolatedManifestPath = PrepareManifest(profile, sourceModuleBase, isolatedModuleBase, isolatedScriptPath);
+        var isolatedManifestPath = PrepareManifest(profile, source.ManifestPath, isolatedModuleBase, isolatedScriptPath);
         var isolatedImportPath = string.IsNullOrWhiteSpace(isolatedManifestPath) ? isolatedScriptPath : isolatedManifestPath;
 
         return new IsolatedModuleImportPlan
@@ -94,13 +96,13 @@ public sealed class IsolatedModuleImportService
             throw new PlatformNotSupportedException("Import-IsolatedModule requires PowerShell 7+ on CoreCLR because AssemblyLoadContext is not available in Windows PowerShell.");
     }
 
-    private static string ResolveModuleBase(IsolatedModuleImportRequest request, ModuleIsolationProfile profile)
+    private static ResolvedModuleSource ResolveModuleSource(IsolatedModuleImportRequest request, ModuleIsolationProfile profile)
     {
         if (!string.IsNullOrWhiteSpace(request.Path))
         {
-            var explicitModuleBase = ResolveExplicitModuleBase(request.Path!);
-            EnsureMinimumVersion(explicitModuleBase, profile);
-            return explicitModuleBase;
+            var explicitSource = ResolveExplicitModuleSource(request.Path!, profile);
+            EnsureMinimumVersion(explicitSource, profile);
+            return explicitSource;
         }
 
         var moduleName = string.IsNullOrWhiteSpace(request.ModuleName) ? profile.ModuleName : request.ModuleName!.Trim();
@@ -123,21 +125,25 @@ public sealed class IsolatedModuleImportService
         if (profile.MinimumVersion is not null && module.Version < profile.MinimumVersion)
             throw new InvalidOperationException($"Profile '{profile.Name}' requires {profile.ModuleName} {profile.MinimumVersion} or newer. Resolved version {module.Version} at '{module.ModuleBase}'.");
 
-        return Path.GetFullPath(module.ModuleBase);
+        var moduleBase = Path.GetFullPath(module.ModuleBase);
+        var manifestPath = !string.IsNullOrWhiteSpace(module.Path) && Path.GetExtension(module.Path).Equals(".psd1", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFullPath(module.Path)
+            : ResolveProfileManifestPath(moduleBase, profile);
+
+        return new ResolvedModuleSource(moduleBase, manifestPath);
     }
 
-    private static void EnsureMinimumVersion(string moduleBase, ModuleIsolationProfile profile)
+    private static void EnsureMinimumVersion(ResolvedModuleSource source, ModuleIsolationProfile profile)
     {
         if (profile.MinimumVersion is null)
             return;
 
-        var manifestPath = ResolveProfileManifestPath(moduleBase, profile);
-        if (!File.Exists(manifestPath))
-            throw new FileNotFoundException($"Profile '{profile.Name}' requires a module manifest to validate the minimum supported version.", manifestPath);
+        if (!File.Exists(source.ManifestPath))
+            throw new FileNotFoundException($"Profile '{profile.Name}' requires a module manifest to validate the minimum supported version.", source.ManifestPath);
 
-        var version = ReadManifestVersion(manifestPath);
+        var version = ReadManifestVersion(source.ManifestPath);
         if (version < profile.MinimumVersion)
-            throw new InvalidOperationException($"Profile '{profile.Name}' requires {profile.ModuleName} {profile.MinimumVersion} or newer. Resolved version {version} at '{moduleBase}'.");
+            throw new InvalidOperationException($"Profile '{profile.Name}' requires {profile.ModuleName} {profile.MinimumVersion} or newer. Resolved version {version} at '{source.ModuleBase}'.");
     }
 
     private static Version ReadManifestVersion(string manifestPath)
@@ -176,14 +182,21 @@ public sealed class IsolatedModuleImportService
         return ast.Extent.Text.Trim().Trim('\'', '"');
     }
 
-    private static string ResolveExplicitModuleBase(string path)
+    private static ResolvedModuleSource ResolveExplicitModuleSource(string path, ModuleIsolationProfile profile)
     {
         var fullPath = Path.GetFullPath(path.Trim().Trim('"'));
         if (Directory.Exists(fullPath))
-            return fullPath;
+            return new ResolvedModuleSource(fullPath, ResolveExistingManifestPath(fullPath, profile));
 
         if (File.Exists(fullPath))
-            return Path.GetDirectoryName(fullPath) ?? throw new DirectoryNotFoundException($"Could not resolve module base for '{fullPath}'.");
+        {
+            var moduleBase = Path.GetDirectoryName(fullPath) ?? throw new DirectoryNotFoundException($"Could not resolve module base for '{fullPath}'.");
+            var manifestPath = Path.GetExtension(fullPath).Equals(".psd1", StringComparison.OrdinalIgnoreCase)
+                ? fullPath
+                : ResolveExistingManifestPath(moduleBase, profile);
+
+            return new ResolvedModuleSource(moduleBase, manifestPath);
+        }
 
         throw new FileNotFoundException($"Module path was not found: {fullPath}", fullPath);
     }
@@ -198,7 +211,7 @@ public sealed class IsolatedModuleImportService
         return root;
     }
 
-    private static string PrepareManifest(ModuleIsolationProfile profile, string sourceModuleBase, string isolatedModuleBase, string isolatedScriptPath)
+    private static string PrepareManifest(ModuleIsolationProfile profile, string sourceManifestPath, string isolatedModuleBase, string isolatedScriptPath)
     {
         if (string.IsNullOrWhiteSpace(profile.ManifestRelativePath))
             return string.Empty;
@@ -207,9 +220,8 @@ public sealed class IsolatedModuleImportService
             throw new InvalidOperationException($"Profile '{profile.Name}' declares a manifest path but no generated manifest name.");
 
         var manifestRelativePath = NormalizeRelativePath(profile.ManifestRelativePath);
-        var sourceManifestPath = ResolveProfileManifestPath(sourceModuleBase, profile);
         if (!File.Exists(sourceManifestPath))
-            throw new FileNotFoundException($"The profile '{profile.Name}' expected module manifest '{profile.ManifestRelativePath}' below '{sourceModuleBase}'.", sourceManifestPath);
+            throw new FileNotFoundException($"The profile '{profile.Name}' expected module manifest '{profile.ManifestRelativePath}'.", sourceManifestPath);
 
         var manifestDirectory = Path.Combine(isolatedModuleBase, Path.GetDirectoryName(manifestRelativePath) ?? string.Empty);
         var isolatedManifestPath = Path.Combine(manifestDirectory, profile.IsolatedManifestName);
@@ -226,6 +238,23 @@ public sealed class IsolatedModuleImportService
             string.IsNullOrWhiteSpace(profile.ManifestRelativePath)
                 ? profile.ModuleName + ".psd1"
                 : profile.ManifestRelativePath));
+
+    private static string ResolveExistingManifestPath(string moduleBase, ModuleIsolationProfile profile)
+    {
+        var profileManifestPath = ResolveProfileManifestPath(moduleBase, profile);
+        if (File.Exists(profileManifestPath))
+            return profileManifestPath;
+
+        var manifests = Directory.GetFiles(moduleBase, "*.psd1", SearchOption.TopDirectoryOnly);
+        if (manifests.Length == 1)
+            return manifests[0];
+
+        var moduleNameManifestPath = Path.Combine(moduleBase, Path.GetFileName(moduleBase) + ".psd1");
+        if (File.Exists(moduleNameManifestPath))
+            return moduleNameManifestPath;
+
+        return profileManifestPath;
+    }
 
     private static void PatchManifest(string sourceManifestPath, string targetManifestPath, string rootModule)
     {
@@ -290,6 +319,59 @@ public sealed class IsolatedModuleImportService
         }
     }
 
+    private static void PatchCopiedBinaryImportScripts(string isolatedModuleBase, ModuleIsolationProfile profile)
+    {
+        if (profile.CopiedScriptBinaryImports.Length == 0)
+            return;
+
+        var binaryImports = profile.CopiedScriptBinaryImports
+            .Select(relativePath => new
+            {
+                RelativePath = NormalizeRelativePath(relativePath),
+                FileName = GetPortableFileName(relativePath)
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.FileName))
+            .ToArray();
+
+        foreach (var scriptPath in Directory.EnumerateFiles(isolatedModuleBase, "*.psm1", SearchOption.AllDirectories))
+        {
+            var script = File.ReadAllText(scriptPath, Encoding.UTF8);
+            var lines = script
+                .Replace("\r\n", "\n")
+                .Replace('\r', '\n')
+                .Split('\n');
+            var changed = false;
+            var scriptDirectory = Path.GetDirectoryName(scriptPath) ?? isolatedModuleBase;
+
+            foreach (var binaryImport in binaryImports)
+            {
+                var binaryPath = Path.Combine(isolatedModuleBase, binaryImport.RelativePath);
+                var binaryPathFromScript = GetRelativePath(scriptDirectory, binaryPath).Replace('\\', '/');
+                var loadLine = "$null = Import-Module -Assembly ([PowerForge.ModuleIsolation.ModuleLoadContext]::LoadModule([System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '" + EscapePowerShellSingleQuotedString(binaryPathFromScript) + "')), '" + EscapePowerShellSingleQuotedString(profile.ContextName) + "')) -Force";
+
+                for (var index = 0; index < lines.Length; index++)
+                {
+                    var line = lines[index];
+                    if (!line.Contains("Import-Module", StringComparison.OrdinalIgnoreCase) ||
+                        !line.Contains(binaryImport.FileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var indent = new string(line.TakeWhile(char.IsWhiteSpace).ToArray());
+                    lines[index] = indent + loadLine;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                var patched = string.Join(Environment.NewLine, lines);
+                File.WriteAllText(scriptPath, patched, Encoding.UTF8);
+            }
+        }
+    }
+
     private static string NormalizeRelativePath(string path)
         => path.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
 
@@ -311,5 +393,24 @@ public sealed class IsolatedModuleImportService
         var invalid = Path.GetInvalidFileNameChars();
         var chars = value.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
         return new string(chars);
+    }
+
+    private static string EscapePowerShellSingleQuotedString(string value)
+        => value.Replace("'", "''");
+
+    private static string GetPortableFileName(string path)
+        => path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? string.Empty;
+
+    private sealed class ResolvedModuleSource
+    {
+        public ResolvedModuleSource(string moduleBase, string manifestPath)
+        {
+            ModuleBase = moduleBase;
+            ManifestPath = manifestPath;
+        }
+
+        public string ModuleBase { get; }
+
+        public string ManifestPath { get; }
     }
 }

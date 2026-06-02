@@ -50,7 +50,7 @@ public sealed class IsolatedModuleImportServiceTests
     }
 
     [Fact]
-    public void Prepare_TeamsProfile_PreservesManifestExportsAndSourceBody()
+    public void Prepare_TeamsProfile_PreservesManifestExportsAndPatchesSubmoduleBinaryImports()
     {
         var root = CreateTempDirectory();
         try
@@ -62,6 +62,9 @@ public sealed class IsolatedModuleImportServiceTests
             Directory.CreateDirectory(bin);
             File.WriteAllText(Path.Combine(moduleBase, "MicrosoftTeams.psm1"), CreateTeamsLikeScript());
             File.WriteAllText(Path.Combine(moduleBase, "MicrosoftTeams.psd1"), CreateTeamsLikeManifest());
+            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Teams.PowerShell.TeamsCmdlets.psm1"), "$null = Import-Module -Name (Join-Path $PSScriptRoot './netcoreapp3.1/Microsoft.Teams.PowerShell.TeamsCmdlets.dll')");
+            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Teams.Policy.Administration.Cmdlets.Core.psm1"), "$null = Import-Module -Name (Join-Path $PSScriptRoot 'netcoreapp3.1\\Microsoft.Teams.Policy.Administration.Cmdlets.Core.dll')");
+            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Teams.ConfigAPI.Cmdlets.psm1"), "$null = Import-Module -Name (Join-Path $PSScriptRoot './bin/Microsoft.Teams.ConfigAPI.Cmdlets.private.dll')");
             File.WriteAllText(Path.Combine(netCore, "Microsoft.TeamsCmdlets.PowerShell.Connect.dll"), "not a real dll");
             File.WriteAllText(Path.Combine(netCore, "Microsoft.Teams.PowerShell.TeamsCmdlets.dll"), "not a real dll");
             File.WriteAllText(Path.Combine(netCore, "Microsoft.Teams.PowerShell.Module.dll"), "not a real dll");
@@ -92,9 +95,61 @@ public sealed class IsolatedModuleImportServiceTests
             Assert.DoesNotContain("function Invoke-OriginalTeamsBootstrap", patched, StringComparison.Ordinal);
             Assert.DoesNotContain("Import-Module './netcoreapp3.1/Microsoft.TeamsCmdlets.PowerShell.Connect.dll'", patched, StringComparison.Ordinal);
 
+            var teamsCmdletsScript = File.ReadAllText(Path.Combine(plan.IsolatedModuleBase, "Microsoft.Teams.PowerShell.TeamsCmdlets.psm1"));
+            Assert.Contains("ModuleLoadContext]::LoadModule([System.IO.Path]::GetFullPath", teamsCmdletsScript, StringComparison.Ordinal);
+            Assert.Contains("netcoreapp3.1/Microsoft.Teams.PowerShell.TeamsCmdlets.dll", teamsCmdletsScript, StringComparison.Ordinal);
+            Assert.DoesNotContain("Import-Module -Name (Join-Path $PSScriptRoot './netcoreapp3.1/Microsoft.Teams.PowerShell.TeamsCmdlets.dll')", teamsCmdletsScript, StringComparison.Ordinal);
+
+            var policyCoreScript = File.ReadAllText(Path.Combine(plan.IsolatedModuleBase, "Microsoft.Teams.Policy.Administration.Cmdlets.Core.psm1"));
+            Assert.Contains("ModuleLoadContext]::LoadModule([System.IO.Path]::GetFullPath", policyCoreScript, StringComparison.Ordinal);
+            Assert.Contains("netcoreapp3.1/Microsoft.Teams.Policy.Administration.Cmdlets.Core.dll", policyCoreScript, StringComparison.Ordinal);
+            Assert.DoesNotContain("Import-Module -Name (Join-Path $PSScriptRoot 'netcoreapp3.1\\Microsoft.Teams.Policy.Administration.Cmdlets.Core.dll')", policyCoreScript, StringComparison.Ordinal);
+
+            var configApiScript = File.ReadAllText(Path.Combine(plan.IsolatedModuleBase, "Microsoft.Teams.ConfigAPI.Cmdlets.psm1"));
+            Assert.Contains("Import-Module -Name (Join-Path $PSScriptRoot './bin/Microsoft.Teams.ConfigAPI.Cmdlets.private.dll')", configApiScript, StringComparison.Ordinal);
+
             var manifest = File.ReadAllText(plan.IsolatedManifestPath);
             Assert.Contains("RootModule = './MicrosoftTeams.ALC.psm1'", manifest, StringComparison.Ordinal);
             Assert.Contains("FunctionsToExport = @('Get-Team')", manifest, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Prepare_ExplicitManifestPathWithDifferentName_UsesResolvedManifest()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var moduleBase = Path.Combine(root, "ContosoTeams", "7.9.0");
+            var netCore = Path.Combine(moduleBase, "netcoreapp3.1");
+            var bin = Path.Combine(moduleBase, "bin");
+            Directory.CreateDirectory(netCore);
+            Directory.CreateDirectory(bin);
+            File.WriteAllText(Path.Combine(moduleBase, "MicrosoftTeams.psm1"), CreateTeamsLikeScript());
+            File.WriteAllText(Path.Combine(moduleBase, "ContosoTeams.psd1"), CreateTeamsLikeManifest("7.9.0", "Get-ContosoTeam"));
+            File.WriteAllText(Path.Combine(netCore, "Microsoft.TeamsCmdlets.PowerShell.Connect.dll"), "not a real dll");
+            File.WriteAllText(Path.Combine(netCore, "Microsoft.Teams.PowerShell.TeamsCmdlets.dll"), "not a real dll");
+            File.WriteAllText(Path.Combine(netCore, "Microsoft.Teams.PowerShell.Module.dll"), "not a real dll");
+            File.WriteAllText(Path.Combine(netCore, "Microsoft.Teams.Policy.Administration.Cmdlets.Core.dll"), "not a real dll");
+            File.WriteAllText(Path.Combine(netCore, "Microsoft.Teams.Policy.Administration.Cmdlets.Providers.PolicyRp.dll"), "not a real dll");
+            File.WriteAllText(Path.Combine(bin, "Microsoft.Teams.ConfigAPI.Cmdlets.private.dll"), "not a real dll");
+
+            var service = new IsolatedModuleImportService();
+            var plan = service.Prepare(new IsolatedModuleImportRequest
+            {
+                ProfileName = "MicrosoftTeams",
+                Path = Path.Combine(moduleBase, "ContosoTeams.psd1"),
+                WorkRoot = Path.Combine(root, "work")
+            });
+
+            var manifest = File.ReadAllText(plan.IsolatedManifestPath);
+            Assert.Contains("RootModule = './MicrosoftTeams.ALC.psm1'", manifest, StringComparison.Ordinal);
+            Assert.Contains("ModuleVersion = '7.9.0'", manifest, StringComparison.Ordinal);
+            Assert.Contains("FunctionsToExport = @('Get-ContosoTeam')", manifest, StringComparison.Ordinal);
         }
         finally
         {
@@ -170,14 +225,14 @@ public sealed class IsolatedModuleImportServiceTests
             "}"
         });
 
-    private static string CreateTeamsLikeManifest(string version = "7.8.0")
+    private static string CreateTeamsLikeManifest(string version = "7.8.0", string functionName = "Get-Team")
         => string.Join(Environment.NewLine, new[]
         {
             "@{",
             "RootModule = './MicrosoftTeams.psm1'",
             "ModuleVersion = '" + version + "'",
             "GUID = 'd910df43-3ca6-4c9c-a2e3-e9f45a8e2ad9'",
-            "FunctionsToExport = @('Get-Team')",
+            "FunctionsToExport = @('" + functionName + "')",
             "CmdletsToExport = @('Connect-MicrosoftTeams')",
             "}"
         });

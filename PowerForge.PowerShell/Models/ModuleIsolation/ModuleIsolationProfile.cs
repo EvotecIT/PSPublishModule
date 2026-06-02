@@ -40,6 +40,9 @@ public sealed class ModuleIsolationProfile
     /// <summary>Binary module assemblies to import from the script folder through the shared load context.</summary>
     public string[] BinaryImports { get; set; } = Array.Empty<string>();
 
+    /// <summary>Copied script-module imports that should be rewritten to use the shared load context.</summary>
+    public string[] CopiedScriptBinaryImports { get; set; } = Array.Empty<string>();
+
     /// <summary>Type namespaces exposed to PowerShell type resolution from assemblies loaded in the isolated context.</summary>
     public string[] TypeAcceleratorNamespaces { get; set; } = Array.Empty<string>();
 
@@ -95,6 +98,11 @@ public sealed class ModuleIsolationProfile
             "netcoreapp3.1/Microsoft.Teams.Policy.Administration.Cmdlets.Core.dll",
             "netcoreapp3.1/Microsoft.Teams.Policy.Administration.Cmdlets.Providers.PolicyRp.dll",
             "bin/Microsoft.Teams.ConfigAPI.Cmdlets.private.dll"
+        ],
+        CopiedScriptBinaryImports =
+        [
+            "netcoreapp3.1/Microsoft.Teams.PowerShell.TeamsCmdlets.dll",
+            "netcoreapp3.1/Microsoft.Teams.Policy.Administration.Cmdlets.Core.dll"
         ],
         TypeAcceleratorNamespaces =
         [
