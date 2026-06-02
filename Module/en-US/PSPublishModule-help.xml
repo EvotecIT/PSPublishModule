@@ -4880,6 +4880,278 @@ and returns one record per discovered version entry.</maml:para>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Import-IsolatedModule</command:name>
+      <command:verb>Import</command:verb>
+      <command:noun>IsolatedModule</command:noun>
+      <maml:description>
+        <maml:para>Imports a known PowerShell module through a curated AssemblyLoadContext isolation profile.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Import-IsolatedModule is intended for PowerShell 7+ sessions where one service module's binary&#xD;
+dependencies cannot safely share the default AssemblyLoadContext with another module. The command&#xD;
+resolves the selected profile, copies the target module to a temporary working folder, generates a&#xD;
+profile-specific wrapper, loads selected binary assemblies through a module-scoped AssemblyLoadContext,&#xD;
+and imports the generated wrapper into the current runspace.</maml:para>
+      <maml:para>Built-in profiles are maintained by PowerForge and are deliberately curated. Use the&#xD;
+ExchangeOnlineManagement profile when Exchange Online needs to coexist with Az.Storage or another&#xD;
+module that has already loaded incompatible Microsoft.OData assemblies. Use the MicrosoftTeams&#xD;
+profile when Teams should keep its MSAL, IdentityModel, policy administration, and ConfigAPI binary&#xD;
+stack out of the default context.</maml:para>
+      <maml:para>This command does not authenticate to the isolated module. After importing the profile, call the&#xD;
+target module's normal connection command, such as Connect-ExchangeOnline or Connect-MicrosoftTeams.&#xD;
+Windows PowerShell 5.1 is not supported because AssemblyLoadContext is only available on CoreCLR.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Import-IsolatedModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Use this only when testing a compatible module installed under a non-standard module name. The&#xD;
+selected profile still controls script patching, binary imports, and the load-context name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>The result includes the source module path, generated script and manifest paths, import path,&#xD;
+work root, load-context name, and profile counts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Use Path to test a specific installed version or a copied module payload. Directory paths are treated&#xD;
+as module bases. File paths are resolved to their parent directory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>Profile</maml:name>
+          <maml:description>
+            <maml:para>Supported built-in profiles are ExchangeOnlineManagement and MicrosoftTeams. Profile names are&#xD;
+resolved case-insensitively.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkRoot</maml:name>
+          <maml:description>
+            <maml:para>When omitted, generated module copies are created under the system temp folder in&#xD;
+PowerForge\IsolatedModules\&lt;profile&gt;. Use WorkRoot when you want to inspect generated wrappers&#xD;
+or keep diagnostic artifacts in a known location.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Use this only when testing a compatible module installed under a non-standard module name. The&#xD;
+selected profile still controls script patching, binary imports, and the load-context name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>The result includes the source module path, generated script and manifest paths, import path,&#xD;
+work root, load-context name, and profile counts.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Use Path to test a specific installed version or a copied module payload. Directory paths are treated&#xD;
+as module bases. File paths are resolved to their parent directory.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <maml:name>Profile</maml:name>
+        <maml:description>
+          <maml:para>Supported built-in profiles are ExchangeOnlineManagement and MicrosoftTeams. Profile names are&#xD;
+resolved case-insensitively.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WorkRoot</maml:name>
+        <maml:description>
+          <maml:para>When omitted, generated module copies are created under the system temp folder in&#xD;
+PowerForge\IsolatedModules\&lt;profile&gt;. Use WorkRoot when you want to inspect generated wrappers&#xD;
+or keep diagnostic artifacts in a known location.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.IsolatedModuleImportResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Start an isolated Exchange Online session</maml:title>
+        <dev:code>Import-IsolatedModule -Profile ExchangeOnlineManagement&#xD;
+$commands = 'Get-EXOMailbox', 'Get-ConnectionInformation'&#xD;
+Connect-ExchangeOnline -ShowBanner:$false -CommandName $commands&#xD;
+Get-ConnectionInformation | Format-Table UserPrincipalName, ConnectionUri&#xD;
+Get-EXOMailbox -ResultSize 5 | Select-Object DisplayName, PrimarySmtpAddress&#xD;
+Disconnect-ExchangeOnline -Confirm:$false</dev:code>
+        <dev:remarks>
+          <maml:para>Imports ExchangeOnlineManagement through the curated profile, connects with the normal EXO&#xD;
+cmdlets, runs a small mailbox query, and disconnects cleanly.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Use Exchange Online after Az.Storage has loaded OData 7.6</maml:title>
+        <dev:code>Import-Module Az.Storage&#xD;
+$defaultODataBefore = [System.Runtime.Loader.AssemblyLoadContext]::Default.Assemblies |&#xD;
+    Where-Object { $_.GetName().Name -like 'Microsoft.OData*' }&#xD;
+Import-IsolatedModule -Profile ExchangeOnlineManagement&#xD;
+Connect-ExchangeOnline -ShowBanner:$false&#xD;
+$defaultODataBefore | ForEach-Object { $_.GetName().Name + ' ' + $_.GetName().Version }&#xD;
+Get-EXOMailbox -ResultSize 1 | Select-Object DisplayName, PrimarySmtpAddress&#xD;
+Disconnect-ExchangeOnline -Confirm:$false</dev:code>
+        <dev:remarks>
+          <maml:para>Keeps Az.Storage's Microsoft.OData 7.6 assemblies in the default context while Exchange Online loads&#xD;
+Microsoft.OData 7.22 assemblies in ExchangeOnlineManagement.ALC.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Start an isolated Microsoft Teams session</maml:title>
+        <dev:code>Import-IsolatedModule -Profile MicrosoftTeams&#xD;
+Connect-MicrosoftTeams -UseDeviceAuthentication&#xD;
+$teams = Get-Team&#xD;
+$teams | Select-Object -First 10 DisplayName, GroupId, Visibility&#xD;
+Disconnect-MicrosoftTeams</dev:code>
+        <dev:remarks>
+          <maml:para>Imports Teams cmdlets from MicrosoftTeams.ALC and then uses the normal Teams connection workflow.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Inspect the generated isolated Teams module</maml:title>
+        <dev:code>$result = Import-IsolatedModule -Profile MicrosoftTeams -PassThru&#xD;
+$result | Format-List ProfileName, ContextName, IsolatedImportPath, IsolatedScriptPath, WorkPath&#xD;
+Get-Command -Module MicrosoftTeams.ALC | Measure-Object&#xD;
+[System.Runtime.Loader.AssemblyLoadContext]::All |&#xD;
+    Where-Object Name -eq $result.ContextName |&#xD;
+    ForEach-Object {&#xD;
+        $_.Assemblies |&#xD;
+            Where-Object { $_.GetName().Name -like 'Microsoft.Teams*' } |&#xD;
+            Select-Object -ExpandProperty FullName&#xD;
+    }</dev:code>
+        <dev:remarks>
+          <maml:para>Returns the generated wrapper details and confirms that Teams assemblies were loaded in the&#xD;
+profile-specific AssemblyLoadContext.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Import a specific installed module copy by path</maml:title>
+        <dev:code>$module = Get-Module -ListAvailable ExchangeOnlineManagement |&#xD;
+    Sort-Object Version -Descending |&#xD;
+    Select-Object -First 1&#xD;
+$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $module.ModuleBase -PassThru&#xD;
+$result | Select-Object ProfileName, ModuleName, SourceModuleBase, IsolatedImportPath&#xD;
+Get-Module ExchangeOnlineManagement | Select-Object Name, Version, ModuleBase</dev:code>
+        <dev:remarks>
+          <maml:para>Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base&#xD;
+folder. The profile still validates its minimum supported module version.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Use a deterministic work root for diagnostics</maml:title>
+        <dev:code>$workRoot = Join-Path $env:TEMP 'PowerForge-Isolated'&#xD;
+$result = Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot $workRoot -PassThru&#xD;
+Get-ChildItem -LiteralPath $result.WorkPath -Recurse | Select-Object -First 20 FullName&#xD;
+Get-Content -LiteralPath $result.IsolatedScriptPath -TotalCount 40</dev:code>
+        <dev:remarks>
+          <maml:para>Creates the generated module copy under the supplied root and inspects the generated wrapper.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Preview an import without creating the isolated module copy</maml:title>
+        <dev:code>Import-IsolatedModule -Profile ExchangeOnlineManagement -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para>Uses ShouldProcess support to show the intended operation without preparing or importing the wrapper.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Import-ModuleRepositoryProfile</command:name>
       <command:verb>Import</command:verb>
       <command:noun>ModuleRepositoryProfile</command:noun>
