@@ -70,6 +70,17 @@ public enum DotNetPublishMsiHarvestMode
 }
 
 /// <summary>
+/// Version pattern used when PowerForge resolves MSI product versions.
+/// </summary>
+public enum DotNetPublishMsiVersionPattern
+{
+    /// <summary>Use configured major/minor values and a date-floor patch segment.</summary>
+    FixedMajorMinorDatePatch,
+    /// <summary>Use UTC short year, month, and day-minute patch segments: <c>yy.month.dayMinute</c>.</summary>
+    UtcShortYearMonthDayMinute
+}
+
+/// <summary>
 /// Microsoft Store / MSIX packaging build mode.
 /// </summary>
 public enum DotNetPublishStoreBuildMode

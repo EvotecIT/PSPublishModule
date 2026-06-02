@@ -510,11 +510,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var minor = Clamp(v.Minor, 0, 255);
         var patchCap = Clamp(v.PatchCap, 1, 65535);
 
-        var floorDate = string.IsNullOrWhiteSpace(v.FloorDateUtc)
-            ? DateTime.UtcNow.Date
-            : ParseUtcDate(v.FloorDateUtc!);
-
-        var basePatch = DaysSince20000101(floorDate);
+        var basePatch = ResolveMsiVersionSegments(v, ref major, ref minor);
         var patch = Clamp(basePatch, 0, patchCap);
         var propertyName = string.IsNullOrWhiteSpace(v.PropertyName) ? "ProductVersion" : v.PropertyName!.Trim();
         string? statePath = null;
@@ -539,9 +535,9 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!plan.AllowOutputOutsideProjectRoot)
                 EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
 
-            var previous = ReadMsiVersionStatePatch(statePath);
-            if (previous.HasValue && previous.Value >= patch)
-                patch = Math.Min(patchCap, previous.Value + 1);
+            var previous = ReadMsiVersionState(statePath);
+            if (ShouldBumpMsiPatch(previous, major, minor, patch))
+                patch = Math.Min(patchCap, previous!.LastPatch + 1);
         }
 
         if (patch >= patchCap && basePatch > patchCap)
@@ -553,6 +549,31 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var version = $"{major}.{minor}.{patch}";
         return new MsiVersionResolution(version, propertyName, patch, statePath);
+    }
+
+    private static int ResolveMsiVersionSegments(DotNetPublishMsiVersionOptions options, ref int major, ref int minor)
+    {
+        switch (options.Pattern)
+        {
+            case DotNetPublishMsiVersionPattern.UtcShortYearMonthDayMinute:
+                var stamp = DateTime.UtcNow;
+                if (!string.IsNullOrWhiteSpace(options.FloorDateUtc))
+                {
+                    var floor = ParseUtcDate(options.FloorDateUtc!);
+                    if (floor > stamp)
+                        stamp = floor;
+                }
+
+                major = Clamp(stamp.Year - 2000, 0, 255);
+                minor = Clamp(stamp.Month, 0, 255);
+                return (stamp.Day * 1440) + (stamp.Hour * 60) + stamp.Minute;
+            case DotNetPublishMsiVersionPattern.FixedMajorMinorDatePatch:
+            default:
+                var floorDate = string.IsNullOrWhiteSpace(options.FloorDateUtc)
+                    ? DateTime.UtcNow.Date
+                    : ParseUtcDate(options.FloorDateUtc!);
+                return DaysSince20000101(floorDate);
+        }
     }
 
     private MsiClientLicenseResolution ResolveInstallerClientLicense(
@@ -602,24 +623,52 @@ public sealed partial class DotNetPublishPipelineRunner
         return MsiClientLicenseResolution.None();
     }
 
-    private static int? ReadMsiVersionStatePatch(string statePath)
+    private static MsiVersionState? ReadMsiVersionState(string statePath)
     {
         try
         {
             if (!File.Exists(statePath)) return null;
             var json = File.ReadAllText(statePath);
-            var state = JsonSerializer.Deserialize<MsiVersionState>(
+            return JsonSerializer.Deserialize<MsiVersionState>(
                 json,
                 new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
-            return state?.LastPatch;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static bool ShouldBumpMsiPatch(MsiVersionState? previous, int major, int minor, int patch)
+    {
+        if (previous is null || previous.LastPatch < patch)
+            return false;
+
+        if (TryParseMsiVersion(previous.Version, out var previousMajor, out var previousMinor, out _)
+            && (previousMajor < major || (previousMajor == major && previousMinor < minor)))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryParseMsiVersion(string? version, out int major, out int minor, out int patch)
+    {
+        major = 0;
+        minor = 0;
+        patch = 0;
+        if (string.IsNullOrWhiteSpace(version))
+            return false;
+
+        var parts = version!.Split('.');
+        return parts.Length >= 3
+            && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out major)
+            && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out minor)
+            && int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out patch);
     }
 
     private static void WriteMsiVersionState(string statePath, int patch, string version)

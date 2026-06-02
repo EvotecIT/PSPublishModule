@@ -98,11 +98,16 @@
       "type": "string",
       "enum": ["Verify", "Update"]
     },
+    "DotNetPublishMsiVersionPattern": {
+      "type": "string",
+      "enum": ["FixedMajorMinorDatePatch", "UtcShortYearMonthDayMinute"]
+    },
     "DotNetPublishMsiVersionOptions": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "Enabled": { "type": "boolean" },
+        "Pattern": { "$ref": "#/$defs/DotNetPublishMsiVersionPattern" },
         "Major": { "type": "integer", "minimum": 0, "maximum": 255 },
         "Minor": { "type": "integer", "minimum": 0, "maximum": 255 },
         "FloorDateUtc": { "type": ["string", "null"] },

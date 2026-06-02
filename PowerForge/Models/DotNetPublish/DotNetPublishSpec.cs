@@ -695,6 +695,11 @@ public sealed class DotNetPublishMsiVersionOptions
     public bool Enabled { get; set; }
 
     /// <summary>
+    /// Version pattern used to resolve the MSI product version. Default keeps the historical PowerForge behavior.
+    /// </summary>
+    public DotNetPublishMsiVersionPattern Pattern { get; set; } = DotNetPublishMsiVersionPattern.FixedMajorMinorDatePatch;
+
+    /// <summary>
     /// Major version segment (0-255). Default: 1.
     /// </summary>
     public int Major { get; set; } = 1;
