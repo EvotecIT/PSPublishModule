@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Management.Automation.Language;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -96,7 +97,11 @@ public sealed class IsolatedModuleImportService
     private static string ResolveModuleBase(IsolatedModuleImportRequest request, ModuleIsolationProfile profile)
     {
         if (!string.IsNullOrWhiteSpace(request.Path))
-            return ResolveExplicitModuleBase(request.Path!);
+        {
+            var explicitModuleBase = ResolveExplicitModuleBase(request.Path!);
+            EnsureMinimumVersion(explicitModuleBase, profile);
+            return explicitModuleBase;
+        }
 
         var moduleName = string.IsNullOrWhiteSpace(request.ModuleName) ? profile.ModuleName : request.ModuleName!.Trim();
         using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
@@ -119,6 +124,56 @@ public sealed class IsolatedModuleImportService
             throw new InvalidOperationException($"Profile '{profile.Name}' requires {profile.ModuleName} {profile.MinimumVersion} or newer. Resolved version {module.Version} at '{module.ModuleBase}'.");
 
         return Path.GetFullPath(module.ModuleBase);
+    }
+
+    private static void EnsureMinimumVersion(string moduleBase, ModuleIsolationProfile profile)
+    {
+        if (profile.MinimumVersion is null)
+            return;
+
+        var manifestPath = ResolveProfileManifestPath(moduleBase, profile);
+        if (!File.Exists(manifestPath))
+            throw new FileNotFoundException($"Profile '{profile.Name}' requires a module manifest to validate the minimum supported version.", manifestPath);
+
+        var version = ReadManifestVersion(manifestPath);
+        if (version < profile.MinimumVersion)
+            throw new InvalidOperationException($"Profile '{profile.Name}' requires {profile.ModuleName} {profile.MinimumVersion} or newer. Resolved version {version} at '{moduleBase}'.");
+    }
+
+    private static Version ReadManifestVersion(string manifestPath)
+    {
+        var ast = Parser.ParseFile(manifestPath, out _, out var errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException($"Module manifest '{manifestPath}' could not be parsed. {errors[0].Message}");
+
+        var hashtable = ast.Find(static node => node is HashtableAst, searchNestedScriptBlocks: false) as HashtableAst
+            ?? throw new InvalidOperationException($"Module manifest '{manifestPath}' does not contain a root hashtable.");
+
+        foreach (var pair in hashtable.KeyValuePairs)
+        {
+            var key = GetManifestStringValue(pair.Item1);
+            if (!string.Equals(key, "ModuleVersion", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var value = GetManifestStringValue(pair.Item2);
+            if (Version.TryParse(value, out var version))
+                return version;
+
+            throw new InvalidOperationException($"Module manifest '{manifestPath}' has an invalid ModuleVersion value '{value}'.");
+        }
+
+        throw new InvalidOperationException($"Module manifest '{manifestPath}' does not declare ModuleVersion.");
+    }
+
+    private static string GetManifestStringValue(Ast ast)
+    {
+        if (ast is StringConstantExpressionAst stringAst)
+            return stringAst.Value;
+
+        if (ast is ConstantExpressionAst constantAst)
+            return Convert.ToString(constantAst.Value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+        return ast.Extent.Text.Trim().Trim('\'', '"');
     }
 
     private static string ResolveExplicitModuleBase(string path)
@@ -152,7 +207,7 @@ public sealed class IsolatedModuleImportService
             throw new InvalidOperationException($"Profile '{profile.Name}' declares a manifest path but no generated manifest name.");
 
         var manifestRelativePath = NormalizeRelativePath(profile.ManifestRelativePath);
-        var sourceManifestPath = Path.Combine(sourceModuleBase, manifestRelativePath);
+        var sourceManifestPath = ResolveProfileManifestPath(sourceModuleBase, profile);
         if (!File.Exists(sourceManifestPath))
             throw new FileNotFoundException($"The profile '{profile.Name}' expected module manifest '{profile.ManifestRelativePath}' below '{sourceModuleBase}'.", sourceManifestPath);
 
@@ -166,12 +221,24 @@ public sealed class IsolatedModuleImportService
         return isolatedManifestPath;
     }
 
+    private static string ResolveProfileManifestPath(string moduleBase, ModuleIsolationProfile profile)
+        => Path.Combine(moduleBase, NormalizeRelativePath(
+            string.IsNullOrWhiteSpace(profile.ManifestRelativePath)
+                ? profile.ModuleName + ".psd1"
+                : profile.ManifestRelativePath));
+
     private static void PatchManifest(string sourceManifestPath, string targetManifestPath, string rootModule)
     {
         var source = File.ReadAllText(sourceManifestPath, Encoding.UTF8);
         var replacement = "RootModule = '" + rootModule.Replace("'", "''") + "'";
         var patched = new Regex(@"^\s*RootModule\s*=\s*(['""]).*?\1", RegexOptions.IgnoreCase | RegexOptions.Multiline)
             .Replace(source, replacement, 1);
+
+        if (string.Equals(source, patched, StringComparison.Ordinal))
+        {
+            patched = new Regex(@"^\s*RootModule\s*=\s*if\s*\([^\r\n]*\)\s*\{.*?^\s*\}\s*else[^\r\n]*\s*\{.*?^\s*\}", RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline)
+                .Replace(source, replacement, 1);
+        }
 
         if (string.Equals(source, patched, StringComparison.Ordinal))
             throw new InvalidOperationException($"Module manifest '{sourceManifestPath}' does not contain a RootModule entry that can be patched.");

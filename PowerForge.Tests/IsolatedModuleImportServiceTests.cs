@@ -15,6 +15,7 @@ public sealed class IsolatedModuleImportServiceTests
             var netCore = Path.Combine(moduleBase, "netCore");
             Directory.CreateDirectory(netCore);
             File.WriteAllText(Path.Combine(netCore, "ExchangeOnlineManagement.psm1"), CreateExchangeLikeScript());
+            File.WriteAllText(Path.Combine(moduleBase, "ExchangeOnlineManagement.psd1"), CreateExchangeLikeManifest("3.9.2"));
             File.WriteAllText(Path.Combine(netCore, "Microsoft.Exchange.Management.RestApiClient.dll"), "not a real dll");
             File.WriteAllText(Path.Combine(netCore, "Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll"), "not a real dll");
 
@@ -30,11 +31,17 @@ public sealed class IsolatedModuleImportServiceTests
             Assert.Equal(moduleBase, plan.SourceModuleBase);
             Assert.StartsWith(workRoot, plan.WorkPath, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(plan.IsolatedScriptPath));
+            Assert.True(File.Exists(plan.IsolatedManifestPath));
+            Assert.Equal(plan.IsolatedManifestPath, plan.IsolatedImportPath);
 
             var patched = File.ReadAllText(plan.IsolatedScriptPath);
             Assert.Contains("PowerForge.ModuleIsolation.ModuleLoadContext", patched, StringComparison.Ordinal);
             Assert.Contains("function Connect-ExchangeOnline", patched, StringComparison.Ordinal);
             Assert.DoesNotContain("Import-Module $RestModulePath", patched, StringComparison.Ordinal);
+
+            var manifest = File.ReadAllText(plan.IsolatedManifestPath);
+            Assert.Contains("RootModule = './netCore/ExchangeOnlineManagement.ALC.psm1'", manifest, StringComparison.Ordinal);
+            Assert.Contains("ModuleVersion = '3.9.2'", manifest, StringComparison.Ordinal);
         }
         finally
         {
@@ -81,11 +88,41 @@ public sealed class IsolatedModuleImportServiceTests
             Assert.Contains("PowerForge.ModuleIsolation.ModuleLoadContext", patched, StringComparison.Ordinal);
             Assert.Contains("Microsoft.Teams.PowerShell.TeamsCmdlets.dll", patched, StringComparison.Ordinal);
             Assert.Contains("Microsoft.Teams.ConfigAPI.Cmdlets.private.dll", patched, StringComparison.Ordinal);
-            Assert.Contains("Invoke-OriginalTeamsBootstrap", patched, StringComparison.Ordinal);
+            Assert.Contains("Microsoft.Teams.Policy.Administration.psd1", patched, StringComparison.Ordinal);
+            Assert.DoesNotContain("function Invoke-OriginalTeamsBootstrap", patched, StringComparison.Ordinal);
+            Assert.DoesNotContain("Import-Module './netcoreapp3.1/Microsoft.TeamsCmdlets.PowerShell.Connect.dll'", patched, StringComparison.Ordinal);
 
             var manifest = File.ReadAllText(plan.IsolatedManifestPath);
             Assert.Contains("RootModule = './MicrosoftTeams.ALC.psm1'", manifest, StringComparison.Ordinal);
             Assert.Contains("FunctionsToExport = @('Get-Team')", manifest, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Prepare_ExplicitPathBelowMinimumVersion_FailsBeforePatching()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var moduleBase = Path.Combine(root, "MicrosoftTeams", "7.1.0");
+            Directory.CreateDirectory(moduleBase);
+            File.WriteAllText(Path.Combine(moduleBase, "MicrosoftTeams.psm1"), CreateTeamsLikeScript());
+            File.WriteAllText(Path.Combine(moduleBase, "MicrosoftTeams.psd1"), CreateTeamsLikeManifest("7.1.0"));
+
+            var service = new IsolatedModuleImportService();
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(new IsolatedModuleImportRequest
+            {
+                ProfileName = "MicrosoftTeams",
+                Path = moduleBase,
+                WorkRoot = Path.Combine(root, "work")
+            }));
+
+            Assert.Contains("requires MicrosoftTeams 7.8.0", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Resolved version 7.1.0", ex.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -114,12 +151,31 @@ public sealed class IsolatedModuleImportServiceTests
             "function Invoke-OriginalTeamsBootstrap { 'body' }"
         });
 
-    private static string CreateTeamsLikeManifest()
+    private static string CreateExchangeLikeManifest(string version)
+        => string.Join(Environment.NewLine, new[]
+        {
+            "@{",
+            "RootModule = if($PSEdition -eq 'Core')",
+            "{",
+            "    './netCore/ExchangeOnlineManagement.psm1'",
+            "}",
+            "else",
+            "{",
+            "    './netFramework/ExchangeOnlineManagement.psm1'",
+            "}",
+            "ModuleVersion = '" + version + "'",
+            "GUID = '2927a85d-904c-4bf6-b35f-5c93682f5656'",
+            "FunctionsToExport = @('Connect-ExchangeOnline')",
+            "CmdletsToExport = @()",
+            "}"
+        });
+
+    private static string CreateTeamsLikeManifest(string version = "7.8.0")
         => string.Join(Environment.NewLine, new[]
         {
             "@{",
             "RootModule = './MicrosoftTeams.psm1'",
-            "ModuleVersion = '7.8.0'",
+            "ModuleVersion = '" + version + "'",
             "GUID = 'd910df43-3ca6-4c9c-a2e3-e9f45a8e2ad9'",
             "FunctionsToExport = @('Get-Team')",
             "CmdletsToExport = @('Connect-MicrosoftTeams')",

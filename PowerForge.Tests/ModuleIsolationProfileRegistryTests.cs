@@ -13,6 +13,8 @@ public sealed class ModuleIsolationProfileRegistryTests
         Assert.Equal("ExchangeOnlineManagement", profile.ModuleName);
         Assert.Equal("netCore/ExchangeOnlineManagement.psm1", profile.ScriptRelativePath);
         Assert.Equal("ExchangeOnlineManagement.ALC.psm1", profile.IsolatedScriptName);
+        Assert.Equal("ExchangeOnlineManagement.psd1", profile.ManifestRelativePath);
+        Assert.Equal("ExchangeOnlineManagement.psd1", profile.IsolatedManifestName);
         Assert.Equal(8, profile.SourceLinesToSkip);
         Assert.Contains("Microsoft.Exchange.Management.RestApiClient.dll", profile.BinaryImports);
         Assert.Contains("Microsoft.Exchange.Management.", profile.TypeAcceleratorNamespaces);
@@ -28,7 +30,10 @@ public sealed class ModuleIsolationProfileRegistryTests
         Assert.Equal("MicrosoftTeams.ALC.psm1", profile.IsolatedScriptName);
         Assert.Equal("MicrosoftTeams.psd1", profile.ManifestRelativePath);
         Assert.Equal("MicrosoftTeams.ALC.psd1", profile.IsolatedManifestName);
-        Assert.True(profile.IncludeSourceScriptBody);
+        Assert.False(profile.IncludeSourceScriptBody);
+        Assert.Contains(profile.AdditionalScriptLines, line => line.Contains("Microsoft.Teams.PowerShell.TeamsCmdlets.psd1", StringComparison.Ordinal));
+        Assert.Contains(profile.AdditionalScriptLines, line => line.Contains("Microsoft.Teams.Policy.Administration.psd1", StringComparison.Ordinal));
+        Assert.Contains(profile.AdditionalScriptLines, line => line.Contains("Microsoft.Teams.ConfigAPI.Cmdlets.psd1", StringComparison.Ordinal));
         Assert.Contains("netcoreapp3.1/Microsoft.Teams.PowerShell.TeamsCmdlets.dll", profile.BinaryImports);
         Assert.Contains("bin/Microsoft.Teams.ConfigAPI.Cmdlets.private.dll", profile.BinaryImports);
         Assert.Contains("Microsoft.Teams.", profile.TypeAcceleratorNamespaces);

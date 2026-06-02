@@ -29,6 +29,8 @@ public sealed class ModuleIsolationScriptPatcher
         builder.AppendLine(CreateLoaderBlock(profile));
         if (profile.IncludeSourceScriptBody)
             builder.AppendLine(string.Join(Environment.NewLine, body));
+        if (profile.AdditionalScriptLines.Length > 0)
+            builder.AppendLine(string.Join(Environment.NewLine, profile.AdditionalScriptLines));
         return builder.ToString();
     }
 
@@ -56,6 +58,7 @@ public sealed class ModuleIsolationScriptPatcher
 if (-not ('PowerForge.ModuleIsolation.ModuleLoadContext' -as [type])) {
     Add-Type -TypeDefinition @"
 using System;
+using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -68,15 +71,19 @@ namespace PowerForge.ModuleIsolation
     {
         private static readonly object Sync = new object();
         private static readonly Dictionary<string, ModuleLoadContext> Contexts = new Dictionary<string, ModuleLoadContext>(StringComparer.OrdinalIgnoreCase);
-        private readonly string assemblyDirectory;
-        private readonly AssemblyDependencyResolver resolver;
+        private readonly List<string> assemblyDirectories = new List<string>();
+        private readonly List<AssemblyDependencyResolver> resolvers = new List<AssemblyDependencyResolver>();
         private readonly Dictionary<string, Assembly> loadedAssemblies = new Dictionary<string, Assembly>(StringComparer.OrdinalIgnoreCase);
 
         private ModuleLoadContext(string mainAssemblyPath, string contextName)
             : base(contextName, isCollectible: false)
         {
-            assemblyDirectory = Path.GetDirectoryName(mainAssemblyPath) ?? string.Empty;
-            resolver = new AssemblyDependencyResolver(mainAssemblyPath);
+            AddProbePath(mainAssemblyPath);
+        }
+
+        public ReadOnlyCollection<Assembly> LoadedModuleAssemblies
+        {
+            get { return loadedAssemblies.Values.ToList().AsReadOnly(); }
         }
 
         public static Assembly LoadModule(string assemblyPath, string contextName)
@@ -94,11 +101,14 @@ namespace PowerForge.ModuleIsolation
 
             lock (Sync)
             {
-                var contextKey = contextName + "|" + (Path.GetDirectoryName(fullPath) ?? string.Empty);
-                if (!Contexts.TryGetValue(contextKey, out var context))
+                if (!Contexts.TryGetValue(contextName, out var context))
                 {
                     context = new ModuleLoadContext(fullPath, contextName);
-                    Contexts[contextKey] = context;
+                    Contexts[contextName] = context;
+                }
+                else
+                {
+                    context.AddProbePath(fullPath);
                 }
 
                 return context.LoadAssemblyFromPath(fullPath);
@@ -114,6 +124,17 @@ namespace PowerForge.ModuleIsolation
             }
 
             return assembly;
+        }
+
+        private void AddProbePath(string assemblyPath)
+        {
+            var directory = Path.GetDirectoryName(assemblyPath) ?? string.Empty;
+            if (!assemblyDirectories.Contains(directory, StringComparer.OrdinalIgnoreCase))
+            {
+                assemblyDirectories.Add(directory);
+            }
+
+            resolvers.Add(new AssemblyDependencyResolver(assemblyPath));
         }
 
         protected override Assembly Load(AssemblyName assemblyName)
@@ -134,16 +155,22 @@ namespace PowerForge.ModuleIsolation
                 return typeof(System.Management.Automation.PSObject).Assembly;
             }
 
-            var resolvedPath = resolver.ResolveAssemblyToPath(assemblyName);
-            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            foreach (var resolver in resolvers)
             {
-                return LoadAssemblyFromPath(resolvedPath);
+                var resolvedPath = resolver.ResolveAssemblyToPath(assemblyName);
+                if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+                {
+                    return LoadAssemblyFromPath(resolvedPath);
+                }
             }
 
-            var candidatePath = Path.Combine(assemblyDirectory, assemblyName.Name + ".dll");
-            if (File.Exists(candidatePath))
+            foreach (var directory in assemblyDirectories)
             {
-                return LoadAssemblyFromPath(candidatePath);
+                var candidatePath = Path.Combine(directory, assemblyName.Name + ".dll");
+                if (File.Exists(candidatePath))
+                {
+                    return LoadAssemblyFromPath(candidatePath);
+                }
             }
 
             return AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a =>
@@ -152,10 +179,13 @@ namespace PowerForge.ModuleIsolation
 
         protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
         {
-            var resolvedPath = resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
-            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            foreach (var resolver in resolvers)
             {
-                return LoadUnmanagedDllFromPath(resolvedPath);
+                var resolvedPath = resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+                if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+                {
+                    return LoadUnmanagedDllFromPath(resolvedPath);
+                }
             }
 
             return IntPtr.Zero;
@@ -178,6 +208,7 @@ foreach ($PowerForgeIsolationAssembly in $PowerForgeIsolationAssemblies) {
 $PowerForgeIsolationTypeNamespaces = @({{namespaces}})
 if ($PowerForgeIsolationTypeNamespaces.Count -gt 0) {
     $PowerForgeIsolationContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($PowerForgeIsolationAssemblies[0])
+    $PowerForgeIsolationAssemblies = $PowerForgeIsolationContext.LoadedModuleAssemblies
     $PowerForgeTypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
     $PowerForgeGetAccelerators = $PowerForgeTypeAccelerators.GetProperty('Get').GetValue($null)
     $PowerForgeAddAccelerator = $PowerForgeTypeAccelerators.GetMethod('Add')

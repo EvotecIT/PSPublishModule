@@ -29,7 +29,8 @@ public sealed class ModuleIsolationScriptPatcherTests
         Assert.Contains("'Microsoft.Exchange.Management.'", patched, StringComparison.Ordinal);
         Assert.Contains("function Connect-ExchangeOnline", patched, StringComparison.Ordinal);
         Assert.DoesNotContain("Import-Module $RestModulePath", patched, StringComparison.Ordinal);
-        Assert.Contains("contextKey = contextName + \"|\" + (Path.GetDirectoryName(fullPath) ?? string.Empty)", patched, StringComparison.Ordinal);
+        Assert.Contains("Contexts[contextName] = context", patched, StringComparison.Ordinal);
+        Assert.Contains("LoadedModuleAssemblies", patched, StringComparison.Ordinal);
     }
 
     [Fact]

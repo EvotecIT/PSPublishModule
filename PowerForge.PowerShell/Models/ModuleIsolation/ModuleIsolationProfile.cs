@@ -34,6 +34,9 @@ public sealed class ModuleIsolationProfile
     /// <summary>Whether the generated wrapper should append the remaining source script body after the loader block.</summary>
     public bool IncludeSourceScriptBody { get; set; } = true;
 
+    /// <summary>Additional PowerShell script lines appended after the loader block and optional source script body.</summary>
+    public string[] AdditionalScriptLines { get; set; } = Array.Empty<string>();
+
     /// <summary>Binary module assemblies to import from the script folder through the shared load context.</summary>
     public string[] BinaryImports { get; set; } = Array.Empty<string>();
 
@@ -51,6 +54,8 @@ public sealed class ModuleIsolationProfile
         MinimumVersion = new Version(3, 9, 0),
         ScriptRelativePath = "netCore/ExchangeOnlineManagement.psm1",
         IsolatedScriptName = "ExchangeOnlineManagement.ALC.psm1",
+        ManifestRelativePath = "ExchangeOnlineManagement.psd1",
+        IsolatedManifestName = "ExchangeOnlineManagement.psd1",
         SourceLinesToSkip = 8,
         BinaryImports =
         [
@@ -75,6 +80,13 @@ public sealed class ModuleIsolationProfile
         IsolatedScriptName = "MicrosoftTeams.ALC.psm1",
         ManifestRelativePath = "MicrosoftTeams.psd1",
         IsolatedManifestName = "MicrosoftTeams.ALC.psd1",
+        IncludeSourceScriptBody = false,
+        AdditionalScriptLines =
+        [
+            "Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'Microsoft.Teams.PowerShell.TeamsCmdlets.psd1')) -Force",
+            "Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'Microsoft.Teams.Policy.Administration.psd1')) -Force",
+            "Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'Microsoft.Teams.ConfigAPI.Cmdlets.psd1')) -Force"
+        ],
         BinaryImports =
         [
             "netcoreapp3.1/Microsoft.TeamsCmdlets.PowerShell.Connect.dll",

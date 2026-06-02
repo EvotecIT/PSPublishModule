@@ -28,6 +28,8 @@ The profile currently:
 - resolves `ExchangeOnlineManagement` from `PSModulePath`,
 - copies the module into `%TEMP%\PowerForge\IsolatedModules\ExchangeOnlineManagement`,
 - patches `netCore\ExchangeOnlineManagement.psm1`,
+- patches the copied `ExchangeOnlineManagement.psd1` manifest so EXO keeps its
+  upstream module name, version, and export metadata,
 - loads `Microsoft.Exchange.Management.RestApiClient.dll` and
   `Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll` through the same
   `ExchangeOnlineManagement.ALC` context,
@@ -57,13 +59,16 @@ The profile currently:
   manifest that preserves the upstream export contract,
 - loads the Teams connect, team cmdlet, policy administration, and ConfigAPI
   binary surfaces through the same `MicrosoftTeams.ALC` context,
+- imports the required Teams submodule manifests after the isolated binary load
+  instead of appending the upstream bootstrap script,
 - exposes public types from `Microsoft.Teams.*` as type accelerators for
   script/proxy surfaces that reference Teams types directly.
 
 The profile preloads the key Teams binary surfaces through the isolated context
-before running the upstream Teams script wrappers. Importing through the generated
-manifest keeps the normal `FunctionsToExport` and `CmdletsToExport` filters in
-place so internal generated helper commands are not exposed as the public surface.
+and then imports only the Teams submodule manifests needed for the public proxy
+surface. Importing through the generated manifest keeps the normal
+`FunctionsToExport` and `CmdletsToExport` filters in place so internal generated
+helper commands are not exposed as the public surface.
 
 ## Compatibility Strategy
 
