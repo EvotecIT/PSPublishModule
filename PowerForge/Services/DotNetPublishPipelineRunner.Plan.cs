@@ -1186,6 +1186,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return new DotNetPublishMsiVersionOptions
         {
             Enabled = versioning.Enabled,
+            Pattern = versioning.Pattern,
             Major = versioning.Major,
             Minor = versioning.Minor,
             FloorDateUtc = versioning.FloorDateUtc,
@@ -2532,6 +2533,8 @@ public sealed partial class DotNetPublishPipelineRunner
         if (clone is null) return null;
         if (!clone.Enabled) return clone;
 
+        if (!Enum.IsDefined(typeof(DotNetPublishMsiVersionPattern), clone.Pattern))
+            throw new ArgumentException($"Installer '{installerId}' Versioning.Pattern is not supported.");
         if (clone.Major < 0 || clone.Major > 255)
             throw new ArgumentException($"Installer '{installerId}' Versioning.Major must be between 0 and 255.");
         if (clone.Minor < 0 || clone.Minor > 255)

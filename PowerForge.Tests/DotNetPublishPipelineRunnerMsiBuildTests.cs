@@ -667,6 +667,97 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void ResolveMsiVersion_UsesUtcShortYearMonthDayMinutePattern()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                AllowOutputOutsideProjectRoot = false,
+                Configuration = "Release"
+            };
+            var installer = new DotNetPublishInstallerPlan
+            {
+                Id = "app.msi",
+                Versioning = new DotNetPublishMsiVersionOptions
+                {
+                    Enabled = true,
+                    Pattern = DotNetPublishMsiVersionPattern.UtcShortYearMonthDayMinute,
+                    FloorDateUtc = "2099-06-02",
+                    Monotonic = false
+                }
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "app.msi",
+                TargetName = "app",
+                Framework = "net10.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable
+            };
+
+            var result = InvokeResolveMsiVersion(plan, installer, step);
+
+            Assert.Equal("99.6.2880", result.Version);
+            Assert.Equal(2880, result.Patch);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveMsiVersion_DoesNotBumpPatchWhenPreviousStateVersionIsOlder()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var statePath = Path.Combine(root, "state", "version.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(statePath)!);
+            File.WriteAllText(statePath, "{ \"lastPatch\": 9499, \"version\": \"1.0.9499\" }");
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                AllowOutputOutsideProjectRoot = false,
+                Configuration = "Release"
+            };
+            var installer = new DotNetPublishInstallerPlan
+            {
+                Id = "app.msi",
+                Versioning = new DotNetPublishMsiVersionOptions
+                {
+                    Enabled = true,
+                    Pattern = DotNetPublishMsiVersionPattern.UtcShortYearMonthDayMinute,
+                    FloorDateUtc = "2099-06-02",
+                    Monotonic = true,
+                    StatePath = "state/version.json"
+                }
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "app.msi",
+                TargetName = "app",
+                Framework = "net10.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable
+            };
+
+            var result = InvokeResolveMsiVersion(plan, installer, step);
+
+            Assert.Equal("99.6.2880", result.Version);
+            Assert.Equal(2880, result.Patch);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ResolveMsiVersion_CapsPatchAtConfiguredLimit()
     {
         var root = CreateTempRoot();

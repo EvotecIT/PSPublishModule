@@ -186,6 +186,7 @@ Depending on config, the run can emit:
 - Registry value components can write a literal `Value`, or write an installer property by setting `ValueProperty`, for example persisting `LICENSE_KEY` after the UI collects it.
 - Shortcut components can use `TargetFileId` for an explicitly authored file component, or `Target` such as `[INSTALLFOLDER]MyApp.exe` when the executable comes from harvested payload.
 - WiX still does the compile. The generated project includes `WixToolset.UI.wixext` and `WixToolset.Util.wixext` only when the authoring model needs those extensions.
+- `Installers[].Versioning.Pattern` defaults to `FixedMajorMinorDatePatch`. Use `UtcShortYearMonthDayMinute` when an MSI line must keep a calendar-based `yy.month.dayMinute` product-version sequence for major-upgrade compatibility with older installer scripts.
 
 ## Microsoft Store / MSIX Packaging
 
