@@ -29,47 +29,49 @@ namespace PSPublishModule;
 /// </para>
 /// </remarks>
 /// <example>
-/// <summary>Import ExchangeOnlineManagement through the built-in profile</summary>
-/// <code>Import-IsolatedModule -Profile ExchangeOnlineManagement</code>
+/// <summary>Start an isolated Exchange Online session</summary>
+/// <code>Import-IsolatedModule -Profile ExchangeOnlineManagement&#xA;$commands = 'Get-EXOMailbox', 'Get-ConnectionInformation'&#xA;Connect-ExchangeOnline -ShowBanner:$false -CommandName $commands&#xA;Get-ConnectionInformation | Format-Table UserPrincipalName, ConnectionUri&#xA;Get-EXOMailbox -ResultSize 5 | Select-Object DisplayName, PrimarySmtpAddress&#xA;Disconnect-ExchangeOnline -Confirm:$false</code>
 /// <para>
-/// Imports the latest available ExchangeOnlineManagement module through the
-/// ExchangeOnlineManagement.ALC load context.
+/// Imports ExchangeOnlineManagement through the curated profile, connects with the normal EXO
+/// cmdlets, runs a small mailbox query, and disconnects cleanly.
 /// </para>
 /// </example>
 /// <example>
 /// <summary>Use Exchange Online after Az.Storage has loaded OData 7.6</summary>
-/// <code>Import-Module Az.Storage&#xA;Import-IsolatedModule -Profile ExchangeOnlineManagement&#xA;Connect-ExchangeOnline&#xA;Get-EXOMailbox -ResultSize 1</code>
+/// <code>Import-Module Az.Storage&#xA;$defaultODataBefore = [System.Runtime.Loader.AssemblyLoadContext]::Default.Assemblies |&#xA;    Where-Object { $_.GetName().Name -like 'Microsoft.OData*' }&#xA;Import-IsolatedModule -Profile ExchangeOnlineManagement&#xA;Connect-ExchangeOnline -ShowBanner:$false&#xA;$defaultODataBefore | ForEach-Object { $_.GetName().Name + ' ' + $_.GetName().Version }&#xA;Get-EXOMailbox -ResultSize 1 | Select-Object DisplayName, PrimarySmtpAddress&#xA;Disconnect-ExchangeOnline -Confirm:$false</code>
 /// <para>
 /// Keeps Az.Storage's Microsoft.OData 7.6 assemblies in the default context while Exchange Online loads
 /// Microsoft.OData 7.22 assemblies in ExchangeOnlineManagement.ALC.
 /// </para>
 /// </example>
 /// <example>
-/// <summary>Import MicrosoftTeams through the built-in profile</summary>
-/// <code>Import-IsolatedModule -Profile MicrosoftTeams&#xA;Connect-MicrosoftTeams -UseDeviceAuthentication&#xA;Get-Team</code>
+/// <summary>Start an isolated Microsoft Teams session</summary>
+/// <code>Import-IsolatedModule -Profile MicrosoftTeams&#xA;Connect-MicrosoftTeams -UseDeviceAuthentication&#xA;$teams = Get-Team&#xA;$teams | Select-Object -First 10 DisplayName, GroupId, Visibility&#xA;Disconnect-MicrosoftTeams</code>
 /// <para>
 /// Imports Teams cmdlets from MicrosoftTeams.ALC and then uses the normal Teams connection workflow.
 /// </para>
 /// </example>
 /// <example>
-/// <summary>Inspect the generated isolated module copy</summary>
-/// <code>$result = Import-IsolatedModule -Profile MicrosoftTeams -PassThru&#xA;$result | Format-List ProfileName, ContextName, IsolatedImportPath, WorkPath</code>
+/// <summary>Inspect the generated isolated Teams module</summary>
+/// <code>$result = Import-IsolatedModule -Profile MicrosoftTeams -PassThru&#xA;$result | Format-List ProfileName, ContextName, IsolatedImportPath, IsolatedScriptPath, WorkPath&#xA;Get-Command -Module MicrosoftTeams.ALC | Measure-Object&#xA;[System.Runtime.Loader.AssemblyLoadContext]::All |&#xA;    Where-Object Name -eq $result.ContextName |&#xA;    ForEach-Object {&#xA;        $_.Assemblies |&#xA;            Where-Object { $_.GetName().Name -like 'Microsoft.Teams*' } |&#xA;            Select-Object -ExpandProperty FullName&#xA;    }</code>
 /// <para>
-/// Returns the generated wrapper location, selected profile, and load-context name.
+/// Returns the generated wrapper details and confirms that Teams assemblies were loaded in the
+/// profile-specific AssemblyLoadContext.
 /// </para>
 /// </example>
 /// <example>
 /// <summary>Import a specific installed module copy by path</summary>
-/// <code>$path = "$HOME\Documents\PowerShell\Modules\ExchangeOnlineManagement\3.9.2"&#xA;Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $path</code>
+/// <code>$module = Get-Module -ListAvailable ExchangeOnlineManagement |&#xA;    Sort-Object Version -Descending |&#xA;    Select-Object -First 1&#xA;$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $module.ModuleBase -PassThru&#xA;$result | Select-Object ProfileName, ModuleName, SourceModuleBase, IsolatedImportPath&#xA;Get-Module ExchangeOnlineManagement | Select-Object Name, Version, ModuleBase</code>
 /// <para>
-/// Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base folder.
+/// Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base
+/// folder. The profile still validates its minimum supported module version.
 /// </para>
 /// </example>
 /// <example>
 /// <summary>Use a deterministic work root for diagnostics</summary>
-/// <code>Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot C:\Temp\PowerForge-Isolated -PassThru</code>
+/// <code>$workRoot = Join-Path $env:TEMP 'PowerForge-Isolated'&#xA;$result = Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot $workRoot -PassThru&#xA;Get-ChildItem -LiteralPath $result.WorkPath -Recurse | Select-Object -First 20 FullName&#xA;Get-Content -LiteralPath $result.IsolatedScriptPath -TotalCount 40</code>
 /// <para>
-/// Creates the generated module copy under the supplied root instead of the default temp location.
+/// Creates the generated module copy under the supplied root and inspects the generated wrapper.
 /// </para>
 /// </example>
 /// <example>

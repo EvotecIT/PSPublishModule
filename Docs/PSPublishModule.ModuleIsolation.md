@@ -18,9 +18,20 @@ Example:
 
 ```powershell
 Import-Module Az.Storage
+$defaultODataBefore = [System.Runtime.Loader.AssemblyLoadContext]::Default.Assemblies |
+    Where-Object { $_.GetName().Name -like 'Microsoft.OData*' }
+
 Import-IsolatedModule -Profile ExchangeOnlineManagement
-Connect-ExchangeOnline
-Get-EXOMailbox -ResultSize 1
+Connect-ExchangeOnline -ShowBanner:$false
+
+$defaultODataBefore | ForEach-Object {
+    $_.GetName().Name + ' ' + $_.GetName().Version
+}
+
+Get-EXOMailbox -ResultSize 5 |
+    Select-Object DisplayName, PrimarySmtpAddress
+
+Disconnect-ExchangeOnline -Confirm:$false
 ```
 
 The profile currently:
@@ -48,7 +59,32 @@ Az.Storage loads `Microsoft.OData.*` 7.6.x in the default context and EXO needs
 ```powershell
 Import-IsolatedModule -Profile MicrosoftTeams
 Connect-MicrosoftTeams -UseDeviceAuthentication
-Get-Team
+
+$teams = Get-Team
+$teams |
+    Select-Object -First 10 DisplayName, GroupId, Visibility
+
+Disconnect-MicrosoftTeams
+```
+
+For diagnostics, keep the generated copy in a deterministic location:
+
+```powershell
+$workRoot = Join-Path $env:TEMP 'PowerForge-Isolated'
+$result = Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot $workRoot -PassThru
+
+$result |
+    Format-List ProfileName, ContextName, IsolatedImportPath, IsolatedScriptPath, WorkPath
+
+Get-Command -Module MicrosoftTeams.ALC | Measure-Object
+
+[System.Runtime.Loader.AssemblyLoadContext]::All |
+    Where-Object Name -eq $result.ContextName |
+    ForEach-Object {
+        $_.Assemblies |
+            Where-Object { $_.GetName().Name -like 'Microsoft.Teams*' } |
+            Select-Object -ExpandProperty FullName
+    }
 ```
 
 The profile currently:
@@ -98,7 +134,10 @@ declares:
 - source script path and generated script name,
 - whether the generated wrapper appends the source script body,
 - number of original bootstrap lines to replace when source script content is used,
+- additional profile-maintained script lines to append after isolated binary loading,
 - binary assemblies to import through the isolated context,
+- optional manifest path and generated manifest name when the upstream export
+  contract should be preserved,
 - namespace prefixes to bridge into PowerShell type resolution,
 - stable load-context name.
 

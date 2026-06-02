@@ -36,17 +36,26 @@ Windows PowerShell 5.1 is not supported because AssemblyLoadContext is only avai
 ### EXAMPLE 1
 ```powershell
 Import-IsolatedModule -Profile ExchangeOnlineManagement
+$commands = 'Get-EXOMailbox', 'Get-ConnectionInformation'
+Connect-ExchangeOnline -ShowBanner:$false -CommandName $commands
+Get-ConnectionInformation | Format-Table UserPrincipalName, ConnectionUri
+Get-EXOMailbox -ResultSize 5 | Select-Object DisplayName, PrimarySmtpAddress
+Disconnect-ExchangeOnline -Confirm:$false
 ```
 
-Imports the latest available ExchangeOnlineManagement module through the
-ExchangeOnlineManagement.ALC load context.
+Imports ExchangeOnlineManagement through the curated profile, connects with the normal EXO
+cmdlets, runs a small mailbox query, and disconnects cleanly.
 
 ### EXAMPLE 2
 ```powershell
 Import-Module Az.Storage
+$defaultODataBefore = [System.Runtime.Loader.AssemblyLoadContext]::Default.Assemblies |
+    Where-Object { $_.GetName().Name -like 'Microsoft.OData*' }
 Import-IsolatedModule -Profile ExchangeOnlineManagement
-Connect-ExchangeOnline
-Get-EXOMailbox -ResultSize 1
+Connect-ExchangeOnline -ShowBanner:$false
+$defaultODataBefore | ForEach-Object { $_.GetName().Name + ' ' + $_.GetName().Version }
+Get-EXOMailbox -ResultSize 1 | Select-Object DisplayName, PrimarySmtpAddress
+Disconnect-ExchangeOnline -Confirm:$false
 ```
 
 Keeps Az.Storage's Microsoft.OData 7.6 assemblies in the default context while Exchange Online loads
@@ -56,7 +65,9 @@ Microsoft.OData 7.22 assemblies in ExchangeOnlineManagement.ALC.
 ```powershell
 Import-IsolatedModule -Profile MicrosoftTeams
 Connect-MicrosoftTeams -UseDeviceAuthentication
-Get-Team
+$teams = Get-Team
+$teams | Select-Object -First 10 DisplayName, GroupId, Visibility
+Disconnect-MicrosoftTeams
 ```
 
 Imports Teams cmdlets from MicrosoftTeams.ALC and then uses the normal Teams connection workflow.
@@ -64,25 +75,42 @@ Imports Teams cmdlets from MicrosoftTeams.ALC and then uses the normal Teams con
 ### EXAMPLE 4
 ```powershell
 $result = Import-IsolatedModule -Profile MicrosoftTeams -PassThru
-$result | Format-List ProfileName, ContextName, IsolatedImportPath, WorkPath
+$result | Format-List ProfileName, ContextName, IsolatedImportPath, IsolatedScriptPath, WorkPath
+Get-Command -Module MicrosoftTeams.ALC | Measure-Object
+[System.Runtime.Loader.AssemblyLoadContext]::All |
+    Where-Object Name -eq $result.ContextName |
+    ForEach-Object {
+        $_.Assemblies |
+            Where-Object { $_.GetName().Name -like 'Microsoft.Teams*' } |
+            Select-Object -ExpandProperty FullName
+    }
 ```
 
-Returns the generated wrapper location, selected profile, and load-context name.
+Returns the generated wrapper details and confirms that Teams assemblies were loaded in the
+profile-specific AssemblyLoadContext.
 
 ### EXAMPLE 5
 ```powershell
-$path = "$HOME\Documents\PowerShell\Modules\ExchangeOnlineManagement\3.9.2"
-Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $path
+$module = Get-Module -ListAvailable ExchangeOnlineManagement |
+    Sort-Object Version -Descending |
+    Select-Object -First 1
+$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $module.ModuleBase -PassThru
+$result | Select-Object ProfileName, ModuleName, SourceModuleBase, IsolatedImportPath
+Get-Module ExchangeOnlineManagement | Select-Object Name, Version, ModuleBase
 ```
 
-Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base folder.
+Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base
+folder. The profile still validates its minimum supported module version.
 
 ### EXAMPLE 6
 ```powershell
-Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot C:\Temp\PowerForge-Isolated -PassThru
+$workRoot = Join-Path $env:TEMP 'PowerForge-Isolated'
+$result = Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot $workRoot -PassThru
+Get-ChildItem -LiteralPath $result.WorkPath -Recurse | Select-Object -First 20 FullName
+Get-Content -LiteralPath $result.IsolatedScriptPath -TotalCount 40
 ```
 
-Creates the generated module copy under the supplied root instead of the default temp location.
+Creates the generated module copy under the supplied root and inspects the generated wrapper.
 
 ### EXAMPLE 7
 ```powershell

@@ -5062,54 +5062,82 @@ or keep diagnostic artifacts in a known location.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Import ExchangeOnlineManagement through the built-in profile</maml:title>
-        <dev:code>Import-IsolatedModule -Profile ExchangeOnlineManagement</dev:code>
+        <maml:title>Start an isolated Exchange Online session</maml:title>
+        <dev:code>Import-IsolatedModule -Profile ExchangeOnlineManagement&#xD;
+$commands = 'Get-EXOMailbox', 'Get-ConnectionInformation'&#xD;
+Connect-ExchangeOnline -ShowBanner:$false -CommandName $commands&#xD;
+Get-ConnectionInformation | Format-Table UserPrincipalName, ConnectionUri&#xD;
+Get-EXOMailbox -ResultSize 5 | Select-Object DisplayName, PrimarySmtpAddress&#xD;
+Disconnect-ExchangeOnline -Confirm:$false</dev:code>
         <dev:remarks>
-          <maml:para>Imports the latest available ExchangeOnlineManagement module through the&#xD;
-ExchangeOnlineManagement.ALC load context.</maml:para>
+          <maml:para>Imports ExchangeOnlineManagement through the curated profile, connects with the normal EXO&#xD;
+cmdlets, runs a small mailbox query, and disconnects cleanly.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Use Exchange Online after Az.Storage has loaded OData 7.6</maml:title>
         <dev:code>Import-Module Az.Storage&#xD;
+$defaultODataBefore = [System.Runtime.Loader.AssemblyLoadContext]::Default.Assemblies |&#xD;
+    Where-Object { $_.GetName().Name -like 'Microsoft.OData*' }&#xD;
 Import-IsolatedModule -Profile ExchangeOnlineManagement&#xD;
-Connect-ExchangeOnline&#xD;
-Get-EXOMailbox -ResultSize 1</dev:code>
+Connect-ExchangeOnline -ShowBanner:$false&#xD;
+$defaultODataBefore | ForEach-Object { $_.GetName().Name + ' ' + $_.GetName().Version }&#xD;
+Get-EXOMailbox -ResultSize 1 | Select-Object DisplayName, PrimarySmtpAddress&#xD;
+Disconnect-ExchangeOnline -Confirm:$false</dev:code>
         <dev:remarks>
           <maml:para>Keeps Az.Storage's Microsoft.OData 7.6 assemblies in the default context while Exchange Online loads&#xD;
 Microsoft.OData 7.22 assemblies in ExchangeOnlineManagement.ALC.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>Import MicrosoftTeams through the built-in profile</maml:title>
+        <maml:title>Start an isolated Microsoft Teams session</maml:title>
         <dev:code>Import-IsolatedModule -Profile MicrosoftTeams&#xD;
 Connect-MicrosoftTeams -UseDeviceAuthentication&#xD;
-Get-Team</dev:code>
+$teams = Get-Team&#xD;
+$teams | Select-Object -First 10 DisplayName, GroupId, Visibility&#xD;
+Disconnect-MicrosoftTeams</dev:code>
         <dev:remarks>
           <maml:para>Imports Teams cmdlets from MicrosoftTeams.ALC and then uses the normal Teams connection workflow.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>Inspect the generated isolated module copy</maml:title>
+        <maml:title>Inspect the generated isolated Teams module</maml:title>
         <dev:code>$result = Import-IsolatedModule -Profile MicrosoftTeams -PassThru&#xD;
-$result | Format-List ProfileName, ContextName, IsolatedImportPath, WorkPath</dev:code>
+$result | Format-List ProfileName, ContextName, IsolatedImportPath, IsolatedScriptPath, WorkPath&#xD;
+Get-Command -Module MicrosoftTeams.ALC | Measure-Object&#xD;
+[System.Runtime.Loader.AssemblyLoadContext]::All |&#xD;
+    Where-Object Name -eq $result.ContextName |&#xD;
+    ForEach-Object {&#xD;
+        $_.Assemblies |&#xD;
+            Where-Object { $_.GetName().Name -like 'Microsoft.Teams*' } |&#xD;
+            Select-Object -ExpandProperty FullName&#xD;
+    }</dev:code>
         <dev:remarks>
-          <maml:para>Returns the generated wrapper location, selected profile, and load-context name.</maml:para>
+          <maml:para>Returns the generated wrapper details and confirms that Teams assemblies were loaded in the&#xD;
+profile-specific AssemblyLoadContext.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Import a specific installed module copy by path</maml:title>
-        <dev:code>$path = "$HOME\Documents\PowerShell\Modules\ExchangeOnlineManagement\3.9.2"&#xD;
-Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $path</dev:code>
+        <dev:code>$module = Get-Module -ListAvailable ExchangeOnlineManagement |&#xD;
+    Sort-Object Version -Descending |&#xD;
+    Select-Object -First 1&#xD;
+$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $module.ModuleBase -PassThru&#xD;
+$result | Select-Object ProfileName, ModuleName, SourceModuleBase, IsolatedImportPath&#xD;
+Get-Module ExchangeOnlineManagement | Select-Object Name, Version, ModuleBase</dev:code>
         <dev:remarks>
-          <maml:para>Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base folder.</maml:para>
+          <maml:para>Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base&#xD;
+folder. The profile still validates its minimum supported module version.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Use a deterministic work root for diagnostics</maml:title>
-        <dev:code>Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot C:\Temp\PowerForge-Isolated -PassThru</dev:code>
+        <dev:code>$workRoot = Join-Path $env:TEMP 'PowerForge-Isolated'&#xD;
+$result = Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot $workRoot -PassThru&#xD;
+Get-ChildItem -LiteralPath $result.WorkPath -Recurse | Select-Object -First 20 FullName&#xD;
+Get-Content -LiteralPath $result.IsolatedScriptPath -TotalCount 40</dev:code>
         <dev:remarks>
-          <maml:para>Creates the generated module copy under the supplied root instead of the default temp location.</maml:para>
+          <maml:para>Creates the generated module copy under the supplied root and inspects the generated wrapper.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
