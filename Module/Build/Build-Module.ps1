@@ -317,8 +317,7 @@ Invoke-ModuleBuild @buildParams -Settings {
 
     New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'Packed') -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
-
-    New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'
+    #New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'
     # Disabled because PSPublishModule testing itself after build causes multiple module instances
     # which breaks InModuleScope tests. The module is tested separately via PSPublishModule.Tests.ps1
     #New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
