@@ -229,7 +229,7 @@ public sealed class IsolatedModuleImportService
         if (!scriptRelativePath.StartsWith(".", StringComparison.Ordinal))
             scriptRelativePath = "./" + scriptRelativePath;
 
-        PatchManifest(sourceManifestPath, isolatedManifestPath, scriptRelativePath);
+        PatchManifest(sourceManifestPath, isolatedManifestPath, scriptRelativePath, profile.RemoveManifestNestedModules);
         return isolatedManifestPath;
     }
 
@@ -256,7 +256,7 @@ public sealed class IsolatedModuleImportService
         return profileManifestPath;
     }
 
-    private static void PatchManifest(string sourceManifestPath, string targetManifestPath, string rootModule)
+    private static void PatchManifest(string sourceManifestPath, string targetManifestPath, string rootModule, bool removeNestedModules)
     {
         var source = File.ReadAllText(sourceManifestPath, Encoding.UTF8);
         var replacement = "RootModule = '" + rootModule.Replace("'", "''") + "'";
@@ -272,8 +272,43 @@ public sealed class IsolatedModuleImportService
         if (string.Equals(source, patched, StringComparison.Ordinal))
             throw new InvalidOperationException($"Module manifest '{sourceManifestPath}' does not contain a RootModule entry that can be patched.");
 
+        if (removeNestedModules)
+            patched = RemoveManifestNestedModules(patched);
+
         Directory.CreateDirectory(Path.GetDirectoryName(targetManifestPath) ?? ".");
         File.WriteAllText(targetManifestPath, patched, Encoding.UTF8);
+    }
+
+    private static string RemoveManifestNestedModules(string manifest)
+    {
+        var lines = manifest
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n')
+            .Split('\n');
+        var builder = new StringBuilder();
+        var skippingNestedModules = false;
+
+        foreach (var line in lines)
+        {
+            if (!skippingNestedModules &&
+                Regex.IsMatch(line, @"^\s*NestedModules\s*=", RegexOptions.IgnoreCase))
+            {
+                builder.AppendLine("NestedModules = @()");
+                skippingNestedModules = line.Contains("@(", StringComparison.Ordinal) && !line.Contains(")", StringComparison.Ordinal);
+                continue;
+            }
+
+            if (skippingNestedModules)
+            {
+                if (line.Contains(")", StringComparison.Ordinal))
+                    skippingNestedModules = false;
+                continue;
+            }
+
+            builder.AppendLine(line);
+        }
+
+        return builder.ToString();
     }
 
     private static void ImportGeneratedModule(string isolatedImportPath)

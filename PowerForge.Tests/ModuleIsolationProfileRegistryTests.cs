@@ -40,6 +40,28 @@ public sealed class ModuleIsolationProfileRegistryTests
     }
 
     [Fact]
+    public void Resolve_ReturnsBuiltInMicrosoftGraphAuthenticationProfile()
+    {
+        var profile = new ModuleIsolationProfileRegistry().Resolve("MicrosoftGraphAuthentication");
+
+        Assert.Equal("Microsoft.Graph.Authentication", profile.ModuleName);
+        Assert.Equal("Microsoft.Graph.Authentication.psm1", profile.ScriptRelativePath);
+        Assert.Equal("Microsoft.Graph.Authentication.ALC.psm1", profile.IsolatedScriptName);
+        Assert.Equal("Microsoft.Graph.Authentication.psd1", profile.ManifestRelativePath);
+        Assert.Equal("Microsoft.Graph.Authentication.ALC.psd1", profile.IsolatedManifestName);
+        Assert.True(profile.RemoveSourceSignatureBlock);
+        Assert.True(profile.RemoveManifestNestedModules);
+        Assert.Contains("Import-Module -Name $ModulePath", profile.SourceLineContainsToSkip);
+        Assert.Contains("Export-ModuleMember -Cmdlet (Get-ModuleCmdlet -ModulePath $ModulePath)", profile.SourceLineContainsToSkip);
+        Assert.Contains(profile.AdditionalScriptLines, line => line.Contains("Connect-MgGraph", StringComparison.Ordinal));
+        Assert.Contains(profile.AdditionalScriptLines, line => line.Contains("Invoke-MgRestMethod", StringComparison.Ordinal));
+        Assert.Contains("Dependencies/Core/Azure.Core.dll", profile.DependencyAssemblyImports);
+        Assert.Contains("Dependencies/Microsoft.Kiota.Abstractions.dll", profile.DependencyAssemblyImports);
+        Assert.Contains("Microsoft.Graph.Authentication.dll", profile.BinaryImports);
+        Assert.Contains("Microsoft.Graph.", profile.TypeAcceleratorNamespaces);
+    }
+
+    [Fact]
     public void Resolve_UnknownProfile_ListsAvailableProfiles()
     {
         var ex = Assert.Throws<InvalidOperationException>(() => new ModuleIsolationProfileRegistry().Resolve("MissingProfile"));
@@ -47,6 +69,7 @@ public sealed class ModuleIsolationProfileRegistryTests
         Assert.Contains("MissingProfile", ex.Message, StringComparison.Ordinal);
         Assert.Contains("ExchangeOnlineManagement", ex.Message, StringComparison.Ordinal);
         Assert.Contains("MicrosoftTeams", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("MicrosoftGraphAuthentication", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

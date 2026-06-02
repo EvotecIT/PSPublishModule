@@ -61,4 +61,31 @@ public sealed class ModuleIsolationScriptPatcherTests
         Assert.DoesNotContain("Invoke-OriginalTeamsBootstrap", patched, StringComparison.Ordinal);
         Assert.DoesNotContain("Import-Module './netcoreapp3.1/Microsoft.TeamsCmdlets.PowerShell.Connect.dll'", patched, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void CreatePatchedScript_GraphProfile_SkipsDefaultImportAndLoadsDependencies()
+    {
+        var source = string.Join(Environment.NewLine, new[]
+        {
+            "$ModulePath = (Join-Path $PSScriptRoot 'Microsoft.Graph.Authentication.dll')",
+            "$null = Import-Module -Name $ModulePath",
+            "Export-ModuleMember -Cmdlet (Get-ModuleCmdlet -ModulePath $ModulePath)",
+            "# SIG # Begin signature block",
+            "# signed payload",
+            "# SIG # End signature block"
+        });
+
+        var patched = new ModuleIsolationScriptPatcher().CreatePatchedScript(source, ModuleIsolationProfile.MicrosoftGraphAuthentication);
+
+        Assert.Contains("'Dependencies/Core/Azure.Core.dll'", patched, StringComparison.Ordinal);
+        Assert.Contains("'Microsoft.Graph.Authentication.dll'", patched, StringComparison.Ordinal);
+        Assert.Contains("$PowerForgeIsolationDependencyAssemblies", patched, StringComparison.Ordinal);
+        Assert.Contains("$ModulePath = (Join-Path $PSScriptRoot 'Microsoft.Graph.Authentication.dll')", patched, StringComparison.Ordinal);
+        Assert.Contains("Export-ModuleMember -Cmdlet @('Add-MgEnvironment'", patched, StringComparison.Ordinal);
+        Assert.Contains("'Invoke-MgRestMethod'", patched, StringComparison.Ordinal);
+        Assert.DoesNotContain("Export-ModuleMember -Cmdlet (Get-ModuleCmdlet -ModulePath $ModulePath)", patched, StringComparison.Ordinal);
+        Assert.DoesNotContain("$null = Import-Module -Name $ModulePath", patched, StringComparison.Ordinal);
+        Assert.DoesNotContain("# SIG # Begin signature block", patched, StringComparison.Ordinal);
+        Assert.DoesNotContain("# signed payload", patched, StringComparison.Ordinal);
+    }
 }
