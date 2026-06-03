@@ -52,6 +52,9 @@ public sealed class ModuleIsolationProfile
     /// <summary>Copied script-module imports that should be rewritten to use the shared load context.</summary>
     public string[] CopiedScriptBinaryImports { get; set; } = Array.Empty<string>();
 
+    /// <summary>Additional files the profile requires but does not otherwise import directly as assemblies.</summary>
+    public string[] RequiredFiles { get; set; } = Array.Empty<string>();
+
     /// <summary>Type namespaces exposed to PowerShell type resolution from assemblies loaded in the isolated context.</summary>
     public string[] TypeAcceleratorNamespaces { get; set; } = Array.Empty<string>();
 
@@ -115,6 +118,12 @@ public sealed class ModuleIsolationProfile
         [
             "netcoreapp3.1/Microsoft.Teams.PowerShell.TeamsCmdlets.dll",
             "netcoreapp3.1/Microsoft.Teams.Policy.Administration.Cmdlets.Core.dll"
+        ],
+        RequiredFiles =
+        [
+            "Microsoft.Teams.PowerShell.TeamsCmdlets.psd1",
+            "Microsoft.Teams.Policy.Administration.psd1",
+            "Microsoft.Teams.ConfigAPI.Cmdlets.psd1"
         ],
         TypeAcceleratorNamespaces =
         [

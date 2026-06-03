@@ -12,7 +12,7 @@ namespace PowerForge;
 /// <summary>
 /// Prepares and imports known PowerShell modules through module-scoped AssemblyLoadContext wrappers.
 /// </summary>
-public sealed class IsolatedModuleImportService
+public sealed partial class IsolatedModuleImportService
 {
     private readonly ModuleIsolationProfileRegistry _profiles;
     private readonly ModuleIsolationScriptPatcher _patcher;
@@ -40,6 +40,10 @@ public sealed class IsolatedModuleImportService
 
         var profile = _profiles.Resolve(request.ProfileName);
         var source = ResolveModuleSource(request, profile);
+        var validationIssues = ValidateProfileLayout(profile, source);
+        if (validationIssues.Any(static issue => string.Equals(issue.Severity, "Error", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(BuildValidationFailureMessage(profile, validationIssues));
+
         var sourceModuleBase = source.ModuleBase;
         var sourceScriptPath = Path.Combine(sourceModuleBase, NormalizeRelativePath(profile.ScriptRelativePath));
         if (!File.Exists(sourceScriptPath))
@@ -229,7 +233,10 @@ public sealed class IsolatedModuleImportService
         if (!scriptRelativePath.StartsWith(".", StringComparison.Ordinal))
             scriptRelativePath = "./" + scriptRelativePath;
 
-        PatchManifest(sourceManifestPath, isolatedManifestPath, scriptRelativePath, profile.RemoveManifestNestedModules);
+        var source = File.ReadAllText(sourceManifestPath, Encoding.UTF8);
+        var patched = PatchManifestText(source, sourceManifestPath, scriptRelativePath, profile.RemoveManifestNestedModules);
+        Directory.CreateDirectory(Path.GetDirectoryName(isolatedManifestPath) ?? ".");
+        File.WriteAllText(isolatedManifestPath, patched, Encoding.UTF8);
         return isolatedManifestPath;
     }
 
@@ -256,9 +263,8 @@ public sealed class IsolatedModuleImportService
         return profileManifestPath;
     }
 
-    private static void PatchManifest(string sourceManifestPath, string targetManifestPath, string rootModule, bool removeNestedModules)
+    private static string PatchManifestText(string source, string sourceManifestPath, string rootModule, bool removeNestedModules)
     {
-        var source = File.ReadAllText(sourceManifestPath, Encoding.UTF8);
         var replacement = "RootModule = '" + rootModule.Replace("'", "''") + "'";
         var patched = new Regex(@"^\s*RootModule\s*=\s*(['""]).*?\1", RegexOptions.IgnoreCase | RegexOptions.Multiline)
             .Replace(source, replacement, 1);
@@ -275,8 +281,7 @@ public sealed class IsolatedModuleImportService
         if (removeNestedModules)
             patched = RemoveManifestNestedModules(patched);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(targetManifestPath) ?? ".");
-        File.WriteAllText(targetManifestPath, patched, Encoding.UTF8);
+        return patched;
     }
 
     private static string RemoveManifestNestedModules(string manifest)

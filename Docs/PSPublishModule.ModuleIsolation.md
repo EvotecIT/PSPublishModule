@@ -192,6 +192,8 @@ then from a single `.psd1` in the module base, then from `<moduleBase>\<moduleBa
 ## Validation Behavior
 
 `Import-IsolatedModule` fails before importing when a required contract is missing.
+Use `Test-IsolatedModuleProfile` to run the same profile resolution and preflight path
+checks without copying or importing the generated wrapper.
 
 Runtime validation:
 
@@ -216,7 +218,10 @@ Profile-layout validation:
 - the configured source script path must exist under the module base,
 - profiles that preserve a manifest must have a source manifest available,
 - the source manifest must contain a `RootModule` entry that can be patched,
-- profile-declared binary imports must exist when the generated wrapper runs.
+- profile-declared dependency assemblies and binary module imports must exist relative
+  to the profiled script module directory,
+- copied script binary imports and additional required files must exist relative to the
+  module base.
 
 Work-root behavior:
 
@@ -227,6 +232,22 @@ Work-root behavior:
 - generated copies can remain locked until the PowerShell process exits.
 
 ## Inspecting Results
+
+Validate a profile source before importing:
+
+```powershell
+$validation = Test-IsolatedModuleProfile -Profile MicrosoftGraphAuthentication
+
+$validation | Format-List ProfileName, ModuleName, SourceModuleBase, IsValid
+$validation.Paths | Format-Table Category, RelativePath, Exists
+$validation.Issues | Format-Table Severity, Category, Message
+```
+
+Return only a Boolean result:
+
+```powershell
+Test-IsolatedModuleProfile -Profile MicrosoftTeams -Quiet
+```
 
 Use `-PassThru` to get the generated import details:
 

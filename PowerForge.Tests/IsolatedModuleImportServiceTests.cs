@@ -62,6 +62,7 @@ public sealed class IsolatedModuleImportServiceTests
             Directory.CreateDirectory(bin);
             File.WriteAllText(Path.Combine(moduleBase, "MicrosoftTeams.psm1"), CreateTeamsLikeScript());
             File.WriteAllText(Path.Combine(moduleBase, "MicrosoftTeams.psd1"), CreateTeamsLikeManifest());
+            WriteProfileFiles(moduleBase, ModuleIsolationProfile.MicrosoftTeams.RequiredFiles);
             File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Teams.PowerShell.TeamsCmdlets.psm1"), "$null = Import-Module -Name (Join-Path $PSScriptRoot './netcoreapp3.1/Microsoft.Teams.PowerShell.TeamsCmdlets.dll')");
             File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Teams.Policy.Administration.Cmdlets.Core.psm1"), "$null = Import-Module -Name (Join-Path $PSScriptRoot 'netcoreapp3.1\\Microsoft.Teams.Policy.Administration.Cmdlets.Core.dll')");
             File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Teams.ConfigAPI.Cmdlets.psm1"), "$null = Import-Module -Name (Join-Path $PSScriptRoot './bin/Microsoft.Teams.ConfigAPI.Cmdlets.private.dll')");
@@ -131,6 +132,7 @@ public sealed class IsolatedModuleImportServiceTests
             Directory.CreateDirectory(bin);
             File.WriteAllText(Path.Combine(moduleBase, "MicrosoftTeams.psm1"), CreateTeamsLikeScript());
             File.WriteAllText(Path.Combine(moduleBase, "ContosoTeams.psd1"), CreateTeamsLikeManifest("7.9.0", "Get-ContosoTeam"));
+            WriteProfileFiles(moduleBase, ModuleIsolationProfile.MicrosoftTeams.RequiredFiles);
             File.WriteAllText(Path.Combine(netCore, "Microsoft.TeamsCmdlets.PowerShell.Connect.dll"), "not a real dll");
             File.WriteAllText(Path.Combine(netCore, "Microsoft.Teams.PowerShell.TeamsCmdlets.dll"), "not a real dll");
             File.WriteAllText(Path.Combine(netCore, "Microsoft.Teams.PowerShell.Module.dll"), "not a real dll");
@@ -168,10 +170,8 @@ public sealed class IsolatedModuleImportServiceTests
             Directory.CreateDirectory(Path.Combine(moduleBase, "Dependencies"));
             File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Graph.Authentication.psm1"), CreateGraphLikeScript());
             File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Graph.Authentication.psd1"), CreateGraphLikeManifest());
-            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Graph.Authentication.dll"), "not a real dll");
-            File.WriteAllText(Path.Combine(moduleBase, "Microsoft.Graph.Authentication.Core.dll"), "not a real dll");
-            File.WriteAllText(Path.Combine(moduleBase, "Dependencies", "Core", "Azure.Core.dll"), "not a real dll");
-            File.WriteAllText(Path.Combine(moduleBase, "Dependencies", "Microsoft.Kiota.Abstractions.dll"), "not a real dll");
+            WriteProfileFiles(moduleBase, ModuleIsolationProfile.MicrosoftGraphAuthentication.BinaryImports);
+            WriteProfileFiles(moduleBase, ModuleIsolationProfile.MicrosoftGraphAuthentication.DependencyAssemblyImports);
 
             var service = new IsolatedModuleImportService();
             var plan = service.Prepare(new IsolatedModuleImportRequest
@@ -196,6 +196,81 @@ public sealed class IsolatedModuleImportServiceTests
             Assert.Contains("RootModule = './Microsoft.Graph.Authentication.ALC.psm1'", manifest, StringComparison.Ordinal);
             Assert.Contains("NestedModules = @()", manifest, StringComparison.Ordinal);
             Assert.DoesNotContain("Microsoft.Graph.Authentication.Core.dll')", manifest, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Validate_CompleteExchangeProfile_ReturnsValidResult()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var moduleBase = Path.Combine(root, "ExchangeOnlineManagement", "3.9.2");
+            var netCore = Path.Combine(moduleBase, "netCore");
+            Directory.CreateDirectory(netCore);
+            File.WriteAllText(Path.Combine(netCore, "ExchangeOnlineManagement.psm1"), CreateExchangeLikeScript());
+            File.WriteAllText(Path.Combine(moduleBase, "ExchangeOnlineManagement.psd1"), CreateExchangeLikeManifest("3.9.2"));
+            WriteProfileFiles(moduleBase, ModuleIsolationProfile.ExchangeOnlineManagement.BinaryImports.Select(path => Path.Combine("netCore", path)));
+
+            var result = new IsolatedModuleImportService().Validate(new IsolatedModuleImportRequest
+            {
+                ProfileName = "ExchangeOnlineManagement",
+                Path = moduleBase
+            });
+
+            Assert.True(result.IsValid);
+            Assert.Empty(result.Issues);
+            Assert.Equal("ExchangeOnlineManagement", result.ProfileName);
+            Assert.Equal(moduleBase, result.SourceModuleBase);
+            Assert.Equal(new Version(3, 9, 2), result.ResolvedVersion);
+            Assert.Contains(result.Paths, path => path.Category == "SourceScript" && path.Exists);
+            Assert.Contains(result.Paths, path => path.Category == "BinaryModule" && path.RelativePath == "Microsoft.Exchange.Management.RestApiClient.dll" && path.Exists);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Validate_MissingProfileBinary_ReturnsIssueAndPrepareFailsBeforeCopy()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var moduleBase = Path.Combine(root, "ExchangeOnlineManagement", "3.9.2");
+            var netCore = Path.Combine(moduleBase, "netCore");
+            Directory.CreateDirectory(netCore);
+            File.WriteAllText(Path.Combine(netCore, "ExchangeOnlineManagement.psm1"), CreateExchangeLikeScript());
+            File.WriteAllText(Path.Combine(moduleBase, "ExchangeOnlineManagement.psd1"), CreateExchangeLikeManifest("3.9.2"));
+            File.WriteAllText(Path.Combine(netCore, "Microsoft.Exchange.Management.RestApiClient.dll"), "not a real dll");
+            var workRoot = Path.Combine(root, "work");
+
+            var service = new IsolatedModuleImportService();
+            var result = service.Validate(new IsolatedModuleImportRequest
+            {
+                ProfileName = "ExchangeOnlineManagement",
+                Path = moduleBase
+            });
+
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Issues, issue =>
+                issue.Category == "BinaryModule" &&
+                issue.Message.Contains("Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll", StringComparison.Ordinal));
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(new IsolatedModuleImportRequest
+            {
+                ProfileName = "ExchangeOnlineManagement",
+                Path = moduleBase,
+                WorkRoot = workRoot
+            }));
+
+            Assert.Contains("failed preflight validation", ex.Message, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(workRoot));
         }
         finally
         {
@@ -309,6 +384,17 @@ public sealed class IsolatedModuleImportServiceTests
             "AliasesToExport = @('Connect-Graph')",
             "}"
         });
+
+    private static void WriteProfileFiles(string moduleBase, IEnumerable<string> relativePaths)
+    {
+        foreach (var relativePath in relativePaths)
+        {
+            var path = Path.Combine(
+                new[] { moduleBase }.Concat(relativePath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries)).ToArray());
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? moduleBase);
+            File.WriteAllText(path, "not a real dll");
+        }
+    }
 
     private static string CreateTempDirectory()
     {
