@@ -35,6 +35,13 @@
           "Provider": { "type": "string", "enum": [ "PackagedApp", "DesktopInstaller" ] },
           "ApplicationId": { "type": "string" },
           "SubmissionId": { "type": [ "string", "null" ] },
+          "ManifestPath": { "type": [ "string", "null" ] },
+          "ManifestRoot": { "type": [ "string", "null" ] },
+          "StorePackageId": { "type": [ "string", "null" ] },
+          "SourceTarget": { "type": [ "string", "null" ] },
+          "Runtime": { "type": [ "string", "null" ] },
+          "Framework": { "type": [ "string", "null" ] },
+          "Style": { "type": [ "string", "null" ] },
           "SourceDirectory": { "type": [ "string", "null" ] },
           "RecurseSourceDirectory": { "type": "boolean" },
           "PackagePatterns": {

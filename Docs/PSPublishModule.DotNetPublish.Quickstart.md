@@ -208,6 +208,8 @@ Depending on config, the run can emit:
 
 - Use `powerforge store submit` after `StorePackages[]` has produced a `*.msixupload` or `*.appxupload` artifact.
 - Keep Store submission in a separate config file, typically `powerforge.store.submit.json` or `Build/store.submit.json`.
+- Prefer `ManifestPath` + `ManifestRoot` for app packages so the submit step selects the artifact recorded by the DotNetPublish manifest instead of hardcoding the generated Store output directory.
+- Use `StorePackageId`, `SourceTarget`, `Runtime`, `Framework`, and `Style` to select one Store package entry from the manifest. Without `PackagePatterns`, PowerForge prefers `*.msixupload` / `*.appxupload` files over raw bundles.
 - `Provider: PackagedApp` targets the classic packaged-app submission flow:
   - create or reuse a draft submission
   - update `applicationPackages`

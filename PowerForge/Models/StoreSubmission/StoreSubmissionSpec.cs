@@ -46,6 +46,20 @@ internal sealed class StoreSubmissionTarget
 
     public string? SubmissionId { get; set; }
 
+    public string? ManifestPath { get; set; }
+
+    public string? ManifestRoot { get; set; }
+
+    public string? StorePackageId { get; set; }
+
+    public string? SourceTarget { get; set; }
+
+    public string? Runtime { get; set; }
+
+    public string? Framework { get; set; }
+
+    public string? Style { get; set; }
+
     public string? SourceDirectory { get; set; }
 
     public bool RecurseSourceDirectory { get; set; }

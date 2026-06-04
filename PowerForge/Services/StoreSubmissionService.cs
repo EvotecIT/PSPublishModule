@@ -8,7 +8,7 @@ using System.Text.Json.Nodes;
 
 namespace PowerForge;
 
-internal sealed class StoreSubmissionService : IDisposable
+internal sealed partial class StoreSubmissionService : IDisposable
 {
     private static readonly string[] UploadPackagePatterns = { "*.msixupload", "*.appxupload" };
     private static readonly string[] StorePackagePatterns = { "*.msixbundle", "*.appxbundle", "*.msix", "*.appx" };
@@ -314,11 +314,15 @@ internal sealed class StoreSubmissionService : IDisposable
             var targetPackagePaths = target.PackagePaths ?? Array.Empty<string>();
             files = targetPackagePaths.Select(path => ResolveFilePath(baseDirectory, path));
         }
+        else if (!string.IsNullOrWhiteSpace(NormalizeNullable(target.ManifestPath)))
+        {
+            files = ResolvePackagedAppFilesFromManifest(target, baseDirectory);
+        }
         else
         {
             var sourceDirectoryRaw = NormalizeNullable(target.SourceDirectory);
             if (string.IsNullOrWhiteSpace(sourceDirectoryRaw))
-                throw new InvalidOperationException($"Store submission target '{target.Name}' must define PackagePaths or SourceDirectory.");
+                throw new InvalidOperationException($"Store submission target '{target.Name}' must define PackagePaths, ManifestPath, or SourceDirectory.");
 
             var sourceDirectory = ResolveDirectoryPath(baseDirectory, sourceDirectoryRaw!);
             if (!Directory.Exists(sourceDirectory))
