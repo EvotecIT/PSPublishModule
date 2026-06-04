@@ -143,8 +143,8 @@ internal sealed partial class StoreSubmissionService
     {
         var fileName = Path.GetFileName(path);
         var regex = "^" + Regex.Escape(pattern)
-            .Replace("\\*", ".*", StringComparison.Ordinal)
-            .Replace("\\?", ".", StringComparison.Ordinal) + "$";
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".") + "$";
         return Regex.IsMatch(fileName, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 }
