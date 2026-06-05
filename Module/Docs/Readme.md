@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.21
+Help Version: 3.0.22
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -291,6 +291,9 @@ Resolves documentation files from an installed module (root or Internals folder)
 
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
+
+### [Test-IsolatedModuleProfile](Test-IsolatedModuleProfile.md)
+Validates a curated isolated module profile without importing it.
 
 ### [Test-ModuleRepositoryProfile](Test-ModuleRepositoryProfile.md)
 Tests saved private module repository profiles and local authentication prerequisites.

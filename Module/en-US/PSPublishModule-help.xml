@@ -4894,10 +4894,10 @@ resolves the selected profile, copies the target module to a temporary working f
 profile-specific wrapper, loads selected binary assemblies through a module-scoped AssemblyLoadContext,&#xD;
 and imports the generated wrapper into the current runspace.</maml:para>
       <maml:para>Built-in profiles are maintained by PowerForge and are deliberately curated. Use the&#xD;
-ExchangeOnlineManagement profile when Exchange Online needs to coexist with Az.Storage or another&#xD;
-module that has already loaded incompatible Microsoft.OData assemblies. Use the MicrosoftTeams&#xD;
-profile when Teams should keep its MSAL, IdentityModel, policy administration, and ConfigAPI binary&#xD;
-stack out of the default context.</maml:para>
+ExchangeOnlineManagement profile when Exchange Online needs to keep its binary surface out of the&#xD;
+default context. Use the MicrosoftTeams profile when Teams should keep its MSAL, IdentityModel,&#xD;
+policy administration, and ConfigAPI binary stack isolated. Use the MicrosoftGraphAuthentication&#xD;
+profile when Graph authentication assemblies should be loaded through a profile-specific context.</maml:para>
       <maml:para>This command does not authenticate to the isolated module. After importing the profile, call the&#xD;
 target module's normal connection command, such as Connect-ExchangeOnline or Connect-MicrosoftTeams.&#xD;
 Windows PowerShell 5.1 is not supported because AssemblyLoadContext is only available on CoreCLR.</maml:para>
@@ -4947,8 +4947,8 @@ as module bases. File paths are resolved to their parent directory.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Profile</maml:name>
           <maml:description>
-            <maml:para>Supported built-in profiles are ExchangeOnlineManagement and MicrosoftTeams. Profile names are&#xD;
-resolved case-insensitively.</maml:para>
+            <maml:para>Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and&#xD;
+MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -5016,8 +5016,8 @@ as module bases. File paths are resolved to their parent directory.</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
         <maml:name>Profile</maml:name>
         <maml:description>
-          <maml:para>Supported built-in profiles are ExchangeOnlineManagement and MicrosoftTeams. Profile names are&#xD;
-resolved case-insensitively.</maml:para>
+          <maml:para>Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and&#xD;
+MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -38858,6 +38858,169 @@ PowerForge.ModuleVersionStepResult</maml:name>
         <dev:code>Step-Version -ExpectedVersion '1.0.X' -Module 'MyModule'</dev:code>
         <dev:remarks>
           <maml:para>Resolves the next patch version by looking up the current version of the module.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Test-IsolatedModuleProfile</command:name>
+      <command:verb>Test</command:verb>
+      <command:noun>IsolatedModuleProfile</command:noun>
+      <maml:description>
+        <maml:para>Validates a curated isolated module profile without importing it.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Test-IsolatedModuleProfile resolves the selected profile and module source, validates the&#xD;
+profile's minimum version, checks the expected script, manifest, binary, dependency, and&#xD;
+support files, and returns a detailed validation result without copying or importing the&#xD;
+generated wrapper.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Test-IsolatedModuleProfile</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Optional module name override. When omitted, the profile's module name is used.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Optional module base path or manifest path. When omitted, the profile module is resolved from PSModulePath.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>Profile</maml:name>
+          <maml:description>
+            <maml:para>Name of the built-in isolation profile to validate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Quiet</maml:name>
+          <maml:description>
+            <maml:para>Return only a Boolean validation result.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Optional module name override. When omitted, the profile's module name is used.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Optional module base path or manifest path. When omitted, the profile module is resolved from PSModulePath.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <maml:name>Profile</maml:name>
+        <maml:description>
+          <maml:para>Name of the built-in isolation profile to validate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Quiet</maml:name>
+        <maml:description>
+          <maml:para>Return only a Boolean validation result.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.IsolatedModuleProfileValidationResult&#xD;
+System.Boolean</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Validate the newest visible ExchangeOnlineManagement profile source</maml:title>
+        <dev:code>Test-IsolatedModuleProfile -Profile ExchangeOnlineManagement</dev:code>
+        <dev:remarks>
+          <maml:para>Resolves ExchangeOnlineManagement from PSModulePath and returns validation details.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Validate a specific Graph Authentication manifest</maml:title>
+        <dev:code>Test-IsolatedModuleProfile -Profile MicrosoftGraphAuthentication -Path 'C:\Modules\Microsoft.Graph.Authentication\2.37.0\Microsoft.Graph.Authentication.psd1' | Format-List *</dev:code>
+        <dev:remarks>
+          <maml:para>Uses the supplied manifest path as the source manifest and its parent as the module base.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Return only a Boolean result</maml:title>
+        <dev:code>Test-IsolatedModuleProfile -Profile MicrosoftTeams -Quiet</dev:code>
+        <dev:remarks>
+          <maml:para>Returns True when the resolved profile source passes validation; otherwise returns False.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

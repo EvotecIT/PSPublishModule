@@ -22,10 +22,10 @@ profile-specific wrapper, loads selected binary assemblies through a module-scop
 and imports the generated wrapper into the current runspace.
 
 Built-in profiles are maintained by PowerForge and are deliberately curated. Use the
-ExchangeOnlineManagement profile when Exchange Online needs to coexist with Az.Storage or another
-module that has already loaded incompatible Microsoft.OData assemblies. Use the MicrosoftTeams
-profile when Teams should keep its MSAL, IdentityModel, policy administration, and ConfigAPI binary
-stack out of the default context.
+ExchangeOnlineManagement profile when Exchange Online needs to keep its binary surface out of the
+default context. Use the MicrosoftTeams profile when Teams should keep its MSAL, IdentityModel,
+policy administration, and ConfigAPI binary stack isolated. Use the MicrosoftGraphAuthentication
+profile when Graph authentication assemblies should be loaded through a profile-specific context.
 
 This command does not authenticate to the isolated module. After importing the profile, call the
 target module's normal connection command, such as Connect-ExchangeOnline or Connect-MicrosoftTeams.
@@ -173,8 +173,8 @@ Accept wildcard characters: True
 ```
 
 ### -Profile
-Supported built-in profiles are ExchangeOnlineManagement and MicrosoftTeams. Profile names are
-resolved case-insensitively.
+Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and
+MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.
 
 ```yaml
 Type: String
