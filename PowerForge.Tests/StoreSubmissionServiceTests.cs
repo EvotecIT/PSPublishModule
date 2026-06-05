@@ -32,6 +32,75 @@ public sealed class StoreSubmissionServiceTests
     }
 
     [Fact]
+    public void Plan_ResolvesUploadArtifactsFromDotNetPublishManifest()
+    {
+        using var scope = new TemporaryScope();
+        var buildDirectory = Path.Combine(scope.RootPath, "Build");
+        var manifestDirectory = Path.Combine(scope.RootPath, "Artifacts", "DotNetPublish");
+        var storeDirectory = Path.Combine(scope.RootPath, "Artifacts", "DotNetPublish", "Store", "contoso.store");
+        Directory.CreateDirectory(buildDirectory);
+        Directory.CreateDirectory(manifestDirectory);
+        Directory.CreateDirectory(storeDirectory);
+
+        var bundlePath = Path.Combine(storeDirectory, "Contoso.msixbundle");
+        var uploadPath = Path.Combine(storeDirectory, "Contoso.msixupload");
+        var unrelatedUploadPath = Path.Combine(storeDirectory, "Other.msixupload");
+        File.WriteAllText(bundlePath, "bundle", new UTF8Encoding(false));
+        File.WriteAllText(uploadPath, "upload", new UTF8Encoding(false));
+        File.WriteAllText(unrelatedUploadPath, "other", new UTF8Encoding(false));
+
+        File.WriteAllText(
+            Path.Combine(manifestDirectory, "manifest.json"),
+            """
+            [
+              {
+                "Category": "StorePackage",
+                "StorePackageId": "contoso.store",
+                "Target": "Contoso.Tray",
+                "Runtime": "win-x64",
+                "Framework": "net8.0-windows10.0.19041.0",
+                "Style": "FrameworkDependent",
+                "OutputFiles": [
+                  "Artifacts/DotNetPublish/Store/contoso.store/Contoso.msixbundle",
+                  "Artifacts/DotNetPublish/Store/contoso.store/Contoso.msixupload"
+                ]
+              },
+              {
+                "Category": "StorePackage",
+                "StorePackageId": "other.store",
+                "Target": "Other",
+                "Runtime": "win-x64",
+                "Framework": "net8.0-windows10.0.19041.0",
+                "Style": "FrameworkDependent",
+                "OutputFiles": [
+                  "Artifacts/DotNetPublish/Store/contoso.store/Other.msixupload"
+                ]
+              }
+            ]
+            """,
+            new UTF8Encoding(false));
+
+        var spec = CreateSpec(new StoreSubmissionTarget
+        {
+            Name = "Contoso",
+            ApplicationId = "12345678",
+            ManifestPath = "../Artifacts/DotNetPublish/manifest.json",
+            ManifestRoot = "..",
+            StorePackageId = "contoso.store",
+            SourceTarget = "Contoso.Tray",
+            Runtime = "win-x64",
+            Framework = "net8.0-windows10.0.19041.0",
+            Style = "FrameworkDependent"
+        });
+
+        using var service = new StoreSubmissionService(new NullLogger());
+        var plan = service.Plan(spec, Path.Combine(buildDirectory, "store.submit.json"));
+
+        Assert.Single(plan.PackageFiles);
+        Assert.Equal(Path.GetFullPath(uploadPath), plan.PackageFiles[0]);
+    }
+
+    [Fact]
     public async Task RunAsync_CreatesUpdatesUploadsAndCommitsSubmission()
     {
         using var scope = new TemporaryScope();

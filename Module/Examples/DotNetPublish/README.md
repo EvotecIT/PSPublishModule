@@ -60,7 +60,7 @@ Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
 - `Example.PortableBundleMsi.json` shows how to use `Bundles`, include sidecar targets, and build an MSI from the composed bundle instead of the raw publish output.
 - `Example.PackageBundleMsi.json` is the starter for TierBridge-style packages: composed service/CLI payload, shipped PowerShell module, generated scripts, ZIP, and MSI from the bundle.
 - `Example.StorePackage.json` shows how to keep Store/MSIX packaging in the same PowerForge publish matrix as the app target.
-- `Example.StoreSubmit.json` shows how to submit a packaged-app ZIP to Partner Center after `StorePackages[]` produces the `*.msixupload` or `*.appxupload` artifact.
+- `Example.StoreSubmit.json` shows how to submit a packaged-app ZIP to Partner Center from the DotNetPublish manifest after `StorePackages[]` produces the `*.msixupload` or `*.appxupload` artifact.
 - `Example.StoreDesktopSubmit.json` shows how to submit MSI/EXE metadata through the newer desktop Store submission API.
 - For command naming and fast overrides, see:
   - `Docs/PSPublishModule.DotNetPublish.Quickstart.md`
