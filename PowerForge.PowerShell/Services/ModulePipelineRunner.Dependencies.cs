@@ -97,14 +97,32 @@ public sealed partial class ModulePipelineRunner
         if (deps.Length == 0)
             return Array.Empty<ModuleDependencyInstallResult>();
 
+        return EnsureFeatureToolDependenciesInstalled(
+            deps,
+            plan.InstallMissingModulesForce,
+            plan.InstallMissingModulesRepository,
+            plan.InstallMissingModulesCredential,
+            plan.InstallMissingModulesPrerelease);
+    }
+
+    private ModuleDependencyInstallResult[] EnsureFeatureToolDependenciesInstalled(
+        ModuleDependency[] deps,
+        bool force,
+        string? repository,
+        RepositoryCredential? credential,
+        bool prerelease)
+    {
+        if (deps.Length == 0)
+            return Array.Empty<ModuleDependencyInstallResult>();
+
         _logger.Info($"Ensuring build feature tool modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
 
         var results = _hostedOperations.EnsureDependenciesInstalled(
             dependencies: deps,
-            force: plan.InstallMissingModulesForce,
-            repository: plan.InstallMissingModulesRepository,
-            credential: plan.InstallMissingModulesCredential,
-            prerelease: plan.InstallMissingModulesPrerelease,
+            force: force,
+            repository: repository,
+            credential: credential,
+            prerelease: prerelease,
             skipModules: null);
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
@@ -145,13 +163,26 @@ public sealed partial class ModulePipelineRunner
                     AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
                     break;
                 case PublishTool.Auto:
-                    if (!IsAutoPublishToolAvailable() &&
-                        !dependencies.ContainsKey("Microsoft.PowerShell.PSResourceGet") &&
-                        !dependencies.ContainsKey("PowerShellGet"))
-                    {
-                        AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
-                    }
+                    AddRepositoryToolDependencyForAuto(dependencies);
+                    break;
+            }
+        }
 
+        foreach (var artefact in plan.Artefacts ?? Array.Empty<ConfigurationArtefactSegment>())
+        {
+            if (!ArtefactRequiresRequiredModuleDownloadTool(artefact, plan.RequiredModulesForPackaging))
+                continue;
+
+            switch (artefact.Configuration.RequiredModules.Tool ?? ModuleSaveTool.Auto)
+            {
+                case ModuleSaveTool.PowerShellGet:
+                    AddFeatureDependency(dependencies, new ModuleDependency("PowerShellGet", minimumVersion: PowerShellGetMinimumVersion));
+                    break;
+                case ModuleSaveTool.PSResourceGet:
+                    AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
+                    break;
+                case ModuleSaveTool.Auto:
+                    AddRepositoryToolDependencyForAuto(dependencies);
                     break;
             }
         }
@@ -161,7 +192,93 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
     }
 
-    private bool IsAutoPublishToolAvailable()
+    private void EnsureRequiredModuleOnlineResolutionToolInstalledIfNeeded(
+        IReadOnlyList<RequiredModuleDraft> requiredModules,
+        IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
+        bool resolveMissingModulesOnline,
+        bool warnIfRequiredModulesOutdated,
+        DependencyVersionSourceRepository? publishVersionSource,
+        bool force,
+        string? repository,
+        RepositoryCredential? credential,
+        bool prerelease)
+    {
+        if (!RequiresRequiredModuleOnlineResolutionTool(
+                requiredModules,
+                requiredModulesForPackaging,
+                resolveMissingModulesOnline,
+                warnIfRequiredModulesOutdated,
+                publishVersionSource))
+        {
+            return;
+        }
+
+        if (IsRepositoryToolAvailable())
+            return;
+
+        EnsureFeatureToolDependenciesInstalled(
+            new[] { new ModuleDependency("Microsoft.PowerShell.PSResourceGet") },
+            force,
+            repository,
+            credential,
+            prerelease);
+    }
+
+    private static bool RequiresRequiredModuleOnlineResolutionTool(
+        IReadOnlyList<RequiredModuleDraft> requiredModules,
+        IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
+        bool resolveMissingModulesOnline,
+        bool warnIfRequiredModulesOutdated,
+        DependencyVersionSourceRepository? publishVersionSource)
+    {
+        var drafts = (requiredModules ?? Array.Empty<RequiredModuleDraft>())
+            .Concat(requiredModulesForPackaging ?? Array.Empty<RequiredModuleDraft>())
+            .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
+            .ToArray();
+        if (drafts.Length == 0)
+            return false;
+
+        if (publishVersionSource is not null || warnIfRequiredModulesOutdated)
+            return true;
+
+        return resolveMissingModulesOnline && HasOnlineResolvableAutoRequiredModules(drafts);
+    }
+
+    private static bool ArtefactRequiresRequiredModuleDownloadTool(
+        ConfigurationArtefactSegment artefact,
+        IReadOnlyList<RequiredModuleReference> requiredModulesForPackaging)
+    {
+        var cfg = artefact.Configuration;
+        if (cfg?.Enabled != true || cfg.RequiredModules.Enabled != true)
+            return false;
+
+        var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
+        if (source == RequiredModulesSource.Installed)
+            return false;
+
+        var excluded = new HashSet<string>(
+            (cfg.RequiredModules.ExcludeModuleName ?? Array.Empty<string>())
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        return (requiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>())
+            .Any(module => module is not null &&
+                           !string.IsNullOrWhiteSpace(module.ModuleName) &&
+                           !excluded.Contains(module.ModuleName!));
+    }
+
+    private void AddRepositoryToolDependencyForAuto(IDictionary<string, ModuleDependency> dependencies)
+    {
+        if (!IsRepositoryToolAvailable() &&
+            !dependencies.ContainsKey("Microsoft.PowerShell.PSResourceGet") &&
+            !dependencies.ContainsKey("PowerShellGet"))
+        {
+            AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
+        }
+    }
+
+    private bool IsRepositoryToolAvailable()
     {
         var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[]
         {
@@ -169,8 +286,17 @@ public sealed partial class ModulePipelineRunner
             "PowerShellGet"
         });
 
-        return installed.ContainsKey("Microsoft.PowerShell.PSResourceGet") ||
-               installed.ContainsKey("PowerShellGet");
+        return IsInstalledModuleAvailable(installed, "Microsoft.PowerShell.PSResourceGet") ||
+               IsInstalledModuleAvailable(installed, "PowerShellGet");
+    }
+
+    private static bool IsInstalledModuleAvailable(
+        IReadOnlyDictionary<string, InstalledModuleMetadata> installed,
+        string moduleName)
+    {
+        return installed.TryGetValue(moduleName, out var metadata) &&
+               (!string.IsNullOrWhiteSpace(metadata.Version) ||
+                !string.IsNullOrWhiteSpace(metadata.ModuleBasePath));
     }
 
     private static void AddFeatureDependency(IDictionary<string, ModuleDependency> dependencies, ModuleDependency dependency)

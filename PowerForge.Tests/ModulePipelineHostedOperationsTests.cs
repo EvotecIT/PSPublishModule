@@ -261,13 +261,100 @@ public sealed class ModulePipelineHostedOperationsTests
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 new ThrowingPowerShellRunner(),
-                new FakeMetadataProvider(Array.Empty<string>()),
+                new FakeMetadataProvider(),
                 hostedOperations);
 
             var plan = runner.Plan(spec);
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
             Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPSResourceGetForRequiredModuleDownloadArtefact()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateRequiredModuleDownloadArtefactSpec(root.FullName, moduleName, ModuleSaveTool.Auto);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_InstallsPSResourceGetBeforeOnlineRequiredModuleResolution()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            ResolveMissingModulesOnline = true
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Online.Tools",
+                            ModuleVersion = "Latest"
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            runner.Plan(spec);
+
             Assert.Equal(1, hostedOperations.DependencyInstallCalls);
             Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
         }
@@ -696,6 +783,47 @@ public sealed class ModulePipelineHostedOperationsTests
         };
     }
 
+    private static ModulePipelineSpec CreateRequiredModuleDownloadArtefactSpec(string root, string moduleName, ModuleSaveTool tool)
+    {
+        return new ModulePipelineSpec
+        {
+            Build = new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = root,
+                Version = "1.0.0"
+            },
+            Install = new ModulePipelineInstallOptions { Enabled = false },
+            Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.RequiredModule,
+                    Configuration = new ModuleDependencyConfiguration
+                    {
+                        ModuleName = "Dependency.Tools",
+                        ModuleVersion = "1.0.0"
+                    }
+                },
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Unpacked,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = Path.Combine(root, "Artefacts", "Unpacked"),
+                        RequiredModules = new ArtefactRequiredModulesConfiguration
+                        {
+                            Enabled = true,
+                            Source = RequiredModulesSource.Download,
+                            Tool = tool
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -739,7 +867,9 @@ public sealed class ModulePipelineHostedOperationsTests
                 .Where(name => !_filterInstalledModules || _installedModuleNames.Contains(name))
                 .ToDictionary(
                     static name => name,
-                    static name => new InstalledModuleMetadata(name, null, null, null),
+                    name => _installedModuleNames.Contains(name)
+                        ? new InstalledModuleMetadata(name, "1.0.0", null, Path.Combine(Path.GetTempPath(), name))
+                        : new InstalledModuleMetadata(name, null, null, null),
                     StringComparer.OrdinalIgnoreCase);
 
         public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)

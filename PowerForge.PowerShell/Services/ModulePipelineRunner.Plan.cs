@@ -650,6 +650,17 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(enabledPublishes);
 
+        EnsureRequiredModuleOnlineResolutionToolInstalledIfNeeded(
+            requiredModulesDraft,
+            requiredModulesDraftForPackaging,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            dependencyVersionSourceRepository,
+            installMissingModulesForce,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            installMissingModulesPrerelease);
+
         var approved = NormalizeApprovedModules(approvedModules);
         ApplyMergeDefaultsForPlan(
             refreshPsd1Only,
