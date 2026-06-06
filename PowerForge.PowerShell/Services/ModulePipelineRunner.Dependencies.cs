@@ -153,7 +153,12 @@ public sealed partial class ModulePipelineRunner
         var dependencies = new Dictionary<string, ModuleDependency>(StringComparer.OrdinalIgnoreCase);
 
         if (plan.TestsAfterMerge is { Length: > 0 })
+        {
             AddFeatureDependency(dependencies, new ModuleDependency("Pester", minimumVersion: PesterMinimumVersion));
+            AddRepositoryToolDependencyForAuto(dependencies);
+        }
+        if (plan.ValidationSettings?.Tests is { Enable: true, SkipDependencies: false, Severity: not ValidationSeverity.Off } tests)
+            AddTestSuiteFeatureDependencies(dependencies, tests.AdditionalModules, tests.SkipModules);
 
         foreach (var publish in plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
         {
@@ -295,7 +300,7 @@ public sealed partial class ModulePipelineRunner
             !string.IsNullOrWhiteSpace(skipName) &&
             string.Equals(skipName.Trim(), moduleName.Trim(), StringComparison.OrdinalIgnoreCase)) == true;
 
-    private static bool RequiresRequiredModuleOnlineResolutionTool(
+    private bool RequiresRequiredModuleOnlineResolutionTool(
         IReadOnlyList<RequiredModuleDraft> requiredModules,
         IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
         bool resolveMissingModulesOnline,
@@ -315,6 +320,9 @@ public sealed partial class ModulePipelineRunner
             return true;
         }
 
+        if (HasRepositoryPreferredTransitiveRequiredModules(drafts, publishVersionSource))
+            return true;
+
         return resolveMissingModulesOnline && HasOnlineResolvableAutoRequiredModules(drafts);
     }
 
@@ -324,6 +332,81 @@ public sealed partial class ModulePipelineRunner
         => HasAutoRequiredModules((drafts ?? Array.Empty<RequiredModuleDraft>())
             .Where(draft => draft is not null &&
                             ResolveDependencyVersionSource(draft.VersionSource, publishVersionSource).PreferOnlineMetadata));
+
+    private bool HasRepositoryPreferredTransitiveRequiredModules(
+        IEnumerable<RequiredModuleDraft> drafts,
+        DependencyVersionSourceRepository? publishVersionSource)
+    {
+        var sourceDrafts = BuildRequiredModuleDraftMap(drafts ?? Array.Empty<RequiredModuleDraft>());
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var draft in sourceDrafts.Values)
+        {
+            if (draft is null || string.IsNullOrWhiteSpace(draft.ModuleName))
+                continue;
+
+            var source = ResolveDependencyVersionSource(draft.VersionSource, publishVersionSource);
+            if (!source.PreferOnlineMetadata)
+                continue;
+
+            if (HasRepositoryPreferredTransitiveRequiredModules(
+                    draft.ModuleName,
+                    draft.VersionSource,
+                    sourceDrafts,
+                    publishVersionSource,
+                    visited))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool HasRepositoryPreferredTransitiveRequiredModules(
+        string moduleName,
+        ModuleDependencyVersionSource inheritedVersionSource,
+        IReadOnlyDictionary<string, RequiredModuleDraft> sourceDrafts,
+        DependencyVersionSourceRepository? publishVersionSource,
+        HashSet<string> visited)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName) || !visited.Add(moduleName.Trim()))
+            return false;
+
+        var source = ResolveDependencyVersionSource(inheritedVersionSource, publishVersionSource);
+        if (!source.PreferOnlineMetadata)
+            return false;
+
+        var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(moduleName.Trim());
+        foreach (var dep in required ?? Array.Empty<RequiredModuleReference>())
+        {
+            if (dep is null || string.IsNullOrWhiteSpace(dep.ModuleName))
+                continue;
+
+            var depName = dep.ModuleName.Trim();
+            if (ModulePipelinePlanningHelpers.ShouldSkipTransitiveRequiredDependencyModule(depName))
+                continue;
+
+            var childVersionSource = ResolveInheritedDependencyVersionSource(depName, sourceDrafts, inheritedVersionSource);
+            if (ShouldPreferTransitiveDependencySourceMetadata(childVersionSource, publishVersionSource) &&
+                !HasExplicitDependencyConstraint(dep))
+            {
+                return true;
+            }
+
+            if (HasRepositoryPreferredTransitiveRequiredModules(
+                    depName,
+                    childVersionSource,
+                    sourceDrafts,
+                    publishVersionSource,
+                    visited))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private bool ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(
         ModulePipelineSpec spec,
@@ -731,6 +814,38 @@ public sealed partial class ModulePipelineRunner
         {
             AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
         }
+    }
+
+    private void AddTestSuiteFeatureDependencies(
+        IDictionary<string, ModuleDependency> dependencies,
+        IEnumerable<string>? additionalModules,
+        IEnumerable<string>? skipModules)
+    {
+        var skip = new HashSet<string>(
+            (skipModules ?? Array.Empty<string>())
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var before = dependencies.Count;
+        foreach (var name in additionalModules ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var moduleName = name.Trim();
+            if (skip.Contains(moduleName))
+                continue;
+
+            AddFeatureDependency(
+                dependencies,
+                moduleName.Equals("Pester", StringComparison.OrdinalIgnoreCase)
+                    ? new ModuleDependency(moduleName, minimumVersion: PesterMinimumVersion)
+                    : new ModuleDependency(moduleName));
+        }
+
+        if (dependencies.Count > before)
+            AddRepositoryToolDependencyForAuto(dependencies);
     }
 
     private bool IsRepositoryToolAvailable()

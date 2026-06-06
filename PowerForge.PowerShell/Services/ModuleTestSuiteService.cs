@@ -13,6 +13,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModuleTestSuiteService
 {
+    private const string RepositoryToolModuleName = "Microsoft.PowerShell.PSResourceGet";
+
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
 
@@ -192,6 +194,8 @@ public sealed class ModuleTestSuiteService
         if (deps.Count == 0)
             return Array.Empty<ModuleDependencyInstallResult>();
 
+        AddRepositoryToolBootstrapDependency(deps, spec.SkipModules);
+
         var installer = new ModuleDependencyInstaller(_runner, _logger);
         var results = installer.EnsureInstalled(
             dependencies: deps,
@@ -203,6 +207,81 @@ public sealed class ModuleTestSuiteService
             throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
 
         return results.ToArray();
+    }
+
+    private void AddRepositoryToolBootstrapDependency(
+        List<ModuleDependency> dependencies,
+        IEnumerable<string>? skipModules)
+    {
+        var skip = new HashSet<string>(
+            (skipModules ?? Array.Empty<string>())
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var hasInstallTarget = dependencies.Any(dependency =>
+            dependency is not null &&
+            !string.IsNullOrWhiteSpace(dependency.Name) &&
+            !IsRepositoryToolModule(dependency.Name) &&
+            !skip.Contains(dependency.Name));
+        if (!hasInstallTarget)
+            return;
+
+        if (IsRepositoryToolAvailable())
+            return;
+
+        if (skip.Contains(RepositoryToolModuleName) ||
+            dependencies.Any(static dependency =>
+                dependency is not null &&
+                !string.IsNullOrWhiteSpace(dependency.Name) &&
+                IsRepositoryToolModule(dependency.Name)))
+        {
+            return;
+        }
+
+        dependencies.Insert(0, new ModuleDependency(RepositoryToolModuleName));
+    }
+
+    private static bool IsRepositoryToolModule(string moduleName)
+        => moduleName.Equals(RepositoryToolModuleName, StringComparison.OrdinalIgnoreCase) ||
+           moduleName.Equals("PowerShellGet", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsRepositoryToolAvailable()
+    {
+        try
+        {
+            var psResourceGet = new PSResourceGetClient(_runner, _logger).GetAvailability(TimeSpan.FromMinutes(1));
+            if (psResourceGet.Available)
+                return true;
+        }
+        catch (Exception ex)
+        {
+            if (_logger.IsVerbose)
+                _logger.Verbose($"PSResourceGet availability probe failed: {ex.Message}");
+        }
+
+        try
+        {
+            var powerShellGet = new PowerShellGetClient(_runner, _logger).GetAvailability(TimeSpan.FromMinutes(1));
+            return powerShellGet.Available && VersionMeetsMinimum(powerShellGet.Version, "2.2.5");
+        }
+        catch (Exception ex)
+        {
+            if (_logger.IsVerbose)
+                _logger.Verbose($"PowerShellGet availability probe failed: {ex.Message}");
+        }
+
+        return false;
+    }
+
+    private static bool VersionMeetsMinimum(string? actual, string minimum)
+    {
+        if (string.IsNullOrWhiteSpace(actual))
+            return false;
+
+        return Version.TryParse(actual!.Trim(), out var actualVersion) &&
+               Version.TryParse(minimum, out var minimumVersion) &&
+               actualVersion.CompareTo(minimumVersion) >= 0;
     }
 
     private static string ResolveTestPath(string projectRoot, string? testPath)
