@@ -122,13 +122,35 @@ public sealed partial class ModulePipelineRunner
 
         _logger.Info($"Ensuring build feature tool modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
 
-        var results = _hostedOperations.EnsureDependenciesInstalled(
-            dependencies: deps,
-            force: force,
-            repository: repository,
-            credential: credential,
-            prerelease: prerelease,
-            skipModules: null);
+        var results = new List<ModuleDependencyInstallResult>();
+        var repositoryBootstrap = ShouldInstallRepositoryToolFirst(deps)
+            ? deps.FirstOrDefault(IsRepositoryToolDependency)
+            : null;
+        var remainingDeps = deps;
+        if (repositoryBootstrap is not null)
+        {
+            results.AddRange(_hostedOperations.EnsureDependenciesInstalled(
+                dependencies: new[] { repositoryBootstrap },
+                force: force,
+                repository: repository,
+                credential: credential,
+                prerelease: prerelease,
+                skipModules: null));
+            remainingDeps = deps
+                .Where(dependency => !IsRepositoryToolDependency(dependency))
+                .ToArray();
+        }
+
+        if (remainingDeps.Length > 0)
+        {
+            results.AddRange(_hostedOperations.EnsureDependenciesInstalled(
+                dependencies: remainingDeps,
+                force: force,
+                repository: repository,
+                credential: credential,
+                prerelease: prerelease,
+                skipModules: null));
+        }
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
@@ -154,11 +176,18 @@ public sealed partial class ModulePipelineRunner
 
         if (plan.TestsAfterMerge is { Length: > 0 })
         {
-            AddFeatureDependency(dependencies, new ModuleDependency("Pester", minimumVersion: PesterMinimumVersion));
-            AddRepositoryToolDependencyForAuto(dependencies);
+            var pester = new ModuleDependency("Pester", minimumVersion: PesterMinimumVersion);
+            AddFeatureDependency(dependencies, pester);
+            AddRepositoryToolDependencyIfNeeded(dependencies, new[] { pester });
         }
         if (plan.ValidationSettings?.Tests is { Enable: true, SkipDependencies: false, Severity: not ValidationSeverity.Off } tests)
             AddTestSuiteFeatureDependencies(dependencies, tests.AdditionalModules, tests.SkipModules);
+        if (plan.ValidationSettings?.ScriptAnalyzer is { Enable: true, InstallIfUnavailable: true, Severity: not ValidationSeverity.Off })
+        {
+            var dependency = new ModuleDependency("PSScriptAnalyzer");
+            AddFeatureDependency(dependencies, dependency);
+            AddRepositoryToolDependencyIfNeeded(dependencies, new[] { dependency });
+        }
 
         foreach (var publish in plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
         {
@@ -262,6 +291,24 @@ public sealed partial class ModulePipelineRunner
             .Where(dependency => dependency is not null &&
                                  !string.IsNullOrWhiteSpace(dependency.Name) &&
                                  !IsModuleSkipped(plan.ModuleSkip, dependency.Name))
+            .ToArray();
+        if (candidates.Length == 0)
+            return false;
+
+        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(
+            candidates.Select(static dependency => dependency.Name.Trim()).ToArray());
+        return candidates.Any(dependency => RequiredModuleInstallNeedsRepositoryTool(dependency, installed));
+    }
+
+    private bool FeatureToolDependenciesNeedRepositoryTool(IReadOnlyList<ModuleDependency> dependencies)
+    {
+        if (dependencies is null || dependencies.Count == 0 || IsRepositoryToolAvailable())
+            return false;
+
+        var candidates = dependencies
+            .Where(dependency => dependency is not null &&
+                                 !string.IsNullOrWhiteSpace(dependency.Name) &&
+                                 !IsRepositoryToolDependency(dependency))
             .ToArray();
         if (candidates.Length == 0)
             return false;
@@ -816,6 +863,14 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private void AddRepositoryToolDependencyIfNeeded(
+        IDictionary<string, ModuleDependency> dependencies,
+        IReadOnlyList<ModuleDependency> candidates)
+    {
+        if (FeatureToolDependenciesNeedRepositoryTool(candidates))
+            AddRepositoryToolDependencyForAuto(dependencies);
+    }
+
     private void AddTestSuiteFeatureDependencies(
         IDictionary<string, ModuleDependency> dependencies,
         IEnumerable<string>? additionalModules,
@@ -828,6 +883,7 @@ public sealed partial class ModulePipelineRunner
             StringComparer.OrdinalIgnoreCase);
 
         var before = dependencies.Count;
+        var added = new List<ModuleDependency>();
         foreach (var name in additionalModules ?? Array.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(name))
@@ -837,16 +893,27 @@ public sealed partial class ModulePipelineRunner
             if (skip.Contains(moduleName))
                 continue;
 
-            AddFeatureDependency(
-                dependencies,
-                moduleName.Equals("Pester", StringComparison.OrdinalIgnoreCase)
-                    ? new ModuleDependency(moduleName, minimumVersion: PesterMinimumVersion)
-                    : new ModuleDependency(moduleName));
+            var dependency = moduleName.Equals("Pester", StringComparison.OrdinalIgnoreCase)
+                ? new ModuleDependency(moduleName, minimumVersion: PesterMinimumVersion)
+                : new ModuleDependency(moduleName);
+            AddFeatureDependency(dependencies, dependency);
+            added.Add(dependency);
         }
 
         if (dependencies.Count > before)
-            AddRepositoryToolDependencyForAuto(dependencies);
+            AddRepositoryToolDependencyIfNeeded(dependencies, added);
     }
+
+    private bool ShouldInstallRepositoryToolFirst(IReadOnlyList<ModuleDependency> dependencies)
+        => dependencies is { Count: > 1 } &&
+           !IsRepositoryToolAvailable() &&
+           dependencies.Any(IsRepositoryToolDependency) &&
+           dependencies.Any(dependency => !IsRepositoryToolDependency(dependency));
+
+    private static bool IsRepositoryToolDependency(ModuleDependency dependency)
+        => dependency is not null &&
+           (string.Equals(dependency.Name, "Microsoft.PowerShell.PSResourceGet", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dependency.Name, "PowerShellGet", StringComparison.OrdinalIgnoreCase));
 
     private bool IsRepositoryToolAvailable()
     {

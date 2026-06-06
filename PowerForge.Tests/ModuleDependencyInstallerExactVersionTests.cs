@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using Xunit;
@@ -116,6 +117,53 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         Assert.Equal(1, runner.InstallCalls);
     }
 
+    [Fact]
+    public void EnsureInstalled_BootstrapsPSResourceGetDirectly_WhenRepositoryClientsAreUnavailable()
+    {
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Uri? downloadedUri = null;
+            var runner = new ToolUnavailablePowerShellRunner();
+            var installer = new ModuleDependencyInstaller(
+                runner,
+                new NullLogger(),
+                galleryVersionResolver: (packageId, includePrerelease, timeout) => new[]
+                {
+                    new PowerShellGalleryPackageVersion("1.1.0", isListed: true, isPrerelease: false),
+                    new PowerShellGalleryPackageVersion("1.2.0", isListed: true, isPrerelease: false)
+                },
+                directPackageDownloader: (uri, destination, timeout) =>
+                {
+                    downloadedUri = uri;
+                    CreatePSResourceGetPackage(destination, "1.2.0");
+                },
+                currentUserModuleRootResolver: () => moduleRoot.FullName);
+
+            var results = installer.EnsureInstalled(new[]
+            {
+                new ModuleDependency("Microsoft.PowerShell.PSResourceGet", minimumVersion: "1.1.1")
+            });
+
+            var result = Assert.Single(results);
+            Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
+            Assert.Equal("DirectPowerShellGallery", result.Installer);
+            Assert.NotNull(downloadedUri);
+            Assert.Contains("/Microsoft.PowerShell.PSResourceGet/1.2.0", downloadedUri!.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(
+                moduleRoot.FullName,
+                "Microsoft.PowerShell.PSResourceGet",
+                "1.2.0",
+                "Microsoft.PowerShell.PSResourceGet.psd1")));
+            Assert.Equal(1, runner.PSResourceGetInstallCalls);
+            Assert.Equal(1, runner.PowerShellGetInstallCalls);
+        }
+        finally
+        {
+            try { moduleRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly IReadOnlyDictionary<string, string?> _latestInstalledVersions;
@@ -195,4 +243,69 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         private static string Encode(string value)
             => Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
     }
+
+    private sealed class ToolUnavailablePowerShellRunner : IPowerShellRunner
+    {
+        public int PSResourceGetInstallCalls { get; private set; }
+        public int PowerShellGetInstallCalls { get; private set; }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+        {
+            Assert.NotNull(request.ScriptPath);
+            var script = File.ReadAllText(request.ScriptPath!);
+
+            if (script.Contains(InstalledVersionsMarker, StringComparison.Ordinal))
+            {
+                var names = DecodeLines(request.Arguments[0]);
+                var lines = names.Select(name => InstalledVersionsMarker + Encode(name) + "::" + Encode(string.Empty));
+                return new PowerShellRunResult(0, string.Join(Environment.NewLine, lines), string.Empty, "pwsh.exe");
+            }
+
+            if (script.Contains(PsResourceInstallMarker, StringComparison.Ordinal))
+            {
+                PSResourceGetInstallCalls++;
+                return new PowerShellRunResult(3, "PFPSRG::ERROR::" + Encode("PSResourceGet unavailable"), string.Empty, "pwsh.exe");
+            }
+
+            if (script.Contains(PowerShellGetInstallMarker, StringComparison.Ordinal))
+            {
+                PowerShellGetInstallCalls++;
+                return new PowerShellRunResult(3, "PFMOD::ERROR::" + Encode("PowerShellGet unavailable"), string.Empty, "pwsh.exe");
+            }
+
+            throw new InvalidOperationException("Unexpected script invocation in test.");
+        }
+    }
+
+    private static void CreatePSResourceGetPackage(string destinationPath, string version)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        using var archive = ZipFile.Open(destinationPath, ZipArchiveMode.Create);
+        AddEntry(archive, "Microsoft.PowerShell.PSResourceGet.psd1", "@{ ModuleVersion = '" + version + "' }");
+        AddEntry(archive, "Microsoft.PowerShell.PSResourceGet.psm1", string.Empty);
+        AddEntry(archive, "Microsoft.PowerShell.PSResourceGet.nuspec", "<package />");
+        AddEntry(archive, "package/services/metadata/core-properties/metadata.psmdcp", string.Empty);
+        AddEntry(archive, "[Content_Types].xml", string.Empty);
+
+        static void AddEntry(ZipArchive archive, string path, string content)
+        {
+            var entry = archive.CreateEntry(path);
+            using var stream = entry.Open();
+            using var writer = new StreamWriter(stream, Encoding.UTF8);
+            writer.Write(content);
+        }
+    }
+
+    private static string[] DecodeLines(string value)
+    {
+        var text = Encoding.UTF8.GetString(Convert.FromBase64String(value));
+        return text
+            .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => line.Trim())
+            .Where(static line => line.Length > 0)
+            .ToArray();
+    }
+
+    private static string Encode(string value)
+        => Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
 }

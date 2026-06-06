@@ -205,9 +205,8 @@ public sealed class ModulePipelineHostedOperationsTests
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
             Assert.Equal(2, result.Length);
-            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
-            Assert.Contains(hostedOperations.LastDependencies, dependency =>
-                dependency.Name == "Microsoft.PowerShell.PSResourceGet");
+            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
             var pester = Assert.Single(hostedOperations.LastDependencies, dependency => dependency.Name == "Pester");
             Assert.Equal("5.7.1", pester.MinimumVersion);
             Assert.Null(hostedOperations.LastSkipModules);
@@ -329,11 +328,9 @@ public sealed class ModulePipelineHostedOperationsTests
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
             Assert.Equal(2, result.Length);
-            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
-            Assert.Contains(hostedOperations.LastDependencies, dependency =>
-                dependency.Name == "Microsoft.PowerShell.PSResourceGet");
-            Assert.Contains(hostedOperations.LastDependencies, dependency =>
-                dependency.Name == "Pester");
+            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
+            Assert.Equal("Pester", Assert.Single(hostedOperations.LastDependencies).Name);
             Assert.Null(hostedOperations.LastRepository);
         }
         finally
@@ -374,7 +371,7 @@ public sealed class ModulePipelineHostedOperationsTests
                             {
                                 Enable = true,
                                 TestPath = testsPath,
-                                AdditionalModules = new[] { "Pester", "PSWriteColor" }
+                                AdditionalModules = new[] { "Az.Accounts", "Pester", "PSWriteColor" }
                             }
                         }
                     }
@@ -391,14 +388,129 @@ public sealed class ModulePipelineHostedOperationsTests
             var plan = runner.Plan(spec);
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
-            Assert.Equal(3, result.Length);
-            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
-            Assert.Contains(hostedOperations.LastDependencies, dependency =>
-                dependency.Name == "Microsoft.PowerShell.PSResourceGet");
+            Assert.Equal(4, result.Length);
+            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
             var pester = Assert.Single(hostedOperations.LastDependencies, dependency => dependency.Name == "Pester");
             Assert.Equal("5.7.1", pester.MinimumVersion);
+            Assert.Contains(hostedOperations.LastDependencies, dependency => dependency.Name == "Az.Accounts");
             Assert.Contains(hostedOperations.LastDependencies, dependency => dependency.Name == "PSWriteColor");
             Assert.Null(hostedOperations.LastRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_SkipsRepositoryToolForSatisfiedTestsAfterMergeTool()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var testsPath = Path.Combine(root.FullName, "Tests");
+            Directory.CreateDirectory(testsPath);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationTestSegment
+                    {
+                        Configuration = new TestConfiguration
+                        {
+                            TestsPath = testsPath,
+                            When = TestExecutionWhen.AfterMerge
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Pester"] = "5.7.1"
+                }),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Pester", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsScriptAnalyzerBootstrapBeforeAnalyzerTool()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationValidationSegment
+                    {
+                        Settings = new ModuleValidationSettings
+                        {
+                            Enable = true,
+                            ScriptAnalyzer = new ScriptAnalyzerValidationSettings
+                            {
+                                Enable = true,
+                                InstallIfUnavailable = true,
+                                Severity = ValidationSeverity.Warning
+                            },
+                            Tests = new TestSuiteValidationSettings { Severity = ValidationSeverity.Off }
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Equal(2, result.Length);
+            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
+            Assert.Equal("PSScriptAnalyzer", Assert.Single(hostedOperations.LastDependencies).Name);
         }
         finally
         {
