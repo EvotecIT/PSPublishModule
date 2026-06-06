@@ -72,4 +72,34 @@ Show-DemoOutput
         Assert.Contains("PS> Show-DemoOutput\r\n        Name        Status", exampleSection, StringComparison.Ordinal);
         Assert.Contains("\r\n        Service A   Healthy\r\n        Service B   Watching", exampleSection, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesSingleBlockBodyIndentationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Invoke-DemoBlock",
+            Synopsis = "Invokes a demo block.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+ForEach-Object {
+        $_.Name
+        $_.Status
+        }
+""",
+                    Remarks = "Keeps authored block formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> ForEach-Object {\r\n        $_.Name", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        $_.Status\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
 }

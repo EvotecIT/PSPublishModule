@@ -397,7 +397,7 @@ internal sealed class MarkdownHelpWriter
         if (indent < 8)
             return;
 
-        if (!HasTopLevelBlockLine(lines, firstNonBlank + 1, indent))
+        if (!HasAdditionalTopLevelLineAfterOpenedBlock(lines[firstNonBlank], lines, firstNonBlank + 1, indent))
             return;
 
         for (var i = firstNonBlank + 1; i < lines.Length; i++)
@@ -415,16 +415,27 @@ internal sealed class MarkdownHelpWriter
             || trimmed.EndsWith("(", StringComparison.Ordinal);
     }
 
-    private static bool HasTopLevelBlockLine(string[] lines, int startIndex, int indent)
+    private static bool HasAdditionalTopLevelLineAfterOpenedBlock(string firstLine, string[] lines, int startIndex, int indent)
     {
+        var blockDepth = Math.Max(0, CountBlockDepthDelta(firstLine));
         for (var i = startIndex; i < lines.Length; i++)
         {
             var line = lines[i];
-            if (string.IsNullOrWhiteSpace(line) || CountLeadingWhitespace(line) != indent)
+            if (string.IsNullOrWhiteSpace(line))
                 continue;
 
-            if (LooksLikeTopLevelPowerShellLine(RemoveLeadingWhitespace(line, indent)))
+            line = RemoveLeadingWhitespace(line, indent);
+            var trimmed = line.TrimStart();
+            var isCandidateTopLevel = CountLeadingWhitespace(line) == 0;
+            if (isCandidateTopLevel
+                && blockDepth == 0
+                && !StartsWithBlockClose(trimmed)
+                && LooksLikeTopLevelPowerShellLine(trimmed))
+            {
                 return true;
+            }
+
+            blockDepth = Math.Max(0, blockDepth + CountBlockDepthDelta(line));
         }
 
         return false;
@@ -435,9 +446,6 @@ internal sealed class MarkdownHelpWriter
         var trimmed = line.TrimStart();
         if (trimmed.Length == 0)
             return false;
-
-        if (trimmed[0] == '}' || trimmed[0] == ')' || trimmed[0] == ']')
-            return true;
 
         if (trimmed[0] == '$' || trimmed[0] == '[' || trimmed[0] == '&' || trimmed[0] == '.')
             return true;
@@ -453,6 +461,32 @@ internal sealed class MarkdownHelpWriter
         }
 
         return dashIndex + 1 < trimmed.Length && char.IsLetter(trimmed[dashIndex + 1]);
+    }
+
+    private static bool StartsWithBlockClose(string trimmed)
+        => trimmed.Length > 0 && (trimmed[0] == '}' || trimmed[0] == ')' || trimmed[0] == ']');
+
+    private static int CountBlockDepthDelta(string line)
+    {
+        var delta = 0;
+        foreach (var ch in line)
+        {
+            switch (ch)
+            {
+                case '{':
+                case '(':
+                case '[':
+                    delta++;
+                    break;
+                case '}':
+                case ')':
+                case ']':
+                    delta--;
+                    break;
+            }
+        }
+
+        return delta;
     }
 
     private static int GetCommonIndent(IEnumerable<string> lines)
