@@ -42,4 +42,34 @@ $plan = New-DemoDeckPlan {
         Assert.DoesNotContain("\r\n            Add-DemoSection", exampleSection, StringComparison.Ordinal);
         Assert.DoesNotContain("\r\n        New-DemoDeck -Path", exampleSection, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesAuthoredIndentationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Show-DemoOutput",
+            Synopsis = "Shows demo output.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+Show-DemoOutput
+        Name        Status
+        Service A   Healthy
+        Service B   Watching
+""",
+                    Remarks = "Shows aligned console output."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> Show-DemoOutput\r\n        Name        Status", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        Service A   Healthy\r\n        Service B   Watching", exampleSection, StringComparison.Ordinal);
+    }
 }

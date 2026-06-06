@@ -390,14 +390,69 @@ internal sealed class MarkdownHelpWriter
         if (firstNonBlank < 0 || CountLeadingWhitespace(lines[firstNonBlank]) > 0)
             return;
 
+        if (!LooksLikePowerShellBlockOpening(lines[firstNonBlank]))
+            return;
+
         var indent = GetCommonIndent(lines.Skip(firstNonBlank + 1));
         if (indent < 8)
+            return;
+
+        if (!HasTopLevelBlockLine(lines, firstNonBlank + 1, indent))
             return;
 
         for (var i = firstNonBlank + 1; i < lines.Length; i++)
         {
             lines[i] = RemoveLeadingWhitespace(lines[i], indent);
         }
+    }
+
+    private static bool LooksLikePowerShellBlockOpening(string line)
+    {
+        var trimmed = line.TrimEnd();
+        return trimmed.EndsWith("{", StringComparison.Ordinal)
+            || trimmed.EndsWith("@(", StringComparison.Ordinal)
+            || trimmed.EndsWith("@{", StringComparison.Ordinal)
+            || trimmed.EndsWith("(", StringComparison.Ordinal);
+    }
+
+    private static bool HasTopLevelBlockLine(string[] lines, int startIndex, int indent)
+    {
+        for (var i = startIndex; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line) || CountLeadingWhitespace(line) != indent)
+                continue;
+
+            if (LooksLikeTopLevelPowerShellLine(RemoveLeadingWhitespace(line, indent)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeTopLevelPowerShellLine(string line)
+    {
+        var trimmed = line.TrimStart();
+        if (trimmed.Length == 0)
+            return false;
+
+        if (trimmed[0] == '}' || trimmed[0] == ')' || trimmed[0] == ']')
+            return true;
+
+        if (trimmed[0] == '$' || trimmed[0] == '[' || trimmed[0] == '&' || trimmed[0] == '.')
+            return true;
+
+        var dashIndex = trimmed.IndexOf('-');
+        if (dashIndex <= 0)
+            return false;
+
+        for (var i = 0; i < dashIndex; i++)
+        {
+            if (!char.IsLetter(trimmed[i]))
+                return false;
+        }
+
+        return dashIndex + 1 < trimmed.Length && char.IsLetter(trimmed[dashIndex + 1]);
     }
 
     private static int GetCommonIndent(IEnumerable<string> lines)
@@ -449,7 +504,7 @@ internal sealed class MarkdownHelpWriter
             index++;
         }
 
-        return index == 0 ? line : line[index..];
+        return index == 0 ? line : line.Substring(index);
     }
 
     private static string GetRelativeLink(string fromDirectory, string toPath)
