@@ -281,7 +281,7 @@ public sealed partial class ModulePipelineRunner
 
     private static bool IsAutoGuid(string? value)
         => !string.IsNullOrWhiteSpace(value) &&
-           value.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
+           value!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
 
     private bool ArtefactRequiresRequiredModuleDownloadTool(
         ConfigurationArtefactSegment artefact,
