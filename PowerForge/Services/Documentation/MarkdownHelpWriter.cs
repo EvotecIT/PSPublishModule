@@ -345,9 +345,9 @@ internal sealed class MarkdownHelpWriter
 
     private static string RenderMarkdownExampleCode(string commandName, DocumentationExampleHelp example)
     {
-        var code = string.IsNullOrWhiteSpace(example.Code)
+        var code = NormalizeMarkdownExampleCode(string.IsNullOrWhiteSpace(example.Code)
             ? commandName
-            : example.Code.Replace("\r\n", "\n").TrimEnd('\n', '\r');
+            : example.Code);
 
         var introduction = (example.Introduction ?? string.Empty)
             .Replace("\r\n", "\n")
@@ -365,6 +365,91 @@ internal sealed class MarkdownHelpWriter
 
         lines[0] = introduction + lines[0];
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string NormalizeMarkdownExampleCode(string code)
+    {
+        var normalized = (code ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n')
+            .Trim('\n');
+
+        if (normalized.Length == 0)
+            return string.Empty;
+
+        var lines = normalized.Split('\n');
+        RemoveSharedIndent(lines, GetCommonIndent(lines));
+        RemoveSharedIndentAfterInlineFirstLine(lines);
+
+        return string.Join("\n", lines).TrimEnd('\n');
+    }
+
+    private static void RemoveSharedIndentAfterInlineFirstLine(string[] lines)
+    {
+        var firstNonBlank = Array.FindIndex(lines, line => !string.IsNullOrWhiteSpace(line));
+        if (firstNonBlank < 0 || CountLeadingWhitespace(lines[firstNonBlank]) > 0)
+            return;
+
+        var indent = GetCommonIndent(lines.Skip(firstNonBlank + 1));
+        if (indent < 8)
+            return;
+
+        for (var i = firstNonBlank + 1; i < lines.Length; i++)
+        {
+            lines[i] = RemoveLeadingWhitespace(lines[i], indent);
+        }
+    }
+
+    private static int GetCommonIndent(IEnumerable<string> lines)
+    {
+        var common = int.MaxValue;
+
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            var indent = CountLeadingWhitespace(line);
+            common = Math.Min(common, indent);
+        }
+
+        return common == int.MaxValue ? 0 : common;
+    }
+
+    private static void RemoveSharedIndent(string[] lines, int indent)
+    {
+        if (indent <= 0)
+            return;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            lines[i] = RemoveLeadingWhitespace(lines[i], indent);
+        }
+    }
+
+    private static int CountLeadingWhitespace(string line)
+    {
+        var count = 0;
+        while (count < line.Length && (line[count] == ' ' || line[count] == '\t'))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    private static string RemoveLeadingWhitespace(string line, int count)
+    {
+        if (string.IsNullOrEmpty(line) || count <= 0)
+            return line;
+
+        var index = 0;
+        while (index < line.Length && index < count && (line[index] == ' ' || line[index] == '\t'))
+        {
+            index++;
+        }
+
+        return index == 0 ? line : line[index..];
     }
 
     private static string GetRelativeLink(string fromDirectory, string toPath)
