@@ -71,7 +71,7 @@ public sealed partial class ModulePipelineRunner
             repository: plan.InstallMissingModulesRepository,
             credential: plan.InstallMissingModulesCredential,
             prerelease: plan.InstallMissingModulesPrerelease,
-            skipModules: null);
+            skipModules: plan.ModuleSkip);
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
@@ -105,7 +105,7 @@ public sealed partial class ModulePipelineRunner
             repository: plan.InstallMissingModulesRepository,
             credential: plan.InstallMissingModulesCredential,
             prerelease: plan.InstallMissingModulesPrerelease,
-            skipModules: plan.ModuleSkip);
+            skipModules: null);
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
@@ -142,8 +142,10 @@ public sealed partial class ModulePipelineRunner
                     AddFeatureDependency(dependencies, new ModuleDependency("PowerShellGet", minimumVersion: PowerShellGetMinimumVersion));
                     break;
                 case PublishTool.PSResourceGet:
-                case PublishTool.Auto:
                     AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
+                    break;
+                case PublishTool.Auto:
+                    AddFeatureDependency(dependencies, new ModuleDependency("PowerShellGet", minimumVersion: PowerShellGetMinimumVersion));
                     break;
             }
         }

@@ -86,6 +86,73 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_HonorsModuleSkipForDeclaredDependencies()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            InstallMissingModules = true
+                        }
+                    },
+                    new ConfigurationModuleSkipSegment
+                    {
+                        Configuration = new ModuleSkipConfiguration
+                        {
+                            IgnoreModuleName = new[] { "Pester" }
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Pester",
+                            RequiredVersion = "5.6.1"
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Pester", Assert.Single(hostedOperations.LastDependencies).Name);
+            Assert.Contains("Pester", hostedOperations.LastSkipModules?.IgnoreModuleName ?? Array.Empty<string>());
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPesterForConfiguredTests()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -108,6 +175,13 @@ public sealed class ModulePipelineHostedOperationsTests
                 Install = new ModulePipelineInstallOptions { Enabled = false },
                 Segments = new IConfigurationSegment[]
                 {
+                    new ConfigurationModuleSkipSegment
+                    {
+                        Configuration = new ModuleSkipConfiguration
+                        {
+                            IgnoreModuleName = new[] { "Pester" }
+                        }
+                    },
                     new ConfigurationTestSegment
                     {
                         Configuration = new TestConfiguration
@@ -134,6 +208,7 @@ public sealed class ModulePipelineHostedOperationsTests
             var dependency = Assert.Single(hostedOperations.LastDependencies);
             Assert.Equal("Pester", dependency.Name);
             Assert.Equal("5.7.1", dependency.MinimumVersion);
+            Assert.Null(hostedOperations.LastSkipModules);
         }
         finally
         {
@@ -142,7 +217,7 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
-    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPSResourceGetForAutoRepositoryPublish()
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPowerShellGetFallbackForAutoRepositoryPublish()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -163,7 +238,9 @@ public sealed class ModulePipelineHostedOperationsTests
 
             Assert.Single(result);
             Assert.Equal(1, hostedOperations.DependencyInstallCalls);
-            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+            var dependency = Assert.Single(hostedOperations.LastDependencies);
+            Assert.Equal("PowerShellGet", dependency.Name);
+            Assert.Equal("2.2.5", dependency.MinimumVersion);
         }
         finally
         {
@@ -196,6 +273,36 @@ public sealed class ModulePipelineHostedOperationsTests
             var dependency = Assert.Single(hostedOperations.LastDependencies);
             Assert.Equal("PowerShellGet", dependency.Name);
             Assert.Equal("2.2.5", dependency.MinimumVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPSResourceGetForExplicitPSResourceGetPublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreatePublishToolSpec(root.FullName, moduleName, PublishTool.PSResourceGet);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
         }
         finally
         {
@@ -605,6 +712,7 @@ public sealed class ModulePipelineHostedOperationsTests
         public int DependencyInstallCalls { get; private set; }
         public IReadOnlyList<ModuleDependency> LastDependencies { get; private set; } = Array.Empty<ModuleDependency>();
         public string? LastRepository { get; private set; }
+        public ModuleSkipConfiguration? LastSkipModules { get; private set; }
         public ModuleTestSuiteResult? NextTestSuiteResult { get; set; }
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
@@ -618,6 +726,7 @@ public sealed class ModulePipelineHostedOperationsTests
             DependencyInstallCalls++;
             LastDependencies = dependencies ?? Array.Empty<ModuleDependency>();
             LastRepository = repository;
+            LastSkipModules = skipModules;
             return LastDependencies
                 .Select(dependency => new ModuleDependencyInstallResult(
                     name: dependency.Name,
