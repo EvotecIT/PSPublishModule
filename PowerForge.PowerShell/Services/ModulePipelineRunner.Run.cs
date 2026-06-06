@@ -7,6 +7,7 @@ public sealed partial class ModulePipelineRunner
     /// </summary>
     public ModulePipelineResult Run(ModulePipelineSpec spec)
     {
+        EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(spec);
         var plan = Plan(spec);
         return Run(spec, plan, progress: null);
     }

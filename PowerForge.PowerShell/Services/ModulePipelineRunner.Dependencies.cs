@@ -262,10 +262,105 @@ public sealed partial class ModulePipelineRunner
                 .Select(static name => name.Trim()),
             StringComparer.OrdinalIgnoreCase);
 
-        return (requiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>())
+        return source == RequiredModulesSource.Download &&
+               (requiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>())
             .Any(module => module is not null &&
                            !string.IsNullOrWhiteSpace(module.ModuleName) &&
                            !excluded.Contains(module.ModuleName!));
+    }
+
+    private void EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(ModulePipelineSpec spec)
+    {
+        if (spec is null) return;
+
+        var requiredModulesDraft = new List<RequiredModuleDraft>();
+        var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
+        var publishes = new List<ConfigurationPublishSegment>();
+        var resolveMissingModulesOnline = false;
+        var resolveMissingModulesOnlineSet = false;
+        var warnIfRequiredModulesOutdated = false;
+        var refreshPsd1Only = false;
+        var installMissingModulesForce = false;
+        var installMissingModulesPrerelease = false;
+        string? installMissingModulesRepository = null;
+        RepositoryCredential? installMissingModulesCredential = null;
+
+        foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
+        {
+            switch (segment)
+            {
+                case ConfigurationBuildSegment build:
+                {
+                    var cfg = build.BuildModule;
+                    if (cfg.ResolveMissingModulesOnline.HasValue)
+                    {
+                        resolveMissingModulesOnline = cfg.ResolveMissingModulesOnline.Value;
+                        resolveMissingModulesOnlineSet = true;
+                    }
+
+                    if (cfg.WarnIfRequiredModulesOutdated.HasValue)
+                        warnIfRequiredModulesOutdated = cfg.WarnIfRequiredModulesOutdated.Value;
+                    if (cfg.RefreshPSD1Only.HasValue)
+                        refreshPsd1Only = cfg.RefreshPSD1Only.Value;
+                    if (cfg.InstallMissingModulesForce.HasValue)
+                        installMissingModulesForce = cfg.InstallMissingModulesForce.Value;
+                    if (cfg.InstallMissingModulesPrerelease.HasValue)
+                        installMissingModulesPrerelease = cfg.InstallMissingModulesPrerelease.Value;
+                    if (!string.IsNullOrWhiteSpace(cfg.InstallMissingModulesRepository))
+                        installMissingModulesRepository = cfg.InstallMissingModulesRepository;
+                    if (cfg.InstallMissingModulesCredential is not null)
+                        installMissingModulesCredential = cfg.InstallMissingModulesCredential;
+                    break;
+                }
+                case ConfigurationModuleSegment moduleSeg:
+                {
+                    var cfg = moduleSeg.Configuration;
+                    if (moduleSeg.Kind != ModuleDependencyKind.RequiredModule ||
+                        cfg is null ||
+                        string.IsNullOrWhiteSpace(cfg.ModuleName) ||
+                        ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(cfg.ModuleName))
+                    {
+                        break;
+                    }
+
+                    var draft = new RequiredModuleDraft(
+                        moduleName: cfg.ModuleName.Trim(),
+                        moduleVersion: cfg.ModuleVersion,
+                        minimumVersion: cfg.MinimumVersion,
+                        requiredVersion: cfg.RequiredVersion,
+                        guid: cfg.Guid,
+                        versionSource: cfg.VersionSource);
+                    requiredModulesDraft.Add(draft);
+                    requiredModulesDraftForPackaging.Add(draft);
+                    break;
+                }
+                case ConfigurationPublishSegment publish:
+                    publishes.Add(publish);
+                    break;
+            }
+        }
+
+        if (refreshPsd1Only)
+            return;
+
+        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft))
+            resolveMissingModulesOnline = true;
+
+        var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(
+            publishes
+                .Where(static publish => publish is not null && publish.Configuration?.Enabled == true)
+                .ToArray());
+
+        EnsureRequiredModuleOnlineResolutionToolInstalledIfNeeded(
+            requiredModulesDraft,
+            requiredModulesDraftForPackaging,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            dependencyVersionSourceRepository,
+            installMissingModulesForce,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            installMissingModulesPrerelease);
     }
 
     private void AddRepositoryToolDependencyForAuto(IDictionary<string, ModuleDependency> dependencies)
@@ -287,16 +382,37 @@ public sealed partial class ModulePipelineRunner
         });
 
         return IsInstalledModuleAvailable(installed, "Microsoft.PowerShell.PSResourceGet") ||
-               IsInstalledModuleAvailable(installed, "PowerShellGet");
+               IsInstalledModuleAvailable(installed, "PowerShellGet", PowerShellGetMinimumVersion);
     }
 
     private static bool IsInstalledModuleAvailable(
         IReadOnlyDictionary<string, InstalledModuleMetadata> installed,
-        string moduleName)
+        string moduleName,
+        string? minimumVersion = null)
     {
-        return installed.TryGetValue(moduleName, out var metadata) &&
-               (!string.IsNullOrWhiteSpace(metadata.Version) ||
-                !string.IsNullOrWhiteSpace(metadata.ModuleBasePath));
+        if (!installed.TryGetValue(moduleName, out var metadata))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(metadata.Version) &&
+            string.IsNullOrWhiteSpace(metadata.ModuleBasePath))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(minimumVersion))
+            return true;
+
+        return !string.IsNullOrWhiteSpace(metadata.Version) &&
+               TryParseVersion(metadata.Version, out var installedVersion) &&
+               TryParseVersion(minimumVersion, out var requiredVersion) &&
+               installedVersion.CompareTo(requiredVersion) >= 0;
+    }
+
+    private static bool TryParseVersion(string? value, out Version version)
+    {
+        var parsed = Version.TryParse(value, out var result);
+        version = result ?? new Version(0, 0);
+        return parsed;
     }
 
     private static void AddFeatureDependency(IDictionary<string, ModuleDependency> dependencies, ModuleDependency dependency)
