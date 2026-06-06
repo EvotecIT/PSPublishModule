@@ -400,6 +400,52 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_PreservesExactLocalAutoRequiredModuleArtefactWhenLatestVersionDiffers()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateRequiredModuleArtefactSpec(root.FullName, moduleName, ModuleSaveTool.Auto, RequiredModulesSource.Auto);
+            var requiredModule = spec.Segments
+                .OfType<ConfigurationModuleSegment>()
+                .Single()
+                .Configuration;
+            requiredModule.ModuleVersion = null;
+            requiredModule.RequiredVersion = "1.0.0";
+
+            var moduleLocatorRequests = new List<PowerShellRunRequest>();
+            var powerShellRunner = new RecordingPowerShellRunner(request =>
+            {
+                moduleLocatorRequests.Add(request);
+                return new PowerShellRunResult(0, "PFMODLOC::FOUND::version::path", string.Empty, "pwsh");
+            });
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner,
+                new FakeMetadataProvider(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Dependency.Tools"] = "2.0.0"
+                }),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Empty(result);
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+            Assert.Single(moduleLocatorRequests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_DoesNotInstallPSResourceGetBeforeOnlineRequiredModuleResolution()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -417,6 +463,73 @@ public sealed class ModulePipelineHostedOperationsTests
                 hostedOperations);
 
             runner.Plan(spec);
+
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunPreflight_SkipsPublishVersionSourceWhenRequiredModulesAreConcrete()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            ResolveMissingModulesOnline = false
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Dependency.Tools",
+                            ModuleVersion = "1.0.0",
+                            Guid = "11111111-1111-1111-1111-111111111111"
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery,
+                            Tool = PublishTool.Auto,
+                            ApiKey = "test-api-key",
+                            UseAsDependencyVersionSource = true
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
 
             Assert.Equal(0, hostedOperations.DependencyInstallCalls);
         }
@@ -1007,6 +1120,13 @@ public sealed class ModulePipelineHostedOperationsTests
         var method = typeof(ModulePipelineRunner).GetMethod("EnsureBuildDependenciesInstalledIfNeeded", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "EnsureBuildDependenciesInstalledIfNeeded method signature may have changed.");
         return (ModuleDependencyInstallResult[])method!.Invoke(runner, new object?[] { plan })!;
+    }
+
+    private static void InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(ModulePipelineRunner runner, ModulePipelineSpec spec)
+    {
+        var method = typeof(ModulePipelineRunner).GetMethod("EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(method is not null, "EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun method signature may have changed.");
+        method!.Invoke(runner, new object?[] { spec });
     }
 
     private static void InvokeRunTestsAfterMerge(ModulePipelineRunner runner, ModulePipelinePlan plan, ModuleBuildResult buildResult, TestConfiguration configuration)

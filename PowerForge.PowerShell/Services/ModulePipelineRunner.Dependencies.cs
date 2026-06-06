@@ -246,8 +246,7 @@ public sealed partial class ModulePipelineRunner
         if (drafts.Length == 0)
             return false;
 
-        if (publishVersionSource is not null ||
-            warnIfRequiredModulesOutdated ||
+        if (warnIfRequiredModulesOutdated ||
             HasRepositoryPreferredOnlineRequiredModules(drafts, publishVersionSource))
         {
             return true;
@@ -318,13 +317,68 @@ public sealed partial class ModulePipelineRunner
         if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
             return false;
 
-        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[] { requiredModule.ModuleName.Trim() });
-        return !installed.TryGetValue(requiredModule.ModuleName.Trim(), out var metadata) ||
-               !IsInstalledModuleAvailable(
-                   metadata,
-                   requiredModule.RequiredVersion,
-                   requiredModule.ModuleVersion,
-                   requiredModule.MaximumVersion);
+        var name = requiredModule.ModuleName.Trim();
+        var requiredVersion = NormalizeLocatorVersionArgument(requiredModule.RequiredVersion);
+        var minimumVersion = NormalizeLocatorVersionArgument(requiredModule.ModuleVersion);
+        var maximumVersion = NormalizeLocatorVersionArgument(requiredModule.MaximumVersion);
+        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[] { name });
+        if (!installed.TryGetValue(name, out var metadata) || !HasInstalledModuleMetadata(metadata))
+            return true;
+
+        if (IsInstalledModuleAvailable(metadata, requiredVersion, minimumVersion, maximumVersion))
+        {
+            return false;
+        }
+
+        return !HasInstalledRequiredModule(name, requiredVersion, minimumVersion, maximumVersion);
+    }
+
+    private static bool HasInstalledModuleMetadata(InstalledModuleMetadata metadata)
+        => metadata is not null &&
+           (!string.IsNullOrWhiteSpace(metadata.Version) ||
+            !string.IsNullOrWhiteSpace(metadata.ModuleBasePath));
+
+    private bool HasInstalledRequiredModule(
+        string moduleName,
+        string? requiredVersion,
+        string? minimumVersion,
+        string? maximumVersion)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName) ||
+            (string.IsNullOrWhiteSpace(requiredVersion) &&
+             string.IsNullOrWhiteSpace(minimumVersion) &&
+             string.IsNullOrWhiteSpace(maximumVersion)))
+        {
+            return false;
+        }
+
+        var script = EmbeddedScripts.Load("Scripts/ModuleLocator/Find-InstalledModule.ps1");
+        var args = new[]
+        {
+            moduleName.Trim(),
+            requiredVersion ?? string.Empty,
+            minimumVersion ?? string.Empty,
+            maximumVersion ?? string.Empty
+        };
+        var result = RunScript(_powerShellRunner, script, args, TimeSpan.FromMinutes(2));
+        if (result.ExitCode != 0)
+        {
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            return false;
+        }
+
+        return SplitLines(result.StdOut)
+            .Any(static line => line.StartsWith("PFMODLOC::FOUND::", StringComparison.Ordinal));
+    }
+
+    private static string? NormalizeLocatorVersionArgument(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value!.Trim();
+        return IsAutoVersion(trimmed) ? null : trimmed;
     }
 
     private static bool IsInstalledModuleAvailable(
