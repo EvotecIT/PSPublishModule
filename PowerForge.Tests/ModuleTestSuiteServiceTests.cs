@@ -74,12 +74,12 @@ public sealed class ModuleTestSuiteServiceTests
             _ = service.Run(new ModuleTestSuiteSpec
             {
                 ProjectPath = projectRoot.FullName,
-                AdditionalModules = new[] { "Pester", "PSWriteColor" },
+                AdditionalModules = new[] { "Az.Accounts", "Pester" },
                 SkipImport = true
             });
 
             Assert.Equal(
-                new[] { "Microsoft.PowerShell.PSResourceGet", "Pester", "PSWriteColor" },
+                new[] { "Microsoft.PowerShell.PSResourceGet", "Az.Accounts", "Pester" },
                 runner.InstallNames);
         }
         finally

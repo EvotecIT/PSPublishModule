@@ -194,23 +194,33 @@ public sealed class ModuleTestSuiteService
         if (deps.Count == 0)
             return Array.Empty<ModuleDependencyInstallResult>();
 
-        AddRepositoryToolBootstrapDependency(deps, spec.SkipModules);
-
         var installer = new ModuleDependencyInstaller(_runner, _logger);
+        var bootstrapResults = Array.Empty<ModuleDependencyInstallResult>();
+        if (ShouldBootstrapRepositoryTool(deps, spec.SkipModules))
+        {
+            bootstrapResults = installer.EnsureInstalled(
+                dependencies: new[] { new ModuleDependency(RepositoryToolModuleName) },
+                skipModules: spec.SkipModules,
+                force: spec.Force)
+                .ToArray();
+        }
+
         var results = installer.EnsureInstalled(
             dependencies: deps,
             skipModules: spec.SkipModules,
-            force: spec.Force);
+            force: spec.Force)
+            .ToArray();
 
-        var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
+        var allResults = bootstrapResults.Concat(results).ToArray();
+        var failures = allResults.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
             throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
 
-        return results.ToArray();
+        return allResults;
     }
 
-    private void AddRepositoryToolBootstrapDependency(
-        List<ModuleDependency> dependencies,
+    private bool ShouldBootstrapRepositoryTool(
+        IReadOnlyList<ModuleDependency> dependencies,
         IEnumerable<string>? skipModules)
     {
         var skip = new HashSet<string>(
@@ -225,10 +235,10 @@ public sealed class ModuleTestSuiteService
             !IsRepositoryToolModule(dependency.Name) &&
             !skip.Contains(dependency.Name));
         if (!hasInstallTarget)
-            return;
+            return false;
 
         if (IsRepositoryToolAvailable())
-            return;
+            return false;
 
         if (skip.Contains(RepositoryToolModuleName) ||
             dependencies.Any(static dependency =>
@@ -236,10 +246,10 @@ public sealed class ModuleTestSuiteService
                 !string.IsNullOrWhiteSpace(dependency.Name) &&
                 IsRepositoryToolModule(dependency.Name)))
         {
-            return;
+            return false;
         }
 
-        dependencies.Insert(0, new ModuleDependency(RepositoryToolModuleName));
+        return true;
     }
 
     private static bool IsRepositoryToolModule(string moduleName)
