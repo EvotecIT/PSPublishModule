@@ -455,6 +455,67 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void Run_WithPrecomputedPlanInstallsPSResourceGetBeforeOnlineRequiredModuleResolution()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateOnlineRequiredModuleSpec(root.FullName, moduleName);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            runner.Run(spec, plan);
+
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_InstallsPSResourceGetForRepositoryVersionSourceEvenWhenOnlineResolutionIsDisabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateOnlineRequiredModuleSpec(
+                root.FullName,
+                moduleName,
+                resolveMissingModulesOnline: false,
+                versionSource: ModuleDependencyVersionSource.PSGallery);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                FakeMetadataProvider.ThrowingOnlineResolver(),
+                hostedOperations);
+
+            Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_InstallsPSResourceGetBeforeManifestRequiredModuleOnlineResolution()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -502,6 +563,59 @@ public sealed class ModulePipelineHostedOperationsTests
 
             runner.Run(spec);
 
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_UsesFilteredPackagingModulesForRequiredModuleArtefact()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateRequiredModuleArtefactSpec(root.FullName, moduleName, ModuleSaveTool.Auto, RequiredModulesSource.Download);
+            spec.Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationBuildSegment
+                {
+                    BuildModule = new BuildModuleConfiguration
+                    {
+                        MergeMissing = true
+                    }
+                }
+            }
+            .Concat(spec.Segments)
+            .Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.ApprovedModule,
+                    Configuration = new ModuleDependencyConfiguration
+                    {
+                        ModuleName = "Dependency.Tools"
+                    }
+                }
+            })
+            .ToArray();
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Empty(result);
             Assert.Equal(0, hostedOperations.DependencyInstallCalls);
         }
         finally
@@ -978,7 +1092,9 @@ public sealed class ModulePipelineHostedOperationsTests
         string root,
         string moduleName,
         bool refreshPsd1Only = false,
-        bool includeSegmentRequiredModule = true)
+        bool includeSegmentRequiredModule = true,
+        bool? resolveMissingModulesOnline = true,
+        ModuleDependencyVersionSource versionSource = ModuleDependencyVersionSource.Auto)
     {
         var segments = new List<IConfigurationSegment>
         {
@@ -986,7 +1102,7 @@ public sealed class ModulePipelineHostedOperationsTests
             {
                 BuildModule = new BuildModuleConfiguration
                 {
-                    ResolveMissingModulesOnline = true,
+                    ResolveMissingModulesOnline = resolveMissingModulesOnline,
                     RefreshPSD1Only = refreshPsd1Only
                 }
             }
@@ -999,7 +1115,8 @@ public sealed class ModulePipelineHostedOperationsTests
                 Configuration = new ModuleDependencyConfiguration
                 {
                     ModuleName = "Online.Tools",
-                    ModuleVersion = "Latest"
+                    ModuleVersion = "Latest",
+                    VersionSource = versionSource
                 }
             });
         }

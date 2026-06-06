@@ -89,11 +89,13 @@ public sealed partial class ModulePipelineRunner
         return results.ToArray();
     }
 
-    private ModuleDependencyInstallResult[] EnsureFeatureToolDependenciesInstalled(ModulePipelinePlan plan)
+    private ModuleDependencyInstallResult[] EnsureFeatureToolDependenciesInstalled(
+        ModulePipelinePlan plan,
+        IReadOnlyList<RequiredModuleReference>? packagingRequiredModules = null)
     {
         if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
 
-        var deps = ResolveFeatureToolDependencies(plan);
+        var deps = ResolveFeatureToolDependencies(plan, packagingRequiredModules);
         if (deps.Length == 0)
             return Array.Empty<ModuleDependencyInstallResult>();
 
@@ -141,7 +143,9 @@ public sealed partial class ModulePipelineRunner
         return results.ToArray();
     }
 
-    private ModuleDependency[] ResolveFeatureToolDependencies(ModulePipelinePlan plan)
+    private ModuleDependency[] ResolveFeatureToolDependencies(
+        ModulePipelinePlan plan,
+        IReadOnlyList<RequiredModuleReference>? packagingRequiredModules)
     {
         var dependencies = new Dictionary<string, ModuleDependency>(StringComparer.OrdinalIgnoreCase);
 
@@ -170,8 +174,12 @@ public sealed partial class ModulePipelineRunner
 
         foreach (var artefact in plan.Artefacts ?? Array.Empty<ConfigurationArtefactSegment>())
         {
-            if (!ArtefactRequiresRequiredModuleDownloadTool(artefact, plan.RequiredModulesForPackaging))
+            if (!ArtefactRequiresRequiredModuleDownloadTool(
+                    artefact,
+                    packagingRequiredModules ?? plan.RequiredModulesForPackaging))
+            {
                 continue;
+            }
 
             switch (artefact.Configuration.RequiredModules.Tool ?? ModuleSaveTool.Auto)
             {
@@ -238,11 +246,42 @@ public sealed partial class ModulePipelineRunner
         if (drafts.Length == 0)
             return false;
 
-        if (publishVersionSource is not null || warnIfRequiredModulesOutdated)
+        if (publishVersionSource is not null ||
+            warnIfRequiredModulesOutdated ||
+            HasRepositoryPreferredOnlineRequiredModules(drafts, publishVersionSource))
+        {
             return true;
+        }
 
         return resolveMissingModulesOnline && HasOnlineResolvableAutoRequiredModules(drafts);
     }
+
+    private static bool HasRepositoryPreferredOnlineRequiredModules(
+        IEnumerable<RequiredModuleDraft> drafts,
+        DependencyVersionSourceRepository? publishVersionSource)
+        => HasAutoRequiredModules((drafts ?? Array.Empty<RequiredModuleDraft>())
+            .Where(draft => draft is not null &&
+                            ResolveDependencyVersionSource(draft.VersionSource, publishVersionSource).PreferOnlineMetadata));
+
+    private static bool ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(ModulePipelinePlan plan)
+    {
+        if (plan is null || plan.BuildSpec.RefreshManifestOnly)
+            return false;
+
+        return HasOnlineResolvableRequiredModuleReferences(plan.RequiredModules) ||
+               HasOnlineResolvableRequiredModuleReferences(plan.RequiredModulesForPackaging);
+    }
+
+    private static bool HasOnlineResolvableRequiredModuleReferences(IEnumerable<RequiredModuleReference> modules)
+        => (modules ?? Array.Empty<RequiredModuleReference>())
+            .Any(static module => module is not null &&
+                                  !string.IsNullOrWhiteSpace(module.ModuleName) &&
+                                  (IsAutoVersion(module.ModuleVersion) ||
+                                   IsAutoGuid(module.Guid)));
+
+    private static bool IsAutoGuid(string? value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           value.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
 
     private bool ArtefactRequiresRequiredModuleDownloadTool(
         ConfigurationArtefactSegment artefact,
