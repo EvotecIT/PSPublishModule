@@ -1266,8 +1266,9 @@ public sealed class ModulePipelineHostedOperationsTests
             var plan = runner.Plan(spec);
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
-            Assert.Single(result);
-            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal(2, result.Length);
+            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
             var dependency = Assert.Single(hostedOperations.LastDependencies);
             Assert.Equal("PowerShellGet", dependency.Name);
             Assert.Equal("2.2.5", dependency.MinimumVersion);

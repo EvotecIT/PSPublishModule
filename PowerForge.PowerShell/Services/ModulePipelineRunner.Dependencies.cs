@@ -123,9 +123,7 @@ public sealed partial class ModulePipelineRunner
         _logger.Info($"Ensuring build feature tool modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
 
         var results = new List<ModuleDependencyInstallResult>();
-        var repositoryBootstrap = ShouldInstallRepositoryToolFirst(deps)
-            ? deps.FirstOrDefault(IsRepositoryToolDependency)
-            : null;
+        var repositoryBootstrap = ResolveRepositoryToolBootstrapDependency(deps);
         var remainingDeps = deps;
         if (repositoryBootstrap is not null)
         {
@@ -137,7 +135,8 @@ public sealed partial class ModulePipelineRunner
                 prerelease: prerelease,
                 skipModules: null));
             remainingDeps = deps
-                .Where(dependency => !IsRepositoryToolDependency(dependency))
+                .Where(dependency =>
+                    !string.Equals(dependency.Name, repositoryBootstrap.Name, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
         }
 
@@ -904,16 +903,31 @@ public sealed partial class ModulePipelineRunner
             AddRepositoryToolDependencyIfNeeded(dependencies, added);
     }
 
-    private bool ShouldInstallRepositoryToolFirst(IReadOnlyList<ModuleDependency> dependencies)
-        => dependencies is { Count: > 1 } &&
-           !IsRepositoryToolAvailable() &&
-           dependencies.Any(IsRepositoryToolDependency) &&
-           dependencies.Any(dependency => !IsRepositoryToolDependency(dependency));
+    private ModuleDependency? ResolveRepositoryToolBootstrapDependency(IReadOnlyList<ModuleDependency> dependencies)
+    {
+        if (dependencies is not { Count: > 0 } || IsRepositoryToolAvailable())
+            return null;
+
+        var psResourceGet = dependencies.FirstOrDefault(IsPSResourceGetDependency);
+        if (psResourceGet is not null && dependencies.Count > 1)
+            return psResourceGet;
+
+        return dependencies.Any(IsPowerShellGetDependency)
+            ? new ModuleDependency("Microsoft.PowerShell.PSResourceGet")
+            : null;
+    }
 
     private static bool IsRepositoryToolDependency(ModuleDependency dependency)
         => dependency is not null &&
-           (string.Equals(dependency.Name, "Microsoft.PowerShell.PSResourceGet", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dependency.Name, "PowerShellGet", StringComparison.OrdinalIgnoreCase));
+           (IsPSResourceGetDependency(dependency) || IsPowerShellGetDependency(dependency));
+
+    private static bool IsPSResourceGetDependency(ModuleDependency dependency)
+        => dependency is not null &&
+           string.Equals(dependency.Name, "Microsoft.PowerShell.PSResourceGet", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPowerShellGetDependency(ModuleDependency dependency)
+        => dependency is not null &&
+           string.Equals(dependency.Name, "PowerShellGet", StringComparison.OrdinalIgnoreCase);
 
     private bool IsRepositoryToolAvailable()
     {
