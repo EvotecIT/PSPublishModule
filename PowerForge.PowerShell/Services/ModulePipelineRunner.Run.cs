@@ -7,17 +7,31 @@ public sealed partial class ModulePipelineRunner
     /// </summary>
     public ModulePipelineResult Run(ModulePipelineSpec spec)
     {
+        EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(spec);
         var plan = Plan(spec);
-        return Run(spec, plan, progress: null);
+        return Run(spec, plan, progress: null, preflightPrecomputedPlan: false);
     }
 
     /// <summary>
     /// Executes the pipeline described by <paramref name="spec"/> using a precomputed <paramref name="plan"/>.
     /// </summary>
     public ModulePipelineResult Run(ModulePipelineSpec spec, ModulePipelinePlan plan, IModulePipelineProgressReporter? progress = null)
+        => Run(spec, plan, progress, preflightPrecomputedPlan: true);
+
+    private ModulePipelineResult Run(
+        ModulePipelineSpec spec,
+        ModulePipelinePlan plan,
+        IModulePipelineProgressReporter? progress,
+        bool preflightPrecomputedPlan)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        if (preflightPrecomputedPlan && ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(spec, plan))
+        {
+            EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(spec);
+            plan = Plan(spec);
+        }
 
         var manifestRequiredModules = ResolveOutputRequiredModules(plan.RequiredModules, plan.MergeMissing, plan.ApprovedModules);
         var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);

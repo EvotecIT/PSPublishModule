@@ -9,21 +9,39 @@ namespace PowerForge;
 /// Ensures that a set of PowerShell module dependencies are installed (out-of-process),
 /// preferring PSResourceGet and falling back to PowerShellGet when PSResourceGet is not available.
 /// </summary>
-public sealed class ModuleDependencyInstaller
+public sealed partial class ModuleDependencyInstaller
 {
     private static readonly TimeSpan ModuleLookupTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan ExactVersionProbeTimeout = TimeSpan.FromSeconds(30);
+    private const string PSResourceGetModuleName = "Microsoft.PowerShell.PSResourceGet";
 
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
+    private readonly Func<string, bool, TimeSpan?, IReadOnlyList<PowerShellGalleryPackageVersion>> _galleryVersionResolver;
+    private readonly Action<Uri, string, TimeSpan> _directPackageDownloader;
+    private readonly Func<string> _currentUserModuleRootResolver;
 
     /// <summary>
     /// Creates a new installer using the provided runner and logger.
     /// </summary>
     public ModuleDependencyInstaller(IPowerShellRunner runner, ILogger logger)
+        : this(runner, logger, galleryVersionResolver: null, directPackageDownloader: null, currentUserModuleRootResolver: null)
+    {
+    }
+
+    internal ModuleDependencyInstaller(
+        IPowerShellRunner runner,
+        ILogger logger,
+        Func<string, bool, TimeSpan?, IReadOnlyList<PowerShellGalleryPackageVersion>>? galleryVersionResolver,
+        Action<Uri, string, TimeSpan>? directPackageDownloader,
+        Func<string>? currentUserModuleRootResolver)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _galleryVersionResolver = galleryVersionResolver ?? ((packageId, includePrerelease, timeout) =>
+            new PowerShellGalleryVersionFeedClient(_logger).GetVersions(packageId, includePrerelease, timeout));
+        _directPackageDownloader = directPackageDownloader ?? DownloadPackage;
+        _currentUserModuleRootResolver = currentUserModuleRootResolver ?? ResolveCurrentUserModuleRoot;
     }
 
     /// <summary>
@@ -131,6 +149,29 @@ public sealed class ModuleDependencyInstaller
                     installer: a.Installer,
                     message: a.Message))
             .ToArray();
+    }
+
+    internal bool NeedsInstall(ModuleDependency dependency, bool force)
+    {
+        if (dependency is null || string.IsNullOrWhiteSpace(dependency.Name))
+            return false;
+
+        var before = GetLatestInstalledModuleVersions(new[] { dependency.Name });
+        var installedBefore = before.TryGetValue(dependency.Name, out var version) ? version : null;
+        var decision = Decide(dependency, installedBefore, force);
+        if (!decision.NeedsInstall)
+            return false;
+
+        var requiredVersion = dependency.RequiredVersion;
+        if (!force &&
+            !string.IsNullOrWhiteSpace(installedBefore) &&
+            !string.IsNullOrWhiteSpace(requiredVersion) &&
+            HasInstalledRequiredVersion(dependency.Name, requiredVersion!.Trim()))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private bool HasInstalledRequiredVersion(string name, string requiredVersion)
@@ -352,8 +393,17 @@ public sealed class ModuleDependencyInstaller
         catch (PowerShellToolNotAvailableException)
         {
             _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Install-Module for '{dep.Name}'.");
-            InstallWithPowerShellGet(dep, repository, credential, timeout);
-            return "PowerShellGet";
+            try
+            {
+                InstallWithPowerShellGet(dep, repository, credential, timeout);
+                return "PowerShellGet";
+            }
+            catch (PowerShellToolNotAvailableException) when (CanDirectBootstrapPSResourceGet(dep, repository, credential))
+            {
+                _logger.Warn("PowerShellGet not available; installing Microsoft.PowerShell.PSResourceGet directly from PowerShell Gallery.");
+                InstallPSResourceGetDirect(dep, prerelease, force, timeout);
+                return "DirectPowerShellGallery";
+            }
         }
     }
 

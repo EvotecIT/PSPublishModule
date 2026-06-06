@@ -21,7 +21,8 @@
             $result.ModuleName | Should -Be 'PSPublishModule'
             $result.ModuleVersion | Should -Not -BeNullOrEmpty
             $result.ManifestPath | Should -Match '\.psd1$'
-            $result.RequiredModules | Should -Not -BeNullOrEmpty
+            $result.PSObject.Properties.Name | Should -Contain 'RequiredModules'
+            @($result.RequiredModules).Count | Should -Be 0
         }
 
         It "Should throw error for invalid path" {

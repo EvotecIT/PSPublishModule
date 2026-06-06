@@ -143,9 +143,9 @@ Invoke-ModuleBuild @buildParams -Settings {
     }
     New-ConfigurationManifest @Manifest
 
-    # Add standard module dependencies (directly, but can be used with loop as well)
-    New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
+    # Keep feature-specific tooling out of the module manifest RequiredModules list.
+    # Test workflows install/use Pester on demand, and repository/download workflows
+    # probe PSResourceGet first with PowerShellGet fallback when those features run.
 
     # Do not add inbox Microsoft.PowerShell.* modules as Required/External dependencies.
     # They are part of the runtime and publishing them as gallery dependencies breaks

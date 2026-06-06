@@ -9,7 +9,7 @@
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @()
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '3.0.22'
+    ModuleVersion          = '3.0.23'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
@@ -20,15 +20,7 @@
             ExternalModuleDependencies = @()
         }
     }
-    RequiredModules        = @(@{
-            Guid            = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
-            ModuleName      = 'powershellget'
-            ModuleVersion   = '2.2.5'
-        }, @{
-            Guid            = 'a699dea5-2c73-4616-a270-1f7abb777e71'
-            ModuleName      = 'Pester'
-            ModuleVersion   = '5.7.1'
-        })
+    RequiredModules        = @()
     RootModule             = 'PSPublishModule.psm1'
     NestedModules          = @()
     ScriptsToProcess       = @()
