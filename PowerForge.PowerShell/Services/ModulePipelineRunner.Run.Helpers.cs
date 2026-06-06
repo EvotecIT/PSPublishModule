@@ -8,11 +8,13 @@ public sealed partial class ModulePipelineRunner
 {
     private ModuleDependencyInstallResult[] EnsureBuildDependenciesInstalledIfNeeded(ModulePipelinePlan plan)
     {
-        if (!plan.InstallMissingModules) return Array.Empty<ModuleDependencyInstallResult>();
-
         try
         {
-            return EnsureBuildDependenciesInstalled(plan);
+            var results = new List<ModuleDependencyInstallResult>();
+            if (plan.InstallMissingModules)
+                results.AddRange(EnsureBuildDependenciesInstalled(plan));
+            results.AddRange(EnsureFeatureToolDependenciesInstalled(plan));
+            return results.ToArray();
         }
         catch (Exception ex)
         {

@@ -8,6 +8,9 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private const string PesterMinimumVersion = "5.7.1";
+    private const string PowerShellGetMinimumVersion = "2.2.5";
+
     private ModuleDependencyInstallResult[] EnsureBuildDependenciesInstalled(ModulePipelinePlan plan)
     {
         if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
@@ -68,7 +71,7 @@ public sealed partial class ModulePipelineRunner
             repository: plan.InstallMissingModulesRepository,
             credential: plan.InstallMissingModulesCredential,
             prerelease: plan.InstallMissingModulesPrerelease,
-            skipModules: plan.ModuleSkip);
+            skipModules: null);
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
@@ -84,6 +87,100 @@ public sealed partial class ModulePipelineRunner
         }
 
         return results.ToArray();
+    }
+
+    private ModuleDependencyInstallResult[] EnsureFeatureToolDependenciesInstalled(ModulePipelinePlan plan)
+    {
+        if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
+
+        var deps = ResolveFeatureToolDependencies(plan);
+        if (deps.Length == 0)
+            return Array.Empty<ModuleDependencyInstallResult>();
+
+        _logger.Info($"Ensuring build feature tool modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
+
+        var results = _hostedOperations.EnsureDependenciesInstalled(
+            dependencies: deps,
+            force: plan.InstallMissingModulesForce,
+            repository: plan.InstallMissingModulesRepository,
+            credential: plan.InstallMissingModulesCredential,
+            prerelease: plan.InstallMissingModulesPrerelease,
+            skipModules: plan.ModuleSkip);
+
+        var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
+        if (failures.Length > 0)
+            throw new InvalidOperationException($"Build feature tool dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
+
+        if (results.Count > 0)
+        {
+            var installed = results.Count(r => r.Status == ModuleDependencyInstallStatus.Installed);
+            var updated = results.Count(r => r.Status == ModuleDependencyInstallStatus.Updated);
+            var satisfied = results.Count(r => r.Status == ModuleDependencyInstallStatus.Satisfied);
+            var skipped = results.Count(r => r.Status == ModuleDependencyInstallStatus.Skipped);
+            _logger.Info($"Build feature tool dependency summary: {installed} installed, {updated} updated, {satisfied} satisfied, {skipped} skipped.");
+        }
+
+        return results.ToArray();
+    }
+
+    private static ModuleDependency[] ResolveFeatureToolDependencies(ModulePipelinePlan plan)
+    {
+        var dependencies = new Dictionary<string, ModuleDependency>(StringComparer.OrdinalIgnoreCase);
+
+        if (plan.TestsAfterMerge is { Length: > 0 })
+            AddFeatureDependency(dependencies, new ModuleDependency("Pester", minimumVersion: PesterMinimumVersion));
+
+        foreach (var publish in plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
+        {
+            var cfg = publish.Configuration;
+            if (cfg is null || !cfg.Enabled || cfg.Destination != PublishDestination.PowerShellGallery)
+                continue;
+
+            switch (cfg.Tool)
+            {
+                case PublishTool.PowerShellGet:
+                    AddFeatureDependency(dependencies, new ModuleDependency("PowerShellGet", minimumVersion: PowerShellGetMinimumVersion));
+                    break;
+                case PublishTool.PSResourceGet:
+                case PublishTool.Auto:
+                    AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
+                    break;
+            }
+        }
+
+        return dependencies.Values
+            .OrderBy(static dependency => dependency.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static void AddFeatureDependency(IDictionary<string, ModuleDependency> dependencies, ModuleDependency dependency)
+    {
+        if (!dependencies.TryGetValue(dependency.Name, out var existing))
+        {
+            dependencies[dependency.Name] = dependency;
+            return;
+        }
+
+        if (HasStrongerVersionConstraint(dependency, existing))
+            dependencies[dependency.Name] = dependency;
+    }
+
+    private static bool HasStrongerVersionConstraint(ModuleDependency candidate, ModuleDependency existing)
+    {
+        if (!string.IsNullOrWhiteSpace(candidate.RequiredVersion) &&
+            !string.Equals(candidate.RequiredVersion, existing.RequiredVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(existing.RequiredVersion) &&
+            string.IsNullOrWhiteSpace(existing.MinimumVersion) &&
+            !string.IsNullOrWhiteSpace(candidate.MinimumVersion))
+        {
+            return true;
+        }
+
+        return false;
     }
 
 }
