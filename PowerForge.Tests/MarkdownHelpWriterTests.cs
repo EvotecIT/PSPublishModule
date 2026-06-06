@@ -102,4 +102,34 @@ ForEach-Object {
         Assert.Contains("PS> ForEach-Object {\r\n        $_.Name", exampleSection, StringComparison.Ordinal);
         Assert.Contains("\r\n        $_.Status\r\n        }", exampleSection, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RenderCommandMarkdown_IgnoresQuotedDelimitersWhenPreservingSingleBlockIndentation()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Invoke-DemoBlock",
+            Synopsis = "Invokes a demo block.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+ForEach-Object {
+        "}"
+        Get-Process
+        }
+""",
+                    Remarks = "Keeps authored block formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> ForEach-Object {\r\n        \"}\"", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        Get-Process\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
 }

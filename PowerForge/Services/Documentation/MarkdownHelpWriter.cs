@@ -469,8 +469,41 @@ internal sealed class MarkdownHelpWriter
     private static int CountBlockDepthDelta(string line)
     {
         var delta = 0;
-        foreach (var ch in line)
+        var inSingleQuotedString = false;
+        var inDoubleQuotedString = false;
+        for (var i = 0; i < line.Length; i++)
         {
+            var ch = line[i];
+            if (ch == '`' && inDoubleQuotedString)
+            {
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
+                break;
+
+            if (!inDoubleQuotedString && ch == '\'')
+            {
+                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
+                {
+                    i++;
+                    continue;
+                }
+
+                inSingleQuotedString = !inSingleQuotedString;
+                continue;
+            }
+
+            if (!inSingleQuotedString && ch == '"')
+            {
+                inDoubleQuotedString = !inDoubleQuotedString;
+                continue;
+            }
+
+            if (inSingleQuotedString || inDoubleQuotedString)
+                continue;
+
             switch (ch)
             {
                 case '{':
