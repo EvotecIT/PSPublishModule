@@ -216,8 +216,10 @@ public sealed class ModulePipelineHostedOperationsTests
         }
     }
 
-    [Fact]
-    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPowerShellGetFallbackForAutoRepositoryPublish()
+    [Theory]
+    [InlineData("Microsoft.PowerShell.PSResourceGet")]
+    [InlineData("PowerShellGet")]
+    public void EnsureBuildDependenciesInstalledIfNeeded_SkipsAutoRepositoryPublishPreflightWhenPublishToolExists(string installedPublishTool)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -230,7 +232,36 @@ public sealed class ModulePipelineHostedOperationsTests
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 new ThrowingPowerShellRunner(),
-                new FakeMetadataProvider(),
+                new FakeMetadataProvider(installedPublishTool),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Empty(result);
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPSResourceGetForAutoRepositoryPublishWhenNoPublishToolExists()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreatePublishToolSpec(root.FullName, moduleName, PublishTool.Auto);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(Array.Empty<string>()),
                 hostedOperations);
 
             var plan = runner.Plan(spec);
@@ -238,9 +269,7 @@ public sealed class ModulePipelineHostedOperationsTests
 
             Assert.Single(result);
             Assert.Equal(1, hostedOperations.DependencyInstallCalls);
-            var dependency = Assert.Single(hostedOperations.LastDependencies);
-            Assert.Equal("PowerShellGet", dependency.Name);
-            Assert.Equal("2.2.5", dependency.MinimumVersion);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
         }
         finally
         {
@@ -688,9 +717,26 @@ public sealed class ModulePipelineHostedOperationsTests
 
     private sealed class FakeMetadataProvider : IModuleDependencyMetadataProvider
     {
+        private readonly bool _filterInstalledModules;
+        private readonly HashSet<string> _installedModuleNames;
+
+        public FakeMetadataProvider()
+        {
+            _installedModuleNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        public FakeMetadataProvider(params string[] installedModuleNames)
+        {
+            _filterInstalledModules = true;
+            _installedModuleNames = new HashSet<string>(
+                installedModuleNames ?? Array.Empty<string>(),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
             => (names ?? Array.Empty<string>())
                 .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Where(name => !_filterInstalledModules || _installedModuleNames.Contains(name))
                 .ToDictionary(
                     static name => name,
                     static name => new InstalledModuleMetadata(name, null, null, null),

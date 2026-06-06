@@ -123,7 +123,7 @@ public sealed partial class ModulePipelineRunner
         return results.ToArray();
     }
 
-    private static ModuleDependency[] ResolveFeatureToolDependencies(ModulePipelinePlan plan)
+    private ModuleDependency[] ResolveFeatureToolDependencies(ModulePipelinePlan plan)
     {
         var dependencies = new Dictionary<string, ModuleDependency>(StringComparer.OrdinalIgnoreCase);
 
@@ -145,7 +145,13 @@ public sealed partial class ModulePipelineRunner
                     AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
                     break;
                 case PublishTool.Auto:
-                    AddFeatureDependency(dependencies, new ModuleDependency("PowerShellGet", minimumVersion: PowerShellGetMinimumVersion));
+                    if (!IsAutoPublishToolAvailable() &&
+                        !dependencies.ContainsKey("Microsoft.PowerShell.PSResourceGet") &&
+                        !dependencies.ContainsKey("PowerShellGet"))
+                    {
+                        AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
+                    }
+
                     break;
             }
         }
@@ -153,6 +159,18 @@ public sealed partial class ModulePipelineRunner
         return dependencies.Values
             .OrderBy(static dependency => dependency.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private bool IsAutoPublishToolAvailable()
+    {
+        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[]
+        {
+            "Microsoft.PowerShell.PSResourceGet",
+            "PowerShellGet"
+        });
+
+        return installed.ContainsKey("Microsoft.PowerShell.PSResourceGet") ||
+               installed.ContainsKey("PowerShellGet");
     }
 
     private static void AddFeatureDependency(IDictionary<string, ModuleDependency> dependencies, ModuleDependency dependency)
