@@ -244,7 +244,7 @@ public sealed partial class ModulePipelineRunner
         return resolveMissingModulesOnline && HasOnlineResolvableAutoRequiredModules(drafts);
     }
 
-    private static bool ArtefactRequiresRequiredModuleDownloadTool(
+    private bool ArtefactRequiresRequiredModuleDownloadTool(
         ConfigurationArtefactSegment artefact,
         IReadOnlyList<RequiredModuleReference> requiredModulesForPackaging)
     {
@@ -262,11 +262,96 @@ public sealed partial class ModulePipelineRunner
                 .Select(static name => name.Trim()),
             StringComparer.OrdinalIgnoreCase);
 
-        return source == RequiredModulesSource.Download &&
-               (requiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>())
-            .Any(module => module is not null &&
-                           !string.IsNullOrWhiteSpace(module.ModuleName) &&
-                           !excluded.Contains(module.ModuleName!));
+        var modules = (requiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>())
+            .Where(module => module is not null &&
+                             !string.IsNullOrWhiteSpace(module.ModuleName) &&
+                             !excluded.Contains(module.ModuleName!))
+            .ToArray();
+        if (modules.Length == 0)
+            return false;
+
+        return source == RequiredModulesSource.Download ||
+               modules.Any(RequiredModuleNeedsDownload);
+    }
+
+    private bool RequiredModuleNeedsDownload(RequiredModuleReference requiredModule)
+    {
+        if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
+            return false;
+
+        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[] { requiredModule.ModuleName.Trim() });
+        return !installed.TryGetValue(requiredModule.ModuleName.Trim(), out var metadata) ||
+               !IsInstalledModuleAvailable(
+                   metadata,
+                   requiredModule.RequiredVersion,
+                   requiredModule.ModuleVersion,
+                   requiredModule.MaximumVersion);
+    }
+
+    private static bool IsInstalledModuleAvailable(
+        InstalledModuleMetadata metadata,
+        string? requiredVersion,
+        string? minimumVersion,
+        string? maximumVersion)
+    {
+        if (metadata is null || string.IsNullOrWhiteSpace(metadata.ModuleBasePath))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(requiredVersion) &&
+            string.IsNullOrWhiteSpace(minimumVersion) &&
+            string.IsNullOrWhiteSpace(maximumVersion))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(metadata.Version) ||
+            !TryParseVersion(metadata.Version, out var installedVersion))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredVersion))
+            return TryParseVersion(requiredVersion, out var required) &&
+                   installedVersion.CompareTo(required) == 0;
+
+        if (!string.IsNullOrWhiteSpace(minimumVersion) &&
+            (!TryParseVersion(minimumVersion, out var minimum) ||
+             installedVersion.CompareTo(minimum) < 0))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(maximumVersion) &&
+            (!TryParseVersion(maximumVersion, out var maximum) ||
+             installedVersion.CompareTo(maximum) > 0))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static RequiredModuleDraft[] ReadRequiredModuleDraftsFromManifest(ModulePipelineSpec spec)
+    {
+        var moduleName = spec?.Build?.Name;
+        var sourcePath = spec?.Build?.SourcePath;
+        if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(sourcePath))
+            return Array.Empty<RequiredModuleDraft>();
+
+        var manifestPath = Path.Combine(sourcePath, $"{moduleName}.psd1");
+        if (!File.Exists(manifestPath))
+            return Array.Empty<RequiredModuleDraft>();
+
+        return ModuleManifestValueReader.ReadRequiredModules(manifestPath)
+            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+            .Select(static module => new RequiredModuleDraft(
+                moduleName: module.ModuleName.Trim(),
+                moduleVersion: module.ModuleVersion,
+                minimumVersion: null,
+                requiredVersion: module.RequiredVersion,
+                guid: module.Guid,
+                versionSource: ModuleDependencyVersionSource.Auto))
+            .ToArray();
     }
 
     private void EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(ModulePipelineSpec spec)
@@ -342,6 +427,13 @@ public sealed partial class ModulePipelineRunner
 
         if (refreshPsd1Only)
             return;
+
+        var manifestRequiredModuleDrafts = ReadRequiredModuleDraftsFromManifest(spec);
+        if (manifestRequiredModuleDrafts.Length > 0)
+        {
+            requiredModulesDraft.AddRange(manifestRequiredModuleDrafts);
+            requiredModulesDraftForPackaging.AddRange(manifestRequiredModuleDrafts);
+        }
 
         if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft))
             resolveMissingModulesOnline = true;

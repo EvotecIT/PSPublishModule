@@ -354,7 +354,7 @@ public sealed class ModulePipelineHostedOperationsTests
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 new ThrowingPowerShellRunner(),
-                new FakeMetadataProvider(),
+                new FakeMetadataProvider("Dependency.Tools"),
                 hostedOperations);
 
             var plan = runner.Plan(spec);
@@ -362,6 +362,36 @@ public sealed class ModulePipelineHostedOperationsTests
 
             Assert.Empty(result);
             Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPSResourceGetForAutoRequiredModuleArtefactWhenLocalModuleIsMissing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateRequiredModuleArtefactSpec(root.FullName, moduleName, ModuleSaveTool.Auto, RequiredModulesSource.Auto);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
         }
         finally
         {
@@ -406,6 +436,35 @@ public sealed class ModulePipelineHostedOperationsTests
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
 
             var spec = CreateOnlineRequiredModuleSpec(root.FullName, moduleName);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                FakeMetadataProvider.ThrowingOnlineResolver(),
+                hostedOperations);
+
+            Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_InstallsPSResourceGetBeforeManifestRequiredModuleOnlineResolution()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            AddRequiredModuleToManifest(root.FullName, moduleName, "Manifest.Tools", "Latest");
+
+            var spec = CreateOnlineRequiredModuleSpec(root.FullName, moduleName, includeSegmentRequiredModule: false);
             var hostedOperations = new FakeHostedOperations();
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
@@ -918,8 +977,33 @@ public sealed class ModulePipelineHostedOperationsTests
     private static ModulePipelineSpec CreateOnlineRequiredModuleSpec(
         string root,
         string moduleName,
-        bool refreshPsd1Only = false)
+        bool refreshPsd1Only = false,
+        bool includeSegmentRequiredModule = true)
     {
+        var segments = new List<IConfigurationSegment>
+        {
+            new ConfigurationBuildSegment
+            {
+                BuildModule = new BuildModuleConfiguration
+                {
+                    ResolveMissingModulesOnline = true,
+                    RefreshPSD1Only = refreshPsd1Only
+                }
+            }
+        };
+        if (includeSegmentRequiredModule)
+        {
+            segments.Add(new ConfigurationModuleSegment
+            {
+                Kind = ModuleDependencyKind.RequiredModule,
+                Configuration = new ModuleDependencyConfiguration
+                {
+                    ModuleName = "Online.Tools",
+                    ModuleVersion = "Latest"
+                }
+            });
+        }
+
         return new ModulePipelineSpec
         {
             Build = new ModuleBuildSpec
@@ -929,26 +1013,7 @@ public sealed class ModulePipelineHostedOperationsTests
                 Version = "1.0.0"
             },
             Install = new ModulePipelineInstallOptions { Enabled = false },
-            Segments = new IConfigurationSegment[]
-            {
-                new ConfigurationBuildSegment
-                {
-                    BuildModule = new BuildModuleConfiguration
-                    {
-                        ResolveMissingModulesOnline = true,
-                        RefreshPSD1Only = refreshPsd1Only
-                    }
-                },
-                new ConfigurationModuleSegment
-                {
-                    Kind = ModuleDependencyKind.RequiredModule,
-                    Configuration = new ModuleDependencyConfiguration
-                    {
-                        ModuleName = "Online.Tools",
-                        ModuleVersion = "Latest"
-                    }
-                }
-            }
+            Segments = segments.ToArray()
         };
     }
 
@@ -969,6 +1034,33 @@ public sealed class ModulePipelineHostedOperationsTests
         }) + Environment.NewLine;
 
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
+    }
+
+    private static void AddRequiredModuleToManifest(
+        string moduleRoot,
+        string moduleName,
+        string requiredModuleName,
+        string requiredModuleVersion)
+    {
+        var manifestPath = Path.Combine(moduleRoot, $"{moduleName}.psd1");
+        var psd1 = string.Join(Environment.NewLine, new[]
+        {
+            "@{",
+            $"    RootModule = '{moduleName}.psm1'",
+            "    ModuleVersion = '1.0.0'",
+            "    RequiredModules = @(",
+            "        @{",
+            $"            ModuleName = '{requiredModuleName}'",
+            $"            ModuleVersion = '{requiredModuleVersion}'",
+            "        }",
+            "    )",
+            "    FunctionsToExport = @()",
+            "    CmdletsToExport = @()",
+            "    AliasesToExport = @()",
+            "}"
+        }) + Environment.NewLine;
+
+        File.WriteAllText(manifestPath, psd1);
     }
 
     private sealed class FakeMetadataProvider : IModuleDependencyMetadataProvider
