@@ -66,7 +66,8 @@ public sealed partial class ModulePipelineRunner
         _logger.Info($"Installing missing modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
 
         var results = new List<ModuleDependencyInstallResult>();
-        results.AddRange(EnsureRepositoryToolDependencyInstalledForAuto(plan));
+        if (RequiredModuleInstallNeedsRepositoryTool(plan, deps))
+            results.AddRange(EnsureRepositoryToolDependencyInstalledForAuto(plan));
         results.AddRange(_hostedOperations.EnsureDependenciesInstalled(
             dependencies: deps,
             force: plan.InstallMissingModulesForce,
@@ -104,8 +105,8 @@ public sealed partial class ModulePipelineRunner
         return EnsureFeatureToolDependenciesInstalled(
             deps,
             plan.InstallMissingModulesForce,
-            plan.InstallMissingModulesRepository,
-            plan.InstallMissingModulesCredential,
+            repository: null,
+            credential: null,
             plan.InstallMissingModulesPrerelease);
     }
 
@@ -229,8 +230,8 @@ public sealed partial class ModulePipelineRunner
         EnsureFeatureToolDependenciesInstalled(
             new[] { new ModuleDependency("Microsoft.PowerShell.PSResourceGet") },
             force,
-            repository,
-            credential,
+            repository: null,
+            credential: null,
             prerelease);
     }
 
@@ -242,10 +243,57 @@ public sealed partial class ModulePipelineRunner
         return EnsureFeatureToolDependenciesInstalled(
             new[] { new ModuleDependency("Microsoft.PowerShell.PSResourceGet") },
             plan.InstallMissingModulesForce,
-            plan.InstallMissingModulesRepository,
-            plan.InstallMissingModulesCredential,
+            repository: null,
+            credential: null,
             plan.InstallMissingModulesPrerelease);
     }
+
+    private bool RequiredModuleInstallNeedsRepositoryTool(ModulePipelinePlan plan, IReadOnlyList<ModuleDependency> dependencies)
+    {
+        if (plan is null || plan.InstallMissingModulesForce)
+            return true;
+
+        var candidates = (dependencies ?? Array.Empty<ModuleDependency>())
+            .Where(dependency => dependency is not null &&
+                                 !string.IsNullOrWhiteSpace(dependency.Name) &&
+                                 !IsModuleSkipped(plan.ModuleSkip, dependency.Name))
+            .ToArray();
+        if (candidates.Length == 0)
+            return false;
+
+        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(
+            candidates.Select(static dependency => dependency.Name.Trim()).ToArray());
+        return candidates.Any(dependency => RequiredModuleInstallNeedsRepositoryTool(dependency, installed));
+    }
+
+    private bool RequiredModuleInstallNeedsRepositoryTool(
+        ModuleDependency dependency,
+        IReadOnlyDictionary<string, InstalledModuleMetadata> installed)
+    {
+        var name = dependency.Name.Trim();
+        var requiredVersion = NormalizeLocatorVersionArgument(dependency.RequiredVersion);
+        var minimumVersion = NormalizeLocatorVersionArgument(dependency.MinimumVersion);
+        var maximumVersion = NormalizeLocatorVersionArgument(dependency.MaximumVersion);
+
+        if (!installed.TryGetValue(name, out var metadata) || !HasInstalledModuleMetadata(metadata))
+            return true;
+
+        if (IsInstalledModuleAvailable(metadata, requiredVersion, minimumVersion, maximumVersion))
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(requiredVersion) &&
+            HasInstalledRequiredModule(name, requiredVersion, minimumVersion: null, maximumVersion: null))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsModuleSkipped(ModuleSkipConfiguration? skip, string moduleName)
+        => skip?.IgnoreModuleName?.Any(skipName =>
+            !string.IsNullOrWhiteSpace(skipName) &&
+            string.Equals(skipName.Trim(), moduleName.Trim(), StringComparison.OrdinalIgnoreCase)) == true;
 
     private static bool RequiresRequiredModuleOnlineResolutionTool(
         IReadOnlyList<RequiredModuleDraft> requiredModules,

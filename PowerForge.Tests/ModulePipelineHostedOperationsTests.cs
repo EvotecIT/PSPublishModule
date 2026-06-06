@@ -142,9 +142,8 @@ public sealed class ModulePipelineHostedOperationsTests
             var plan = runner.Plan(spec);
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
-            Assert.Equal(2, result.Length);
-            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
-            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
             Assert.Equal("Pester", Assert.Single(hostedOperations.LastDependencies).Name);
             Assert.Contains("Pester", hostedOperations.LastSkipModules?.IgnoreModuleName ?? Array.Empty<string>());
         }
@@ -211,6 +210,127 @@ public sealed class ModulePipelineHostedOperationsTests
             Assert.Equal("Pester", dependency.Name);
             Assert.Equal("5.7.1", dependency.MinimumVersion);
             Assert.Null(hostedOperations.LastSkipModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_SkipsRepositoryToolPreflightForSatisfiedDeclaredDependencies()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            InstallMissingModules = true
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Pester",
+                            RequiredVersion = "1.0.0"
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider("Pester"),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Pester", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsFeatureToolsFromDefaultSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var testsPath = Path.Combine(root.FullName, "Tests");
+            Directory.CreateDirectory(testsPath);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            InstallMissingModulesRepository = "CompanyDependencies"
+                        }
+                    },
+                    new ConfigurationTestSegment
+                    {
+                        Configuration = new TestConfiguration
+                        {
+                            TestsPath = testsPath,
+                            When = TestExecutionWhen.AfterMerge
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Pester", Assert.Single(hostedOperations.LastDependencies).Name);
+            Assert.Null(hostedOperations.LastRepository);
         }
         finally
         {
