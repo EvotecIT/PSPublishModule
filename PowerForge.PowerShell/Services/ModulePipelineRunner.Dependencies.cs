@@ -65,13 +65,15 @@ public sealed partial class ModulePipelineRunner
 
         _logger.Info($"Installing missing modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
 
-        var results = _hostedOperations.EnsureDependenciesInstalled(
+        var results = new List<ModuleDependencyInstallResult>();
+        results.AddRange(EnsureRepositoryToolDependencyInstalledForAuto(plan));
+        results.AddRange(_hostedOperations.EnsureDependenciesInstalled(
             dependencies: deps,
             force: plan.InstallMissingModulesForce,
             repository: plan.InstallMissingModulesRepository,
             credential: plan.InstallMissingModulesCredential,
             prerelease: plan.InstallMissingModulesPrerelease,
-            skipModules: plan.ModuleSkip);
+            skipModules: plan.ModuleSkip));
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
@@ -232,6 +234,19 @@ public sealed partial class ModulePipelineRunner
             prerelease);
     }
 
+    private ModuleDependencyInstallResult[] EnsureRepositoryToolDependencyInstalledForAuto(ModulePipelinePlan plan)
+    {
+        if (plan is null || IsRepositoryToolAvailable())
+            return Array.Empty<ModuleDependencyInstallResult>();
+
+        return EnsureFeatureToolDependenciesInstalled(
+            new[] { new ModuleDependency("Microsoft.PowerShell.PSResourceGet") },
+            plan.InstallMissingModulesForce,
+            plan.InstallMissingModulesRepository,
+            plan.InstallMissingModulesCredential,
+            plan.InstallMissingModulesPrerelease);
+    }
+
     private static bool RequiresRequiredModuleOnlineResolutionTool(
         IReadOnlyList<RequiredModuleDraft> requiredModules,
         IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
@@ -262,21 +277,45 @@ public sealed partial class ModulePipelineRunner
             .Where(draft => draft is not null &&
                             ResolveDependencyVersionSource(draft.VersionSource, publishVersionSource).PreferOnlineMetadata));
 
-    private static bool ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(ModulePipelinePlan plan)
+    private bool ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(
+        ModulePipelineSpec spec,
+        ModulePipelinePlan plan)
     {
         if (plan is null || plan.BuildSpec.RefreshManifestOnly)
             return false;
 
-        return HasOnlineResolvableRequiredModuleReferences(plan.RequiredModules) ||
-               HasOnlineResolvableRequiredModuleReferences(plan.RequiredModulesForPackaging);
+        if (HasOnlineResolvableRequiredModuleReferences(plan.RequiredModules) ||
+            HasOnlineResolvableRequiredModuleReferences(plan.RequiredModulesForPackaging))
+        {
+            return true;
+        }
+
+        var input = CollectRequiredModulePreflightInput(spec);
+        return RequiresRequiredModuleOnlineResolutionTool(
+            input.RequiredModules,
+            input.RequiredModulesForPackaging,
+            input.ResolveMissingModulesOnline,
+            input.WarnIfRequiredModulesOutdated,
+            input.PublishVersionSource);
     }
 
     private static bool HasOnlineResolvableRequiredModuleReferences(IEnumerable<RequiredModuleReference> modules)
         => (modules ?? Array.Empty<RequiredModuleReference>())
             .Any(static module => module is not null &&
                                   !string.IsNullOrWhiteSpace(module.ModuleName) &&
-                                  (IsAutoVersion(module.ModuleVersion) ||
+                                  (IsAutoOrLatestVersionValue(module.ModuleVersion) ||
+                                   IsAutoOrLatestVersionValue(module.RequiredVersion) ||
                                    IsAutoGuid(module.Guid)));
+
+    private static bool IsAutoOrLatestVersionValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value!.Trim();
+        return trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("Latest", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsAutoGuid(string? value)
         => !string.IsNullOrWhiteSpace(value) &&
@@ -440,7 +479,7 @@ public sealed partial class ModulePipelineRunner
             .Select(static module => new RequiredModuleDraft(
                 moduleName: module.ModuleName.Trim(),
                 moduleVersion: module.ModuleVersion,
-                minimumVersion: null,
+                minimumVersion: module.ModuleVersion,
                 requiredVersion: module.RequiredVersion,
                 guid: module.Guid,
                 versionSource: ModuleDependencyVersionSource.Auto))
@@ -451,8 +490,31 @@ public sealed partial class ModulePipelineRunner
     {
         if (spec is null) return;
 
+        var input = CollectRequiredModulePreflightInput(spec);
+        if (input.RefreshPsd1Only)
+            return;
+
+        EnsureRequiredModuleOnlineResolutionToolInstalledIfNeeded(
+            input.RequiredModules,
+            input.RequiredModulesForPackaging,
+            input.ResolveMissingModulesOnline,
+            input.WarnIfRequiredModulesOutdated,
+            input.PublishVersionSource,
+            input.InstallMissingModulesForce,
+            input.InstallMissingModulesRepository,
+            input.InstallMissingModulesCredential,
+            input.InstallMissingModulesPrerelease);
+    }
+
+    private RequiredModulePreflightInput CollectRequiredModulePreflightInput(ModulePipelineSpec spec)
+    {
+        if (spec is null)
+            return RequiredModulePreflightInput.Empty;
+
         var requiredModulesDraft = new List<RequiredModuleDraft>();
+        var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
+        var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var publishes = new List<ConfigurationPublishSegment>();
         var resolveMissingModulesOnline = false;
         var resolveMissingModulesOnlineSet = false;
@@ -462,6 +524,12 @@ public sealed partial class ModulePipelineRunner
         var installMissingModulesPrerelease = false;
         string? installMissingModulesRepository = null;
         RepositoryCredential? installMissingModulesCredential = null;
+
+        foreach (var draft in ReadRequiredModuleDraftsFromManifest(spec))
+        {
+            AddOrReplaceRequiredModuleDraft(requiredModulesDraft, requiredIndex, draft);
+            AddOrReplaceRequiredModuleDraft(requiredModulesDraftForPackaging, requiredPackagingIndex, draft);
+        }
 
         foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
         {
@@ -508,24 +576,14 @@ public sealed partial class ModulePipelineRunner
                         requiredVersion: cfg.RequiredVersion,
                         guid: cfg.Guid,
                         versionSource: cfg.VersionSource);
-                    requiredModulesDraft.Add(draft);
-                    requiredModulesDraftForPackaging.Add(draft);
+                    AddOrReplaceRequiredModuleDraft(requiredModulesDraft, requiredIndex, draft);
+                    AddOrReplaceRequiredModuleDraft(requiredModulesDraftForPackaging, requiredPackagingIndex, draft);
                     break;
                 }
                 case ConfigurationPublishSegment publish:
                     publishes.Add(publish);
                     break;
             }
-        }
-
-        if (refreshPsd1Only)
-            return;
-
-        var manifestRequiredModuleDrafts = ReadRequiredModuleDraftsFromManifest(spec);
-        if (manifestRequiredModuleDrafts.Length > 0)
-        {
-            requiredModulesDraft.AddRange(manifestRequiredModuleDrafts);
-            requiredModulesDraftForPackaging.AddRange(manifestRequiredModuleDrafts);
         }
 
         if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft))
@@ -536,16 +594,85 @@ public sealed partial class ModulePipelineRunner
                 .Where(static publish => publish is not null && publish.Configuration?.Enabled == true)
                 .ToArray());
 
-        EnsureRequiredModuleOnlineResolutionToolInstalledIfNeeded(
-            requiredModulesDraft,
-            requiredModulesDraftForPackaging,
+        return new RequiredModulePreflightInput(
             resolveMissingModulesOnline,
             warnIfRequiredModulesOutdated,
             dependencyVersionSourceRepository,
             installMissingModulesForce,
             installMissingModulesRepository,
             installMissingModulesCredential,
-            installMissingModulesPrerelease);
+            installMissingModulesPrerelease,
+            refreshPsd1Only,
+            requiredModulesDraft.ToArray(),
+            requiredModulesDraftForPackaging.ToArray());
+    }
+
+    private static void AddOrReplaceRequiredModuleDraft(
+        List<RequiredModuleDraft> drafts,
+        Dictionary<string, int> index,
+        RequiredModuleDraft draft)
+    {
+        if (draft is null || string.IsNullOrWhiteSpace(draft.ModuleName))
+            return;
+
+        if (index.TryGetValue(draft.ModuleName, out var existingIndex))
+        {
+            drafts[existingIndex] = draft;
+            return;
+        }
+
+        index[draft.ModuleName] = drafts.Count;
+        drafts.Add(draft);
+    }
+
+    private sealed class RequiredModulePreflightInput
+    {
+        public static RequiredModulePreflightInput Empty { get; } = new(
+            resolveMissingModulesOnline: false,
+            warnIfRequiredModulesOutdated: false,
+            publishVersionSource: null,
+            installMissingModulesForce: false,
+            installMissingModulesRepository: null,
+            installMissingModulesCredential: null,
+            installMissingModulesPrerelease: false,
+            refreshPsd1Only: false,
+            requiredModules: Array.Empty<RequiredModuleDraft>(),
+            requiredModulesForPackaging: Array.Empty<RequiredModuleDraft>());
+
+        public bool ResolveMissingModulesOnline { get; }
+        public bool WarnIfRequiredModulesOutdated { get; }
+        public DependencyVersionSourceRepository? PublishVersionSource { get; }
+        public bool InstallMissingModulesForce { get; }
+        public string? InstallMissingModulesRepository { get; }
+        public RepositoryCredential? InstallMissingModulesCredential { get; }
+        public bool InstallMissingModulesPrerelease { get; }
+        public bool RefreshPsd1Only { get; }
+        public RequiredModuleDraft[] RequiredModules { get; }
+        public RequiredModuleDraft[] RequiredModulesForPackaging { get; }
+
+        public RequiredModulePreflightInput(
+            bool resolveMissingModulesOnline,
+            bool warnIfRequiredModulesOutdated,
+            DependencyVersionSourceRepository? publishVersionSource,
+            bool installMissingModulesForce,
+            string? installMissingModulesRepository,
+            RepositoryCredential? installMissingModulesCredential,
+            bool installMissingModulesPrerelease,
+            bool refreshPsd1Only,
+            RequiredModuleDraft[] requiredModules,
+            RequiredModuleDraft[] requiredModulesForPackaging)
+        {
+            ResolveMissingModulesOnline = resolveMissingModulesOnline;
+            WarnIfRequiredModulesOutdated = warnIfRequiredModulesOutdated;
+            PublishVersionSource = publishVersionSource;
+            InstallMissingModulesForce = installMissingModulesForce;
+            InstallMissingModulesRepository = installMissingModulesRepository;
+            InstallMissingModulesCredential = installMissingModulesCredential;
+            InstallMissingModulesPrerelease = installMissingModulesPrerelease;
+            RefreshPsd1Only = refreshPsd1Only;
+            RequiredModules = requiredModules ?? Array.Empty<RequiredModuleDraft>();
+            RequiredModulesForPackaging = requiredModulesForPackaging ?? Array.Empty<RequiredModuleDraft>();
+        }
     }
 
     private void AddRepositoryToolDependencyForAuto(IDictionary<string, ModuleDependency> dependencies)

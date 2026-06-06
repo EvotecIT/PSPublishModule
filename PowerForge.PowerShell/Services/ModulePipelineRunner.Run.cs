@@ -27,7 +27,7 @@ public sealed partial class ModulePipelineRunner
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
-        if (preflightPrecomputedPlan && ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(plan))
+        if (preflightPrecomputedPlan && ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(spec, plan))
         {
             EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(spec);
             plan = Plan(spec);

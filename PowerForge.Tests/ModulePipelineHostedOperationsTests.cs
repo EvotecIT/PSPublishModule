@@ -74,8 +74,9 @@ public sealed class ModulePipelineHostedOperationsTests
             var plan = runner.Plan(spec);
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
-            Assert.Single(result);
-            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal(2, result.Length);
+            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
             Assert.Equal("Pester", hostedOperations.LastDependencies.Single().Name);
             Assert.Null(hostedOperations.LastRepository);
         }
@@ -141,8 +142,9 @@ public sealed class ModulePipelineHostedOperationsTests
             var plan = runner.Plan(spec);
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
-            Assert.Single(result);
-            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal(2, result.Length);
+            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
             Assert.Equal("Pester", Assert.Single(hostedOperations.LastDependencies).Name);
             Assert.Contains("Pester", hostedOperations.LastSkipModules?.IgnoreModuleName ?? Array.Empty<string>());
         }
@@ -532,6 +534,146 @@ public sealed class ModulePipelineHostedOperationsTests
             InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
 
             Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunPreflight_UsesConfigurationOverrideBeforeManifestRequiredModules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            AddRequiredModuleToManifest(root.FullName, moduleName, "Dependency.Tools", "Latest");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            ResolveMissingModulesOnline = false
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Dependency.Tools",
+                            ModuleVersion = "1.0.0",
+                            Guid = "11111111-1111-1111-1111-111111111111"
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunPreflight_RefreshesRepositorySourcedPrecomputedPlans()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateOnlineRequiredModuleSpec(
+                root.FullName,
+                moduleName,
+                resolveMissingModulesOnline: false,
+                versionSource: ModuleDependencyVersionSource.PSGallery);
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Online.Tools"] = "1.0.0"
+                }),
+                new FakeHostedOperations());
+
+            var plan = runner.Plan(spec);
+
+            Assert.True(InvokeShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(runner, spec, plan));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunPreflight_DoesNotRefreshExactRequiredVersionPrecomputedPlans()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Dependency.Tools",
+                            RequiredVersion = "1.0.0"
+                        }
+                    }
+                }
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Dependency.Tools"] = "1.0.0"
+                }),
+                new FakeHostedOperations());
+
+            var plan = runner.Plan(spec);
+
+            Assert.False(InvokeShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(runner, spec, plan));
         }
         finally
         {
@@ -1129,6 +1271,13 @@ public sealed class ModulePipelineHostedOperationsTests
         method!.Invoke(runner, new object?[] { spec });
     }
 
+    private static bool InvokeShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(ModulePipelineRunner runner, ModulePipelineSpec spec, ModulePipelinePlan plan)
+    {
+        var method = typeof(ModulePipelineRunner).GetMethod("ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(method is not null, "ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight method signature may have changed.");
+        return (bool)method!.Invoke(runner, new object?[] { spec, plan })!;
+    }
+
     private static void InvokeRunTestsAfterMerge(ModulePipelineRunner runner, ModulePipelinePlan plan, ModuleBuildResult buildResult, TestConfiguration configuration)
     {
         var method = typeof(ModulePipelineRunner).GetMethod("RunTestsAfterMerge", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -1373,6 +1522,7 @@ public sealed class ModulePipelineHostedOperationsTests
     private sealed class FakeHostedOperations : IModulePipelineHostedOperations
     {
         public int DependencyInstallCalls { get; private set; }
+        public List<IReadOnlyList<ModuleDependency>> DependencyCalls { get; } = new();
         public IReadOnlyList<ModuleDependency> LastDependencies { get; private set; } = Array.Empty<ModuleDependency>();
         public string? LastRepository { get; private set; }
         public ModuleSkipConfiguration? LastSkipModules { get; private set; }
@@ -1388,6 +1538,7 @@ public sealed class ModulePipelineHostedOperationsTests
         {
             DependencyInstallCalls++;
             LastDependencies = dependencies ?? Array.Empty<ModuleDependency>();
+            DependencyCalls.Add(LastDependencies);
             LastRepository = repository;
             LastSkipModules = skipModules;
             return LastDependencies
