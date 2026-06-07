@@ -320,6 +320,33 @@ $root = '.\src'
     }
 
     [Fact]
+    public void RenderCommandMarkdown_PreservesNonPowerShellOutputAfterInlineAssignment()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Save-DemoStatus",
+            Synopsis = "Saves demo status.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$status = Save-DemoStatus
+            [OK] saved
+""",
+                    Remarks = "Shows command output."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $status = Save-DemoStatus\r\n            [OK] saved", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_NormalizesInlineAssignmentEndingWithSwitchParameter()
     {
         var command = new DocumentationCommandHelp

@@ -27,6 +27,8 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             if (statements.Length <= 1)
                 return false;
 
+            // Mixed command/output examples are ambiguous when the output is valid PowerShell syntax.
+            // Keep this parser-backed and avoid command-name or keyword allow/deny lists here.
             var firstLine = GetFirstNonBlankLine(candidateCode);
             if (firstLine.Length == 0)
                 return false;
