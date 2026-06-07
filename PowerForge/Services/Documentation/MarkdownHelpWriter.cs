@@ -462,7 +462,6 @@ internal sealed class MarkdownHelpWriter
             var isCandidateTopLevel = CountLeadingWhitespace(line) == 0;
             if (isCandidateTopLevel
                 && !StartsWithBlockClose(trimmed)
-                && LooksLikePowerShellBlockOpening(trimmed)
                 && LooksLikeTopLevelPowerShellLine(trimmed))
             {
                 return true;
@@ -513,7 +512,11 @@ internal sealed class MarkdownHelpWriter
             || trimmed.EndsWith("`", StringComparison.Ordinal)
             || trimmed.EndsWith(",", StringComparison.Ordinal)
             || trimmed.EndsWith("=", StringComparison.Ordinal)
-            || trimmed.EndsWith("+", StringComparison.Ordinal))
+            || trimmed.EndsWith("+", StringComparison.Ordinal)
+            || trimmed.EndsWith("-", StringComparison.Ordinal)
+            || trimmed.EndsWith("*", StringComparison.Ordinal)
+            || trimmed.EndsWith("/", StringComparison.Ordinal)
+            || trimmed.EndsWith("%", StringComparison.Ordinal))
         {
             return true;
         }
@@ -523,13 +526,43 @@ internal sealed class MarkdownHelpWriter
         if (lastToken.Length <= 1 || lastToken[0] != '-')
             return false;
 
-        for (var i = 1; i < lastToken.Length; i++)
+        return IsPowerShellContinuationOperator(lastToken);
+    }
+
+    private static bool IsPowerShellContinuationOperator(string token)
+    {
+        switch (token.ToLowerInvariant())
         {
-            if (!char.IsLetter(lastToken[i]))
+            case "-and":
+            case "-as":
+            case "-band":
+            case "-bor":
+            case "-bxor":
+            case "-contains":
+            case "-eq":
+            case "-ge":
+            case "-gt":
+            case "-in":
+            case "-is":
+            case "-isnot":
+            case "-join":
+            case "-le":
+            case "-like":
+            case "-lt":
+            case "-match":
+            case "-ne":
+            case "-notcontains":
+            case "-notin":
+            case "-notlike":
+            case "-notmatch":
+            case "-or":
+            case "-replace":
+            case "-split":
+            case "-xor":
+                return true;
+            default:
                 return false;
         }
-
-        return true;
     }
 
     private static bool StartsHereString(string trimmed)

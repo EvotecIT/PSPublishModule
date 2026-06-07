@@ -165,6 +165,62 @@ $image = '.\Tests\Assets\CellImage.png'
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentBeforeNonBlockCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$path = '.\out.txt'
+            Set-Content -Path $path -Value 'ok'
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentEndingWithSwitchParameter()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Save-DemoItems",
+            Synopsis = "Saves demo items.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$items = Get-ChildItem -Recurse
+            Set-Content -Path .\items.txt -Value $items.Count
+""",
+                    Remarks = "Saves item counts."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $items = Get-ChildItem -Recurse\r\nSet-Content -Path .\\items.txt -Value $items.Count", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_PreservesIndentedPipelineContinuationAfterInlinePrompt()
     {
         var command = new DocumentationCommandHelp
@@ -277,6 +333,36 @@ $value = $first +
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first +\r\n        $second", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesArithmeticContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoValue",
+            Synopsis = "Sets a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$value = $first -
+        $(
+            Get-DemoValue
+        )
+""",
+                    Remarks = "Keeps authored arithmetic continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $value = $first -\r\n        $(", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            Get-DemoValue\r\n        )", exampleSection, StringComparison.Ordinal);
     }
 
     [Fact]
