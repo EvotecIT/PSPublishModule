@@ -410,7 +410,7 @@ internal sealed class MarkdownHelpWriter
 
     private static bool LooksLikePowerShellBlockOpening(string line)
     {
-        var trimmed = line.TrimEnd();
+        var trimmed = StripLineComment(line).TrimEnd();
         return trimmed.EndsWith("{", StringComparison.Ordinal)
             || trimmed.EndsWith("@(", StringComparison.Ordinal)
             || trimmed.EndsWith("@{", StringComparison.Ordinal)
@@ -445,8 +445,8 @@ internal sealed class MarkdownHelpWriter
 
     private static bool HasAdditionalTopLevelLineAfterCompleteInlineStatement(string firstLine, string[] lines, int startIndex, int indent)
     {
-        var trimmedFirstLine = firstLine.TrimEnd();
-        if (!LooksLikeTopLevelPowerShellLine(trimmedFirstLine)
+        var trimmedFirstLine = StripLineComment(firstLine).TrimEnd();
+        if (!LooksLikeInlineAssignment(trimmedFirstLine)
             || EndsWithPowerShellContinuation(trimmedFirstLine)
             || StartsHereString(trimmedFirstLine))
             return false;
@@ -497,8 +497,18 @@ internal sealed class MarkdownHelpWriter
     private static bool StartsWithBlockClose(string trimmed)
         => trimmed.Length > 0 && (trimmed[0] == '}' || trimmed[0] == ')' || trimmed[0] == ']');
 
+    private static bool LooksLikeInlineAssignment(string trimmed)
+    {
+        if (!trimmed.StartsWith("$", StringComparison.Ordinal))
+            return false;
+
+        var equalsIndex = trimmed.IndexOf('=');
+        return equalsIndex > 1 && equalsIndex < trimmed.Length - 1;
+    }
+
     private static bool EndsWithPowerShellContinuation(string trimmed)
     {
+        trimmed = StripLineComment(trimmed).TrimEnd();
         if (trimmed.EndsWith("|", StringComparison.Ordinal)
             || trimmed.EndsWith("`", StringComparison.Ordinal)
             || trimmed.EndsWith(",", StringComparison.Ordinal)
@@ -525,6 +535,44 @@ internal sealed class MarkdownHelpWriter
     private static bool StartsHereString(string trimmed)
         => trimmed.Contains("@'", StringComparison.Ordinal)
             || trimmed.Contains("@\"", StringComparison.Ordinal);
+
+    private static string StripLineComment(string line)
+    {
+        var inSingleQuotedString = false;
+        var inDoubleQuotedString = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (ch == '`' && inDoubleQuotedString)
+            {
+                i++;
+                continue;
+            }
+
+            if (!inDoubleQuotedString && ch == '\'')
+            {
+                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
+                {
+                    i++;
+                    continue;
+                }
+
+                inSingleQuotedString = !inSingleQuotedString;
+                continue;
+            }
+
+            if (!inSingleQuotedString && ch == '"')
+            {
+                inDoubleQuotedString = !inDoubleQuotedString;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
+                return line.Substring(0, i);
+        }
+
+        return line;
+    }
 
     private static int CountBlockDepthDelta(string line)
     {

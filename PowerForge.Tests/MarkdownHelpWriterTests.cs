@@ -338,4 +338,96 @@ Result:
         Assert.Contains("PS> Result:\r\n        New-Demo {", exampleSection, StringComparison.Ordinal);
         Assert.Contains("\r\n            Status = Ready\r\n        }", exampleSection, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesBlockShapedOutputAfterCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Show-DemoTemplate",
+            Synopsis = "Shows a demo template.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+Show-DemoTemplate
+        $config = @{
+            Name = 'Demo'
+        }
+""",
+                    Remarks = "Keeps authored template output formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> Show-DemoTemplate\r\n        $config = @{", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            Name = 'Demo'\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesOperatorContinuationBeforeLineComment()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoValue",
+            Synopsis = "Sets a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$value = $first + # combine
+        $second
+        New-DemoDeck {
+            Add-DemoImage
+        }
+""",
+                    Remarks = "Keeps authored continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $value = $first + # combine\r\n        $second", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        New-DemoDeck {\r\n            Add-DemoImage\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesSingleBlockWithTrailingComment()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Invoke-DemoBlock",
+            Synopsis = "Invokes a demo block.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+ForEach-Object { # filter
+        New-Demo {
+            Status = Ready
+        }
+        }
+""",
+                    Remarks = "Keeps authored block formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> ForEach-Object { # filter\r\n        New-Demo {", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            Status = Ready\r\n        }\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
 }
