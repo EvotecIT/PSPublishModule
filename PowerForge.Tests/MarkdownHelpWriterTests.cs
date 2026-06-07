@@ -268,6 +268,97 @@ ForEach-Object -Begin {
     }
 
     [Fact]
+    public void RenderCommandMarkdown_PreservesHereStringContentInSingleBlockCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Invoke-DemoBlock",
+            Synopsis = "Invokes a demo block.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+Invoke-DemoBlock {
+            $template = @'
+        }
+'@
+        }
+""",
+                    Remarks = "Keeps template content unchanged."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> Invoke-DemoBlock {\r\n            $template = @'\r\n        }\r\n'@\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesGeneratedCommentsInSingleBlockCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "New-DemoReport",
+            Synopsis = "Creates a demo report.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+New-DemoReport -Path .\Examples\Documents\Report.pdf {
+        # setup
+            Add-DemoHeading -Text 'Service Review'
+        }
+""",
+                    Remarks = "Normalizes generated block comments."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> New-DemoReport -Path .\\Examples\\Documents\\Report.pdf {\r\n# setup\r\n    Add-DemoHeading -Text 'Service Review'\r\n}", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n        # setup", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Add-DemoHeading", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesGeneratedAssignmentSingleBlockCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "New-DemoPlan",
+            Synopsis = "Creates a demo plan.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$plan = New-DemoPlan {
+            Add-DemoStep -Title 'Service Review'
+        }
+""",
+                    Remarks = "Normalizes generated assignment block formatting."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $plan = New-DemoPlan {\r\n    Add-DemoStep -Title 'Service Review'\r\n}", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Add-DemoStep", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_IgnoresQuotedDelimitersWhenPreservingSingleBlockIndentation()
     {
         var command = new DocumentationCommandHelp

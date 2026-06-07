@@ -25,6 +25,7 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             var ast = Parser.ParseInput(normalized, out var tokens, out var errors);
             var errorLines = GetErrorLines(errors);
             var commentLines = GetCommentLines(tokens);
+            var hereStringLines = GetHereStringLines(tokens);
 
             var statements = ast.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
             if (statements.Length == 0)
@@ -49,7 +50,7 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             if (indent < 8)
                 return normalized;
 
-            if (statements.Length == 1 && !ShouldNormalizeSingleStatement(firstStatement, lines, linesToNormalize, indent))
+            if (statements.Length == 1 && !ShouldNormalizeSingleStatement(firstStatement, lines, linesToNormalize, commentLines, hereStringLines, indent))
                 return normalized;
 
             AddIndentedCommentLines(lines, commentLines, linesToNormalize, indent, firstStatement.Extent.EndLineNumber - 1);
@@ -89,6 +90,25 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         foreach (var token in tokens)
         {
             if (token.Kind != TokenKind.Comment)
+                continue;
+
+            var start = Math.Max(1, token.Extent.StartLineNumber);
+            var end = Math.Max(start, token.Extent.EndLineNumber);
+            for (var line = start; line <= end; line++)
+            {
+                lines.Add(line - 1);
+            }
+        }
+
+        return lines;
+    }
+
+    private static HashSet<int> GetHereStringLines(Token[] tokens)
+    {
+        var lines = new HashSet<int>();
+        foreach (var token in tokens)
+        {
+            if (token.Kind != TokenKind.HereStringExpandable && token.Kind != TokenKind.HereStringLiteral)
                 continue;
 
             var start = Math.Max(1, token.Extent.StartLineNumber);
@@ -229,6 +249,8 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         StatementAst statement,
         string[] lines,
         HashSet<int> lineIndexes,
+        HashSet<int> commentLines,
+        HashSet<int> hereStringLines,
         int commonIndent)
     {
         if (!IsSingleCommandScriptBlockStatement(statement))
@@ -245,6 +267,12 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             if (CountLeadingWhitespace(lines[lineIndex]) != commonIndent)
                 continue;
 
+            if (hereStringLines.Contains(lineIndex))
+                return false;
+
+            if (commentLines.Contains(lineIndex))
+                continue;
+
             if (!IsClosingDelimiterLine(lines[lineIndex]))
                 return false;
         }
@@ -254,6 +282,9 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
 
     private static bool IsSingleCommandScriptBlockStatement(StatementAst statement)
     {
+        if (statement is AssignmentStatementAst assignment)
+            return IsSingleCommandScriptBlockStatement(assignment.Right);
+
         if (statement is not PipelineAst pipeline || pipeline.PipelineElements.Count != 1)
             return false;
 
