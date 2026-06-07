@@ -420,7 +420,8 @@ internal sealed class MarkdownHelpWriter
 
     private static bool HasAdditionalTopLevelLineAfterOpenedBlock(string firstLine, string[] lines, int startIndex, int indent)
     {
-        var blockDepth = Math.Max(0, CountBlockDepthDelta(firstLine));
+        var inBlockComment = false;
+        var blockDepth = Math.Max(0, CountBlockDepthDelta(firstLine, ref inBlockComment));
         for (var i = startIndex; i < lines.Length; i++)
         {
             var line = lines[i];
@@ -438,7 +439,7 @@ internal sealed class MarkdownHelpWriter
                 return true;
             }
 
-            blockDepth = Math.Max(0, blockDepth + CountBlockDepthDelta(line));
+            blockDepth = Math.Max(0, blockDepth + CountBlockDepthDelta(line, ref inBlockComment));
         }
 
         return false;
@@ -620,15 +621,42 @@ internal sealed class MarkdownHelpWriter
             || lastToken == "?"
             || lastToken == "??"
             || lastToken == "&&"
-            || lastToken == "||")
+            || lastToken == "||"
+            || lastToken == "+="
+            || lastToken == "-="
+            || lastToken == "*="
+            || lastToken == "/="
+            || lastToken == "%=")
         {
             return true;
         }
+
+        if (EndsWithAdjacentContinuationOperator(lastToken))
+            return true;
 
         if (lastToken.Length <= 1 || lastToken[0] != '-')
             return false;
 
         return IsPowerShellContinuationOperator(lastToken);
+    }
+
+    private static bool EndsWithAdjacentContinuationOperator(string token)
+    {
+        if (token.Length <= 1)
+            return false;
+
+        var last = token[token.Length - 1];
+        switch (last)
+        {
+            case '+':
+            case '-':
+            case '%':
+            case '!':
+            case '?':
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static int FindTopLevelAssignmentOperator(string line, int startIndex)
@@ -962,12 +990,11 @@ internal sealed class MarkdownHelpWriter
         return result.ToString();
     }
 
-    private static int CountBlockDepthDelta(string line)
+    private static int CountBlockDepthDelta(string line, ref bool inBlockComment)
     {
         var delta = 0;
         var inSingleQuotedString = false;
         var inDoubleQuotedString = false;
-        var inBlockComment = false;
         for (var i = 0; i < line.Length; i++)
         {
             var ch = line[i];
