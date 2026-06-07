@@ -22,8 +22,9 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         {
             var normalized = code.Replace("\r\n", "\n").Replace('\r', '\n');
             var lines = normalized.Split('\n');
-            var ast = Parser.ParseInput(normalized, out _, out var errors);
+            var ast = Parser.ParseInput(normalized, out var tokens, out var errors);
             var errorLines = GetErrorLines(errors);
+            var commentLines = GetCommentLines(tokens);
 
             var statements = ast.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
             if (statements.Length <= 1)
@@ -48,6 +49,8 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             if (indent < 8)
                 return normalized;
 
+            AddIndentedCommentLines(lines, commentLines, linesToNormalize, indent, firstStatement.Extent.EndLineNumber - 1);
+
             foreach (var lineIndex in linesToNormalize)
             {
                 lines[lineIndex] = RemoveLeadingWhitespace(lines[lineIndex], indent);
@@ -71,6 +74,25 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             for (var line = start; line <= end; line++)
             {
                 lines.Add(line);
+            }
+        }
+
+        return lines;
+    }
+
+    private static HashSet<int> GetCommentLines(Token[] tokens)
+    {
+        var lines = new HashSet<int>();
+        foreach (var token in tokens)
+        {
+            if (token.Kind != TokenKind.Comment)
+                continue;
+
+            var start = Math.Max(1, token.Extent.StartLineNumber);
+            var end = Math.Max(start, token.Extent.EndLineNumber);
+            for (var line = start; line <= end; line++)
+            {
+                lines.Add(line - 1);
             }
         }
 
@@ -144,10 +166,15 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         var start = statement.Extent.StartLineNumber + (skipFirstLine ? 1 : 0);
         for (var line = start; line <= statement.Extent.EndLineNumber; line++)
         {
-            if (!errorLines.Contains(line))
+            if (!errorLines.Contains(line) || IsInsideMultilineStatement(statement, line))
                 lines.Add(line - 1);
         }
     }
+
+    private static bool IsInsideMultilineStatement(StatementAst statement, int line)
+        => statement.Extent.EndLineNumber > statement.Extent.StartLineNumber
+            && line > statement.Extent.StartLineNumber
+            && line <= statement.Extent.EndLineNumber;
 
     private static bool ParsesWithoutErrors(string code)
     {
@@ -171,10 +198,37 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
                 continue;
 
-            common = Math.Min(common, CountLeadingWhitespace(lines[lineIndex]));
+            var indent = CountLeadingWhitespace(lines[lineIndex]);
+            if (indent == 0)
+                continue;
+
+            common = Math.Min(common, indent);
         }
 
         return common == int.MaxValue ? 0 : common;
+    }
+
+    private static void AddIndentedCommentLines(
+        string[] lines,
+        HashSet<int> commentLines,
+        HashSet<int> linesToNormalize,
+        int indent,
+        int startLineIndex)
+    {
+        if (linesToNormalize.Count == 0)
+            return;
+
+        var endLineIndex = linesToNormalize.Max();
+        for (var lineIndex = Math.Max(0, startLineIndex); lineIndex <= endLineIndex; lineIndex++)
+        {
+            if (!commentLines.Contains(lineIndex))
+                continue;
+
+            if (lineIndex >= lines.Length || CountLeadingWhitespace(lines[lineIndex]) < indent)
+                continue;
+
+            linesToNormalize.Add(lineIndex);
+        }
     }
 
     private static int CountLeadingWhitespace(string line)

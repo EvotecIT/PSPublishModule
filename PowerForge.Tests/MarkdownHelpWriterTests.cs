@@ -405,6 +405,123 @@ $status = Save-DemoStatus
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesIndentedCommandAfterSameLineAssignments()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$a = 1; $b = 2
+            Set-Content -Path .\out.txt -Value $b
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $a = 1; $b = 2\r\nSet-Content -Path .\\out.txt -Value $b", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesCommentBetweenInlineAssignmentAndCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$path = '.\out.txt'
+            # write generated content
+            Set-Content -Path $path -Value 'ok'
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $path = '.\\out.txt'\r\n# write generated content\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            # write generated content", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesHereStringBodyInsideIndentedCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$path = '.\out.txt'
+            Set-Content -Path $path -Value @"
+            [OK] saved
+            "@
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $path = '.\\out.txt'\r\nSet-Content -Path $path -Value @\"\r\n[OK] saved\r\n\"@", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            [OK] saved", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesIndentedCommandBeforeAlreadyDedentedStatement()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$path = '.\out.txt'
+            Set-Content -Path $path -Value 'ok'
+Get-Content -Path $path
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'\r\nGet-Content -Path $path", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_NormalizesInlineAssignmentEndingWithSwitchParameter()
     {
         var command = new DocumentationCommandHelp
