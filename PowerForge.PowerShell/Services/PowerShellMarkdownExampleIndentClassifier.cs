@@ -49,7 +49,7 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             if (indent < 8)
                 return normalized;
 
-            if (statements.Length == 1 && (indent < 12 || !HasNestedIndent(lines, linesToNormalize, indent)))
+            if (statements.Length == 1 && !ShouldNormalizeSingleStatement(lines, linesToNormalize, indent))
                 return normalized;
 
             AddIndentedCommentLines(lines, commentLines, linesToNormalize, indent, firstStatement.Extent.EndLineNumber - 1);
@@ -223,6 +223,35 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         }
 
         return false;
+    }
+
+    private static bool ShouldNormalizeSingleStatement(string[] lines, HashSet<int> lineIndexes, int commonIndent)
+    {
+        if (!HasNestedIndent(lines, lineIndexes, commonIndent))
+            return false;
+
+        if (commonIndent >= 12)
+            return true;
+
+        foreach (var lineIndex in lineIndexes)
+        {
+            if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
+                continue;
+
+            if (CountLeadingWhitespace(lines[lineIndex]) != commonIndent)
+                continue;
+
+            if (!IsClosingDelimiterLine(lines[lineIndex]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsClosingDelimiterLine(string line)
+    {
+        var trimmed = line.Trim();
+        return trimmed == "}" || trimmed == ")" || trimmed == "]";
     }
 
     private static void AddIndentedCommentLines(
