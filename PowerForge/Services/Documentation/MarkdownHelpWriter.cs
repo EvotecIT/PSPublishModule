@@ -8,7 +8,7 @@ namespace PowerForge;
 /// <summary>
 /// Writes PowerShell command markdown help files.
 /// </summary>
-internal sealed class MarkdownHelpWriter
+internal sealed partial class MarkdownHelpWriter
 {
     public void WriteCommandHelpFiles(DocumentationExtractionPayload payload, string moduleName, string docsPath)
     {
@@ -483,6 +483,9 @@ internal sealed class MarkdownHelpWriter
         if (trimmed[0] == '$' || trimmed[0] == '[' || trimmed[0] == '&' || trimmed[0] == '.')
             return true;
 
+        if (StartsWithPowerShellStatementKeyword(trimmed) || StartsWithKnownNativeCommand(trimmed))
+            return true;
+
         var dashIndex = trimmed.IndexOf('-');
         if (dashIndex <= 0)
             return false;
@@ -789,43 +792,6 @@ internal sealed class MarkdownHelpWriter
         }
 
         return -1;
-    }
-
-    private static bool IsPowerShellContinuationOperator(string token)
-    {
-        switch (token.ToLowerInvariant())
-        {
-            case "-and":
-            case "-as":
-            case "-band":
-            case "-bor":
-            case "-bxor":
-            case "-contains":
-            case "-eq":
-            case "-ge":
-            case "-gt":
-            case "-in":
-            case "-is":
-            case "-isnot":
-            case "-join":
-            case "-le":
-            case "-like":
-            case "-lt":
-            case "-match":
-            case "-ne":
-            case "-notcontains":
-            case "-notin":
-            case "-notlike":
-            case "-notmatch":
-            case "-not":
-            case "-or":
-            case "-replace":
-            case "-split":
-            case "-xor":
-                return true;
-            default:
-                return false;
-        }
     }
 
     private static bool StartsHereString(string trimmed)

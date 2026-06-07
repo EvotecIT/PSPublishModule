@@ -255,6 +255,92 @@ $path = '.\out.txt'
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentBeforeKeywordStatement()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Add-DemoImage",
+            Synopsis = "Adds a demo image.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$image = '.\Tests\Assets\CellImage.png'
+            if ($image) {
+                Add-DemoImage -Path $image
+            }
+""",
+                    Remarks = "Adds an image when one is configured."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $image = '.\\Tests\\Assets\\CellImage.png'\r\nif ($image) {", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n    Add-DemoImage -Path $image\r\n}", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            if ($image)", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentBeforeNativeCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Build-DemoProject",
+            Synopsis = "Builds a demo project.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$root = '.\src'
+            dotnet build $root
+""",
+                    Remarks = "Builds the project folder."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $root = '.\\src'\r\ndotnet build $root", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            dotnet", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesLowercaseOutputAfterInlineAssignment()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Show-DemoStatus",
+            Synopsis = "Shows demo status.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$status = 'ready'
+            service ready
+""",
+                    Remarks = "Shows command output."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $status = 'ready'\r\n            service ready", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_NormalizesInlineAssignmentEndingWithSwitchParameter()
     {
         var command = new DocumentationCommandHelp
@@ -1034,6 +1120,33 @@ $ok = $value -eq
 
         Assert.Contains("PS> $ok = $value -eq\r\n        $(", exampleSection, StringComparison.Ordinal);
         Assert.Contains("\r\n            Get-DemoValue\r\n        )", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("-f")]
+    [InlineData("-ceq")]
+    [InlineData("-shl")]
+    public void RenderCommandMarkdown_PreservesAdditionalOperatorContinuationAfterInlinePrompt(string operatorToken)
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoValue",
+            Synopsis = "Sets a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = "$value = $first " + operatorToken + "\r\n        $second",
+                    Remarks = "Keeps authored operator continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $value = $first " + operatorToken + "\r\n        $second", exampleSection, StringComparison.Ordinal);
     }
 
     [Fact]
