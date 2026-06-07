@@ -311,6 +311,34 @@ $files = Get-ChildItem C:/Temp/
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentEndingWithGlob()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Save-DemoFiles",
+            Synopsis = "Saves demo files.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$files = Get-ChildItem C:/Temp/*
+            Set-Content -Path .\files.txt -Value $files.Count
+""",
+                    Remarks = "Saves file counts."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $files = Get-ChildItem C:/Temp/*\r\nSet-Content -Path .\\files.txt -Value $files.Count", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_NormalizesTypedInlineAssignmentBeforeTopLevelCommand()
     {
         var command = new DocumentationCommandHelp
@@ -566,6 +594,32 @@ $value = $first -
 
         Assert.Contains("PS> $value = $first -\r\n        $(", exampleSection, StringComparison.Ordinal);
         Assert.Contains("\r\n            Get-DemoValue\r\n        )", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("*")]
+    [InlineData("/")]
+    public void RenderCommandMarkdown_PreservesAdjacentArithmeticContinuationAfterInlinePrompt(string operatorToken)
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoValue",
+            Synopsis = "Sets a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = "$value = $first" + operatorToken + "\r\n        $second",
+                    Remarks = "Keeps authored arithmetic continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $value = $first" + operatorToken + "\r\n        $second", exampleSection, StringComparison.Ordinal);
     }
 
     [Fact]

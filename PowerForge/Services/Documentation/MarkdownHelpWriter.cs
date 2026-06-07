@@ -668,9 +668,39 @@ internal sealed class MarkdownHelpWriter
             case '%':
             case '.':
                 return true;
+            case '*':
+            case '/':
+                return LooksLikeAdjacentArithmeticExpression(token);
             default:
                 return false;
         }
+    }
+
+    private static bool LooksLikeAdjacentArithmeticExpression(string token)
+    {
+        if (token.Length <= 1)
+            return false;
+
+        var operand = token.Substring(0, token.Length - 1);
+        if (operand.IndexOf('\\') >= 0 || operand.IndexOf('/') >= 0)
+            return false;
+
+        if (operand.IndexOf(':') >= 0 && !operand.StartsWith("[", StringComparison.Ordinal))
+            return false;
+
+        var first = operand[0];
+        var last = operand[operand.Length - 1];
+        return first == '$'
+            || first == '('
+            || first == '['
+            || first == '\''
+            || first == '"'
+            || char.IsDigit(first)
+            || last == ')'
+            || last == ']'
+            || last == '}'
+            || last == '\''
+            || last == '"';
     }
 
     private static int FindTopLevelAssignmentOperator(string line, int startIndex)
