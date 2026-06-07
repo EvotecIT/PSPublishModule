@@ -249,7 +249,22 @@ public sealed partial class IsolatedModuleImportService
         var patched = PatchManifestText(source, sourceManifestPath, scriptRelativePath, profile.RemoveManifestNestedModules);
         Directory.CreateDirectory(Path.GetDirectoryName(isolatedManifestPath) ?? ".");
         File.WriteAllText(isolatedManifestPath, patched, Encoding.UTF8);
+        WriteDiscoverableManifest(profile, source, sourceManifestPath, isolatedModuleBase, isolatedManifestPath, isolatedScriptPath);
         return isolatedManifestPath;
+    }
+
+    private static void WriteDiscoverableManifest(ModuleIsolationProfile profile, string source, string sourceManifestPath, string isolatedModuleBase, string isolatedManifestPath, string isolatedScriptPath)
+    {
+        var discoverableManifestPath = Path.Combine(isolatedModuleBase, profile.ModuleName + ".psd1");
+        if (PathsEqual(discoverableManifestPath, isolatedManifestPath))
+            return;
+
+        var scriptRelativePath = GetRelativePath(isolatedModuleBase, isolatedScriptPath).Replace('\\', '/');
+        if (!scriptRelativePath.StartsWith(".", StringComparison.Ordinal))
+            scriptRelativePath = "./" + scriptRelativePath;
+
+        var patched = PatchManifestText(source, sourceManifestPath, scriptRelativePath, profile.RemoveManifestNestedModules);
+        File.WriteAllText(discoverableManifestPath, patched, Encoding.UTF8);
     }
 
     private static string ResolveProfileManifestPath(string moduleBase, ModuleIsolationProfile profile)

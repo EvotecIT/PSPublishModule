@@ -112,6 +112,13 @@ public sealed class IsolatedModuleImportServiceTests
             var manifest = File.ReadAllText(plan.IsolatedManifestPath);
             Assert.Contains("RootModule = './MicrosoftTeams.ALC.psm1'", manifest, StringComparison.Ordinal);
             Assert.Contains("FunctionsToExport = @('Get-Team')", manifest, StringComparison.Ordinal);
+
+            var discoverableManifestPath = Path.Combine(plan.IsolatedModuleBase, "MicrosoftTeams.psd1");
+            Assert.True(File.Exists(discoverableManifestPath));
+            var discoverableManifest = File.ReadAllText(discoverableManifestPath);
+            Assert.Contains("RootModule = './MicrosoftTeams.ALC.psm1'", discoverableManifest, StringComparison.Ordinal);
+            Assert.Contains("FunctionsToExport = @('Get-Team')", discoverableManifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("RootModule = './MicrosoftTeams.psm1'", discoverableManifest, StringComparison.Ordinal);
         }
         finally
         {
@@ -196,6 +203,13 @@ public sealed class IsolatedModuleImportServiceTests
             Assert.Contains("RootModule = './Microsoft.Graph.Authentication.ALC.psm1'", manifest, StringComparison.Ordinal);
             Assert.Contains("NestedModules = @()", manifest, StringComparison.Ordinal);
             Assert.DoesNotContain("Microsoft.Graph.Authentication.Core.dll')", manifest, StringComparison.Ordinal);
+
+            var discoverableManifestPath = Path.Combine(plan.IsolatedModuleBase, "Microsoft.Graph.Authentication.psd1");
+            Assert.True(File.Exists(discoverableManifestPath));
+            var discoverableManifest = File.ReadAllText(discoverableManifestPath);
+            Assert.Contains("RootModule = './Microsoft.Graph.Authentication.ALC.psm1'", discoverableManifest, StringComparison.Ordinal);
+            Assert.Contains("NestedModules = @()", discoverableManifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("RootModule = './Microsoft.Graph.Authentication.psm1'", discoverableManifest, StringComparison.Ordinal);
         }
         finally
         {

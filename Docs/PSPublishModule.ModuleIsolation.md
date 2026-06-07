@@ -220,7 +220,9 @@ The switch prepends the generated profile work path to process-scoped `PSModuleP
 the isolated import succeeds. In the Exchange example, a later
 `Import-Module ExchangeOnlineManagement` by name can resolve the generated copy under
 `%TEMP%\PowerForge\IsolatedModules\ExchangeOnlineManagement\<guid>` before the original
-installed module.
+installed module. Profiles that use an ALC-specific manifest name, such as
+`MicrosoftTeams.ALC.psd1`, also write a module-name manifest in the generated copy so
+PowerShell name-based resolution still points at the patched ALC root module.
 
 Use this only when you need that resolution behavior. It is intentionally opt-in because it
 changes module-name resolution for the whole current PowerShell process:
