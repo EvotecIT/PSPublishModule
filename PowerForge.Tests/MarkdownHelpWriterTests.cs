@@ -261,6 +261,64 @@ $path = '.\out.txt'
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentBeforeCommandAndPreservesTrailingOutput()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$path = '.\out.txt'
+            Set-Content -Path $path -Value 'ok'
+            [OK] saved
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            [OK] saved", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentAfterLeadingComment()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+# choose output
+$path = '.\out.txt'
+            Set-Content -Path $path -Value 'ok'
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> # choose output\r\n$path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_NormalizesInlineAssignmentBeforeKeywordStatement()
     {
         var command = new DocumentationCommandHelp

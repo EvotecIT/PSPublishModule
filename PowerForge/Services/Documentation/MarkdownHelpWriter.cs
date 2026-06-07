@@ -392,40 +392,12 @@ internal sealed class MarkdownHelpWriter
 
         var lines = normalized.Split('\n');
         RemoveSharedIndent(lines, GetCommonIndent(lines));
-        RemoveSharedIndentAfterInlineFirstLine(lines, exampleIndentClassifier);
+        normalized = string.Join("\n", lines);
 
-        return string.Join("\n", lines).TrimEnd('\n');
-    }
+        if (exampleIndentClassifier is not null)
+            normalized = exampleIndentClassifier.NormalizeAfterSharedIndent(normalized);
 
-    private static void RemoveSharedIndentAfterInlineFirstLine(
-        string[] lines,
-        IMarkdownExampleIndentClassifier? exampleIndentClassifier)
-    {
-        if (exampleIndentClassifier is null)
-            return;
-
-        var firstNonBlank = Array.FindIndex(lines, line => !string.IsNullOrWhiteSpace(line));
-        if (firstNonBlank < 0 || CountLeadingWhitespace(lines[firstNonBlank]) > 0)
-            return;
-
-        var indent = GetCommonIndent(lines.Skip(firstNonBlank + 1));
-        if (indent < 8)
-            return;
-
-        var candidate = new string[lines.Length - firstNonBlank];
-        candidate[0] = lines[firstNonBlank];
-        for (var i = firstNonBlank + 1; i < lines.Length; i++)
-        {
-            candidate[i - firstNonBlank] = RemoveLeadingWhitespace(lines[i], indent);
-        }
-
-        if (!exampleIndentClassifier.ShouldRemoveSharedIndentAfterFirstLine(string.Join("\n", candidate)))
-            return;
-
-        for (var i = firstNonBlank + 1; i < lines.Length; i++)
-        {
-            lines[i] = RemoveLeadingWhitespace(lines[i], indent);
-        }
+        return normalized.TrimEnd('\n');
     }
 
     private static int GetCommonIndent(IEnumerable<string> lines)
