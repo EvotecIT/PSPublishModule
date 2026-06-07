@@ -112,6 +112,13 @@ public sealed class IsolatedModuleImportServiceTests
             var manifest = File.ReadAllText(plan.IsolatedManifestPath);
             Assert.Contains("RootModule = './MicrosoftTeams.ALC.psm1'", manifest, StringComparison.Ordinal);
             Assert.Contains("FunctionsToExport = @('Get-Team')", manifest, StringComparison.Ordinal);
+
+            var discoverableManifestPath = Path.Combine(plan.IsolatedModuleBase, "MicrosoftTeams.psd1");
+            Assert.True(File.Exists(discoverableManifestPath));
+            var discoverableManifest = File.ReadAllText(discoverableManifestPath);
+            Assert.Contains("RootModule = './MicrosoftTeams.ALC.psm1'", discoverableManifest, StringComparison.Ordinal);
+            Assert.Contains("FunctionsToExport = @('Get-Team')", discoverableManifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("RootModule = './MicrosoftTeams.psm1'", discoverableManifest, StringComparison.Ordinal);
         }
         finally
         {
@@ -196,6 +203,13 @@ public sealed class IsolatedModuleImportServiceTests
             Assert.Contains("RootModule = './Microsoft.Graph.Authentication.ALC.psm1'", manifest, StringComparison.Ordinal);
             Assert.Contains("NestedModules = @()", manifest, StringComparison.Ordinal);
             Assert.DoesNotContain("Microsoft.Graph.Authentication.Core.dll')", manifest, StringComparison.Ordinal);
+
+            var discoverableManifestPath = Path.Combine(plan.IsolatedModuleBase, "Microsoft.Graph.Authentication.psd1");
+            Assert.True(File.Exists(discoverableManifestPath));
+            var discoverableManifest = File.ReadAllText(discoverableManifestPath);
+            Assert.Contains("RootModule = './Microsoft.Graph.Authentication.ALC.psm1'", discoverableManifest, StringComparison.Ordinal);
+            Assert.Contains("NestedModules = @()", discoverableManifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("RootModule = './Microsoft.Graph.Authentication.psm1'", discoverableManifest, StringComparison.Ordinal);
         }
         finally
         {
@@ -306,6 +320,40 @@ public sealed class IsolatedModuleImportServiceTests
         }
     }
 
+    [Fact]
+    public void PrependModuleResolutionPath_AddsPathOnceAtFront()
+    {
+        var original = Environment.GetEnvironmentVariable("PSModulePath", EnvironmentVariableTarget.Process);
+        var root = CreateTempDirectory();
+        try
+        {
+            var first = Path.Combine(root, "first");
+            var second = Path.Combine(root, "second");
+            var isolated = Path.Combine(root, "isolated");
+            Directory.CreateDirectory(first);
+            Directory.CreateDirectory(second);
+            Directory.CreateDirectory(isolated);
+            Environment.SetEnvironmentVariable("PSModulePath", string.Join(Path.PathSeparator.ToString(), first, second), EnvironmentVariableTarget.Process);
+
+            var normalized = IsolatedModuleImportService.PrependModuleResolutionPath(isolated);
+            IsolatedModuleImportService.PrependModuleResolutionPath(isolated);
+
+            var entries = (Environment.GetEnvironmentVariable("PSModulePath", EnvironmentVariableTarget.Process) ?? string.Empty)
+                .Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.Equal(Path.GetFullPath(isolated), normalized);
+            Assert.Equal(Path.GetFullPath(isolated), entries[0]);
+            Assert.Single(entries, entry => string.Equals(Path.GetFullPath(entry), Path.GetFullPath(isolated), PlatformPathComparison));
+            Assert.Contains(entries, entry => string.Equals(Path.GetFullPath(entry), Path.GetFullPath(first), PlatformPathComparison));
+            Assert.Contains(entries, entry => string.Equals(Path.GetFullPath(entry), Path.GetFullPath(second), PlatformPathComparison));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PSModulePath", original, EnvironmentVariableTarget.Process);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateExchangeLikeScript()
         => string.Join(Environment.NewLine, new[]
         {
@@ -402,4 +450,7 @@ public sealed class IsolatedModuleImportServiceTests
         Directory.CreateDirectory(path);
         return path;
     }
+
+    private static StringComparison PlatformPathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 }

@@ -11,7 +11,7 @@ Imports a known PowerShell module through a curated AssemblyLoadContext isolatio
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Import-IsolatedModule [-Profile] <string> [-Name <string>] [-Path <string>] [-WorkRoot <string>] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Import-IsolatedModule [-Profile] <string> [-Name <string>] [-Path <string>] [-WorkRoot <string>] [-PassThru] [-PreferIsolatedModulePath] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -114,6 +114,21 @@ Creates the generated module copy under the supplied root and inspects the gener
 
 ### EXAMPLE 7
 ```powershell
+Import-Module Az.Storage
+$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -PreferIsolatedModulePath -PassThru
+Connect-ExchangeOnline -ShowBanner:$false
+Import-Module Contoso.ExchangeWorker
+Invoke-ContosoExchangeWorker
+$result | Format-List IsolatedModuleResolutionPath, PreferIsolatedModulePath
+Disconnect-ExchangeOnline -Confirm:$false
+```
+
+Prepends the generated isolated module parent path to PSModulePath for the current process. This is
+useful when a downstream module imports ExchangeOnlineManagement by name and should bind to the
+isolated copy instead of the original installed module.
+
+### EXAMPLE 8
+```powershell
 Import-IsolatedModule -Profile ExchangeOnlineManagement -WhatIf
 ```
 
@@ -161,6 +176,25 @@ as module bases. File paths are resolved to their parent directory.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PreferIsolatedModulePath
+When set, Import-IsolatedModule prepends the generated module parent directory to PSModulePath after
+the isolated import succeeds. Later Import-Module calls and RequiredModules resolution in the same
+PowerShell process can then find the isolated copy before the original installed module. This is
+session-scoped and intentionally opt-in because it changes module-name resolution for the process.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

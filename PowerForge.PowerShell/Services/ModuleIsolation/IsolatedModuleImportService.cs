@@ -14,6 +14,10 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class IsolatedModuleImportService
 {
+    private static readonly StringComparison PathComparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
+
     private readonly ModuleIsolationProfileRegistry _profiles;
     private readonly ModuleIsolationScriptPatcher _patcher;
 
@@ -78,6 +82,12 @@ public sealed partial class IsolatedModuleImportService
     {
         var plan = Prepare(request);
         ImportGeneratedModule(plan.IsolatedImportPath);
+        var moduleResolutionPath = string.Empty;
+        if (request.PreferIsolatedModulePath)
+        {
+            moduleResolutionPath = plan.WorkPath;
+            PrependModuleResolutionPath(moduleResolutionPath);
+        }
 
         return new IsolatedModuleImportResult
         {
@@ -88,6 +98,8 @@ public sealed partial class IsolatedModuleImportService
             IsolatedManifestPath = plan.IsolatedManifestPath,
             IsolatedImportPath = plan.IsolatedImportPath,
             WorkPath = plan.WorkPath,
+            PreferIsolatedModulePath = request.PreferIsolatedModulePath,
+            IsolatedModuleResolutionPath = moduleResolutionPath,
             ContextName = plan.Profile.ContextName,
             BinaryImportCount = plan.Profile.BinaryImports.Length,
             TypeAcceleratorNamespaceCount = plan.Profile.TypeAcceleratorNamespaces.Length
@@ -237,7 +249,22 @@ public sealed partial class IsolatedModuleImportService
         var patched = PatchManifestText(source, sourceManifestPath, scriptRelativePath, profile.RemoveManifestNestedModules);
         Directory.CreateDirectory(Path.GetDirectoryName(isolatedManifestPath) ?? ".");
         File.WriteAllText(isolatedManifestPath, patched, Encoding.UTF8);
+        WriteDiscoverableManifest(profile, source, sourceManifestPath, isolatedModuleBase, isolatedManifestPath, isolatedScriptPath);
         return isolatedManifestPath;
+    }
+
+    private static void WriteDiscoverableManifest(ModuleIsolationProfile profile, string source, string sourceManifestPath, string isolatedModuleBase, string isolatedManifestPath, string isolatedScriptPath)
+    {
+        var discoverableManifestPath = Path.Combine(isolatedModuleBase, profile.ModuleName + ".psd1");
+        if (PathsEqual(discoverableManifestPath, isolatedManifestPath))
+            return;
+
+        var scriptRelativePath = GetRelativePath(isolatedModuleBase, isolatedScriptPath).Replace('\\', '/');
+        if (!scriptRelativePath.StartsWith(".", StringComparison.Ordinal))
+            scriptRelativePath = "./" + scriptRelativePath;
+
+        var patched = PatchManifestText(source, sourceManifestPath, scriptRelativePath, profile.RemoveManifestNestedModules);
+        File.WriteAllText(discoverableManifestPath, patched, Encoding.UTF8);
     }
 
     private static string ResolveProfileManifestPath(string moduleBase, ModuleIsolationProfile profile)
@@ -327,6 +354,42 @@ public sealed partial class IsolatedModuleImportService
 
         _ = ps.Invoke<PSModuleInfo>();
         ThrowIfPowerShellFailed(ps.Streams.Error, $"Failed to import isolated module '{isolatedImportPath}'.");
+    }
+
+    internal static string PrependModuleResolutionPath(string moduleResolutionPath)
+    {
+        if (string.IsNullOrWhiteSpace(moduleResolutionPath))
+            throw new ArgumentException("Module resolution path is required.", nameof(moduleResolutionPath));
+
+        var normalizedPath = Path.GetFullPath(moduleResolutionPath.Trim().Trim('"'));
+        var current = Environment.GetEnvironmentVariable("PSModulePath", EnvironmentVariableTarget.Process) ?? string.Empty;
+        var entries = current
+            .Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static entry => entry.Trim())
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry))
+            .ToList();
+
+        if (!entries.Any(entry => PathsEqual(entry, normalizedPath)))
+        {
+            entries.Insert(0, normalizedPath);
+            Environment.SetEnvironmentVariable("PSModulePath", string.Join(Path.PathSeparator.ToString(), entries), EnvironmentVariableTarget.Process);
+        }
+
+        return normalizedPath;
+    }
+
+    private static bool PathsEqual(string first, string second)
+    {
+        try
+        {
+            return string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), PathComparison);
+        }
+        catch (Exception) when (
+            first.Length > 0 &&
+            second.Length > 0)
+        {
+            return string.Equals(first.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), second.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), PathComparison);
+        }
     }
 
     private static void ThrowIfPowerShellFailed(PSDataCollection<ErrorRecord> errors, string message)

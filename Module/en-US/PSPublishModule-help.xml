@@ -4944,6 +4944,21 @@ as module bases. File paths are resolved to their parent directory.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PreferIsolatedModulePath</maml:name>
+          <maml:description>
+            <maml:para>When set, Import-IsolatedModule prepends the generated module parent directory to PSModulePath after&#xD;
+the isolated import succeeds. Later Import-Module calls and RequiredModules resolution in the same&#xD;
+PowerShell process can then find the isolated copy before the original installed module. This is&#xD;
+session-scoped and intentionally opt-in because it changes module-name resolution for the process.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Profile</maml:name>
           <maml:description>
@@ -5009,6 +5024,21 @@ as module bases. File paths are resolved to their parent directory.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PreferIsolatedModulePath</maml:name>
+        <maml:description>
+          <maml:para>When set, Import-IsolatedModule prepends the generated module parent directory to PSModulePath after&#xD;
+the isolated import succeeds. Later Import-Module calls and RequiredModules resolution in the same&#xD;
+PowerShell process can then find the isolated copy before the original installed module. This is&#xD;
+session-scoped and intentionally opt-in because it changes module-name resolution for the process.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -5138,6 +5168,21 @@ Get-ChildItem -LiteralPath $result.WorkPath -Recurse | Select-Object -First 20 F
 Get-Content -LiteralPath $result.IsolatedScriptPath -TotalCount 40</dev:code>
         <dev:remarks>
           <maml:para>Creates the generated module copy under the supplied root and inspects the generated wrapper.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Prefer the generated isolated copy for later module imports</maml:title>
+        <dev:code>Import-Module Az.Storage&#xD;
+$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -PreferIsolatedModulePath -PassThru&#xD;
+Connect-ExchangeOnline -ShowBanner:$false&#xD;
+Import-Module Contoso.ExchangeWorker&#xD;
+Invoke-ContosoExchangeWorker&#xD;
+$result | Format-List IsolatedModuleResolutionPath, PreferIsolatedModulePath&#xD;
+Disconnect-ExchangeOnline -Confirm:$false</dev:code>
+        <dev:remarks>
+          <maml:para>Prepends the generated isolated module parent path to PSModulePath for the current process. This is&#xD;
+useful when a downstream module imports ExchangeOnlineManagement by name and should bind to the&#xD;
+isolated copy instead of the original installed module.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>

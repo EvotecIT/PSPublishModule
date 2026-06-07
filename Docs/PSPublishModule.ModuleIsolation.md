@@ -189,6 +189,49 @@ Non-manifest file paths are resolved to their parent directory. The service then
 find a manifest for validation and patching from the profile's configured manifest path,
 then from a single `.psd1` in the module base, then from `<moduleBase>\<moduleBaseName>.psd1`.
 
+## Preferred Module Resolution
+
+By default, `Import-IsolatedModule` imports the generated wrapper but does not change
+`PSModulePath`. That keeps the isolated import narrow: commands are available in the
+current runspace, but later module-name resolution can still find the originally installed
+module first.
+
+Use `-PreferIsolatedModulePath` when a downstream module imports the profiled module by
+name and should bind to the generated isolated copy:
+
+```powershell
+Import-Module Az.Storage
+
+$exo = Import-IsolatedModule `
+    -Profile ExchangeOnlineManagement `
+    -PreferIsolatedModulePath `
+    -PassThru
+
+Connect-ExchangeOnline -ShowBanner:$false
+
+Import-Module Contoso.ExchangeWorker
+Invoke-ContosoExchangeWorker
+
+$exo |
+    Format-List ProfileName, IsolatedModuleResolutionPath, PreferIsolatedModulePath
+```
+
+The switch prepends the generated profile work path to process-scoped `PSModulePath` after
+the isolated import succeeds. In the Exchange example, a later
+`Import-Module ExchangeOnlineManagement` by name can resolve the generated copy under
+`%TEMP%\PowerForge\IsolatedModules\ExchangeOnlineManagement\<guid>` before the original
+installed module. Profiles that use an ALC-specific manifest name, such as
+`MicrosoftTeams.ALC.psd1`, also write a module-name manifest in the generated copy so
+PowerShell name-based resolution still points at the patched ALC root module.
+
+Use this only when you need that resolution behavior. It is intentionally opt-in because it
+changes module-name resolution for the whole current PowerShell process:
+
+- `Get-Module -ListAvailable <profile module>` may show the generated copy first,
+- the most recently prepended isolated import wins when several generated copies exist,
+- explicit file-path imports still use the path provided by the caller,
+- the change is process-scoped and ends when the PowerShell process exits.
+
 ## Validation Behavior
 
 `Import-IsolatedModule` fails before importing when a required contract is missing.
@@ -365,4 +408,6 @@ patching rules without duplicating loader code.
   namespaced or renamed.
 - Generated module copies are process-local working artifacts and can remain locked until
   the PowerShell process exits.
+- `-PreferIsolatedModulePath` changes process-scoped `PSModulePath` only after a successful
+  import and does not prevent explicit imports of another module path.
 - Assembly isolation does not isolate service authentication state or remote service state.

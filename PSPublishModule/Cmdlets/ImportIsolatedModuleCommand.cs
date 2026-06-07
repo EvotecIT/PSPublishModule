@@ -75,6 +75,15 @@ namespace PSPublishModule;
 /// </para>
 /// </example>
 /// <example>
+/// <summary>Prefer the generated isolated copy for later module imports</summary>
+/// <code>Import-Module Az.Storage&#xA;$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -PreferIsolatedModulePath -PassThru&#xA;Connect-ExchangeOnline -ShowBanner:$false&#xA;Import-Module Contoso.ExchangeWorker&#xA;Invoke-ContosoExchangeWorker&#xA;$result | Format-List IsolatedModuleResolutionPath, PreferIsolatedModulePath&#xA;Disconnect-ExchangeOnline -Confirm:$false</code>
+/// <para>
+/// Prepends the generated isolated module parent path to PSModulePath for the current process. This is
+/// useful when a downstream module imports ExchangeOnlineManagement by name and should bind to the
+/// isolated copy instead of the original installed module.
+/// </para>
+/// </example>
+/// <example>
 /// <summary>Preview an import without creating the isolated module copy</summary>
 /// <code>Import-IsolatedModule -Profile ExchangeOnlineManagement -WhatIf</code>
 /// <para>
@@ -140,6 +149,18 @@ public sealed class ImportIsolatedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter PassThru { get; set; }
 
+    /// <summary>Prefer the generated isolated module copy for later module-name resolution in the current process.</summary>
+    /// <remarks>
+    /// <para>
+    /// When set, Import-IsolatedModule prepends the generated module parent directory to PSModulePath after
+    /// the isolated import succeeds. Later Import-Module calls and RequiredModules resolution in the same
+    /// PowerShell process can then find the isolated copy before the original installed module. This is
+    /// session-scoped and intentionally opt-in because it changes module-name resolution for the process.
+    /// </para>
+    /// </remarks>
+    [Parameter]
+    public SwitchParameter PreferIsolatedModulePath { get; set; }
+
     /// <summary>Imports the isolated module profile into the current session.</summary>
     protected override void ProcessRecord()
     {
@@ -153,7 +174,8 @@ public sealed class ImportIsolatedModuleCommand : PSCmdlet
                 ProfileName = Profile,
                 ModuleName = Name,
                 Path = ResolveOptionalPath(Path),
-                WorkRoot = ResolveOptionalPath(WorkRoot)
+                WorkRoot = ResolveOptionalPath(WorkRoot),
+                PreferIsolatedModulePath = PreferIsolatedModulePath.IsPresent
             };
 
             var result = new IsolatedModuleImportService().Import(request);

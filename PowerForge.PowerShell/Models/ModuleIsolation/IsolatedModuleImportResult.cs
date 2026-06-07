@@ -26,6 +26,12 @@ public sealed class IsolatedModuleImportResult
     /// <summary>Root folder containing the generated copy.</summary>
     public string WorkPath { get; set; } = string.Empty;
 
+    /// <summary>Whether the generated module parent path was requested as the preferred PSModulePath entry.</summary>
+    public bool PreferIsolatedModulePath { get; set; }
+
+    /// <summary>PSModulePath entry prepended when <see cref="PreferIsolatedModulePath"/> is enabled.</summary>
+    public string IsolatedModuleResolutionPath { get; set; } = string.Empty;
+
     /// <summary>Load-context name used by the generated wrapper.</summary>
     public string ContextName { get; set; } = string.Empty;
 
