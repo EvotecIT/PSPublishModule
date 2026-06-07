@@ -651,6 +651,34 @@ $value = $first + <# combine #>
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesAssignmentEndingWithPromptPunctuation()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Read-DemoAnswer",
+            Synopsis = "Reads a demo answer.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$answer = Read-Host Continue?
+            Set-Content -Path .\answer.txt -Value $answer
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $answer = Read-Host Continue?\r\nSet-Content -Path .\\answer.txt -Value $answer", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_PreservesAdjacentOperatorContinuationAfterInlinePrompt()
     {
         var command = new DocumentationCommandHelp
@@ -675,6 +703,85 @@ $value = $first+
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first+\r\n        $second", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesTabbedOperatorContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Test-DemoValue",
+            Synopsis = "Tests a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = "$ok = $value\t-eq\r\n        $(\r\n            Get-DemoValue\r\n        )",
+                    Remarks = "Keeps authored continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $ok = $value\t-eq\r\n        $(", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            Get-DemoValue\r\n        )", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesMemberAccessContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-DemoName",
+            Synopsis = "Gets a demo name.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$name = $object.
+        $property
+""",
+                    Remarks = "Keeps authored member-access continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $name = $object.\r\n        $property", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesStaticMemberAccessContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-DemoName",
+            Synopsis = "Gets a demo name.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$name = [Math]::
+        $property
+""",
+                    Remarks = "Keeps authored member-access continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $name = [Math]::\r\n        $property", exampleSection, StringComparison.Ordinal);
     }
 
     [Fact]

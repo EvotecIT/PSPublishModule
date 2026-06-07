@@ -606,8 +606,7 @@ internal sealed class MarkdownHelpWriter
     private static bool EndsWithPowerShellContinuation(string trimmed)
     {
         trimmed = StripLineComment(trimmed).TrimEnd();
-        var lastSpace = trimmed.LastIndexOf(' ');
-        var lastToken = lastSpace < 0 ? trimmed : trimmed.Substring(lastSpace + 1);
+        var lastToken = GetLastToken(trimmed);
         if (lastToken == "|"
             || lastToken == "`"
             || lastToken == ","
@@ -622,6 +621,8 @@ internal sealed class MarkdownHelpWriter
             || lastToken == "??"
             || lastToken == "&&"
             || lastToken == "||"
+            || lastToken == "."
+            || lastToken == "::"
             || lastToken == "+="
             || lastToken == "-="
             || lastToken == "*="
@@ -640,10 +641,24 @@ internal sealed class MarkdownHelpWriter
         return IsPowerShellContinuationOperator(lastToken);
     }
 
+    private static string GetLastToken(string value)
+    {
+        for (var i = value.Length - 1; i >= 0; i--)
+        {
+            if (char.IsWhiteSpace(value[i]))
+                return value.Substring(i + 1);
+        }
+
+        return value;
+    }
+
     private static bool EndsWithAdjacentContinuationOperator(string token)
     {
         if (token.Length <= 1)
             return false;
+
+        if (token.EndsWith("::", StringComparison.Ordinal))
+            return true;
 
         var last = token[token.Length - 1];
         switch (last)
@@ -651,8 +666,7 @@ internal sealed class MarkdownHelpWriter
             case '+':
             case '-':
             case '%':
-            case '!':
-            case '?':
+            case '.':
                 return true;
             default:
                 return false;
