@@ -221,6 +221,62 @@ $items = Get-ChildItem -Recurse
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesTypedInlineAssignmentBeforeTopLevelCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+[string]$path = '.\out.txt'
+            Set-Content -Path $path -Value 'ok'
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> [string]$path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentWithQuotedHereStringMarker()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoPrefix",
+            Synopsis = "Sets a demo prefix.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$prefix = '@"'
+            Set-Content -Path .\prefix.txt -Value $prefix
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $prefix = '@\"'\r\nSet-Content -Path .\\prefix.txt -Value $prefix", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_PreservesIndentedPipelineContinuationAfterInlinePrompt()
     {
         var command = new DocumentationCommandHelp
@@ -363,6 +419,60 @@ $value = $first -
 
         Assert.Contains("PS> $value = $first -\r\n        $(", exampleSection, StringComparison.Ordinal);
         Assert.Contains("\r\n            Get-DemoValue\r\n        )", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesUnaryNegationContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Test-DemoValue",
+            Synopsis = "Tests a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$ok = !
+        $config.Disabled
+""",
+                    Remarks = "Keeps authored unary continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $ok = !\r\n        $config.Disabled", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesNotOperatorContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Test-DemoValue",
+            Synopsis = "Tests a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$ok = -not
+        $config.Disabled
+""",
+                    Remarks = "Keeps authored unary continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $ok = -not\r\n        $config.Disabled", exampleSection, StringComparison.Ordinal);
     }
 
     [Fact]

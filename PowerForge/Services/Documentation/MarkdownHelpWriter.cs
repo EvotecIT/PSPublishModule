@@ -498,11 +498,18 @@ internal sealed class MarkdownHelpWriter
 
     private static bool LooksLikeInlineAssignment(string trimmed)
     {
-        if (!trimmed.StartsWith("$", StringComparison.Ordinal))
+        var variableIndex = trimmed.IndexOf('$');
+        if (variableIndex < 0)
             return false;
 
+        if (variableIndex != 0
+            && (trimmed[0] != '[' || trimmed.LastIndexOf(']', variableIndex) <= 0))
+        {
+            return false;
+        }
+
         var equalsIndex = trimmed.IndexOf('=');
-        return equalsIndex > 1 && equalsIndex < trimmed.Length - 1;
+        return equalsIndex > variableIndex + 1 && equalsIndex < trimmed.Length - 1;
     }
 
     private static bool EndsWithPowerShellContinuation(string trimmed)
@@ -516,7 +523,8 @@ internal sealed class MarkdownHelpWriter
             || trimmed.EndsWith("-", StringComparison.Ordinal)
             || trimmed.EndsWith("*", StringComparison.Ordinal)
             || trimmed.EndsWith("/", StringComparison.Ordinal)
-            || trimmed.EndsWith("%", StringComparison.Ordinal))
+            || trimmed.EndsWith("%", StringComparison.Ordinal)
+            || trimmed.EndsWith("!", StringComparison.Ordinal))
         {
             return true;
         }
@@ -555,6 +563,7 @@ internal sealed class MarkdownHelpWriter
             case "-notin":
             case "-notlike":
             case "-notmatch":
+            case "-not":
             case "-or":
             case "-replace":
             case "-split":
@@ -566,8 +575,51 @@ internal sealed class MarkdownHelpWriter
     }
 
     private static bool StartsHereString(string trimmed)
-        => trimmed.Contains("@'", StringComparison.Ordinal)
-            || trimmed.Contains("@\"", StringComparison.Ordinal);
+        => ContainsHereStringHeader(trimmed);
+
+    private static bool ContainsHereStringHeader(string line)
+    {
+        var inSingleQuotedString = false;
+        var inDoubleQuotedString = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (ch == '`' && inDoubleQuotedString)
+            {
+                i++;
+                continue;
+            }
+
+            if (!inDoubleQuotedString && ch == '\'')
+            {
+                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
+                {
+                    i++;
+                    continue;
+                }
+
+                inSingleQuotedString = !inSingleQuotedString;
+                continue;
+            }
+
+            if (!inSingleQuotedString && ch == '"')
+            {
+                inDoubleQuotedString = !inDoubleQuotedString;
+                continue;
+            }
+
+            if (!inSingleQuotedString
+                && !inDoubleQuotedString
+                && ch == '@'
+                && i + 1 < line.Length
+                && (line[i + 1] == '\'' || line[i + 1] == '"'))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static string StripLineComment(string line)
     {
