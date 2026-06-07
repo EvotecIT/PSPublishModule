@@ -202,6 +202,72 @@ Get-Demo |
     }
 
     [Fact]
+    public void RenderCommandMarkdown_PreservesAuthoredDeepSingleBlockIndentation()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Invoke-DemoBlock",
+            Synopsis = "Invokes a demo block.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+Invoke-DemoBlock {
+            ForEach-Object {
+                if ($_.Ready) {
+                    $_.Name
+                }
+            }
+            }
+""",
+                    Remarks = "Keeps authored deep block formatting."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> Invoke-DemoBlock {\r\n            ForEach-Object {", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n                if ($_.Ready) {\r\n                    $_.Name", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            }\r\n            }", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesGeneratedChainedScriptBlockParameters()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Invoke-DemoBlock",
+            Synopsis = "Invokes a demo block.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+ForEach-Object -Begin {
+            $started = $true
+        } -Process {
+            $_.Name
+        }
+""",
+                    Remarks = "Normalizes generated script-block parameter formatting."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> ForEach-Object -Begin {\r\n    $started = $true\r\n} -Process {\r\n    $_.Name\r\n}", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            $started", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n        } -Process", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_IgnoresQuotedDelimitersWhenPreservingSingleBlockIndentation()
     {
         var command = new DocumentationCommandHelp

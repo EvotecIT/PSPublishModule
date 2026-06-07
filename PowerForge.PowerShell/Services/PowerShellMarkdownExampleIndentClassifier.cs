@@ -237,9 +237,6 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         if (!HasNestedIndent(lines, lineIndexes, commonIndent))
             return false;
 
-        if (commonIndent >= 12)
-            return true;
-
         foreach (var lineIndex in lineIndexes)
         {
             if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
@@ -269,7 +266,15 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
     private static bool IsClosingDelimiterLine(string line)
     {
         var trimmed = line.Trim();
-        return trimmed == "}" || trimmed == ")" || trimmed == "]";
+        if (trimmed.Length == 0 || (trimmed[0] != '}' && trimmed[0] != ')' && trimmed[0] != ']'))
+            return false;
+
+        if (trimmed.Length == 1)
+            return true;
+
+        var remainder = trimmed.Substring(1).TrimStart();
+        return remainder.StartsWith("-", StringComparison.Ordinal)
+            || remainder.StartsWith("|", StringComparison.Ordinal);
     }
 
     private static void AddIndentedCommentLines(
