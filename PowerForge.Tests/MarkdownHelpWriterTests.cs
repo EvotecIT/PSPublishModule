@@ -221,6 +221,34 @@ $items = Get-ChildItem -Recurse
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentEndingWithPathSeparator()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Save-DemoFiles",
+            Synopsis = "Saves demo files.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$files = Get-ChildItem C:/Temp/
+            Set-Content -Path .\files.txt -Value $files.Count
+""",
+                    Remarks = "Saves file counts."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $files = Get-ChildItem C:/Temp/\r\nSet-Content -Path .\\files.txt -Value $files.Count", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_NormalizesTypedInlineAssignmentBeforeTopLevelCommand()
     {
         var command = new DocumentationCommandHelp
@@ -245,6 +273,34 @@ $items = Get-ChildItem -Recurse
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> [string]$path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesAttributedInlineAssignmentBeforeTopLevelCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoContent",
+            Synopsis = "Sets demo content.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+[Parameter(Mandatory=$true)]$path = '.\out.txt'
+            Set-Content -Path $path -Value 'ok'
+""",
+                    Remarks = "Writes generated content."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> [Parameter(Mandatory=$true)]$path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
         Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
     }
 
@@ -274,6 +330,35 @@ $prefix = '@"'
 
         Assert.Contains("PS> $prefix = '@\"'\r\nSet-Content -Path .\\prefix.txt -Value $prefix", exampleSection, StringComparison.Ordinal);
         Assert.DoesNotContain("\r\n            Set-Content", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesExpressionOutputWithEqualsInString()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Show-DemoResponse",
+            Synopsis = "Shows demo response.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$headers.Add('Accept=application/json')
+        Status-Code 200
+        $value Healthy
+""",
+                    Remarks = "Keeps authored output formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $headers.Add('Accept=application/json')\r\n        Status-Code 200", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        $value Healthy", exampleSection, StringComparison.Ordinal);
     }
 
     [Fact]

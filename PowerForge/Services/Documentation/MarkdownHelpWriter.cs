@@ -500,7 +500,7 @@ internal sealed class MarkdownHelpWriter
 
     private static bool LooksLikeInlineAssignment(string trimmed)
     {
-        var variableIndex = trimmed.IndexOf('$');
+        var variableIndex = FindTopLevelVariableStart(trimmed);
         if (variableIndex < 0)
             return false;
 
@@ -510,33 +510,209 @@ internal sealed class MarkdownHelpWriter
             return false;
         }
 
-        var equalsIndex = trimmed.IndexOf('=');
+        var equalsIndex = FindTopLevelAssignmentOperator(trimmed, variableIndex);
         return equalsIndex > variableIndex + 1 && equalsIndex < trimmed.Length - 1;
+    }
+
+    private static int FindTopLevelVariableStart(string line)
+    {
+        var inSingleQuotedString = false;
+        var inDoubleQuotedString = false;
+        var inBlockComment = false;
+        var parenDepth = 0;
+        var bracketDepth = 0;
+        var braceDepth = 0;
+
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (inBlockComment)
+            {
+                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
+                {
+                    inBlockComment = false;
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (ch == '`' && inDoubleQuotedString)
+            {
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
+            {
+                inBlockComment = true;
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
+                break;
+
+            if (!inDoubleQuotedString && ch == '\'')
+            {
+                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
+                {
+                    i++;
+                    continue;
+                }
+
+                inSingleQuotedString = !inSingleQuotedString;
+                continue;
+            }
+
+            if (!inSingleQuotedString && ch == '"')
+            {
+                inDoubleQuotedString = !inDoubleQuotedString;
+                continue;
+            }
+
+            if (inSingleQuotedString || inDoubleQuotedString)
+                continue;
+
+            switch (ch)
+            {
+                case '$' when parenDepth == 0 && bracketDepth == 0 && braceDepth == 0:
+                    return i;
+                case '(':
+                    parenDepth++;
+                    break;
+                case ')':
+                    parenDepth = Math.Max(0, parenDepth - 1);
+                    break;
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    bracketDepth = Math.Max(0, bracketDepth - 1);
+                    break;
+                case '{':
+                    braceDepth++;
+                    break;
+                case '}':
+                    braceDepth = Math.Max(0, braceDepth - 1);
+                    break;
+            }
+        }
+
+        return -1;
     }
 
     private static bool EndsWithPowerShellContinuation(string trimmed)
     {
         trimmed = StripLineComment(trimmed).TrimEnd();
-        if (trimmed.EndsWith("|", StringComparison.Ordinal)
-            || trimmed.EndsWith("`", StringComparison.Ordinal)
-            || trimmed.EndsWith(",", StringComparison.Ordinal)
-            || trimmed.EndsWith("=", StringComparison.Ordinal)
-            || trimmed.EndsWith("+", StringComparison.Ordinal)
-            || trimmed.EndsWith("-", StringComparison.Ordinal)
-            || trimmed.EndsWith("*", StringComparison.Ordinal)
-            || trimmed.EndsWith("/", StringComparison.Ordinal)
-            || trimmed.EndsWith("%", StringComparison.Ordinal)
-            || trimmed.EndsWith("!", StringComparison.Ordinal))
+        var lastSpace = trimmed.LastIndexOf(' ');
+        var lastToken = lastSpace < 0 ? trimmed : trimmed.Substring(lastSpace + 1);
+        if (lastToken == "|"
+            || lastToken == "`"
+            || lastToken == ","
+            || lastToken == "="
+            || lastToken == "+"
+            || lastToken == "-"
+            || lastToken == "*"
+            || lastToken == "/"
+            || lastToken == "%"
+            || lastToken == "!")
         {
             return true;
         }
 
-        var lastSpace = trimmed.LastIndexOf(' ');
-        var lastToken = lastSpace < 0 ? trimmed : trimmed.Substring(lastSpace + 1);
         if (lastToken.Length <= 1 || lastToken[0] != '-')
             return false;
 
         return IsPowerShellContinuationOperator(lastToken);
+    }
+
+    private static int FindTopLevelAssignmentOperator(string line, int startIndex)
+    {
+        var inSingleQuotedString = false;
+        var inDoubleQuotedString = false;
+        var inBlockComment = false;
+        var parenDepth = 0;
+        var bracketDepth = 0;
+        var braceDepth = 0;
+
+        for (var i = startIndex; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (inBlockComment)
+            {
+                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
+                {
+                    inBlockComment = false;
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (ch == '`' && inDoubleQuotedString)
+            {
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
+            {
+                inBlockComment = true;
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
+                break;
+
+            if (!inDoubleQuotedString && ch == '\'')
+            {
+                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
+                {
+                    i++;
+                    continue;
+                }
+
+                inSingleQuotedString = !inSingleQuotedString;
+                continue;
+            }
+
+            if (!inSingleQuotedString && ch == '"')
+            {
+                inDoubleQuotedString = !inDoubleQuotedString;
+                continue;
+            }
+
+            if (inSingleQuotedString || inDoubleQuotedString)
+                continue;
+
+            switch (ch)
+            {
+                case '(':
+                    parenDepth++;
+                    break;
+                case ')':
+                    parenDepth = Math.Max(0, parenDepth - 1);
+                    break;
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    bracketDepth = Math.Max(0, bracketDepth - 1);
+                    break;
+                case '{':
+                    braceDepth++;
+                    break;
+                case '}':
+                    braceDepth = Math.Max(0, braceDepth - 1);
+                    break;
+                case '=' when parenDepth == 0 && bracketDepth == 0 && braceDepth == 0:
+                    return i;
+            }
+        }
+
+        return -1;
     }
 
     private static bool IsPowerShellContinuationOperator(string token)
