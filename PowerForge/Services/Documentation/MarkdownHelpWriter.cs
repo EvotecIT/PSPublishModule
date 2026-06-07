@@ -9,6 +9,13 @@ namespace PowerForge;
 /// </summary>
 internal sealed class MarkdownHelpWriter
 {
+    private readonly IMarkdownExampleIndentClassifier? _exampleIndentClassifier;
+
+    public MarkdownHelpWriter(IMarkdownExampleIndentClassifier? exampleIndentClassifier = null)
+    {
+        _exampleIndentClassifier = exampleIndentClassifier;
+    }
+
     public void WriteCommandHelpFiles(DocumentationExtractionPayload payload, string moduleName, string docsPath)
     {
         if (payload is null) throw new ArgumentNullException(nameof(payload));
@@ -23,7 +30,7 @@ internal sealed class MarkdownHelpWriter
                      .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
                      .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion);
+            var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion, exampleIndentClassifier: _exampleIndentClassifier);
             var path = Path.Combine(docsPath, $"{cmd.Name.Trim()}.md");
             GeneratedTextNormalizer.WriteUtf8NoBom(path, md);
         }
@@ -108,7 +115,8 @@ internal sealed class MarkdownHelpWriter
         string moduleName,
         DocumentationCommandHelp cmd,
         string? onlineVersion = null,
-        DocumentationExampleLayout examplesLayout = DocumentationExampleLayout.MamlDefault)
+        DocumentationExampleLayout examplesLayout = DocumentationExampleLayout.MamlDefault,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier = null)
     {
         var doc = new MarkdownDocumentBuilder(blankLineAfterFrontMatter: false);
         doc.FrontMatterRaw("external help file", $"{moduleName}-help.xml");
@@ -163,7 +171,7 @@ internal sealed class MarkdownHelpWriter
             {
                 var ex = examples[i];
                 doc.RawLine($"### EXAMPLE {i + 1}");
-                var code = RenderMarkdownExampleCode(cmd.Name.Trim(), ex);
+                var code = RenderMarkdownExampleCode(cmd.Name.Trim(), ex, exampleIndentClassifier);
                 var remarks = (ex.Remarks ?? string.Empty).Replace("\r\n", "\n").TrimEnd('\n', '\r');
                 if (examplesLayout == DocumentationExampleLayout.ProseFirst)
                 {
@@ -343,11 +351,14 @@ internal sealed class MarkdownHelpWriter
 
     private static string Bool(bool value) => value ? "True" : "False";
 
-    private static string RenderMarkdownExampleCode(string commandName, DocumentationExampleHelp example)
+    private static string RenderMarkdownExampleCode(
+        string commandName,
+        DocumentationExampleHelp example,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier)
     {
-        var code = NormalizeMarkdownExampleCode(string.IsNullOrWhiteSpace(example.Code)
-            ? commandName
-            : example.Code);
+        var code = NormalizeMarkdownExampleCode(
+            string.IsNullOrWhiteSpace(example.Code) ? commandName : example.Code,
+            exampleIndentClassifier);
 
         var introduction = (example.Introduction ?? string.Empty)
             .Replace("\r\n", "\n")
@@ -367,7 +378,9 @@ internal sealed class MarkdownHelpWriter
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static string NormalizeMarkdownExampleCode(string code)
+    private static string NormalizeMarkdownExampleCode(
+        string code,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier)
     {
         var normalized = (code ?? string.Empty)
             .Replace("\r\n", "\n")
@@ -379,147 +392,12 @@ internal sealed class MarkdownHelpWriter
 
         var lines = normalized.Split('\n');
         RemoveSharedIndent(lines, GetCommonIndent(lines));
-        RemoveSharedIndentAfterInlineFirstLine(lines);
+        normalized = string.Join("\n", lines);
 
-        return string.Join("\n", lines).TrimEnd('\n');
-    }
+        if (exampleIndentClassifier is not null)
+            normalized = exampleIndentClassifier.NormalizeAfterSharedIndent(normalized);
 
-    private static void RemoveSharedIndentAfterInlineFirstLine(string[] lines)
-    {
-        var firstNonBlank = Array.FindIndex(lines, line => !string.IsNullOrWhiteSpace(line));
-        if (firstNonBlank < 0 || CountLeadingWhitespace(lines[firstNonBlank]) > 0)
-            return;
-
-        if (!LooksLikePowerShellBlockOpening(lines[firstNonBlank]))
-            return;
-
-        var indent = GetCommonIndent(lines.Skip(firstNonBlank + 1));
-        if (indent < 8)
-            return;
-
-        if (!HasAdditionalTopLevelLineAfterOpenedBlock(lines[firstNonBlank], lines, firstNonBlank + 1, indent))
-            return;
-
-        for (var i = firstNonBlank + 1; i < lines.Length; i++)
-        {
-            lines[i] = RemoveLeadingWhitespace(lines[i], indent);
-        }
-    }
-
-    private static bool LooksLikePowerShellBlockOpening(string line)
-    {
-        var trimmed = line.TrimEnd();
-        return trimmed.EndsWith("{", StringComparison.Ordinal)
-            || trimmed.EndsWith("@(", StringComparison.Ordinal)
-            || trimmed.EndsWith("@{", StringComparison.Ordinal)
-            || trimmed.EndsWith("(", StringComparison.Ordinal);
-    }
-
-    private static bool HasAdditionalTopLevelLineAfterOpenedBlock(string firstLine, string[] lines, int startIndex, int indent)
-    {
-        var blockDepth = Math.Max(0, CountBlockDepthDelta(firstLine));
-        for (var i = startIndex; i < lines.Length; i++)
-        {
-            var line = lines[i];
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            line = RemoveLeadingWhitespace(line, indent);
-            var trimmed = line.TrimStart();
-            var isCandidateTopLevel = CountLeadingWhitespace(line) == 0;
-            if (isCandidateTopLevel
-                && blockDepth == 0
-                && !StartsWithBlockClose(trimmed)
-                && LooksLikeTopLevelPowerShellLine(trimmed))
-            {
-                return true;
-            }
-
-            blockDepth = Math.Max(0, blockDepth + CountBlockDepthDelta(line));
-        }
-
-        return false;
-    }
-
-    private static bool LooksLikeTopLevelPowerShellLine(string line)
-    {
-        var trimmed = line.TrimStart();
-        if (trimmed.Length == 0)
-            return false;
-
-        if (trimmed[0] == '$' || trimmed[0] == '[' || trimmed[0] == '&' || trimmed[0] == '.')
-            return true;
-
-        var dashIndex = trimmed.IndexOf('-');
-        if (dashIndex <= 0)
-            return false;
-
-        for (var i = 0; i < dashIndex; i++)
-        {
-            if (!char.IsLetter(trimmed[i]))
-                return false;
-        }
-
-        return dashIndex + 1 < trimmed.Length && char.IsLetter(trimmed[dashIndex + 1]);
-    }
-
-    private static bool StartsWithBlockClose(string trimmed)
-        => trimmed.Length > 0 && (trimmed[0] == '}' || trimmed[0] == ')' || trimmed[0] == ']');
-
-    private static int CountBlockDepthDelta(string line)
-    {
-        var delta = 0;
-        var inSingleQuotedString = false;
-        var inDoubleQuotedString = false;
-        for (var i = 0; i < line.Length; i++)
-        {
-            var ch = line[i];
-            if (ch == '`' && inDoubleQuotedString)
-            {
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
-                break;
-
-            if (!inDoubleQuotedString && ch == '\'')
-            {
-                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
-                {
-                    i++;
-                    continue;
-                }
-
-                inSingleQuotedString = !inSingleQuotedString;
-                continue;
-            }
-
-            if (!inSingleQuotedString && ch == '"')
-            {
-                inDoubleQuotedString = !inDoubleQuotedString;
-                continue;
-            }
-
-            if (inSingleQuotedString || inDoubleQuotedString)
-                continue;
-
-            switch (ch)
-            {
-                case '{':
-                case '(':
-                case '[':
-                    delta++;
-                    break;
-                case '}':
-                case ')':
-                case ']':
-                    delta--;
-                    break;
-            }
-        }
-
-        return delta;
+        return normalized.TrimEnd('\n');
     }
 
     private static int GetCommonIndent(IEnumerable<string> lines)
