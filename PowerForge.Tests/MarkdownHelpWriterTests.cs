@@ -422,6 +422,88 @@ $value = $first -
     }
 
     [Fact]
+    public void RenderCommandMarkdown_PreservesUnmatchedDelimiterContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoItems",
+            Synopsis = "Sets demo items.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$items = @(Get-Demo
+        Where-Object Status -eq 'Ready')
+""",
+                    Remarks = "Keeps authored grouping continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $items = @(Get-Demo\r\n        Where-Object Status -eq 'Ready')", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesOrdinaryMultilineStringAssignment()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoBody",
+            Synopsis = "Sets a demo body.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$body = "
+        Get-Process
+"
+""",
+                    Remarks = "Keeps authored string content."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $body = \"\r\n        Get-Process\r\n\"", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesOperatorContinuationBeforeBlockComment()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoValue",
+            Synopsis = "Sets a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$value = $first + <# combine #>
+        $second
+""",
+                    Remarks = "Keeps authored continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $value = $first + <# combine #>\r\n        $second", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_PreservesUnaryNegationContinuationAfterInlinePrompt()
     {
         var command = new DocumentationCommandHelp

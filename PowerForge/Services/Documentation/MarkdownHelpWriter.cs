@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace PowerForge;
 
@@ -448,6 +449,7 @@ internal sealed class MarkdownHelpWriter
         var trimmedFirstLine = StripLineComment(firstLine).TrimEnd();
         if (!LooksLikeInlineAssignment(trimmedFirstLine)
             || EndsWithPowerShellContinuation(trimmedFirstLine)
+            || HasUnclosedGroupingOrString(firstLine)
             || StartsHereString(trimmedFirstLine))
             return false;
 
@@ -577,6 +579,97 @@ internal sealed class MarkdownHelpWriter
     private static bool StartsHereString(string trimmed)
         => ContainsHereStringHeader(trimmed);
 
+    private static bool HasUnclosedGroupingOrString(string line)
+    {
+        var inSingleQuotedString = false;
+        var inDoubleQuotedString = false;
+        var inBlockComment = false;
+        var parenDepth = 0;
+        var bracketDepth = 0;
+        var braceDepth = 0;
+
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (inBlockComment)
+            {
+                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
+                {
+                    inBlockComment = false;
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (ch == '`' && inDoubleQuotedString)
+            {
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
+            {
+                inBlockComment = true;
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
+                break;
+
+            if (!inDoubleQuotedString && ch == '\'')
+            {
+                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
+                {
+                    i++;
+                    continue;
+                }
+
+                inSingleQuotedString = !inSingleQuotedString;
+                continue;
+            }
+
+            if (!inSingleQuotedString && ch == '"')
+            {
+                inDoubleQuotedString = !inDoubleQuotedString;
+                continue;
+            }
+
+            if (inSingleQuotedString || inDoubleQuotedString)
+                continue;
+
+            switch (ch)
+            {
+                case '(':
+                    parenDepth++;
+                    break;
+                case ')':
+                    parenDepth = Math.Max(0, parenDepth - 1);
+                    break;
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    bracketDepth = Math.Max(0, bracketDepth - 1);
+                    break;
+                case '{':
+                    braceDepth++;
+                    break;
+                case '}':
+                    braceDepth = Math.Max(0, braceDepth - 1);
+                    break;
+            }
+        }
+
+        return inSingleQuotedString
+            || inDoubleQuotedString
+            || inBlockComment
+            || parenDepth > 0
+            || bracketDepth > 0
+            || braceDepth > 0;
+    }
+
     private static bool ContainsHereStringHeader(string line)
     {
         var inSingleQuotedString = false;
@@ -625,11 +718,35 @@ internal sealed class MarkdownHelpWriter
     {
         var inSingleQuotedString = false;
         var inDoubleQuotedString = false;
+        var inBlockComment = false;
+        var result = new StringBuilder(line.Length);
         for (var i = 0; i < line.Length; i++)
         {
             var ch = line[i];
+            if (inBlockComment)
+            {
+                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
+                {
+                    inBlockComment = false;
+                    i++;
+                }
+
+                continue;
+            }
+
             if (ch == '`' && inDoubleQuotedString)
             {
+                result.Append(ch);
+                if (i + 1 < line.Length)
+                    result.Append(line[i + 1]);
+
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
+            {
+                inBlockComment = true;
                 i++;
                 continue;
             }
@@ -638,25 +755,31 @@ internal sealed class MarkdownHelpWriter
             {
                 if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
                 {
+                    result.Append(ch);
+                    result.Append(line[i + 1]);
                     i++;
                     continue;
                 }
 
                 inSingleQuotedString = !inSingleQuotedString;
+                result.Append(ch);
                 continue;
             }
 
             if (!inSingleQuotedString && ch == '"')
             {
                 inDoubleQuotedString = !inDoubleQuotedString;
+                result.Append(ch);
                 continue;
             }
 
             if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
-                return line.Substring(0, i);
+                break;
+
+            result.Append(ch);
         }
 
-        return line;
+        return result.ToString();
     }
 
     private static int CountBlockDepthDelta(string line)
