@@ -49,7 +49,7 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             if (indent < 8)
                 return normalized;
 
-            if (statements.Length == 1 && !ShouldNormalizeSingleStatement(lines, linesToNormalize, indent))
+            if (statements.Length == 1 && !ShouldNormalizeSingleStatement(firstStatement, lines, linesToNormalize, indent))
                 return normalized;
 
             AddIndentedCommentLines(lines, commentLines, linesToNormalize, indent, firstStatement.Extent.EndLineNumber - 1);
@@ -225,8 +225,15 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         return false;
     }
 
-    private static bool ShouldNormalizeSingleStatement(string[] lines, HashSet<int> lineIndexes, int commonIndent)
+    private static bool ShouldNormalizeSingleStatement(
+        StatementAst statement,
+        string[] lines,
+        HashSet<int> lineIndexes,
+        int commonIndent)
     {
+        if (!IsSingleCommandScriptBlockStatement(statement))
+            return false;
+
         if (!HasNestedIndent(lines, lineIndexes, commonIndent))
             return false;
 
@@ -246,6 +253,17 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         }
 
         return true;
+    }
+
+    private static bool IsSingleCommandScriptBlockStatement(StatementAst statement)
+    {
+        if (statement is not PipelineAst pipeline || pipeline.PipelineElements.Count != 1)
+            return false;
+
+        if (pipeline.PipelineElements[0] is not CommandAst command)
+            return false;
+
+        return command.CommandElements.Any(static element => element is ScriptBlockExpressionAst);
     }
 
     private static bool IsClosingDelimiterLine(string line)

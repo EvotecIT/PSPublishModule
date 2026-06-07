@@ -172,6 +172,36 @@ New-DemoReport -Path .\Examples\Documents\Report.pdf {
     }
 
     [Fact]
+    public void RenderCommandMarkdown_PreservesAuthoredPipelineContinuationInSingleStatement()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-DemoReport",
+            Synopsis = "Gets a demo report.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+Get-Demo |
+            Where-Object {
+                $_.Ready
+            }
+""",
+                    Remarks = "Keeps authored pipeline continuation formatting."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> Get-Demo |\r\n            Where-Object {", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n                $_.Ready\r\n            }", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_IgnoresQuotedDelimitersWhenPreservingSingleBlockIndentation()
     {
         var command = new DocumentationCommandHelp
