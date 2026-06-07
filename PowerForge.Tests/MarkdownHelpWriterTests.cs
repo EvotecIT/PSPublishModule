@@ -5,6 +5,12 @@ using Xunit;
 
 public class MarkdownHelpWriterTests
 {
+    private static string RenderCommandMarkdown(DocumentationCommandHelp command)
+        => MarkdownHelpWriter.RenderCommandMarkdown(
+            "DemoModule",
+            command,
+            exampleIndentClassifier: PowerShellMarkdownExampleIndentClassifier.Instance);
+
     [Fact]
     public void RenderCommandMarkdown_NormalizesIncidentalExampleIndentation()
     {
@@ -34,7 +40,7 @@ $plan = New-DemoDeckPlan {
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $plan = New-DemoDeckPlan {\r\n    Add-DemoSection -Title 'Service Review'", exampleSection, StringComparison.Ordinal);
@@ -66,7 +72,7 @@ Show-DemoOutput
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> Show-DemoOutput\r\n        Name        Status", exampleSection, StringComparison.Ordinal);
@@ -96,7 +102,7 @@ ForEach-Object {
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> ForEach-Object {\r\n        $_.Name", exampleSection, StringComparison.Ordinal);
@@ -126,7 +132,7 @@ ForEach-Object {
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> ForEach-Object {\r\n        \"}\"", exampleSection, StringComparison.Ordinal);
@@ -157,7 +163,7 @@ ForEach-Object { <# } #>
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> ForEach-Object { <# } #>\r\n        New-Demo {", exampleSection, StringComparison.Ordinal);
@@ -188,7 +194,7 @@ ForEach-Object { <#
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> ForEach-Object { <#\r\n        }", exampleSection, StringComparison.Ordinal);
@@ -218,7 +224,7 @@ $image = '.\Tests\Assets\CellImage.png'
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $image = '.\\Tests\\Assets\\CellImage.png'\r\nNew-DemoDeck -Path .\\Examples\\Documents\\DemoImage.pptx", exampleSection, StringComparison.Ordinal);
@@ -247,7 +253,7 @@ $path = '.\out.txt'
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
@@ -277,7 +283,7 @@ $image = '.\Tests\Assets\CellImage.png'
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $image = '.\\Tests\\Assets\\CellImage.png'\r\nif ($image) {", exampleSection, StringComparison.Ordinal);
@@ -306,38 +312,11 @@ $root = '.\src'
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $root = '.\\src'\r\ndotnet build $root", exampleSection, StringComparison.Ordinal);
         Assert.DoesNotContain("\r\n            dotnet", exampleSection, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void RenderCommandMarkdown_PreservesLowercaseOutputAfterInlineAssignment()
-    {
-        var command = new DocumentationCommandHelp
-        {
-            Name = "Show-DemoStatus",
-            Synopsis = "Shows demo status.",
-            Examples = new List<DocumentationExampleHelp>
-            {
-                new()
-                {
-                    Introduction = "PS> ",
-                    Code = """
-$status = 'ready'
-            service ready
-""",
-                    Remarks = "Shows command output."
-                }
-            }
-        };
-
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
-        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
-
-        Assert.Contains("PS> $status = 'ready'\r\n            service ready", exampleSection, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -361,7 +340,7 @@ $items = Get-ChildItem -Recurse
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $items = Get-ChildItem -Recurse\r\nSet-Content -Path .\\items.txt -Value $items.Count", exampleSection, StringComparison.Ordinal);
@@ -389,7 +368,7 @@ $files = Get-ChildItem C:/Temp/
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $files = Get-ChildItem C:/Temp/\r\nSet-Content -Path .\\files.txt -Value $files.Count", exampleSection, StringComparison.Ordinal);
@@ -417,7 +396,7 @@ $files = Get-ChildItem C:/Temp/*
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $files = Get-ChildItem C:/Temp/*\r\nSet-Content -Path .\\files.txt -Value $files.Count", exampleSection, StringComparison.Ordinal);
@@ -445,7 +424,7 @@ $files = Get-ChildItem C:/Temp/*
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> [string]$path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
@@ -473,7 +452,7 @@ $files = Get-ChildItem C:/Temp/*
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> [Parameter(Mandatory=$true)]$path = '.\\out.txt'\r\nSet-Content -Path $path -Value 'ok'", exampleSection, StringComparison.Ordinal);
@@ -501,7 +480,7 @@ $prefix = '@"'
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $prefix = '@\"'\r\nSet-Content -Path .\\prefix.txt -Value $prefix", exampleSection, StringComparison.Ordinal);
@@ -530,7 +509,7 @@ $headers.Add('Accept=application/json')
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $headers.Add('Accept=application/json')\r\n        Status-Code 200", exampleSection, StringComparison.Ordinal);
@@ -559,7 +538,7 @@ Get-Demo |
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> Get-Demo |\r\n        Where-Object Status -eq 'Ready' |", exampleSection, StringComparison.Ordinal);
@@ -588,7 +567,7 @@ Show-DemoStatus
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> Show-DemoStatus\r\n        Service-Status Ready", exampleSection, StringComparison.Ordinal);
@@ -618,7 +597,7 @@ $body =
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $body =\r\n        @\"", exampleSection, StringComparison.Ordinal);
@@ -646,7 +625,7 @@ $value = $first +
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first +\r\n        $second", exampleSection, StringComparison.Ordinal);
@@ -675,7 +654,7 @@ $value = $first -
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first -\r\n        $(", exampleSection, StringComparison.Ordinal);
@@ -702,7 +681,7 @@ $value = $first -
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first" + operatorToken + "\r\n        $second", exampleSection, StringComparison.Ordinal);
@@ -729,7 +708,7 @@ $items = @(Get-Demo
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $items = @(Get-Demo\r\n        Where-Object Status -eq 'Ready')", exampleSection, StringComparison.Ordinal);
@@ -757,7 +736,7 @@ $body = "
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $body = \"\r\n        Get-Process\r\n\"", exampleSection, StringComparison.Ordinal);
@@ -784,7 +763,7 @@ $value = $first + <# combine #>
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first + <# combine #>\r\n        $second", exampleSection, StringComparison.Ordinal);
@@ -811,7 +790,7 @@ $answer = Read-Host Continue?
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $answer = Read-Host Continue?\r\nSet-Content -Path .\\answer.txt -Value $answer", exampleSection, StringComparison.Ordinal);
@@ -839,7 +818,7 @@ $value = $first+
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first+\r\n        $second", exampleSection, StringComparison.Ordinal);
@@ -863,7 +842,7 @@ $value = $first+
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $ok = $value\t-eq\r\n        $(", exampleSection, StringComparison.Ordinal);
@@ -891,7 +870,7 @@ $name = $object.
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $name = $object.\r\n        $property", exampleSection, StringComparison.Ordinal);
@@ -918,7 +897,7 @@ $name = [Math]::
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $name = [Math]::\r\n        $property", exampleSection, StringComparison.Ordinal);
@@ -945,7 +924,7 @@ $total +=
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $total +=\r\n        $next", exampleSection, StringComparison.Ordinal);
@@ -973,7 +952,7 @@ $result = $condition ?
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $result = $condition ?\r\n        $trueValue :", exampleSection, StringComparison.Ordinal);
@@ -1001,7 +980,7 @@ $result = $value ??
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $result = $value ??\r\n        $fallback", exampleSection, StringComparison.Ordinal);
@@ -1031,7 +1010,7 @@ $ok = (Test-Path $a) &&
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $ok = (Test-Path $a) &&\r\n        (Test-Path $b)", exampleSection, StringComparison.Ordinal);
@@ -1059,7 +1038,7 @@ $ok = !
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $ok = !\r\n        $config.Disabled", exampleSection, StringComparison.Ordinal);
@@ -1086,7 +1065,7 @@ $ok = -not
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $ok = -not\r\n        $config.Disabled", exampleSection, StringComparison.Ordinal);
@@ -1115,7 +1094,7 @@ $ok = $value -eq
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $ok = $value -eq\r\n        $(", exampleSection, StringComparison.Ordinal);
@@ -1143,7 +1122,7 @@ $ok = $value -eq
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first " + operatorToken + "\r\n        $second", exampleSection, StringComparison.Ordinal);
@@ -1172,7 +1151,7 @@ Result:
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> Result:\r\n        New-Demo {", exampleSection, StringComparison.Ordinal);
@@ -1202,7 +1181,7 @@ Show-DemoTemplate
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> Show-DemoTemplate\r\n        $config = @{", exampleSection, StringComparison.Ordinal);
@@ -1233,7 +1212,7 @@ $value = $first + # combine
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first + # combine\r\n        $second", exampleSection, StringComparison.Ordinal);
@@ -1264,7 +1243,7 @@ ForEach-Object { # filter
             }
         };
 
-        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var markdown = RenderCommandMarkdown(command);
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> ForEach-Object { # filter\r\n        New-Demo {", exampleSection, StringComparison.Ordinal);

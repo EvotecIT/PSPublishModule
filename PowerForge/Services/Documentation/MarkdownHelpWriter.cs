@@ -1,15 +1,21 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text;
 
 namespace PowerForge;
 
 /// <summary>
 /// Writes PowerShell command markdown help files.
 /// </summary>
-internal sealed partial class MarkdownHelpWriter
+internal sealed class MarkdownHelpWriter
 {
+    private readonly IMarkdownExampleIndentClassifier? _exampleIndentClassifier;
+
+    public MarkdownHelpWriter(IMarkdownExampleIndentClassifier? exampleIndentClassifier = null)
+    {
+        _exampleIndentClassifier = exampleIndentClassifier;
+    }
+
     public void WriteCommandHelpFiles(DocumentationExtractionPayload payload, string moduleName, string docsPath)
     {
         if (payload is null) throw new ArgumentNullException(nameof(payload));
@@ -24,7 +30,7 @@ internal sealed partial class MarkdownHelpWriter
                      .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
                      .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion);
+            var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion, exampleIndentClassifier: _exampleIndentClassifier);
             var path = Path.Combine(docsPath, $"{cmd.Name.Trim()}.md");
             GeneratedTextNormalizer.WriteUtf8NoBom(path, md);
         }
@@ -109,7 +115,8 @@ internal sealed partial class MarkdownHelpWriter
         string moduleName,
         DocumentationCommandHelp cmd,
         string? onlineVersion = null,
-        DocumentationExampleLayout examplesLayout = DocumentationExampleLayout.MamlDefault)
+        DocumentationExampleLayout examplesLayout = DocumentationExampleLayout.MamlDefault,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier = null)
     {
         var doc = new MarkdownDocumentBuilder(blankLineAfterFrontMatter: false);
         doc.FrontMatterRaw("external help file", $"{moduleName}-help.xml");
@@ -164,7 +171,7 @@ internal sealed partial class MarkdownHelpWriter
             {
                 var ex = examples[i];
                 doc.RawLine($"### EXAMPLE {i + 1}");
-                var code = RenderMarkdownExampleCode(cmd.Name.Trim(), ex);
+                var code = RenderMarkdownExampleCode(cmd.Name.Trim(), ex, exampleIndentClassifier);
                 var remarks = (ex.Remarks ?? string.Empty).Replace("\r\n", "\n").TrimEnd('\n', '\r');
                 if (examplesLayout == DocumentationExampleLayout.ProseFirst)
                 {
@@ -344,11 +351,14 @@ internal sealed partial class MarkdownHelpWriter
 
     private static string Bool(bool value) => value ? "True" : "False";
 
-    private static string RenderMarkdownExampleCode(string commandName, DocumentationExampleHelp example)
+    private static string RenderMarkdownExampleCode(
+        string commandName,
+        DocumentationExampleHelp example,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier)
     {
-        var code = NormalizeMarkdownExampleCode(string.IsNullOrWhiteSpace(example.Code)
-            ? commandName
-            : example.Code);
+        var code = NormalizeMarkdownExampleCode(
+            string.IsNullOrWhiteSpace(example.Code) ? commandName : example.Code,
+            exampleIndentClassifier);
 
         var introduction = (example.Introduction ?? string.Empty)
             .Replace("\r\n", "\n")
@@ -368,7 +378,9 @@ internal sealed partial class MarkdownHelpWriter
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static string NormalizeMarkdownExampleCode(string code)
+    private static string NormalizeMarkdownExampleCode(
+        string code,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier)
     {
         var normalized = (code ?? string.Empty)
             .Replace("\r\n", "\n")
@@ -380,13 +392,18 @@ internal sealed partial class MarkdownHelpWriter
 
         var lines = normalized.Split('\n');
         RemoveSharedIndent(lines, GetCommonIndent(lines));
-        RemoveSharedIndentAfterInlineFirstLine(lines);
+        RemoveSharedIndentAfterInlineFirstLine(lines, exampleIndentClassifier);
 
         return string.Join("\n", lines).TrimEnd('\n');
     }
 
-    private static void RemoveSharedIndentAfterInlineFirstLine(string[] lines)
+    private static void RemoveSharedIndentAfterInlineFirstLine(
+        string[] lines,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier)
     {
+        if (exampleIndentClassifier is null)
+            return;
+
         var firstNonBlank = Array.FindIndex(lines, line => !string.IsNullOrWhiteSpace(line));
         if (firstNonBlank < 0 || CountLeadingWhitespace(lines[firstNonBlank]) > 0)
             return;
@@ -395,683 +412,20 @@ internal sealed partial class MarkdownHelpWriter
         if (indent < 8)
             return;
 
-        var firstLine = lines[firstNonBlank];
-        var shouldRemoveIndent = LooksLikePowerShellBlockOpening(firstLine)
-            ? HasAdditionalTopLevelLineAfterOpenedBlock(firstLine, lines, firstNonBlank + 1, indent)
-            : HasAdditionalTopLevelLineAfterCompleteInlineStatement(firstLine, lines, firstNonBlank + 1, indent);
+        var candidate = new string[lines.Length - firstNonBlank];
+        candidate[0] = lines[firstNonBlank];
+        for (var i = firstNonBlank + 1; i < lines.Length; i++)
+        {
+            candidate[i - firstNonBlank] = RemoveLeadingWhitespace(lines[i], indent);
+        }
 
-        if (!shouldRemoveIndent)
+        if (!exampleIndentClassifier.ShouldRemoveSharedIndentAfterFirstLine(string.Join("\n", candidate)))
             return;
 
         for (var i = firstNonBlank + 1; i < lines.Length; i++)
         {
             lines[i] = RemoveLeadingWhitespace(lines[i], indent);
         }
-    }
-
-    private static bool LooksLikePowerShellBlockOpening(string line)
-    {
-        var trimmed = StripLineComment(line).TrimEnd();
-        return trimmed.EndsWith("{", StringComparison.Ordinal)
-            || trimmed.EndsWith("@(", StringComparison.Ordinal)
-            || trimmed.EndsWith("@{", StringComparison.Ordinal)
-            || trimmed.EndsWith("(", StringComparison.Ordinal);
-    }
-
-    private static bool HasAdditionalTopLevelLineAfterOpenedBlock(string firstLine, string[] lines, int startIndex, int indent)
-    {
-        var inBlockComment = false;
-        var blockDepth = Math.Max(0, CountBlockDepthDelta(firstLine, ref inBlockComment));
-        for (var i = startIndex; i < lines.Length; i++)
-        {
-            var line = lines[i];
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            line = RemoveLeadingWhitespace(line, indent);
-            var trimmed = line.TrimStart();
-            var isCandidateTopLevel = CountLeadingWhitespace(line) == 0;
-            if (isCandidateTopLevel
-                && blockDepth == 0
-                && !StartsWithBlockClose(trimmed)
-                && LooksLikeTopLevelPowerShellLine(trimmed))
-            {
-                return true;
-            }
-
-            blockDepth = Math.Max(0, blockDepth + CountBlockDepthDelta(line, ref inBlockComment));
-        }
-
-        return false;
-    }
-
-    private static bool HasAdditionalTopLevelLineAfterCompleteInlineStatement(string firstLine, string[] lines, int startIndex, int indent)
-    {
-        var trimmedFirstLine = StripLineComment(firstLine).TrimEnd();
-        if (!LooksLikeInlineAssignment(trimmedFirstLine)
-            || EndsWithPowerShellContinuation(trimmedFirstLine)
-            || HasUnclosedGroupingOrString(firstLine)
-            || StartsHereString(trimmedFirstLine))
-            return false;
-
-        for (var i = startIndex; i < lines.Length; i++)
-        {
-            var line = lines[i];
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            line = RemoveLeadingWhitespace(line, indent);
-            var trimmed = line.TrimStart();
-            var isCandidateTopLevel = CountLeadingWhitespace(line) == 0;
-            if (isCandidateTopLevel
-                && !StartsWithBlockClose(trimmed)
-                && LooksLikeTopLevelPowerShellLine(trimmed))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool LooksLikeTopLevelPowerShellLine(string line)
-    {
-        var trimmed = line.TrimStart();
-        if (trimmed.Length == 0)
-            return false;
-
-        if (trimmed[0] == '$' || trimmed[0] == '[' || trimmed[0] == '&' || trimmed[0] == '.')
-            return true;
-
-        if (StartsWithPowerShellStatementKeyword(trimmed) || StartsWithKnownNativeCommand(trimmed))
-            return true;
-
-        var dashIndex = trimmed.IndexOf('-');
-        if (dashIndex <= 0)
-            return false;
-
-        for (var i = 0; i < dashIndex; i++)
-        {
-            if (!char.IsLetter(trimmed[i]))
-                return false;
-        }
-
-        return dashIndex + 1 < trimmed.Length && char.IsLetter(trimmed[dashIndex + 1]);
-    }
-
-    private static bool StartsWithBlockClose(string trimmed)
-        => trimmed.Length > 0 && (trimmed[0] == '}' || trimmed[0] == ')' || trimmed[0] == ']');
-
-    private static bool LooksLikeInlineAssignment(string trimmed)
-    {
-        var variableIndex = FindTopLevelVariableStart(trimmed);
-        if (variableIndex < 0)
-            return false;
-
-        if (variableIndex != 0
-            && (trimmed[0] != '[' || trimmed.LastIndexOf(']', variableIndex) <= 0))
-        {
-            return false;
-        }
-
-        var equalsIndex = FindTopLevelAssignmentOperator(trimmed, variableIndex);
-        return equalsIndex > variableIndex + 1 && equalsIndex < trimmed.Length - 1;
-    }
-
-    private static int FindTopLevelVariableStart(string line)
-    {
-        var inSingleQuotedString = false;
-        var inDoubleQuotedString = false;
-        var inBlockComment = false;
-        var parenDepth = 0;
-        var bracketDepth = 0;
-        var braceDepth = 0;
-
-        for (var i = 0; i < line.Length; i++)
-        {
-            var ch = line[i];
-            if (inBlockComment)
-            {
-                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
-                {
-                    inBlockComment = false;
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (ch == '`' && inDoubleQuotedString)
-            {
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
-            {
-                inBlockComment = true;
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
-                break;
-
-            if (!inDoubleQuotedString && ch == '\'')
-            {
-                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
-                {
-                    i++;
-                    continue;
-                }
-
-                inSingleQuotedString = !inSingleQuotedString;
-                continue;
-            }
-
-            if (!inSingleQuotedString && ch == '"')
-            {
-                inDoubleQuotedString = !inDoubleQuotedString;
-                continue;
-            }
-
-            if (inSingleQuotedString || inDoubleQuotedString)
-                continue;
-
-            switch (ch)
-            {
-                case '$' when parenDepth == 0 && bracketDepth == 0 && braceDepth == 0:
-                    return i;
-                case '(':
-                    parenDepth++;
-                    break;
-                case ')':
-                    parenDepth = Math.Max(0, parenDepth - 1);
-                    break;
-                case '[':
-                    bracketDepth++;
-                    break;
-                case ']':
-                    bracketDepth = Math.Max(0, bracketDepth - 1);
-                    break;
-                case '{':
-                    braceDepth++;
-                    break;
-                case '}':
-                    braceDepth = Math.Max(0, braceDepth - 1);
-                    break;
-            }
-        }
-
-        return -1;
-    }
-
-    private static bool EndsWithPowerShellContinuation(string trimmed)
-    {
-        trimmed = StripLineComment(trimmed).TrimEnd();
-        var lastToken = GetLastToken(trimmed);
-        if (lastToken == "|"
-            || lastToken == "`"
-            || lastToken == ","
-            || lastToken == "="
-            || lastToken == "+"
-            || lastToken == "-"
-            || lastToken == "*"
-            || lastToken == "/"
-            || lastToken == "%"
-            || lastToken == "!"
-            || lastToken == "?"
-            || lastToken == "??"
-            || lastToken == "&&"
-            || lastToken == "||"
-            || lastToken == "."
-            || lastToken == "::"
-            || lastToken == "+="
-            || lastToken == "-="
-            || lastToken == "*="
-            || lastToken == "/="
-            || lastToken == "%=")
-        {
-            return true;
-        }
-
-        if (EndsWithAdjacentContinuationOperator(lastToken))
-            return true;
-
-        if (lastToken.Length <= 1 || lastToken[0] != '-')
-            return false;
-
-        return IsPowerShellContinuationOperator(lastToken);
-    }
-
-    private static string GetLastToken(string value)
-    {
-        for (var i = value.Length - 1; i >= 0; i--)
-        {
-            if (char.IsWhiteSpace(value[i]))
-                return value.Substring(i + 1);
-        }
-
-        return value;
-    }
-
-    private static bool EndsWithAdjacentContinuationOperator(string token)
-    {
-        if (token.Length <= 1)
-            return false;
-
-        if (token.EndsWith("::", StringComparison.Ordinal))
-            return true;
-
-        var last = token[token.Length - 1];
-        switch (last)
-        {
-            case '+':
-            case '-':
-            case '%':
-            case '.':
-                return true;
-            case '*':
-            case '/':
-                return LooksLikeAdjacentArithmeticExpression(token);
-            default:
-                return false;
-        }
-    }
-
-    private static bool LooksLikeAdjacentArithmeticExpression(string token)
-    {
-        if (token.Length <= 1)
-            return false;
-
-        var operand = token.Substring(0, token.Length - 1);
-        if (operand.IndexOf('\\') >= 0 || operand.IndexOf('/') >= 0)
-            return false;
-
-        if (operand.IndexOf(':') >= 0 && !operand.StartsWith("[", StringComparison.Ordinal))
-            return false;
-
-        var first = operand[0];
-        var last = operand[operand.Length - 1];
-        return first == '$'
-            || first == '('
-            || first == '['
-            || first == '\''
-            || first == '"'
-            || char.IsDigit(first)
-            || last == ')'
-            || last == ']'
-            || last == '}'
-            || last == '\''
-            || last == '"';
-    }
-
-    private static int FindTopLevelAssignmentOperator(string line, int startIndex)
-    {
-        var inSingleQuotedString = false;
-        var inDoubleQuotedString = false;
-        var inBlockComment = false;
-        var parenDepth = 0;
-        var bracketDepth = 0;
-        var braceDepth = 0;
-
-        for (var i = startIndex; i < line.Length; i++)
-        {
-            var ch = line[i];
-            if (inBlockComment)
-            {
-                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
-                {
-                    inBlockComment = false;
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (ch == '`' && inDoubleQuotedString)
-            {
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
-            {
-                inBlockComment = true;
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
-                break;
-
-            if (!inDoubleQuotedString && ch == '\'')
-            {
-                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
-                {
-                    i++;
-                    continue;
-                }
-
-                inSingleQuotedString = !inSingleQuotedString;
-                continue;
-            }
-
-            if (!inSingleQuotedString && ch == '"')
-            {
-                inDoubleQuotedString = !inDoubleQuotedString;
-                continue;
-            }
-
-            if (inSingleQuotedString || inDoubleQuotedString)
-                continue;
-
-            switch (ch)
-            {
-                case '(':
-                    parenDepth++;
-                    break;
-                case ')':
-                    parenDepth = Math.Max(0, parenDepth - 1);
-                    break;
-                case '[':
-                    bracketDepth++;
-                    break;
-                case ']':
-                    bracketDepth = Math.Max(0, bracketDepth - 1);
-                    break;
-                case '{':
-                    braceDepth++;
-                    break;
-                case '}':
-                    braceDepth = Math.Max(0, braceDepth - 1);
-                    break;
-                case '=' when parenDepth == 0 && bracketDepth == 0 && braceDepth == 0:
-                    return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private static bool StartsHereString(string trimmed)
-        => ContainsHereStringHeader(trimmed);
-
-    private static bool HasUnclosedGroupingOrString(string line)
-    {
-        var inSingleQuotedString = false;
-        var inDoubleQuotedString = false;
-        var inBlockComment = false;
-        var parenDepth = 0;
-        var bracketDepth = 0;
-        var braceDepth = 0;
-
-        for (var i = 0; i < line.Length; i++)
-        {
-            var ch = line[i];
-            if (inBlockComment)
-            {
-                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
-                {
-                    inBlockComment = false;
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (ch == '`' && inDoubleQuotedString)
-            {
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
-            {
-                inBlockComment = true;
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
-                break;
-
-            if (!inDoubleQuotedString && ch == '\'')
-            {
-                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
-                {
-                    i++;
-                    continue;
-                }
-
-                inSingleQuotedString = !inSingleQuotedString;
-                continue;
-            }
-
-            if (!inSingleQuotedString && ch == '"')
-            {
-                inDoubleQuotedString = !inDoubleQuotedString;
-                continue;
-            }
-
-            if (inSingleQuotedString || inDoubleQuotedString)
-                continue;
-
-            switch (ch)
-            {
-                case '(':
-                    parenDepth++;
-                    break;
-                case ')':
-                    parenDepth = Math.Max(0, parenDepth - 1);
-                    break;
-                case '[':
-                    bracketDepth++;
-                    break;
-                case ']':
-                    bracketDepth = Math.Max(0, bracketDepth - 1);
-                    break;
-                case '{':
-                    braceDepth++;
-                    break;
-                case '}':
-                    braceDepth = Math.Max(0, braceDepth - 1);
-                    break;
-            }
-        }
-
-        return inSingleQuotedString
-            || inDoubleQuotedString
-            || inBlockComment
-            || parenDepth > 0
-            || bracketDepth > 0
-            || braceDepth > 0;
-    }
-
-    private static bool ContainsHereStringHeader(string line)
-    {
-        var inSingleQuotedString = false;
-        var inDoubleQuotedString = false;
-        for (var i = 0; i < line.Length; i++)
-        {
-            var ch = line[i];
-            if (ch == '`' && inDoubleQuotedString)
-            {
-                i++;
-                continue;
-            }
-
-            if (!inDoubleQuotedString && ch == '\'')
-            {
-                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
-                {
-                    i++;
-                    continue;
-                }
-
-                inSingleQuotedString = !inSingleQuotedString;
-                continue;
-            }
-
-            if (!inSingleQuotedString && ch == '"')
-            {
-                inDoubleQuotedString = !inDoubleQuotedString;
-                continue;
-            }
-
-            if (!inSingleQuotedString
-                && !inDoubleQuotedString
-                && ch == '@'
-                && i + 1 < line.Length
-                && (line[i + 1] == '\'' || line[i + 1] == '"'))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string StripLineComment(string line)
-    {
-        var inSingleQuotedString = false;
-        var inDoubleQuotedString = false;
-        var inBlockComment = false;
-        var result = new StringBuilder(line.Length);
-        for (var i = 0; i < line.Length; i++)
-        {
-            var ch = line[i];
-            if (inBlockComment)
-            {
-                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
-                {
-                    inBlockComment = false;
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (ch == '`' && inDoubleQuotedString)
-            {
-                result.Append(ch);
-                if (i + 1 < line.Length)
-                    result.Append(line[i + 1]);
-
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
-            {
-                inBlockComment = true;
-                i++;
-                continue;
-            }
-
-            if (!inDoubleQuotedString && ch == '\'')
-            {
-                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
-                {
-                    result.Append(ch);
-                    result.Append(line[i + 1]);
-                    i++;
-                    continue;
-                }
-
-                inSingleQuotedString = !inSingleQuotedString;
-                result.Append(ch);
-                continue;
-            }
-
-            if (!inSingleQuotedString && ch == '"')
-            {
-                inDoubleQuotedString = !inDoubleQuotedString;
-                result.Append(ch);
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
-                break;
-
-            result.Append(ch);
-        }
-
-        return result.ToString();
-    }
-
-    private static int CountBlockDepthDelta(string line, ref bool inBlockComment)
-    {
-        var delta = 0;
-        var inSingleQuotedString = false;
-        var inDoubleQuotedString = false;
-        for (var i = 0; i < line.Length; i++)
-        {
-            var ch = line[i];
-            if (inBlockComment)
-            {
-                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
-                {
-                    inBlockComment = false;
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (ch == '`' && inDoubleQuotedString)
-            {
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
-            {
-                inBlockComment = true;
-                i++;
-                continue;
-            }
-
-            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '#')
-                break;
-
-            if (!inDoubleQuotedString && ch == '\'')
-            {
-                if (inSingleQuotedString && i + 1 < line.Length && line[i + 1] == '\'')
-                {
-                    i++;
-                    continue;
-                }
-
-                inSingleQuotedString = !inSingleQuotedString;
-                continue;
-            }
-
-            if (!inSingleQuotedString && ch == '"')
-            {
-                inDoubleQuotedString = !inDoubleQuotedString;
-                continue;
-            }
-
-            if (inSingleQuotedString || inDoubleQuotedString)
-                continue;
-
-            switch (ch)
-            {
-                case '{':
-                case '(':
-                case '[':
-                    delta++;
-                    break;
-                case '}':
-                case ')':
-                case ']':
-                    delta--;
-                    break;
-            }
-        }
-
-        return delta;
     }
 
     private static int GetCommonIndent(IEnumerable<string> lines)

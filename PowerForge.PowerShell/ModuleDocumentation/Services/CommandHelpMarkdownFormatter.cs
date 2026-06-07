@@ -15,7 +15,8 @@ internal static class CommandHelpMarkdownFormatter
             moduleName,
             command,
             onlineVersion: null,
-            examplesLayout: ToDocumentationLayout(examplesLayout));
+            examplesLayout: ToDocumentationLayout(examplesLayout),
+            exampleIndentClassifier: PowerShellMarkdownExampleIndentClassifier.Instance);
     }
 
     private static DocumentationCommandHelp ToDocumentationCommand(CommandHelpModel model)

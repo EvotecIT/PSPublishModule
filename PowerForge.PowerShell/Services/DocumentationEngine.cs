@@ -167,7 +167,7 @@ public sealed class DocumentationEngine
                 if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
 
-            var writer = new MarkdownHelpWriter();
+            var writer = new MarkdownHelpWriter(PowerShellMarkdownExampleIndentClassifier.Instance);
             SafeStart(writeStep);
             try
             {
