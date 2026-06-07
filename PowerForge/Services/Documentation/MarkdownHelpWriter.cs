@@ -446,7 +446,9 @@ internal sealed class MarkdownHelpWriter
     private static bool HasAdditionalTopLevelLineAfterCompleteInlineStatement(string firstLine, string[] lines, int startIndex, int indent)
     {
         var trimmedFirstLine = firstLine.TrimEnd();
-        if (EndsWithPowerShellContinuation(trimmedFirstLine) || StartsHereString(trimmedFirstLine))
+        if (!LooksLikeTopLevelPowerShellLine(trimmedFirstLine)
+            || EndsWithPowerShellContinuation(trimmedFirstLine)
+            || StartsHereString(trimmedFirstLine))
             return false;
 
         for (var i = startIndex; i < lines.Length; i++)
@@ -496,13 +498,29 @@ internal sealed class MarkdownHelpWriter
         => trimmed.Length > 0 && (trimmed[0] == '}' || trimmed[0] == ')' || trimmed[0] == ']');
 
     private static bool EndsWithPowerShellContinuation(string trimmed)
-        => trimmed.EndsWith("|", StringComparison.Ordinal)
+    {
+        if (trimmed.EndsWith("|", StringComparison.Ordinal)
             || trimmed.EndsWith("`", StringComparison.Ordinal)
             || trimmed.EndsWith(",", StringComparison.Ordinal)
             || trimmed.EndsWith("=", StringComparison.Ordinal)
-            || trimmed.EndsWith("+", StringComparison.Ordinal)
-            || trimmed.EndsWith("-and", StringComparison.OrdinalIgnoreCase)
-            || trimmed.EndsWith("-or", StringComparison.OrdinalIgnoreCase);
+            || trimmed.EndsWith("+", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var lastSpace = trimmed.LastIndexOf(' ');
+        var lastToken = lastSpace < 0 ? trimmed : trimmed.Substring(lastSpace + 1);
+        if (lastToken.Length <= 1 || lastToken[0] != '-')
+            return false;
+
+        for (var i = 1; i < lastToken.Length; i++)
+        {
+            if (!char.IsLetter(lastToken[i]))
+                return false;
+        }
+
+        return true;
+    }
 
     private static bool StartsHereString(string trimmed)
         => trimmed.Contains("@'", StringComparison.Ordinal)

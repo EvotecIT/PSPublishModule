@@ -278,4 +278,64 @@ $value = $first +
 
         Assert.Contains("PS> $value = $first +\r\n        $second", exampleSection, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesComparisonOperatorContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Test-DemoValue",
+            Synopsis = "Tests a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$ok = $value -eq
+        $(
+            Get-DemoValue
+        )
+""",
+                    Remarks = "Keeps authored comparison continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $ok = $value -eq\r\n        $(", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            Get-DemoValue\r\n        )", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesLabeledOutputBeforeIndentedCommandLikeText()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Show-DemoResult",
+            Synopsis = "Shows a demo result.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+Result:
+        New-Demo {
+            Status = Ready
+        }
+""",
+                    Remarks = "Keeps authored labeled output formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> Result:\r\n        New-Demo {", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            Status = Ready\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
 }
