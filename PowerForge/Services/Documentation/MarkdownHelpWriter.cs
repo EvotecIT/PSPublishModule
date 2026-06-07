@@ -390,14 +390,16 @@ internal sealed class MarkdownHelpWriter
         if (firstNonBlank < 0 || CountLeadingWhitespace(lines[firstNonBlank]) > 0)
             return;
 
-        if (!LooksLikePowerShellBlockOpening(lines[firstNonBlank]))
-            return;
-
         var indent = GetCommonIndent(lines.Skip(firstNonBlank + 1));
         if (indent < 8)
             return;
 
-        if (!HasAdditionalTopLevelLineAfterOpenedBlock(lines[firstNonBlank], lines, firstNonBlank + 1, indent))
+        var firstLine = lines[firstNonBlank];
+        var shouldRemoveIndent = LooksLikePowerShellBlockOpening(firstLine)
+            ? HasAdditionalTopLevelLineAfterOpenedBlock(firstLine, lines, firstNonBlank + 1, indent)
+            : HasAdditionalTopLevelLineAfterCompleteInlineStatement(firstLine, lines, firstNonBlank + 1, indent);
+
+        if (!shouldRemoveIndent)
             return;
 
         for (var i = firstNonBlank + 1; i < lines.Length; i++)
@@ -441,6 +443,32 @@ internal sealed class MarkdownHelpWriter
         return false;
     }
 
+    private static bool HasAdditionalTopLevelLineAfterCompleteInlineStatement(string firstLine, string[] lines, int startIndex, int indent)
+    {
+        var trimmedFirstLine = firstLine.TrimEnd();
+        if (EndsWithPowerShellContinuation(trimmedFirstLine) || StartsHereString(trimmedFirstLine))
+            return false;
+
+        for (var i = startIndex; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            line = RemoveLeadingWhitespace(line, indent);
+            var trimmed = line.TrimStart();
+            var isCandidateTopLevel = CountLeadingWhitespace(line) == 0;
+            if (isCandidateTopLevel
+                && !StartsWithBlockClose(trimmed)
+                && LooksLikeTopLevelPowerShellLine(trimmed))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool LooksLikeTopLevelPowerShellLine(string line)
     {
         var trimmed = line.TrimStart();
@@ -465,6 +493,15 @@ internal sealed class MarkdownHelpWriter
 
     private static bool StartsWithBlockClose(string trimmed)
         => trimmed.Length > 0 && (trimmed[0] == '}' || trimmed[0] == ')' || trimmed[0] == ']');
+
+    private static bool EndsWithPowerShellContinuation(string trimmed)
+        => trimmed.EndsWith("|", StringComparison.Ordinal)
+            || trimmed.EndsWith("`", StringComparison.Ordinal)
+            || trimmed.EndsWith(",", StringComparison.Ordinal);
+
+    private static bool StartsHereString(string trimmed)
+        => trimmed.Contains("@'", StringComparison.Ordinal)
+            || trimmed.Contains("@\"", StringComparison.Ordinal);
 
     private static int CountBlockDepthDelta(string line)
     {

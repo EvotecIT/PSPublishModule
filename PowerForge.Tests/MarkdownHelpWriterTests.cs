@@ -132,4 +132,64 @@ ForEach-Object {
         Assert.Contains("PS> ForEach-Object {\r\n        \"}\"", exampleSection, StringComparison.Ordinal);
         Assert.Contains("\r\n        Get-Process\r\n        }", exampleSection, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RenderCommandMarkdown_NormalizesInlineAssignmentBeforeTopLevelCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Add-DemoImage",
+            Synopsis = "Adds a demo image.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$image = '.\Tests\Assets\CellImage.png'
+            New-DemoDeck -Path .\Examples\Documents\DemoImage.pptx {
+                Add-DemoImage -Path $image
+            }
+""",
+                    Remarks = "Adds an image to a generated slide."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $image = '.\\Tests\\Assets\\CellImage.png'\r\nNew-DemoDeck -Path .\\Examples\\Documents\\DemoImage.pptx", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n    Add-DemoImage -Path $image\r\n}", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            New-DemoDeck", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesIndentedPipelineContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-Demo",
+            Synopsis = "Gets demo rows.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+Get-Demo |
+        Where-Object Status -eq 'Ready' |
+        Select-Object Name
+""",
+                    Remarks = "Keeps authored continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> Get-Demo |\r\n        Where-Object Status -eq 'Ready' |", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        Select-Object Name", exampleSection, StringComparison.Ordinal);
+    }
 }
