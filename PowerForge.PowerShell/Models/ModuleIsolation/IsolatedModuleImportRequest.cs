@@ -16,4 +16,7 @@ public sealed class IsolatedModuleImportRequest
 
     /// <summary>Optional root folder for generated isolated module copies.</summary>
     public string? WorkRoot { get; set; }
+
+    /// <summary>Prepend the generated module parent path to PSModulePath after a successful import.</summary>
+    public bool PreferIsolatedModulePath { get; set; }
 }
