@@ -134,6 +134,37 @@ ForEach-Object {
     }
 
     [Fact]
+    public void RenderCommandMarkdown_IgnoresBlockCommentDelimitersWhenPreservingSingleBlockIndentation()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Invoke-DemoBlock",
+            Synopsis = "Invokes a demo block.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+ForEach-Object { <# } #>
+        New-Demo {
+            Add-DemoStep
+        }
+        }
+""",
+                    Remarks = "Keeps authored block formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> ForEach-Object { <# } #>\r\n        New-Demo {", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n            Add-DemoStep\r\n        }\r\n        }", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_NormalizesInlineAssignmentBeforeTopLevelCommand()
     {
         var command = new DocumentationCommandHelp
@@ -586,6 +617,93 @@ $value = $first + <# combine #>
         var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
 
         Assert.Contains("PS> $value = $first + <# combine #>\r\n        $second", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesTernaryContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoValue",
+            Synopsis = "Sets a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$result = $condition ?
+        $trueValue :
+        $falseValue
+""",
+                    Remarks = "Keeps authored ternary continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $result = $condition ?\r\n        $trueValue :", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        $falseValue", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesNullCoalescingContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoValue",
+            Synopsis = "Sets a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$result = $value ??
+        $fallback
+""",
+                    Remarks = "Keeps authored null-coalescing continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $result = $value ??\r\n        $fallback", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesPipelineChainContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Test-DemoPath",
+            Synopsis = "Tests a demo path.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$ok = (Test-Path $a) &&
+        (Test-Path $b)
+        New-Demo {
+            Add-DemoStep
+        }
+""",
+                    Remarks = "Keeps authored pipeline-chain continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $ok = (Test-Path $a) &&\r\n        (Test-Path $b)", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        New-Demo {\r\n            Add-DemoStep", exampleSection, StringComparison.Ordinal);
     }
 
     [Fact]

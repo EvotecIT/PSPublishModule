@@ -616,7 +616,11 @@ internal sealed class MarkdownHelpWriter
             || lastToken == "*"
             || lastToken == "/"
             || lastToken == "%"
-            || lastToken == "!")
+            || lastToken == "!"
+            || lastToken == "?"
+            || lastToken == "??"
+            || lastToken == "&&"
+            || lastToken == "||")
         {
             return true;
         }
@@ -963,11 +967,30 @@ internal sealed class MarkdownHelpWriter
         var delta = 0;
         var inSingleQuotedString = false;
         var inDoubleQuotedString = false;
+        var inBlockComment = false;
         for (var i = 0; i < line.Length; i++)
         {
             var ch = line[i];
+            if (inBlockComment)
+            {
+                if (ch == '#' && i + 1 < line.Length && line[i + 1] == '>')
+                {
+                    inBlockComment = false;
+                    i++;
+                }
+
+                continue;
+            }
+
             if (ch == '`' && inDoubleQuotedString)
             {
+                i++;
+                continue;
+            }
+
+            if (!inSingleQuotedString && !inDoubleQuotedString && ch == '<' && i + 1 < line.Length && line[i + 1] == '#')
+            {
+                inBlockComment = true;
                 i++;
                 continue;
             }
