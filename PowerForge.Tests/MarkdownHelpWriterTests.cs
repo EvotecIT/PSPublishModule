@@ -110,6 +110,38 @@ ForEach-Object {
     }
 
     [Fact]
+    public void RenderCommandMarkdown_NormalizesGeneratedIndentationInSingleBlockCommand()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "New-DemoReport",
+            Synopsis = "Creates a demo report.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+New-DemoReport -Path .\Examples\Documents\Report.pdf {
+                Add-DemoHeading -Text 'Service Review'
+                Add-DemoParagraph -Text 'All services are healthy.'
+            }
+""",
+                    Remarks = "Creates a generated report."
+                }
+            }
+        };
+
+        var markdown = RenderCommandMarkdown(command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> New-DemoReport -Path .\\Examples\\Documents\\Report.pdf {\r\n    Add-DemoHeading -Text 'Service Review'", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n    Add-DemoParagraph -Text 'All services are healthy.'\r\n}", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n                Add-DemoHeading", exampleSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n            }", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderCommandMarkdown_IgnoresQuotedDelimitersWhenPreservingSingleBlockIndentation()
     {
         var command = new DocumentationCommandHelp

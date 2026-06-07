@@ -27,7 +27,7 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             var commentLines = GetCommentLines(tokens);
 
             var statements = ast.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
-            if (statements.Length <= 1)
+            if (statements.Length == 0)
                 return normalized;
 
             var firstStatementIndex = FindFirstUsableStatementIndex(statements, errorLines);
@@ -47,6 +47,9 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
 
             var indent = GetCommonIndent(lines, linesToNormalize);
             if (indent < 8)
+                return normalized;
+
+            if (statements.Length == 1 && (indent < 12 || !HasNestedIndent(lines, linesToNormalize, indent)))
                 return normalized;
 
             AddIndentedCommentLines(lines, commentLines, linesToNormalize, indent, firstStatement.Extent.EndLineNumber - 1);
@@ -206,6 +209,20 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         }
 
         return common == int.MaxValue ? 0 : common;
+    }
+
+    private static bool HasNestedIndent(string[] lines, HashSet<int> lineIndexes, int commonIndent)
+    {
+        foreach (var lineIndex in lineIndexes)
+        {
+            if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
+                continue;
+
+            if (CountLeadingWhitespace(lines[lineIndex]) > commonIndent)
+                return true;
+        }
+
+        return false;
     }
 
     private static void AddIndentedCommentLines(
