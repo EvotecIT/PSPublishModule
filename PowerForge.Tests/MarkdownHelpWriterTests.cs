@@ -192,4 +192,90 @@ Get-Demo |
         Assert.Contains("PS> Get-Demo |\r\n        Where-Object Status -eq 'Ready' |", exampleSection, StringComparison.Ordinal);
         Assert.Contains("\r\n        Select-Object Name", exampleSection, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesCommandLikeOutputAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Show-DemoStatus",
+            Synopsis = "Shows demo status.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+Show-DemoStatus
+        Service-Status Ready
+        $value Healthy
+""",
+                    Remarks = "Keeps authored output formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> Show-DemoStatus\r\n        Service-Status Ready", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        $value Healthy", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesHereStringAfterIncompleteAssignment()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoBody",
+            Synopsis = "Sets a demo body.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$body =
+        @"
+        Get-Process
+        "@
+""",
+                    Remarks = "Keeps authored here-string content."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $body =\r\n        @\"", exampleSection, StringComparison.Ordinal);
+        Assert.Contains("\r\n        Get-Process\r\n        \"@", exampleSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderCommandMarkdown_PreservesOperatorContinuationAfterInlinePrompt()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Set-DemoValue",
+            Synopsis = "Sets a demo value.",
+            Examples = new List<DocumentationExampleHelp>
+            {
+                new()
+                {
+                    Introduction = "PS> ",
+                    Code = """
+$value = $first +
+        $second
+""",
+                    Remarks = "Keeps authored continuation formatting."
+                }
+            }
+        };
+
+        var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
+        var exampleSection = markdown.Substring(markdown.IndexOf("### EXAMPLE 1", StringComparison.Ordinal));
+
+        Assert.Contains("PS> $value = $first +\r\n        $second", exampleSection, StringComparison.Ordinal);
+    }
 }

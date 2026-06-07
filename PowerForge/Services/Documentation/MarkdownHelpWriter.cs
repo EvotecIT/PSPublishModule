@@ -460,6 +460,7 @@ internal sealed class MarkdownHelpWriter
             var isCandidateTopLevel = CountLeadingWhitespace(line) == 0;
             if (isCandidateTopLevel
                 && !StartsWithBlockClose(trimmed)
+                && LooksLikePowerShellBlockOpening(trimmed)
                 && LooksLikeTopLevelPowerShellLine(trimmed))
             {
                 return true;
@@ -497,7 +498,11 @@ internal sealed class MarkdownHelpWriter
     private static bool EndsWithPowerShellContinuation(string trimmed)
         => trimmed.EndsWith("|", StringComparison.Ordinal)
             || trimmed.EndsWith("`", StringComparison.Ordinal)
-            || trimmed.EndsWith(",", StringComparison.Ordinal);
+            || trimmed.EndsWith(",", StringComparison.Ordinal)
+            || trimmed.EndsWith("=", StringComparison.Ordinal)
+            || trimmed.EndsWith("+", StringComparison.Ordinal)
+            || trimmed.EndsWith("-and", StringComparison.OrdinalIgnoreCase)
+            || trimmed.EndsWith("-or", StringComparison.OrdinalIgnoreCase);
 
     private static bool StartsHereString(string trimmed)
         => trimmed.Contains("@'", StringComparison.Ordinal)
