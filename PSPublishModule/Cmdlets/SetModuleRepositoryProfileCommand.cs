@@ -85,6 +85,11 @@ public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
     [Parameter]
     public string? JFrogRepository { get; set; }
 
+    /// <summary>GitHub user or organization namespace for GitHub Packages. Defaults from Repository when omitted.</summary>
+    [Parameter]
+    [Alias("Owner", "Namespace")]
+    public string? GitHubOwner { get; set; }
+
     /// <summary>Registration strategy saved in the profile. Defaults to PSResourceGet for Entra-first Azure Artifacts use.</summary>
     [Parameter]
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.PSResourceGet;
@@ -127,6 +132,7 @@ public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
             RepositoryPublishUri = RepositoryPublishUri ?? string.Empty,
             JFrogBaseUri = JFrogBaseUri ?? string.Empty,
             JFrogRepository = JFrogRepository ?? string.Empty,
+            GitHubOwner = GitHubOwner ?? string.Empty,
             Tool = Tool,
             BootstrapMode = BootstrapMode,
             Trusted = Trusted,

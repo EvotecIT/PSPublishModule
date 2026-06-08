@@ -77,6 +77,9 @@ public sealed class ModuleRepositoryProfileReadinessResult
     /// <summary>JFrog NuGet repository key, when applicable.</summary>
     public string JFrogRepository { get; set; } = string.Empty;
 
+    /// <summary>GitHub user or organization namespace, when applicable.</summary>
+    public string GitHubOwner { get; set; } = string.Empty;
+
     /// <summary>Resolved NuGet v2 source URI used by PowerShellGet.</summary>
     public string PowerShellGetSourceUri { get; set; } = string.Empty;
 

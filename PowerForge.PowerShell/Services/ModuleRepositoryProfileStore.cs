@@ -227,7 +227,8 @@ internal sealed class ModuleRepositoryProfileStore
             profile.RepositorySourceUri,
             profile.RepositoryPublishUri,
             profile.JFrogBaseUri,
-            profile.JFrogRepository);
+            profile.JFrogRepository,
+            profile.GitHubOwner);
 
         return new ModuleRepositoryProfile
         {
@@ -243,6 +244,7 @@ internal sealed class ModuleRepositoryProfileStore
             RepositoryPublishUri = endpoint.PowerShellGetPublishUri,
             JFrogBaseUri = endpoint.JFrogBaseUri ?? string.Empty,
             JFrogRepository = endpoint.JFrogRepository ?? string.Empty,
+            GitHubOwner = endpoint.GitHubOwner ?? string.Empty,
             Tool = profile.Tool,
             BootstrapMode = ResolveBootstrapMode(endpoint.Provider, profile.BootstrapMode),
             Trusted = profile.Trusted,

@@ -55,7 +55,11 @@ public enum PrivateGalleryProvider
     /// <summary>JFrog Artifactory NuGet/PowerShell repository.</summary>
     JFrog = 1,
     /// <summary>Generic NuGet-backed PowerShell repository.</summary>
-    NuGet = 2
+    NuGet = 2,
+    /// <summary>GitHub Packages NuGet registry scoped to a GitHub user or organization.</summary>
+    GitHubPackages = 3,
+    /// <summary>Alias for GitHub Packages NuGet registry.</summary>
+    GitHub = 3
 }
 
 /// <summary>
