@@ -51,6 +51,7 @@ internal sealed class PowerForgeReleaseService
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
     private readonly Func<DotNetPublishPlan, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> _publishGitHubRelease;
+    private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
 
     /// <summary>
     /// Creates a new unified release service.
@@ -64,7 +65,8 @@ internal sealed class PowerForgeReleaseService
             LoadDotNetToolsSpec,
             (spec, configPath, request, selectedOutputs) => PlanDotNetTools(logger, spec, configPath, request, selectedOutputs),
             plan => new DotNetPublishPipelineRunner(logger).Run(plan, progress: null),
-            publishRequest => new GitHubReleasePublisher(logger).PublishRelease(publishRequest))
+            publishRequest => new GitHubReleasePublisher(logger).PublishRelease(publishRequest),
+            plan => new WingetSubmissionService(logger).Run(plan))
     {
     }
 
@@ -82,7 +84,8 @@ internal sealed class PowerForgeReleaseService
             LoadDotNetToolsSpec,
             (spec, configPath, request, selectedOutputs) => PlanDotNetTools(logger, spec, configPath, request, selectedOutputs),
             plan => new DotNetPublishPipelineRunner(logger).Run(plan, progress: null),
-            publishGitHubRelease)
+            publishGitHubRelease,
+            plan => new WingetSubmissionService(logger).Run(plan))
     {
     }
 
@@ -94,7 +97,8 @@ internal sealed class PowerForgeReleaseService
         Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> loadDotNetToolsSpec,
         Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> planDotNetTools,
         Func<DotNetPublishPlan, DotNetPublishResult> runDotNetTools,
-        Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> publishGitHubRelease)
+        Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> publishGitHubRelease,
+        Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult>? submitWinget = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -104,6 +108,7 @@ internal sealed class PowerForgeReleaseService
         _planDotNetTools = planDotNetTools ?? throw new ArgumentNullException(nameof(planDotNetTools));
         _runDotNetTools = runDotNetTools ?? throw new ArgumentNullException(nameof(runDotNetTools));
         _publishGitHubRelease = publishGitHubRelease ?? throw new ArgumentNullException(nameof(publishGitHubRelease));
+        _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
     }
 
     /// <summary>
@@ -293,6 +298,7 @@ internal sealed class PowerForgeReleaseService
                     return result;
                 }
             }
+            SubmitWingetOutputs(spec, request, configDirectory, result);
             RewriteReleaseSummaryFiles(result);
         }
 
@@ -619,6 +625,7 @@ internal sealed class PowerForgeReleaseService
         Directory.CreateDirectory(outputPath);
 
         var manifestPaths = new List<string>();
+        var manifestArtifacts = new List<PowerForgeWingetManifestArtifact>();
         foreach (var package in winget.Packages)
         {
             if (string.IsNullOrWhiteSpace(package.PackageIdentifier))
@@ -649,9 +656,46 @@ internal sealed class PowerForgeReleaseService
             var yaml = WingetManifestWriter.Build(winget, package, packageVersion!, installerEntries);
             File.WriteAllText(manifestPath, yaml, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             manifestPaths.Add(manifestPath);
+            manifestArtifacts.Add(new PowerForgeWingetManifestArtifact
+            {
+                PackageIdentifier = package.PackageIdentifier,
+                PackageVersion = packageVersion!,
+                ManifestPath = manifestPath,
+                InstallerUrls = installerEntries
+                    .Select(entry => entry.InstallerUrl)
+                    .Where(url => !string.IsNullOrWhiteSpace(url))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            });
         }
 
         result.WingetManifestPaths = manifestPaths.ToArray();
+        result.WingetManifests = manifestArtifacts.ToArray();
+    }
+
+    private void SubmitWingetOutputs(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        string configDirectory,
+        PowerForgeReleaseResult result)
+    {
+        var winget = spec.Winget;
+        if (winget is null)
+            return;
+
+        var service = new WingetSubmissionService(_logger);
+        var plan = service.Plan(winget, result.WingetManifests, configDirectory, request);
+        result.WingetSubmissionPlan = plan;
+        if (!plan.Enabled)
+            return;
+
+        var submission = _submitWinget(plan);
+        result.WingetSubmission = submission;
+        if (!submission.Succeeded)
+        {
+            result.Success = false;
+            result.ErrorMessage = submission.ErrorMessage ?? "Winget submission failed.";
+        }
     }
 
     private static string ResolveWingetOutputPath(

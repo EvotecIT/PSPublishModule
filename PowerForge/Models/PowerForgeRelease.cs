@@ -126,6 +126,30 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? PackageSignTimestampUrl { get; set; }
 
+    public bool? SubmitWinget { get; set; }
+
+    public PowerForgeWingetSubmissionMode? WingetSubmitMode { get; set; }
+
+    public string? WingetSubmitToolPath { get; set; }
+
+    public string? WingetSubmitToken { get; set; }
+
+    public string? WingetSubmitTokenFilePath { get; set; }
+
+    public string? WingetSubmitTokenEnvName { get; set; }
+
+    public string? WingetSubmitPrTitle { get; set; }
+
+    public bool? WingetSubmitNoOpen { get; set; }
+
+    public bool? WingetSubmitReplace { get; set; }
+
+    public string? WingetSubmitReplaceVersion { get; set; }
+
+    public bool? WingetSubmitAllowInteractiveAuthentication { get; set; }
+
+    public int? WingetSubmitTimeoutSeconds { get; set; }
+
     public Dictionary<string, string> InstallerMsBuildProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public string[] Targets { get; set; } = Array.Empty<string>();
@@ -187,6 +211,12 @@ internal sealed class PowerForgeReleaseResult
     public string? ReleaseChecksumsPath { get; set; }
 
     public string[] WingetManifestPaths { get; set; } = Array.Empty<string>();
+
+    public PowerForgeWingetManifestArtifact[] WingetManifests { get; set; } = Array.Empty<PowerForgeWingetManifestArtifact>();
+
+    public PowerForgeWingetSubmissionPlan? WingetSubmissionPlan { get; set; }
+
+    public PowerForgeWingetSubmissionResult? WingetSubmission { get; set; }
 }
 
 /// <summary>
@@ -273,7 +303,120 @@ internal sealed class PowerForgeReleaseWingetOptions
 
     public string PackageLocale { get; set; } = "en-US";
 
+    public bool Submit { get; set; }
+
+    public PowerForgeReleaseWingetSubmissionOptions Submission { get; set; } = new();
+
     public PowerForgeReleaseWingetPackage[] Packages { get; set; } = Array.Empty<PowerForgeReleaseWingetPackage>();
+}
+
+internal sealed class PowerForgeReleaseWingetSubmissionOptions
+{
+    public bool? Enabled { get; set; }
+
+    public PowerForgeWingetSubmissionMode Mode { get; set; } = PowerForgeWingetSubmissionMode.Manifest;
+
+    public string ToolPath { get; set; } = "wingetcreate";
+
+    public string? Token { get; set; }
+
+    public string? TokenFilePath { get; set; }
+
+    public string TokenEnvName { get; set; } = "WINGET_CREATE_GITHUB_TOKEN";
+
+    public string? PullRequestTitle { get; set; }
+
+    public bool NoOpen { get; set; } = true;
+
+    public bool Replace { get; set; }
+
+    public string? ReplaceVersion { get; set; }
+
+    public bool AllowInteractiveAuthentication { get; set; }
+
+    public int TimeoutSeconds { get; set; } = 900;
+}
+
+internal enum PowerForgeWingetSubmissionMode
+{
+    Manifest,
+    Update
+}
+
+internal sealed class PowerForgeWingetManifestArtifact
+{
+    public string PackageIdentifier { get; set; } = string.Empty;
+
+    public string PackageVersion { get; set; } = string.Empty;
+
+    public string ManifestPath { get; set; } = string.Empty;
+
+    public string[] InstallerUrls { get; set; } = Array.Empty<string>();
+}
+
+internal sealed class PowerForgeWingetSubmissionPlan
+{
+    public bool Enabled { get; set; }
+
+    public PowerForgeWingetSubmissionMode Mode { get; set; }
+
+    public string ToolPath { get; set; } = "wingetcreate";
+
+    public string WorkingDirectory { get; set; } = string.Empty;
+
+    public int TimeoutSeconds { get; set; } = 900;
+
+    public bool UsesToken { get; set; }
+
+    public bool NoOpen { get; set; }
+
+    public PowerForgeWingetSubmissionEntryPlan[] Entries { get; set; } = Array.Empty<PowerForgeWingetSubmissionEntryPlan>();
+}
+
+internal sealed class PowerForgeWingetSubmissionEntryPlan
+{
+    public string PackageIdentifier { get; set; } = string.Empty;
+
+    public string PackageVersion { get; set; } = string.Empty;
+
+    public string ManifestPath { get; set; } = string.Empty;
+
+    public string[] InstallerUrls { get; set; } = Array.Empty<string>();
+
+    [JsonIgnore]
+    public string[] Arguments { get; set; } = Array.Empty<string>();
+
+    public string[] RedactedArguments { get; set; } = Array.Empty<string>();
+}
+
+internal sealed class PowerForgeWingetSubmissionResult
+{
+    public bool Succeeded { get; set; }
+
+    public string? ErrorMessage { get; set; }
+
+    public PowerForgeWingetSubmissionEntryResult[] Entries { get; set; } = Array.Empty<PowerForgeWingetSubmissionEntryResult>();
+}
+
+internal sealed class PowerForgeWingetSubmissionEntryResult
+{
+    public string PackageIdentifier { get; set; } = string.Empty;
+
+    public string PackageVersion { get; set; } = string.Empty;
+
+    public string ManifestPath { get; set; } = string.Empty;
+
+    public string[] RedactedArguments { get; set; } = Array.Empty<string>();
+
+    public int ExitCode { get; set; }
+
+    public bool Succeeded { get; set; }
+
+    public bool TimedOut { get; set; }
+
+    public string StdOut { get; set; } = string.Empty;
+
+    public string StdErr { get; set; } = string.Empty;
 }
 
 internal sealed class PowerForgeReleaseWingetPackage

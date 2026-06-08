@@ -108,5 +108,27 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public string? PackageSignTimestampUrl { get; set; }
 
+    public bool? SubmitWinget { get; set; }
+
+    public PowerForgeWingetSubmissionMode? WingetSubmitMode { get; set; }
+
+    public string? WingetSubmitToolPath { get; set; }
+
+    public string? WingetSubmitTokenFilePath { get; set; }
+
+    public string? WingetSubmitTokenEnvName { get; set; }
+
+    public string? WingetSubmitPrTitle { get; set; }
+
+    public bool? WingetSubmitNoOpen { get; set; }
+
+    public bool? WingetSubmitReplace { get; set; }
+
+    public string? WingetSubmitReplaceVersion { get; set; }
+
+    public bool? WingetSubmitAllowInteractiveAuthentication { get; set; }
+
+    public int? WingetSubmitTimeoutSeconds { get; set; }
+
     public Dictionary<string, string> InstallerMsBuildProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

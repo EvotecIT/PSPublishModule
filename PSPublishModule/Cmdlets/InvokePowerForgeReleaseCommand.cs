@@ -29,7 +29,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "PowerForgeRelease", SupportsShouldProcess = true, DefaultParameterSetName = ParameterSetConfig)]
 [OutputType(typeof(PowerForgeReleaseResult))]
-public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
+public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
 {
     private const string ParameterSetConfig = "Config";
     private const string ParameterSetProject = "Project";
@@ -601,6 +601,17 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
             PublishNuget = ResolveRequestedFlag(boundParameters, nameof(PublishNuget)),
             PublishProjectGitHub = ResolveRequestedFlag(boundParameters, nameof(PublishProjectGitHub)),
             PublishToolGitHub = ResolveRequestedFlag(boundParameters, nameof(PublishToolGitHub)),
+            SubmitWinget = ResolveWingetSubmitFlag(boundParameters),
+            WingetSubmitMode = ParseWingetSubmitMode(WingetSubmitMode),
+            WingetSubmitToolPath = NormalizeNullable(WingetToolPath),
+            WingetSubmitTokenEnvName = NormalizeNullable(WingetTokenEnvName),
+            WingetSubmitTokenFilePath = NormalizeNullable(WingetTokenFilePath),
+            WingetSubmitPrTitle = NormalizeNullable(WingetPullRequestTitle),
+            WingetSubmitNoOpen = ResolveRequestedFlag(boundParameters, nameof(WingetOpenBrowser)) == true ? false : null,
+            WingetSubmitReplace = ResolveRequestedFlag(boundParameters, nameof(WingetReplace)),
+            WingetSubmitReplaceVersion = NormalizeNullable(WingetReplaceVersion),
+            WingetSubmitAllowInteractiveAuthentication = ResolveRequestedFlag(boundParameters, nameof(WingetAllowInteractiveAuthentication)),
+            WingetSubmitTimeoutSeconds = WingetTimeoutSeconds,
             ModuleNoDotnetBuild = ResolveRequestedFlag(boundParameters, nameof(ModuleNoDotnetBuild)),
             ModuleNoSign = ResolveRequestedFlag(boundParameters, nameof(ModuleNoSign)),
             ModuleSignModule = ResolveRequestedFlag(boundParameters, nameof(ModuleSignModule)),

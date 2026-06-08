@@ -69,6 +69,31 @@
         },
         "ManifestVersion": { "type": [ "string", "null" ] },
         "PackageLocale": { "type": [ "string", "null" ] },
+        "Submit": {
+          "type": "boolean",
+          "description": "When true, submit generated Winget manifests with wingetcreate after release assets are available."
+        },
+        "Submission": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Enabled": { "type": [ "boolean", "null" ] },
+            "Mode": { "type": "string", "enum": [ "Manifest", "Update" ] },
+            "ToolPath": { "type": [ "string", "null" ] },
+            "Token": {
+              "type": [ "string", "null" ],
+              "description": "GitHub token passed to wingetcreate. Prefer TokenEnvName or TokenFilePath to avoid logging secrets."
+            },
+            "TokenFilePath": { "type": [ "string", "null" ] },
+            "TokenEnvName": { "type": [ "string", "null" ] },
+            "PullRequestTitle": { "type": [ "string", "null" ] },
+            "NoOpen": { "type": "boolean" },
+            "Replace": { "type": "boolean" },
+            "ReplaceVersion": { "type": [ "string", "null" ] },
+            "AllowInteractiveAuthentication": { "type": "boolean" },
+            "TimeoutSeconds": { "type": "integer", "minimum": 1 }
+          }
+        },
         "Packages": {
           "type": "array",
           "items": {

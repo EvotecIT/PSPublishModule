@@ -2054,6 +2054,7 @@ public sealed class PowerForgeReleaseServiceTests
 
         try
         {
+            PowerForgeWingetSubmissionPlan? capturedWingetSubmissionPlan = null;
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
                 executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -2124,7 +2125,12 @@ public sealed class PowerForgeReleaseServiceTests
                         }
                     }
                 },
-                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                submitWinget: plan =>
+                {
+                    capturedWingetSubmissionPlan = plan;
+                    return new PowerForgeWingetSubmissionResult { Succeeded = true };
+                });
 
             var stageRoot = Path.Combine(root, "upload-ready");
             var result = service.Execute(
@@ -2146,8 +2152,14 @@ public sealed class PowerForgeReleaseServiceTests
                     Winget = new PowerForgeReleaseWingetOptions
                     {
                         Enabled = true,
+                        Submit = true,
                         OutputPath = "Artifacts/UploadReady/Winget",
                         InstallerUrlTemplate = "https://github.com/EvotecIT/IntelligenceX/releases/download/v{PackageVersion}/{FileName}",
+                        Submission = new PowerForgeReleaseWingetSubmissionOptions
+                        {
+                            Token = "secret-token",
+                            PullRequestTitle = "Submit {PackageIdentifier} {PackageVersion}"
+                        },
                         Packages = new[]
                         {
                             new PowerForgeReleaseWingetPackage
@@ -2203,6 +2215,16 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Contains("RelativeFilePath: IntelligenceX.Tray.exe", yaml, StringComparison.Ordinal);
             Assert.Contains("Architecture: x64", yaml, StringComparison.Ordinal);
             Assert.Contains("Architecture: arm64", yaml, StringComparison.Ordinal);
+            var manifest = Assert.Single(result.WingetManifests);
+            Assert.Equal("EvotecIT.IntelligenceX.Tray", manifest.PackageIdentifier);
+            Assert.Equal(2, manifest.InstallerUrls.Length);
+            Assert.NotNull(result.WingetSubmissionPlan);
+            Assert.Same(capturedWingetSubmissionPlan, result.WingetSubmissionPlan);
+            var submitEntry = Assert.Single(result.WingetSubmissionPlan!.Entries);
+            Assert.Equal("submit", submitEntry.RedactedArguments[0]);
+            Assert.Contains("***", submitEntry.RedactedArguments);
+            Assert.DoesNotContain("secret-token", submitEntry.RedactedArguments);
+            Assert.Contains("Submit EvotecIT.IntelligenceX.Tray 1.0.0", submitEntry.RedactedArguments);
         }
         finally
         {

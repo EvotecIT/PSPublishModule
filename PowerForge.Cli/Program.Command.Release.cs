@@ -5,7 +5,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string ReleaseUsage =
-        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--configuration <Release|Debug>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <Tool|Portable|Installer|Store>[,<...>]] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
+        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--configuration <Release|Debug>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
 
     private static int CommandRelease(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -154,6 +154,14 @@ internal static partial class Program
                 cmdLogger.Info($"Release manifest: {result.ReleaseManifestPath}");
             if (!string.IsNullOrWhiteSpace(result.ReleaseChecksumsPath))
                 cmdLogger.Info($"Release checksums: {result.ReleaseChecksumsPath}");
+            foreach (var manifest in result.WingetManifests)
+                cmdLogger.Info($"Winget manifest: {manifest.PackageIdentifier} {manifest.PackageVersion} -> {manifest.ManifestPath}");
+            if (result.WingetSubmissionPlan is not null && result.WingetSubmissionPlan.Enabled)
+            {
+                cmdLogger.Success($"Winget submission: {(result.WingetSubmission?.Succeeded == true ? "completed" : "planned")} ({result.WingetSubmissionPlan.Entries.Length} package(s)).");
+                foreach (var entry in result.WingetSubmissionPlan.Entries)
+                    cmdLogger.Info($" -> {result.WingetSubmissionPlan.ToolPath} {string.Join(" ", entry.RedactedArguments)}");
+            }
 
             if (result.Tools is not null)
             {
@@ -282,6 +290,7 @@ internal static partial class Program
         request.PublishNuget = ChooseBool(request.PublishNuget, argv.Any(a => a.Equals("--publish-nuget", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.PublishProjectGitHub = ChooseBool(request.PublishProjectGitHub, argv.Any(a => a.Equals("--publish-project-github", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.PublishToolGitHub = ChooseBool(request.PublishToolGitHub, argv.Any(a => a.Equals("--publish-tool-github", StringComparison.OrdinalIgnoreCase)) ? true : null);
+        request.SubmitWinget = ChooseBool(request.SubmitWinget, ResolveWingetSubmitOverride(argv));
         request.ModuleNoDotnetBuild = ChooseBool(request.ModuleNoDotnetBuild, argv.Any(a => a.Equals("--module-no-dotnet-build", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.ModuleNoSign = ChooseBool(request.ModuleNoSign, argv.Any(a => a.Equals("--module-no-sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.ModuleSignModule = ChooseBool(request.ModuleSignModule, argv.Any(a => a.Equals("--module-sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
@@ -312,6 +321,20 @@ internal static partial class Program
         request.PackageSignThumbprint = ChooseString(request.PackageSignThumbprint, TryGetOptionValue(argv, "--package-sign-thumbprint"));
         request.PackageSignStore = ChooseString(request.PackageSignStore, TryGetOptionValue(argv, "--package-sign-store"));
         request.PackageSignTimestampUrl = ChooseString(request.PackageSignTimestampUrl, TryGetOptionValue(argv, "--package-sign-timestamp-url"));
+        request.WingetSubmitToolPath = ChooseString(request.WingetSubmitToolPath, TryGetOptionValue(argv, "--winget-tool-path"));
+        request.WingetSubmitTokenEnvName = ChooseString(request.WingetSubmitTokenEnvName, TryGetOptionValue(argv, "--winget-token-env"));
+        request.WingetSubmitTokenFilePath = ChooseString(request.WingetSubmitTokenFilePath, TryGetOptionValue(argv, "--winget-token-file"));
+        request.WingetSubmitPrTitle = ChooseString(request.WingetSubmitPrTitle, TryGetOptionValue(argv, "--winget-pr-title"));
+        request.WingetSubmitNoOpen = ChooseBool(request.WingetSubmitNoOpen, argv.Any(a => a.Equals("--winget-open-browser", StringComparison.OrdinalIgnoreCase)) ? false : null);
+        request.WingetSubmitReplace = ChooseBool(request.WingetSubmitReplace, TryGetOptionalOptionValue(argv, "--winget-replace", out var wingetReplaceVersion) ? true : null);
+        request.WingetSubmitReplaceVersion = ChooseString(request.WingetSubmitReplaceVersion, wingetReplaceVersion);
+        request.WingetSubmitAllowInteractiveAuthentication = ChooseBool(
+            request.WingetSubmitAllowInteractiveAuthentication,
+            argv.Any(a => a.Equals("--winget-allow-interactive-auth", StringComparison.OrdinalIgnoreCase)) ? true : null);
+        if (Enum.TryParse<PowerForgeWingetSubmissionMode>(TryGetOptionValue(argv, "--winget-submit-mode"), ignoreCase: true, out var wingetSubmitMode))
+            request.WingetSubmitMode = wingetSubmitMode;
+        if (TryParsePositiveInt(TryGetOptionValue(argv, "--winget-timeout-seconds"), out var wingetTimeoutSeconds))
+            request.WingetSubmitTimeoutSeconds = wingetTimeoutSeconds;
 
         if (TryParseDotNetPublishPolicyMode(TryGetOptionValue(argv, "--sign-on-missing-tool")) is { } signOnMissingTool)
             request.SignOnMissingTool = signOnMissingTool;
@@ -349,6 +372,31 @@ internal static partial class Program
             request.InstallerMsBuildProperties = installerProperties;
 
         return request;
+    }
+
+    private static bool? ResolveWingetSubmitOverride(string[] argv)
+    {
+        if (argv.Any(a => a.Equals("--skip-winget-submit", StringComparison.OrdinalIgnoreCase)))
+            return false;
+        if (argv.Any(a => a.Equals("--submit-winget", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return null;
+    }
+
+    private static bool TryGetOptionalOptionValue(string[] argv, string optionName, out string? value)
+    {
+        value = null;
+        for (var i = 0; i < argv.Length; i++)
+        {
+            if (!argv[i].Equals(optionName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (i + 1 < argv.Length && !argv[i + 1].StartsWith("--", StringComparison.Ordinal))
+                value = argv[i + 1];
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryParsePositiveInt(string? value, out int result)
