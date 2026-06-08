@@ -1,251 +1,388 @@
-﻿# PSPublishModule - PowerShell Module
+# PSPublishModule and PowerForge
 
-<p align="center">
-  <a href="https://github.com/EvotecIT/PSPublishModule/actions/workflows/BuildModule.yml"><img src="https://github.com/EvotecIT/PSPublishModule/actions/workflows/BuildModule.yml/badge.svg"></a>
-  <a href="https://www.powershellgallery.com/packages/PSPublishModule"><img src="https://img.shields.io/powershellgallery/v/PSPublishModule.svg?style=flat-square"></a>
-  <a href="https://www.powershellgallery.com/packages/PSPublishModule"><img src="https://img.shields.io/powershellgallery/v/PSPublishModule.svg?label=powershell%20gallery%20preview&colorB=yellow&style=flat-square&include_prereleases"></a>
-  <a href="https://github.com/EvotecIT/PSPublishModule"><img src="https://img.shields.io/github/license/EvotecIT/PSPublishModule.svg?style=flat-square"></a>
+PSPublishModule started as the Evotec module builder. It has grown into the PowerShell-facing surface for **PowerForge**: a build, packaging, documentation, release, private-gallery, and static-site automation toolkit used across EvotecIT projects.
 
-</p>
+Use it when you want repeatable PowerShell module builds, .NET publish matrices, MSI/MSIX/Store packaging, NuGet and PSGallery releases, generated PowerShell help, private gallery onboarding, GitHub housekeeping, or PowerForge.Web static site pipelines without rewriting the same build logic in every repository.
 
-<p align="center">
-  <a href="https://www.powershellgallery.com/packages/PSPublishModule"><img src="https://img.shields.io/powershellgallery/p/PSPublishModule.svg?style=flat-square"></a>
-  <a href="https://github.com/EvotecIT/PSPublishModule"><img src="https://img.shields.io/github/languages/top/evotecit/PSPublishModule.svg?style=flat-square"></a>
-  <a href="https://github.com/EvotecIT/PSPublishModule"><img src="https://img.shields.io/github/languages/code-size/evotecit/PSPublishModule.svg?style=flat-square"></a>
-  <a href="https://www.powershellgallery.com/packages/PSPublishModule"><img src="https://img.shields.io/powershellgallery/dt/PSPublishModule.svg?style=flat-square"></a>
-</p>
+## Packages
 
-<p align="center">
-  <a href="https://twitter.com/PrzemyslawKlys"><img src="https://img.shields.io/twitter/follow/PrzemyslawKlys.svg?label=Twitter%20%40PrzemyslawKlys&style=flat-square"></a>
-  <a href="https://evotec.xyz/hub"><img src="https://img.shields.io/badge/Blog-evotec.xyz-2A6496.svg?style=flat-square"></a>
-  <a href="https://www.linkedin.com/in/pklys"><img src="https://img.shields.io/badge/LinkedIn-pklys-0077B5.svg?logo=LinkedIn&style=flat-square"></a>
-</p>
+### PowerShell Module
 
-## Description
+[![PowerShell Gallery version](https://img.shields.io/powershellgallery/v/PSPublishModule.svg)](https://www.powershellgallery.com/packages/PSPublishModule)
+[![PowerShell Gallery preview](https://img.shields.io/powershellgallery/v/PSPublishModule.svg?label=powershell%20gallery%20preview&colorB=yellow&include_prereleases)](https://www.powershellgallery.com/packages/PSPublishModule)
+[![PowerShell Gallery platforms](https://img.shields.io/powershellgallery/p/PSPublishModule.svg)](https://www.powershellgallery.com/packages/PSPublishModule)
+[![PowerShell Gallery downloads](https://img.shields.io/powershellgallery/dt/PSPublishModule.svg)](https://www.powershellgallery.com/packages/PSPublishModule)
 
-This module is a module builder helper that helps build PowerShell modules "Evotec way".
-It allows us to make sure our modules are built the same way every time making the process really easy to build and publish new versions.
+### NuGet Packages and Tools
 
-Each module that is published to PowerShellGallery has Build or Publish folder next to it and within it there is PS1 script which executes module building that uses this module builder.
+[![PowerForge](https://img.shields.io/nuget/v/PowerForge?label=PowerForge)](https://www.nuget.org/packages/PowerForge)
+[![PowerForge downloads](https://img.shields.io/nuget/dt/PowerForge?label=PowerForge%20downloads)](https://www.nuget.org/packages/PowerForge)
+[![PowerForge.PowerShell](https://img.shields.io/nuget/v/PowerForge.PowerShell?label=PowerForge.PowerShell)](https://www.nuget.org/packages/PowerForge.PowerShell)
+[![PowerForge.Build](https://img.shields.io/nuget/v/PowerForge.Build?label=powerforge%20tool)](https://www.nuget.org/packages/PowerForge.Build)
+[![PowerForge.Web](https://img.shields.io/nuget/v/PowerForge.Web?label=PowerForge.Web)](https://www.nuget.org/packages/PowerForge.Web)
+[![PowerForge.Web.Build](https://img.shields.io/nuget/v/PowerForge.Web.Build?label=powerforge-web%20tool)](https://www.nuget.org/packages/PowerForge.Web.Build)
 
-For examples and usage you can visit other projects and see how they are built in addition to what is shown in Build folder.
+### Project Information
 
-## Private Galleries
+[![Build Module](https://github.com/EvotecIT/PSPublishModule/actions/workflows/BuildModule.yml/badge.svg)](https://github.com/EvotecIT/PSPublishModule/actions/workflows/BuildModule.yml)
+[![DotNet publish tests](https://github.com/EvotecIT/PSPublishModule/actions/workflows/dotnetpublish-tests.yml/badge.svg)](https://github.com/EvotecIT/PSPublishModule/actions/workflows/dotnetpublish-tests.yml)
+[![license](https://img.shields.io/github/license/EvotecIT/PSPublishModule.svg)](https://github.com/EvotecIT/PSPublishModule)
+[![top language](https://img.shields.io/github/languages/top/EvotecIT/PSPublishModule.svg)](https://github.com/EvotecIT/PSPublishModule)
 
-PSPublishModule can also manage enterprise private PowerShell module feeds, with the first managed provider focused on Azure Artifacts. The recommended path uses Microsoft Entra ID/MFA through `Microsoft.PowerShell.PSResourceGet` and the Azure Artifacts Credential Provider, while PSPublishModule stores only non-secret profile settings such as organization, project, feed, and local repository name.
+### Author and Social
 
-Typical user onboarding:
+[![Twitter follow](https://img.shields.io/twitter/follow/PrzemyslawKlys.svg?label=Twitter%20%40PrzemyslawKlys&style=social)](https://twitter.com/PrzemyslawKlys)
+[![Blog](https://img.shields.io/badge/Blog-evotec.xyz-2A6496.svg)](https://evotec.xyz/hub)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-pklys-0077B5.svg?logo=LinkedIn)](https://www.linkedin.com/in/pklys)
+[![Discord](https://img.shields.io/discord/508328927853281280?style=flat-square&label=discord%20chat)](https://evo.yt/discord)
+
+## What It Is
+
+PSPublishModule is the PowerShell module you install and import. PowerForge is the reusable engine underneath it. The repo also ships CLI tools:
+
+- `powerforge` from the `PowerForge.Build` .NET tool package.
+- `powerforge-web` from the `PowerForge.Web.Build` .NET tool package.
+
+The same contracts are available from PowerShell cmdlets, JSON files, and CLI commands, so a project can start with a simple build script and later move the repeatable rules into checked-in JSON.
+
+## Main Capabilities
+
+| Area | What it does | Main entry points |
+| --- | --- | --- |
+| PowerShell module build | Builds script and binary modules, merges public/private functions, updates manifests, signs outputs, creates packed/unpacked artifacts, validates imports, runs tests, and generates help. | `Invoke-ModuleBuild`, `Build-Module`, `New-ConfigurationBuild`, `New-ConfigurationManifest`, `New-ConfigurationArtefact`, `New-ConfigurationValidation` |
+| Module dependencies and isolation | Resolves required/external/approved modules, supports online dependency install, packages required modules, detects missing helpers, and imports selected modules through AssemblyLoadContext isolation profiles. | `New-ConfigurationModule`, `Get-MissingFunctions`, `Import-IsolatedModule`, `Test-IsolatedModuleProfile` |
+| Documentation and delivery | Generates Markdown command docs, MAML external help, about topics, and bundled module documentation. It can also copy or render installed module docs from local files, GitHub, or Azure DevOps. | `New-ConfigurationDocumentation`, `New-ModuleAboutTopic`, `Show-ModuleDocumentation`, `Install-ModuleDocumentation`, `Install-ModuleScript` |
+| Private galleries | Onboards users and publishers to private PowerShell module feeds, especially Azure Artifacts, without storing secrets in profiles. | `Initialize-ModuleRepository`, `Connect-ModuleRepository`, `Register-ModuleRepository`, `Install-PrivateModule`, `Update-PrivateModule`, `Publish-NugetPackage` |
+| .NET publish and packaging | Builds publish matrices for apps, services, tools, bundles, plugins, MSI, MSIX, Microsoft Store packages, appinstaller files, signing, checksums, and manifests. | `New-DotNetPublishConfig`, `Invoke-DotNetPublish`, `Invoke-PowerForgeBundlePostProcess`, `Invoke-PowerForgePluginExport`, `Invoke-PowerForgePluginPack` |
+| Unified release | Coordinates module artifacts, NuGet packages, tool binaries, installers, GitHub releases, staging folders, checksums, Winget manifests, and release manifests from one release config. | `New-PowerForgeReleaseConfig`, `Invoke-PowerForgeRelease`, `Invoke-ProjectRelease`, `Invoke-ProjectBuild`, `powerforge release` |
+| GitHub housekeeping | Prunes Actions artifacts and caches, performs runner cleanup, and provides reusable workflows/actions for cross-repo maintenance. | `powerforge github housekeeping`, `.github/workflows/powerforge-github-housekeeping.yml` |
+| Static websites and API docs | Builds PowerForge.Web sites, docs, blogs, search indexes, API docs, project hubs, SEO assets, sitemaps, quality gates, audits, and deployment artifacts. | `powerforge-web build`, `powerforge-web pipeline`, `powerforge-web verify`, `powerforge-web audit`, `powerforge-web scaffold` |
+| Project hygiene | Checks or fixes line endings/encoding, removes comments or project files, reads versions, and summarizes test failures. | `Get-ProjectConsistency`, `Convert-ProjectConsistency`, `Get-ProjectVersion`, `Set-ProjectVersion`, `Get-ModuleTestFailures` |
+
+## Supported Runtimes
+
+| Surface | Targets |
+| --- | --- |
+| PSPublishModule | Windows PowerShell 5.1 and PowerShell 7+ |
+| PowerForge | .NET Framework 4.7.2, .NET 8, .NET 10 |
+| PowerForge.PowerShell | .NET Framework 4.7.2, .NET 8, .NET 10 |
+| PowerForge.Cli / `powerforge` | .NET 8 and .NET 10 |
+| PowerForge.Web / `powerforge-web` | .NET 8 and .NET 10 |
+
+## Install
+
+Install the PowerShell module from PSGallery:
 
 ```powershell
-Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -SkipConnect
-Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
-Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
-Install-PrivateModule -ProfileName Company -Name ModuleA
-Update-PrivateModule -ProfileName Company -Name ModuleA
+Install-Module -Name PSPublishModule -Scope CurrentUser
 ```
 
-For a single-user or admin-created profile, the same onboarding can be created
-and connected directly:
-
-```powershell
-Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
-```
-
-Publishers can reuse the same profile:
-
-```powershell
-New-ConfigurationPublish -ProfileName Company -Enabled
-Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
-```
-
-See [Docs\PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md) and `Get-Help about_PrivateGalleries` for the rollout checklist, testing handoff scenarios, PAT fallback guidance, and live Azure Artifacts validation helper with optional non-secret evidence JSON output.
-
-## PowerForge Studio
-
-The repo also contains the current PowerForge Studio hosts:
-
-- `PowerForgeStudio.Wpf`
-- `PowerForgeStudio.Cli`
-
-For Studio-specific build, run, and publish commands, use:
-
-- [Docs\PowerForgeStudio.Runbook.md](Docs/PowerForgeStudio.Runbook.md)
-
-## Support This Project
-
-If you find this project helpful, please consider supporting its development.
-Your sponsorship will help the maintainers dedicate more time to maintenance and new feature development for everyone.
-
-It takes a lot of time and effort to create and maintain this project.
-By becoming a sponsor, you can help ensure that it stays free and accessible to everyone who needs it.
-
-To become a sponsor, you can choose from the following options:
-
- - [Become a sponsor via GitHub Sponsors :heart:](https://github.com/sponsors/PrzemyslawKlys)
- - [Become a sponsor via PayPal :heart:](https://paypal.me/PrzemyslawKlys)
-
-Your sponsorship is completely optional and not required for using this project.
-We want this project to remain open-source and available for anyone to use for free,
-regardless of whether they choose to sponsor it or not.
-
-If you work for a company that uses our .NET libraries or PowerShell Modules,
-please consider asking your manager or marketing team if your company would be interested in supporting this project.
-Your company's support can help us continue to maintain and improve this project for the benefit of everyone.
-
-Thank you for considering supporting this project!
-
-### Installing
+If you are updating an older install or replacing a prerelease build, this is the usual maintainer-friendly command:
 
 ```powershell
 Install-Module -Name PSPublishModule -AllowClobber -Force -SkipPublisherCheck
 ```
 
-Force and AllowClobber and SkipPublisherCheck aren't necessary but they do skip errors in case some appear.
+Install the CLI tools when you prefer JSON-first automation from shell scripts or CI:
 
-### Updating
+```powershell
+dotnet tool install --global PowerForge.Build
+dotnet tool install --global PowerForge.Web.Build
+```
+
+Update later with:
 
 ```powershell
 Update-Module -Name PSPublishModule
+dotnet tool update --global PowerForge.Build
+dotnet tool update --global PowerForge.Web.Build
 ```
 
-That's it. Whenever there's a new version you simply run the command and you can enjoy it. Remember, that you may need to close, reopen the PowerShell session if you have already used the module before updating it.
+If a production build depends on a known-good version, pin and test upgrades intentionally. PSPublishModule and PowerForge expose build/release contracts, so small parameter or manifest changes can affect automation.
 
-**The important thing** is if something works for you on production, keep using it till you test the new version on a test computer. I do changes that may not be big, but big enough that auto-update will break your code. For example, small rename to a parameter and your code stops working! Be responsible!
+## Quick Start: Build a PowerShell Module
 
-### Documentation - Local, GitHub, Azure DevOps
-
-PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Config) and root README/CHANGELOG/LICENSE. The former PSMaintenance documentation viewer/installer surface is now available directly from PSPublishModule, backed by PowerForge services for module resolution, documentation planning, repository content lookup, and install/copy behavior.
-
-- Build-time bundling (in your module's Build script):
-  - `New-ConfigurationInformation -IncludeAll 'Internals\'`
-  - `New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -DocumentationOrder '01-Intro.md','02-HowTo.md'`
-  - Optional repository backfill (display docs directly from repo):
-    - GitHub: `New-ConfigurationDelivery -RepositoryPaths 'docs' -RepositoryBranch main`
-    - Azure DevOps: `New-ConfigurationDelivery -RepositoryPaths 'Docs/en-US' -RepositoryBranch main`
-
-- Copy docs or scripts for a module already installed:
-  - `Install-ModuleDocumentation -Name 'EFAdminManager' -Path 'C:\Docs' -Layout ModuleAndVersion`
-  - `Install-ModuleScript -Name 'EFAdminManager' -Path 'C:\Tools' -Unblock`
-
-- View docs:
-  - Local files: `Show-ModuleDocumentation -Name 'EFAdminManager'`
-  - Include repository content: `Show-ModuleDocumentation -Name 'EFAdminManager' -Online`
-  - Prefer Internals: `Show-ModuleDocumentation -Name 'EFAdminManager' -PreferInternals`
-  - Specific file from copied docs: `Show-ModuleDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -File 'Internals\Docs\HowTo.md'`
-  - GitHub token (private repos): set once `setx PG_GITHUB_TOKEN "ghp_xxx"` or `Set-ModuleDocumentation -GitHubToken 'ghp_xxx'`
-  - Azure DevOps PAT (Code: Read): set once `setx PG_AZDO_PAT "your_pat"` or `Set-ModuleDocumentation -AzureDevOpsPat 'your_pat'`
-  - Repo URL format for AzDO: `https://dev.azure.com/{organization}/{project}/_git/{repository}`
-
-Compatibility aliases from PSMaintenance are preserved: `Show-Documentation`, `Install-Documentation`, `Install-ModuleScripts`, `Install-Scripts`, and `Set-Documentation`.
-
-### Documentation Generation (Markdown, External Help, about_*)
-
-PowerForge can generate PowerShell help from a built module:
-
-- Markdown help: `Docs/*.md`
-- External help for `Get-Help` (MAML): `<culture>/<ModuleName>-help.xml` (default culture: `en-US`)
-- About topics (from `about_*.help.txt` / `about_*.txt`): converted to `Docs/About/*.md` and listed in `Docs/Readme.md`
-
-For binary modules, the recommended migration path is:
-
-- remove `MatejKafka.XmlDoc2CmdletDoc` package/targets from the `.csproj`
-- keep `<GenerateDocumentationFile>true</GenerateDocumentationFile>` in the `.csproj`
-- build the module normally so the compiler emits `<ModuleName>.xml` next to `<ModuleName>.dll`
-- let `New-ConfigurationDocumentation` / `Invoke-ModuleBuild` translate that compiler XML plus PowerShell metadata into Markdown help and spec-correct MAML help
-
-That means:
-
-- `<ModuleName>.xml` is the compiler XML documentation file used as input
-- `<culture>/<ModuleName>-help.xml` is the generated PowerShell external help file consumed by `Get-Help`
-
-To enable it in your build config:
-
-- `New-ConfigurationDocumentation -Path 'Docs' -PathReadme 'Docs\\Readme.md'`
-- `New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\\Readme.md'`
-- To also sync the generated external help file back into your project folder, add `-SyncExternalHelpToProjectRoot`
-
-Authoring C# cmdlets (recommended):
-
-- Ensure `<GenerateDocumentationFile>true</GenerateDocumentationFile>` in your `.csproj`.
-- Add `<example>` blocks to the cmdlet class XML docs (PowerForge reads the `.xml` next to the published `.dll`):
-
-```csharp
-/// <example>
-/// <summary>Build a module</summary>
-/// <code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\\Git\\MyModule'</code>
-/// </example>
-```
-
-Supported XML authoring patterns for binary cmdlets include:
-
-- `<summary>` for synopsis
-- top-level cmdlet `<para>` blocks or `<remarks>` for long descriptions
-- parameter/property `<summary>` for parameter help
-- `<list type="alertSet">` for notes
-- `<example>` with `<summary>`, `<prefix>`, `<code>`, and `<para>` for examples
-- `<seealso>` for related links
-- CLR type XML docs for input/output descriptions
-
-PowerForge keeps the generated help spec-correct for both Windows PowerShell 5.1 and PowerShell 7+. Some host rendering quirks still exist in `Get-Help`, especially in Windows PowerShell 5.1 text output, but the generated MAML remains standards-aligned rather than being distorted to work around host-specific formatting.
-
-Authoring `about_*` topics:
-
-- Create `en-US\\about_<Topic>.help.txt` in your module source (standard PowerShell about help format).
-- Keep the culture folder in your packaged output (PowerForge includes `en-US` by default).
-- Opt out by omitting `about_*` files or setting `BuildDocumentation.IncludeAboutTopics = false` (or using `New-ConfigurationDocumentation -SkipAboutTopics`).
-
-### Usage
-
-### CLI (PowerForge.Cli)
-
-This project includes a reusable C# core (`PowerForge`) and a CLI (`powerforge`) that can run builds/pipelines from JSON (CI/VSCode-friendly).
-See `JSON_SCHEMA.md` for the shipped schema files and example pipeline configs.
-
-GitHub artifact quota cleanup (safe defaults):
+Scaffold a starter module:
 
 ```powershell
-# dry-run by default (uses GITHUB_REPOSITORY + GITHUB_TOKEN)
-powerforge github artifacts prune --name "test-results*,coverage*,github-pages"
+Import-Module PSPublishModule
 
-# apply deletions
-powerforge github artifacts prune --apply --keep 5 --max-age-days 7 --max-delete 200
+Build-Module -ModuleName 'MyModule' -Path 'C:\Git'
 ```
 
-GitHub cache cleanup, runner housekeeping, and config-driven orchestration:
+Build an existing module with a PowerShell DSL:
 
 ```powershell
-# GitHub Actions cache cleanup (dry-run by default)
-powerforge github caches prune --key "ubuntu-*,windows-*" --keep 1 --max-age-days 14
-
-# Runner cleanup for hosted/self-hosted GitHub Actions runners
-powerforge github runner cleanup --apply --min-free-gb 20
-
-# Config-driven housekeeping (auto-loads .powerforge/github-housekeeping.json when present)
-powerforge github housekeeping --apply
-```
-
-The recommended cross-repo setup is one config file plus one reusable workflow:
-
-```json
-{
-  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/github.housekeeping.schema.json",
-  "repository": "EvotecIT/OfficeIMO",
-  "tokenEnvName": "GITHUB_TOKEN",
-  "artifacts": {
-    "enabled": true,
-    "keepLatestPerName": 10,
-    "maxAgeDays": 7
-  },
-  "caches": {
-    "enabled": true,
-    "keepLatestPerKey": 2,
-    "maxAgeDays": 14
-  },
-  "runner": {
-    "enabled": false
-  }
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
+    New-ConfigurationBuild -Enable
+    New-ConfigurationManifest -Description 'My module' -PowerShellVersion '5.1'
+    New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -AboutTopicsSourcePath 'Help\About'
+    New-ConfigurationArtefact -Type Packed -Enable
+    New-ConfigurationValidation -Enable
 }
 ```
+
+Common module build outputs include:
+
+- a refreshed module manifest,
+- packed and unpacked artifacts,
+- generated Markdown command docs,
+- generated external help XML,
+- about topic docs,
+- validation/test summaries,
+- signed module files when signing is configured.
+
+See [Docs/PSPublishModule.ModuleDocumentation.md](Docs/PSPublishModule.ModuleDocumentation.md) and [Module/Docs/Invoke-ModuleBuild.md](Module/Docs/Invoke-ModuleBuild.md).
+
+## Full Module Builder Example
+
+The quick path creates the initial module structure, manifest, and build script:
+
+```powershell
+Import-Module PSPublishModule
+
+Build-Module -ModuleName 'MyGreatModule' -Path 'C:\Support\GitHub'
+```
+
+The scaffold creates the standard folders and starting files needed to build and publish the module.
+
+![New module scaffold](Assets/Images/NewPrepareModule.png)
+
+The generated structure is intentionally boring: public/private functions, manifest, docs, tests, build script, and artifact locations are laid out in the same way across modules.
+
+![Generated module structure](Assets/Images/NewPrepareModule1.png)
+
+After the scaffold exists, the module can be built repeatedly with a DSL script. This is the pattern used by Evotec modules: the build script owns project-specific values, while PSPublishModule/PowerForge owns the reusable build, validation, packaging, signing, and publishing behavior.
+
+```powershell
+Build-Module -ModuleName 'MyGreatModule' -Path 'C:\Support\GitHub' {
+    $Manifest = [ordered] @{
+        ModuleVersion        = '1.0.0'
+        CompatiblePSEditions = @('Desktop', 'Core')
+        GUID                 = '330e259e-799f-415d-8247-4843127620a1'
+        Author               = 'Author'
+        CompanyName          = 'CompanyName'
+        Copyright            = "(c) 2011 - $((Get-Date).Year) Author @ CompanyName. All rights reserved."
+        Description          = 'Simple project MyGreatModule'
+        PowerShellVersion    = '5.1'
+        Tags                 = @('Windows', 'MacOS', 'Linux')
+        ProjectUri           = 'https://github.com/CompanyName/MyGreatModule'
+    }
+    New-ConfigurationManifest @Manifest
+
+    New-ConfigurationModule -Type RequiredModule -Name 'PSSharedGoods' -Guid 'Auto' -Version 'Latest'
+
+    New-ConfigurationModule -Type ApprovedModule -Name @(
+        'PSSharedGoods'
+        'PSWriteColor'
+        'Connectimo'
+        'PSUnifi'
+        'PSWebToolbox'
+        'PSMyPassword'
+    )
+
+    New-ConfigurationModuleSkip -IgnoreFunctionName 'Invoke-Formatter', 'Find-Module'
+
+    $format = [ordered] @{
+        RemoveComments                              = $false
+        PlaceOpenBraceEnable                        = $true
+        PlaceOpenBraceOnSameLine                    = $true
+        PlaceOpenBraceNewLineAfter                  = $true
+        PlaceOpenBraceIgnoreOneLineBlock            = $false
+        PlaceCloseBraceEnable                       = $true
+        PlaceCloseBraceNewLineAfter                 = $true
+        PlaceCloseBraceIgnoreOneLineBlock           = $false
+        PlaceCloseBraceNoEmptyLineBefore            = $true
+        UseConsistentIndentationEnable              = $true
+        UseConsistentIndentationKind                = 'space'
+        UseConsistentIndentationPipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
+        UseConsistentIndentationIndentationSize     = 4
+        UseConsistentWhitespaceEnable               = $true
+        UseConsistentWhitespaceCheckInnerBrace      = $true
+        UseConsistentWhitespaceCheckOpenBrace       = $true
+        UseConsistentWhitespaceCheckOpenParen       = $true
+        UseConsistentWhitespaceCheckOperator        = $true
+        UseConsistentWhitespaceCheckPipe            = $true
+        UseConsistentWhitespaceCheckSeparator       = $true
+        AlignAssignmentStatementEnable              = $true
+        AlignAssignmentStatementCheckHashtable      = $true
+        UseCorrectCasingEnable                      = $true
+    }
+
+    New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @format
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1' -EnableFormatting -Sort None
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
+
+    New-ConfigurationDocumentation `
+        -Enable `
+        -PathReadme 'Docs\Readme.md' `
+        -Path 'Docs' `
+        -AboutTopicsSourcePath 'Help\About'
+
+    New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
+
+    New-ConfigurationBuild `
+        -Enable `
+        -DeleteTargetModuleBeforeBuild `
+        -MergeModuleOnBuild `
+        -SignModule:$false
+
+    New-ConfigurationArtefact `
+        -Type Unpacked `
+        -Enable `
+        -Path "$PSScriptRoot\..\Artefacts" `
+        -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Modules"
+
+    New-ConfigurationArtefact `
+        -Type Packed `
+        -Enable `
+        -Path "$PSScriptRoot\..\Releases" `
+        -IncludeTagName
+
+    New-ConfigurationPublish `
+        -Type PowerShellGallery `
+        -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' `
+        -Enabled:$false
+
+    New-ConfigurationPublish `
+        -Type GitHub `
+        -FilePath 'C:\Support\Important\GitHubAPI.txt' `
+        -UserName 'CompanyName' `
+        -Enabled:$false
+}
+```
+
+The older hashtable-style configuration is still supported for compatibility, but the `New-Configuration*` DSL is the preferred style for new and actively maintained modules.
+
+## Quick Start: Private PowerShell Galleries
+
+Create a non-secret private gallery profile for Azure Artifacts:
+
+```powershell
+Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+```
+
+Export/import the same settings for other users or build machines:
+
+```powershell
+Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
+Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
+Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+```
+
+Install and update modules through the profile:
+
+```powershell
+Install-PrivateModule -ProfileName Company -Name ModuleA
+Update-PrivateModule -ProfileName Company -Name ModuleA
+```
+
+Publish packages to the saved feed:
+
+```powershell
+Publish-NugetPackage -Path .\Artifacts -ProfileName Company -SkipDuplicate
+```
+
+See [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md) and `Get-Help about_PrivateGalleries`.
+
+## Quick Start: .NET Publish and Packaging
+
+Scaffold a JSON config:
+
+```powershell
+New-DotNetPublishConfig -ProjectRoot '.' -PassThru
+```
+
+Plan and run:
+
+```powershell
+Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -Validate
+Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -Plan
+Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
+```
+
+The same flow is available through the CLI:
+
+```powershell
+powerforge dotnet scaffold --project-root . --output json
+powerforge dotnet publish --config .\powerforge.dotnetpublish.json --plan
+powerforge dotnet publish --config .\powerforge.dotnetpublish.json --output json
+```
+
+The DotNet publish engine can produce publish folders, zip files, service scripts, bundle layouts, plugin folders/packages, generated MSI authoring, MSI outputs, MSIX/Store packages, appinstaller files, manifests, checksums, and signing reports.
+
+See [Docs/PSPublishModule.DotNetPublish.Quickstart.md](Docs/PSPublishModule.DotNetPublish.Quickstart.md).
+
+## Quick Start: Unified Release
+
+Generate a starter release config:
+
+```powershell
+New-PowerForgeReleaseConfig -ProjectRoot . -PassThru
+```
+
+Plan or run the release:
+
+```powershell
+Invoke-PowerForgeRelease -ConfigPath .\Build\release.json -Plan
+Invoke-PowerForgeRelease -ConfigPath .\Build\release.json
+```
+
+CLI equivalent:
+
+```powershell
+powerforge release --config .\Build\release.json --plan
+```
+
+The unified release engine is designed for repositories that need several outputs at once: module packages, NuGet packages, portable tools, installers, GitHub release uploads, Winget manifests, checksums, and categorized upload-ready staging folders.
+
+See [Docs/PSPublishModule.ProjectBuild.md](Docs/PSPublishModule.ProjectBuild.md).
+
+## Quick Start: PowerForge.Web
+
+PowerForge.Web is the static-site engine in this repository. It is used for documentation sites, API reference portals, project hubs, blog/news content, search, SEO assets, sitemaps, quality gates, and CI-friendly audits.
+
+Create or standardize a site:
+
+```powershell
+powerforge-web scaffold --out .\Website --name "My Site" --base-url "https://example.com" --engine scriban
+```
+
+Run a local pipeline:
+
+```powershell
+powerforge-web pipeline --config .\pipeline.json --mode dev
+```
+
+Run CI-style gates locally:
+
+```powershell
+powerforge-web pipeline --config .\pipeline.json --mode ci
+```
+
+Recommended site contracts include:
+
+- explicit `Features` in `site.json`,
+- `pipeline.json` with dev and CI modes,
+- committed `.powerforge/verify-baseline.json`,
+- committed `.powerforge/audit-baseline.json`,
+- strict CI gates with `failOnNewWarnings` and `failOnNewIssues`,
+- a theme manifest with feature contracts.
+
+See [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md), [Docs/PowerForge.Web.QualityGates.md](Docs/PowerForge.Web.QualityGates.md), and [Docs/PowerForge.Web.Roadmap.md](Docs/PowerForge.Web.Roadmap.md).
+
+## GitHub Housekeeping
+
+PowerForge can clean GitHub Actions artifacts, caches, and runner workspace pressure with safe dry-run defaults:
+
+```powershell
+powerforge github artifacts prune --name "test-results*,coverage*,github-pages"
+powerforge github caches prune --key "ubuntu-*,windows-*" --keep 1 --max-age-days 14
+powerforge github runner cleanup --apply --min-free-gb 20
+powerforge github housekeeping --config .\.powerforge\github-housekeeping.json --apply
+```
+
+Reusable workflow example:
 
 ```yaml
 permissions:
@@ -260,383 +397,93 @@ jobs:
     secrets: inherit
 ```
 
-If you need direct action usage instead of the reusable workflow:
+## Command Families
 
-```yaml
-permissions:
-  contents: read
-  actions: write
+PSPublishModule exports commands in these families:
 
-jobs:
-  housekeeping:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: EvotecIT/PSPublishModule/.github/actions/github-housekeeping@main
-        with:
-          config-path: ./.powerforge/github-housekeeping.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+- `Invoke-*`: run build, test, publish, release, plugin, and repository workflows.
+- `New-Configuration*`: create DSL objects for module, .NET publish, release, installer, signing, documentation, validation, and compatibility configuration.
+- `New-*Config`: scaffold JSON configuration files.
+- `Get-*` / `Test-*`: inspect module metadata, repository profiles, compatibility, project consistency, versions, isolated module profiles, and test failures.
+- `Install-*` / `Update-*` / `Register-*` / `Connect-*`: manage module docs/scripts and private gallery repositories.
+- `Publish-*` / `Send-*`: publish NuGet packages and GitHub release assets.
+- `powerforge`: JSON-first CLI for release, .NET publish, GitHub housekeeping, plugin export/pack, bundle post-process, and related automation.
+- `powerforge-web`: static-site and API-docs CLI.
+
+Generated command reference lives in [Module/Docs/Readme.md](Module/Docs/Readme.md).
+
+## Repository Layout
+
+| Path | Purpose |
+| --- | --- |
+| `PSPublishModule/` | Binary PowerShell module cmdlets. |
+| `PowerForge/` | Host-neutral build, release, packaging, and workflow engine. |
+| `PowerForge.PowerShell/` | PowerShell runtime adapters, module build execution, help extraction, signing, Pester, and repository tooling. |
+| `PowerForge.Cli/` | `powerforge` command-line tool. |
+| `PowerForge.Web/` | Static-site, API-docs, search, SEO, audit, and verification engine. |
+| `PowerForge.Web.Cli/` | `powerforge-web` command-line tool. |
+| `PowerForgeStudio.*` | Current PowerForge Studio experiments and hosts. |
+| `Module/` | Packaged PSPublishModule output, generated command docs, external help, tests, and module build script. |
+| `Docs/` | Durable design notes, quickstarts, roadmaps, and workflow documentation. |
+| `Schemas/` | JSON schemas for PowerForge configs. |
+| `Build/` | Repo release/build entrypoints and release configuration. |
+
+## Build This Repository
+
+Run the full solution tests:
+
+```powershell
+dotnet test .\PSPublishModule.sln -c Release
 ```
 
-For release/build packaging, this repo now uses one unified release entrypoint:
+Run the module build:
+
+```powershell
+.\Module\Build\Build-Module.ps1
+```
+
+Run the unified release plan:
+
+```powershell
+.\Build\Build-Project.ps1 -Plan
+```
+
+Build release artifacts:
 
 ```powershell
 .\Build\Build-Project.ps1
-.\Build\Build-Project.ps1 -Plan
-.\Build\Build-Project.ps1 -PublishNuget $true -PublishGitHub $true
-.\Build\Build-Project.ps1 -ToolsOnly -PublishToolGitHub $true
 ```
 
-`Build\release.json` is the source of truth for both package releases and downloadable tool binaries.
-
-For targeted tool-only runs, the convenience wrappers still exist:
+Build only the CLI tools:
 
 ```powershell
-# Build PowerForge.exe / PowerForge for one runtime
-.\Build\Build-PowerForge.ps1 -Tool PowerForge -Runtime win-x64 -Framework net10.0 -Flavor SingleContained
-
-# Build PowerForgeWeb.exe / PowerForgeWeb
-.\Build\Build-PowerForgeWeb.ps1 -Runtime win-x64 -Framework net10.0 -Flavor SingleContained
-
-# Optional: publish the generated zip assets to GitHub releases
-.\Build\Build-PowerForge.ps1 -Tool All -Runtime win-x64,linux-x64,osx-arm64 -Framework net10.0 -Flavor SingleContained -PublishGitHub
+.\Build\Build-Project.ps1 -ToolsOnly
 ```
 
-Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
+## Documentation
 
-```powershell
-New-PrepareModule -ModuleName "YourModule" -Path "C:\DirectoryWhereTheModuleWillBeCreated"
-```
+Start here:
 
-Once run the script will precrate the module folder with nessecary fies
+- [Docs/PSPublishModule.DotNetPublish.Quickstart.md](Docs/PSPublishModule.DotNetPublish.Quickstart.md)
+- [Docs/PSPublishModule.ProjectBuild.md](Docs/PSPublishModule.ProjectBuild.md)
+- [Docs/PSPublishModule.ModuleDocumentation.md](Docs/PSPublishModule.ModuleDocumentation.md)
+- [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md)
+- [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
+- [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md)
+- [Docs/PowerForge.Web.QualityGates.md](Docs/PowerForge.Web.QualityGates.md)
+- [Docs/PowerForge.Web.Roadmap.md](Docs/PowerForge.Web.Roadmap.md)
+- [Docs/PowerForgeStudio.Runbook.md](Docs/PowerForgeStudio.Runbook.md)
+- [Module/Docs/Readme.md](Module/Docs/Readme.md)
 
-![NewPrepareModule](Assets/Images/NewPrepareModule.png)
+## Support This Project
 
-The structure of the module has all the basics that are required to start building the module. The module is ready to be built and published.
+If PSPublishModule or PowerForge saves you time, sponsorship helps keep the project maintained and improving:
 
-![NewPrepareModuleStructure](Assets/Images/NewPrepareModule1.png)
+- [Become a sponsor via GitHub Sponsors](https://github.com/sponsors/PrzemyslawKlys)
+- [Support via PayPal](https://paypal.me/PrzemyslawKlys)
 
-The configuration example below shows how PSPublishModule is built internally. It's a good starting point for building your own module.
-You can also look at the `Examples` and `Build` folders in this repository to see how it's used in real life.
-Additionally all Evotec projects use this, so you can look at any of them to see how it's used.
+Sponsorship is optional. The project remains open-source and available for everyone.
 
-```powershell
-Build-Module -ModuleName 'PSPublishModule' {
-    # Usual defaults as per standard module
-    $Manifest = [ordered] @{
-        ModuleVersion          = '1.0.X'
-        CompatiblePSEditions   = @('Desktop', 'Core')
-        GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-        Author                 = 'Przemyslaw Klys'
-        CompanyName            = 'Evotec'
-        Copyright              = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
-        Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
-        PowerShellVersion      = '5.1'
-        Tags                   = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
-        IconUri                = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
-        ProjectUri             = 'https://github.com/EvotecIT/PSPublishModule'
-        DotNetFrameworkVersion = '4.5.2'
-    }
-    New-ConfigurationManifest @Manifest
+## License
 
-    # Add standard module dependencies (directly, but can be used with loop as well)
-    New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
-
-    # Do not add inbox Microsoft.PowerShell.* modules as Required/External dependencies.
-
-    # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
-    # And on that time only that function and dependant functions will be copied over
-    # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
-    New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
-
-    #New-ConfigurationModuleSkip -IgnoreFunctionName 'Invoke-Formatter', 'Find-Module'
-
-    $ConfigurationFormat = [ordered] @{
-        RemoveComments                              = $false
-
-        PlaceOpenBraceEnable                        = $true
-        PlaceOpenBraceOnSameLine                    = $true
-        PlaceOpenBraceNewLineAfter                  = $true
-        PlaceOpenBraceIgnoreOneLineBlock            = $false
-
-        PlaceCloseBraceEnable                       = $true
-        PlaceCloseBraceNewLineAfter                 = $true
-        PlaceCloseBraceIgnoreOneLineBlock           = $false
-        PlaceCloseBraceNoEmptyLineBefore            = $true
-
-        UseConsistentIndentationEnable              = $true
-        UseConsistentIndentationKind                = 'space'
-        UseConsistentIndentationPipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
-        UseConsistentIndentationIndentationSize     = 4
-
-        UseConsistentWhitespaceEnable               = $true
-        UseConsistentWhitespaceCheckInnerBrace      = $true
-        UseConsistentWhitespaceCheckOpenBrace       = $true
-        UseConsistentWhitespaceCheckOpenParen       = $true
-        UseConsistentWhitespaceCheckOperator        = $true
-        UseConsistentWhitespaceCheckPipe            = $true
-        UseConsistentWhitespaceCheckSeparator       = $true
-
-        AlignAssignmentStatementEnable              = $true
-        AlignAssignmentStatementCheckHashtable      = $true
-
-        UseCorrectCasingEnable                      = $true
-    }
-    # format PSD1 and PSM1 files when merging into a single file
-    # enable formatting is not required as Configuration is provided
-    New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
-    # format PSD1 and PSM1 files within the module
-    # enable formatting is required to make sure that formatting is applied (with default settings)
-    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1' -EnableFormatting -Sort None
-    # when creating PSD1 use special style without comments and with only required parameters
-    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
-
-    # configuration for documentation, at the same time it enables documentation processing
-    New-ConfigurationDocumentation -Enable:$false -PathReadme 'Docs\Readme.md' -Path 'Docs'
-
-    New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
-
-    New-ConfigurationBuild -Enable:$true -SignModule -DeleteTargetModuleBeforeBuild -MergeModuleOnBuild -CertificateThumbprint '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
-
-    New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Modules"
-    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Releases" -IncludeTagName
-
-    # global options for publishing to github/psgallery
-    New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$false
-    New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$false
-}
-```
-
-The old way still works, but is less preferred. It's kept for backwards compatibility.
-It's much harder to discover what is what and how it impacts things. It's also harder to maintain.
-
-```powershell
-$Configuration = @{
-    Information = @{
-        ModuleName        = 'PSPublishModule'
-        #DirectoryProjects = 'C:\Support\GitHub'
-
-        # Where from to export aliases / functions
-        FunctionsToExport = 'Public'
-        AliasesToExport   = 'Public'
-
-        # Those options below are not nessecary but can be used to configure other options. Those are "defaults"
-        Exclude           = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
-        IncludeRoot       = '*.psm1', '*.psd1', 'License*'
-        IncludePS1        = 'Private', 'Public', 'Enums', 'Classes'
-        IncludeAll        = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'en-US\'
-
-        IncludeCustomCode = {
-
-        }
-        IncludeToArray    = @{
-            'Rules' = 'Examples'
-        }
-
-        LibrariesCore     = 'Lib\Core'
-        LibrariesDefault  = 'Lib\Default'
-        LibrariesStandard = 'Lib\Standard'
-
-        # manifest information
-        Manifest          = @{
-            # Version number of this module.
-            ModuleVersion              = '1.0.0'
-            # Supported PSEditions
-            CompatiblePSEditions       = @('Desktop', 'Core')
-            # ID used to uniquely identify this module
-            GUID                       = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-            # Author of this module
-            Author                     = 'Przemyslaw Klys'
-            # Company or vendor of this module
-            CompanyName                = 'Evotec'
-            # Copyright statement for this module
-            Copyright                  = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
-            # Description of the functionality provided by this module
-            Description                = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
-            # Minimum version of the Windows PowerShell engine required by this module
-            PowerShellVersion          = '5.1'
-            # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-            Tags                       = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
-            IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
-            ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
-
-            RequiredModules            = @(
-                @{ ModuleName = 'powershellget'; ModuleVersion = "2.2.5"; Guid = '1d73a601-4a6c-43c5-ba3f-619b18bbb404' }
-                @{ ModuleName = 'PSScriptAnalyzer'; ModuleVersion = "Latest"; Guid = 'd6245802-193d-4068-a631-8863a4342a18' }
-            )
-            ExternalModuleDependencies = @()
-            DotNetFrameworkVersion     = '4.5.2'
-        }
-    }
-    Options     = @{
-        Merge             = @{
-            Sort           = 'None'
-            FormatCodePSM1 = @{
-                Enabled           = $false
-                RemoveComments    = $false
-                FormatterSettings = @{
-                    IncludeRules = @(
-                        'PSPlaceOpenBrace',
-                        'PSPlaceCloseBrace',
-                        'PSUseConsistentWhitespace',
-                        'PSUseConsistentIndentation',
-                        'PSAlignAssignmentStatement',
-                        'PSUseCorrectCasing'
-                    )
-
-                    Rules        = @{
-                        PSPlaceOpenBrace           = @{
-                            Enable             = $true
-                            OnSameLine         = $true
-                            NewLineAfter       = $true
-                            IgnoreOneLineBlock = $true
-                        }
-
-                        PSPlaceCloseBrace          = @{
-                            Enable             = $true
-                            NewLineAfter       = $false
-                            IgnoreOneLineBlock = $true
-                            NoEmptyLineBefore  = $false
-                        }
-
-                        PSUseConsistentIndentation = @{
-                            Enable              = $true
-                            Kind                = 'space'
-                            PipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
-                            IndentationSize     = 4
-                        }
-
-                        PSUseConsistentWhitespace  = @{
-                            Enable          = $true
-                            CheckInnerBrace = $true
-                            CheckOpenBrace  = $true
-                            CheckOpenParen  = $true
-                            CheckOperator   = $true
-                            CheckPipe       = $true
-                            CheckSeparator  = $true
-                        }
-
-                        PSAlignAssignmentStatement = @{
-                            Enable         = $true
-                            CheckHashtable = $true
-                        }
-
-                        PSUseCorrectCasing         = @{
-                            Enable = $true
-                        }
-                    }
-                }
-            }
-            FormatCodePSD1 = @{
-                Enabled        = $true
-                RemoveComments = $false
-            }
-            Integrate      = @{
-                ApprovedModules = 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
-            }
-            # Style          = @{
-            #     PSD1 = 'Native'
-            # }
-        }
-        Standard          = @{
-            FormatCodePSM1 = @{
-
-            }
-            FormatCodePSD1 = @{
-                Enabled = $true
-                #RemoveComments = $true
-            }
-            # Style          = @{
-            #     PSD1 = 'Native'
-            # }
-        }
-        PowerShellGallery = @{
-            ApiKey   = 'C:\Support\Important\PowerShellGalleryAPI.txt'
-            FromFile = $true
-        }
-        GitHub            = @{
-            ApiKey   = 'C:\Support\Important\GithubAPI.txt'
-            FromFile = $true
-            UserName = 'EvotecIT'
-            #RepositoryName = 'PSPublishModule' # not required, uses project name
-        }
-        Documentation     = @{
-            Path       = 'Docs'
-            PathReadme = 'Docs\Readme.md'
-        }
-        Style             = @{
-            PSD1 = 'Minimal' # Native
-        }
-        Signing           = @{
-            CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
-        }
-    }
-    Steps       = @{
-        BuildLibraries     = @{
-            Enable        = $false # build once every time nuget gets updated
-            Configuration = 'Release'
-            Framework     = 'netstandard2.0', 'net472'
-            #ProjectName   = 'ImagePlayground.PowerShell'
-        }
-        BuildModule        = @{  # requires Enable to be on to process all of that
-            Enable                  = $true
-            DeleteBefore            = $false
-            Merge                   = $true
-            MergeMissing            = $true
-            SignMerged              = $true
-            CreateFileCatalog       = $false
-            Releases                = $true
-            #ReleasesUnpacked        = $false
-            ReleasesUnpacked        = @{
-                Enabled         = $true
-                IncludeTagName  = $false
-                Path            = "$PSScriptRoot\..\Artefacts"
-                RequiredModules = @{
-                    Enabled = $true
-                    Path    = "$PSScriptRoot\..\Artefacts\Modules"
-                }
-                DirectoryOutput = @{
-
-                }
-                FilesOutput     = @{
-
-                }
-            }
-            RefreshPSD1Only         = $false
-            # only when there are classes
-            ClassesDotSource        = $false
-            LibrarySeparateFile     = $false
-            LibraryDotSource        = $false
-            # Applicable only for non-merge/publish situation
-            # It's simply to make life easier during debugging
-            # It makes all functions/aliases exportable
-            UseWildcardForFunctions = $false
-
-            # special features for binary modules
-            DebugDLL                = $false
-            ResolveBinaryConflicts  = $false # mostly for memory and other libraries
-            # ResolveBinaryConflicts  = @{
-            #     ProjectName = 'ImagePlayground.PowerShell'
-            # }
-            LocalVersion            = $false # bumps version in PSD1 on every build
-        }
-        BuildDocumentation = @{
-            Enable = $true # enables documentation processing, cleans stale docs, and syncs project docs
-        }
-        ImportModules      = @{
-            Self            = $true
-            RequiredModules = $false
-            Verbose         = $false
-        }
-        PublishModule      = @{  # requires Enable to be on to process all of that
-            Enabled      = $false
-            Prerelease   = ''
-            RequireForce = $false
-            GitHub       = $false
-        }
-    }
-}
-
-Build-Module -Configuration $Configuration
-```
+PSPublishModule and PowerForge are released under the license in [LICENSE](LICENSE).
