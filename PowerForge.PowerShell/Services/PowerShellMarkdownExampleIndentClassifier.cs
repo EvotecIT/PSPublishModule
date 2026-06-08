@@ -25,9 +25,10 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
             var ast = Parser.ParseInput(normalized, out var tokens, out var errors);
             var errorLines = GetErrorLines(errors);
             var commentLines = GetCommentLines(tokens);
+            var hereStringLines = GetHereStringLines(tokens);
 
             var statements = ast.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
-            if (statements.Length <= 1)
+            if (statements.Length == 0)
                 return normalized;
 
             var firstStatementIndex = FindFirstUsableStatementIndex(statements, errorLines);
@@ -47,6 +48,9 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
 
             var indent = GetCommonIndent(lines, linesToNormalize);
             if (indent < 8)
+                return normalized;
+
+            if (statements.Length == 1 && !ShouldNormalizeSingleStatement(firstStatement, lines, linesToNormalize, commentLines, hereStringLines, indent))
                 return normalized;
 
             AddIndentedCommentLines(lines, commentLines, linesToNormalize, indent, firstStatement.Extent.EndLineNumber - 1);
@@ -86,6 +90,25 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         foreach (var token in tokens)
         {
             if (token.Kind != TokenKind.Comment)
+                continue;
+
+            var start = Math.Max(1, token.Extent.StartLineNumber);
+            var end = Math.Max(start, token.Extent.EndLineNumber);
+            for (var line = start; line <= end; line++)
+            {
+                lines.Add(line - 1);
+            }
+        }
+
+        return lines;
+    }
+
+    private static HashSet<int> GetHereStringLines(Token[] tokens)
+    {
+        var lines = new HashSet<int>();
+        foreach (var token in tokens)
+        {
+            if (token.Kind != TokenKind.HereStringExpandable && token.Kind != TokenKind.HereStringLiteral)
                 continue;
 
             var start = Math.Max(1, token.Extent.StartLineNumber);
@@ -206,6 +229,83 @@ internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExamp
         }
 
         return common == int.MaxValue ? 0 : common;
+    }
+
+    private static bool HasNestedIndent(string[] lines, HashSet<int> lineIndexes, int commonIndent)
+    {
+        foreach (var lineIndex in lineIndexes)
+        {
+            if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
+                continue;
+
+            if (CountLeadingWhitespace(lines[lineIndex]) > commonIndent)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ShouldNormalizeSingleStatement(
+        StatementAst statement,
+        string[] lines,
+        HashSet<int> lineIndexes,
+        HashSet<int> commentLines,
+        HashSet<int> hereStringLines,
+        int commonIndent)
+    {
+        if (!IsSingleCommandScriptBlockStatement(statement))
+            return false;
+
+        if (!HasNestedIndent(lines, lineIndexes, commonIndent))
+            return false;
+
+        foreach (var lineIndex in lineIndexes)
+        {
+            if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
+                continue;
+
+            if (CountLeadingWhitespace(lines[lineIndex]) != commonIndent)
+                continue;
+
+            if (hereStringLines.Contains(lineIndex))
+                return false;
+
+            if (commentLines.Contains(lineIndex))
+                continue;
+
+            if (!IsClosingDelimiterLine(lines[lineIndex]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsSingleCommandScriptBlockStatement(StatementAst statement)
+    {
+        if (statement is AssignmentStatementAst assignment)
+            return IsSingleCommandScriptBlockStatement(assignment.Right);
+
+        if (statement is not PipelineAst pipeline || pipeline.PipelineElements.Count != 1)
+            return false;
+
+        if (pipeline.PipelineElements[0] is not CommandAst command)
+            return false;
+
+        return command.CommandElements.Any(static element => element is ScriptBlockExpressionAst);
+    }
+
+    private static bool IsClosingDelimiterLine(string line)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.Length == 0 || (trimmed[0] != '}' && trimmed[0] != ')' && trimmed[0] != ']'))
+            return false;
+
+        if (trimmed.Length == 1)
+            return true;
+
+        var remainder = trimmed.Substring(1).TrimStart();
+        return remainder.StartsWith("-", StringComparison.Ordinal)
+            || remainder.StartsWith("|", StringComparison.Ordinal);
     }
 
     private static void AddIndentedCommentLines(
