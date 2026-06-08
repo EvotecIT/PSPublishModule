@@ -681,7 +681,11 @@ internal sealed class PowerForgeReleaseService
     {
         var winget = spec.Winget;
         if (winget is null)
+        {
+            if (request.SubmitWinget == true)
+                throw new InvalidOperationException("Winget submission was requested, but the release config does not define a Winget section.");
             return;
+        }
 
         var service = new WingetSubmissionService(_logger);
         var plan = service.Plan(winget, result.WingetManifests, configDirectory, request);

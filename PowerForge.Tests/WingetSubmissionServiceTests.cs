@@ -38,6 +38,7 @@ public sealed class WingetSubmissionServiceTests
             var entry = Assert.Single(plan.Entries);
             Assert.Equal(new[] { "submit", manifestPath, "--prtitle", "Submit Evotec.Test 1.2.3", "--token", "secret-token", "--no-open" }, entry.Arguments);
             Assert.Equal(new[] { "submit", manifestPath, "--prtitle", "Submit Evotec.Test 1.2.3", "--token", "***", "--no-open" }, entry.RedactedArguments);
+            Assert.Null(typeof(PowerForgeWingetSubmissionEntryPlan).GetProperty(nameof(PowerForgeWingetSubmissionEntryPlan.Arguments)));
         }
         finally
         {
@@ -89,6 +90,67 @@ public sealed class WingetSubmissionServiceTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void Plan_Disabled_DoesNotResolveTokenSources()
+    {
+        var service = new WingetSubmissionService(new NullLogger(), new StubProcessRunner(_ => Success()));
+
+        var plan = service.Plan(
+            new PowerForgeReleaseWingetOptions
+            {
+                Submission = new PowerForgeReleaseWingetSubmissionOptions
+                {
+                    TokenFilePath = "missing-token.txt"
+                }
+            },
+            Array.Empty<PowerForgeWingetManifestArtifact>(),
+            Path.GetTempPath(),
+            new PowerForgeReleaseRequest());
+
+        Assert.False(plan.Enabled);
+        Assert.False(plan.UsesToken);
+        Assert.Empty(plan.Entries);
+    }
+
+    [Fact]
+    public void Run_InteractiveAuthentication_DoesNotCaptureProcessStreams()
+    {
+        ProcessRunRequest? capturedRequest = null;
+        var service = new WingetSubmissionService(
+            new NullLogger(),
+            new StubProcessRunner(request =>
+            {
+                capturedRequest = request;
+                return Success();
+            }));
+        var plan = new PowerForgeWingetSubmissionPlan
+        {
+            Enabled = true,
+            UsesInteractiveAuthentication = true,
+            ToolPath = "wingetcreate",
+            WorkingDirectory = Path.GetTempPath(),
+            TimeoutSeconds = 60,
+            Entries = new[]
+            {
+                new PowerForgeWingetSubmissionEntryPlan
+                {
+                    PackageIdentifier = "Evotec.Test",
+                    PackageVersion = "1.2.3",
+                    ManifestPath = "Evotec.Test.yaml",
+                    Arguments = new[] { "submit", "Evotec.Test.yaml" },
+                    RedactedArguments = new[] { "submit", "Evotec.Test.yaml" }
+                }
+            }
+        };
+
+        var result = service.Run(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(capturedRequest);
+        Assert.False(capturedRequest!.CaptureOutput);
+        Assert.False(capturedRequest.CaptureError);
     }
 
     [Fact]

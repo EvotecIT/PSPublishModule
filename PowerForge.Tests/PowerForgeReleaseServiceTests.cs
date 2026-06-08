@@ -2233,6 +2233,51 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_SubmitWinget_ThrowsWhenWingetConfigIsMissing()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Configuration = "Release",
+                    Targets = Array.Empty<DotNetPublishTargetPlan>()
+                },
+                runDotNetTools: _ => new DotNetPublishResult { Succeeded = true },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                submitWinget: _ => throw new InvalidOperationException("Winget should not run."));
+
+            var blocked = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec()
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    SubmitWinget = true
+                }));
+
+            Assert.Contains("does not define a Winget section", blocked.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_Winget_PrefersResolvedPackageVersionOverPortableTargetVersion()
     {
         var root = CreateSandbox();

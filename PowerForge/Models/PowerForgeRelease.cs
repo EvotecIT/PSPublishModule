@@ -368,6 +368,8 @@ internal sealed class PowerForgeWingetSubmissionPlan
 
     public bool UsesToken { get; set; }
 
+    public bool UsesInteractiveAuthentication { get; set; }
+
     public bool NoOpen { get; set; }
 
     public PowerForgeWingetSubmissionEntryPlan[] Entries { get; set; } = Array.Empty<PowerForgeWingetSubmissionEntryPlan>();
@@ -384,7 +386,7 @@ internal sealed class PowerForgeWingetSubmissionEntryPlan
     public string[] InstallerUrls { get; set; } = Array.Empty<string>();
 
     [JsonIgnore]
-    public string[] Arguments { get; set; } = Array.Empty<string>();
+    internal string[] Arguments { get; set; } = Array.Empty<string>();
 
     public string[] RedactedArguments { get; set; } = Array.Empty<string>();
 }

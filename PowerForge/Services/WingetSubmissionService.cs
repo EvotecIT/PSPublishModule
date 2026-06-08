@@ -35,14 +35,20 @@ internal sealed class WingetSubmissionService
         if (timeoutSeconds <= 0)
             throw new InvalidOperationException("Winget submission timeout must be greater than zero seconds.");
 
-        var token = ResolveToken(submission, request, configDirectory);
+        string? token = null;
         var allowInteractive = request.WingetSubmitAllowInteractiveAuthentication ?? submission.AllowInteractiveAuthentication;
-        if (enabled && string.IsNullOrWhiteSpace(token) && !allowInteractive)
+        if (enabled)
         {
-            throw new InvalidOperationException(
-                $"Winget submission requires a GitHub token. Set Winget.Submission.TokenEnvName (default {DefaultTokenEnvName}), TokenFilePath, Token, or enable AllowInteractiveAuthentication.");
+            token = ResolveToken(submission, request, configDirectory);
+            if (string.IsNullOrWhiteSpace(token) && !allowInteractive)
+            {
+                throw new InvalidOperationException(
+                    $"Winget submission requires a GitHub token. Set Winget.Submission.TokenEnvName (default {DefaultTokenEnvName}), TokenFilePath, Token, or enable AllowInteractiveAuthentication.");
+            }
         }
 
+        var usesToken = enabled && !string.IsNullOrWhiteSpace(token);
+        var usesInteractiveAuthentication = enabled && !usesToken && allowInteractive;
         var entries = enabled
             ? manifests.Select(manifest => BuildEntry(winget, submission, request, manifest, mode, token)).ToArray()
             : Array.Empty<PowerForgeWingetSubmissionEntryPlan>();
@@ -57,7 +63,8 @@ internal sealed class WingetSubmissionService
             ToolPath = toolPath,
             WorkingDirectory = workingDirectory,
             TimeoutSeconds = timeoutSeconds,
-            UsesToken = !string.IsNullOrWhiteSpace(token),
+            UsesToken = usesToken,
+            UsesInteractiveAuthentication = usesInteractiveAuthentication,
             NoOpen = request.WingetSubmitNoOpen ?? submission.NoOpen,
             Entries = entries
         };
@@ -85,7 +92,9 @@ internal sealed class WingetSubmissionService
                 plan.ToolPath,
                 plan.WorkingDirectory,
                 entry.Arguments,
-                TimeSpan.FromSeconds(plan.TimeoutSeconds))).GetAwaiter().GetResult();
+                TimeSpan.FromSeconds(plan.TimeoutSeconds),
+                captureOutput: !plan.UsesInteractiveAuthentication,
+                captureError: !plan.UsesInteractiveAuthentication)).GetAwaiter().GetResult();
 
             var entryResult = new PowerForgeWingetSubmissionEntryResult
             {

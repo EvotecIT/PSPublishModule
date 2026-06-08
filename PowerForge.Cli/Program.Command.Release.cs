@@ -331,8 +331,9 @@ internal static partial class Program
         request.WingetSubmitAllowInteractiveAuthentication = ChooseBool(
             request.WingetSubmitAllowInteractiveAuthentication,
             argv.Any(a => a.Equals("--winget-allow-interactive-auth", StringComparison.OrdinalIgnoreCase)) ? true : null);
-        if (Enum.TryParse<PowerForgeWingetSubmissionMode>(TryGetOptionValue(argv, "--winget-submit-mode"), ignoreCase: true, out var wingetSubmitMode))
-            request.WingetSubmitMode = wingetSubmitMode;
+        var wingetSubmitModeValue = TryGetOptionValue(argv, "--winget-submit-mode");
+        if (!string.IsNullOrWhiteSpace(wingetSubmitModeValue))
+            request.WingetSubmitMode = ParseWingetSubmissionMode(wingetSubmitModeValue);
         if (TryParsePositiveInt(TryGetOptionValue(argv, "--winget-timeout-seconds"), out var wingetTimeoutSeconds))
             request.WingetSubmitTimeoutSeconds = wingetTimeoutSeconds;
 
@@ -455,6 +456,20 @@ internal static partial class Program
 
         throw new ArgumentException(
             $"Unknown dotnet publish policy mode: {raw}. Expected one of: {string.Join(", ", Enum.GetNames(typeof(DotNetPublishPolicyMode)))}",
+            nameof(value));
+    }
+
+    private static PowerForgeWingetSubmissionMode ParseWingetSubmissionMode(string? value)
+    {
+        var raw = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+            throw new ArgumentException("Winget submit mode must not be empty.", nameof(value));
+
+        if (Enum.TryParse(raw, ignoreCase: true, out PowerForgeWingetSubmissionMode mode))
+            return mode;
+
+        throw new ArgumentException(
+            $"Unknown Winget submit mode: {raw}. Expected one of: {string.Join(", ", Enum.GetNames(typeof(PowerForgeWingetSubmissionMode)))}",
             nameof(value));
     }
 
