@@ -23,8 +23,8 @@ internal sealed class PrivateGalleryService
 
     public void EnsureProviderSupported(PrivateGalleryProvider provider)
     {
-        if (provider is not (PrivateGalleryProvider.AzureArtifacts or PrivateGalleryProvider.JFrog or PrivateGalleryProvider.NuGet))
-            throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, NuGet.", nameof(provider));
+        if (provider is not (PrivateGalleryProvider.AzureArtifacts or PrivateGalleryProvider.JFrog or PrivateGalleryProvider.GitHubPackages or PrivateGalleryProvider.NuGet))
+            throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, GitHubPackages, NuGet.", nameof(provider));
     }
 
     public IReadOnlyList<ModuleDependency> BuildDependencies(IEnumerable<string> names)
@@ -228,8 +228,7 @@ internal sealed class PrivateGalleryService
         var result = new ModuleRepositoryRegistrationResult
         {
             RepositoryName = endpoint.RepositoryName,
-            Provider = endpoint.Provider == PrivateGalleryProvider.JFrog ? "JFrog" :
-                endpoint.Provider == PrivateGalleryProvider.NuGet ? "NuGet" : "AzureArtifacts",
+            Provider = endpoint.Provider.ToString(),
             BootstrapModeRequested = bootstrapModeRequested,
             BootstrapModeUsed = bootstrapModeUsed,
             CredentialSource = credentialSource,

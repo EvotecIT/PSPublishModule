@@ -42,6 +42,8 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     private const string ParameterSetSource = "Source";
     private const string ParameterSetProfile = "Profile";
     private const string AzureArtifactsApiKeyPlaceholder = "AzureArtifacts";
+    private const string GitHubTokenEnvironmentVariable = "GITHUB_TOKEN";
+    private const string GitHubCliTokenEnvironmentVariable = "GH_TOKEN";
 
     /// <summary>Directory to search for NuGet packages.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetSource)]
@@ -49,7 +51,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[] Path { get; set; } = Array.Empty<string>();
 
-    /// <summary>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</summary>
+    /// <summary>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetSource)]
     [Parameter(ParameterSetName = ParameterSetProfile)]
     [ValidateNotNullOrEmpty]
@@ -111,7 +113,8 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                     profile.RepositorySourceUri,
                     profile.RepositoryPublishUri,
                     profile.JFrogBaseUri,
-                    profile.JFrogRepository);
+                    profile.JFrogRepository,
+                    profile.GitHubOwner);
 
                 source = endpoint.PSResourceGetUri;
                 repositoryName = endpoint.RepositoryName;
@@ -119,6 +122,10 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                 if (string.IsNullOrWhiteSpace(apiKey) && endpoint.Provider == PrivateGalleryProvider.AzureArtifacts)
                 {
                     apiKey = AzureArtifactsApiKeyPlaceholder;
+                }
+                else if (string.IsNullOrWhiteSpace(apiKey) && endpoint.Provider == PrivateGalleryProvider.GitHubPackages)
+                {
+                    apiKey = ResolveGitHubPackagesApiKey();
                 }
                 else if (string.IsNullOrWhiteSpace(apiKey))
                 {
@@ -154,6 +161,19 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path!))
         .ToArray();
+
+    private static string ResolveGitHubPackagesApiKey()
+    {
+        var token = Environment.GetEnvironmentVariable(GitHubTokenEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(token))
+            return token!;
+
+        token = Environment.GetEnvironmentVariable(GitHubCliTokenEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(token))
+            return token!;
+
+        throw new ArgumentException("ApiKey is required for GitHub Packages profiles unless GITHUB_TOKEN or GH_TOKEN is set.", nameof(ApiKey));
+    }
 
     private static PublishNugetPackageResult ToCmdletResult(
         PowerForge.NuGetPackagePublishResult result,

@@ -132,6 +132,39 @@ public sealed class ModuleRepositoryProfileStoreTests
     }
 
     [Fact]
+    public void SaveProfile_NormalizesGitHubPackagesProfileWithTokenDefaults()
+    {
+        var path = CreateTempFilePath();
+        try
+        {
+            var store = new ModuleRepositoryProfileStore(path);
+
+            var saved = store.SaveProfile(new ModuleRepositoryProfile
+            {
+                Name = " Licensing ",
+                Provider = PrivateGalleryProvider.GitHubPackages,
+                GitHubOwner = " EvotecIT ",
+                RepositoryName = " evotec-github "
+            });
+
+            Assert.Equal("Licensing", saved.Name);
+            Assert.Equal(PrivateGalleryProvider.GitHubPackages, saved.Provider);
+            Assert.Equal("EvotecIT", saved.GitHubOwner);
+            Assert.Equal("EvotecIT", saved.Repository);
+            Assert.Equal("evotec-github", saved.RepositoryName);
+            Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", saved.RepositoryUri);
+            Assert.Equal(saved.RepositoryUri, saved.RepositorySourceUri);
+            Assert.Equal(saved.RepositoryUri, saved.RepositoryPublishUri);
+            Assert.Equal(PrivateGalleryBootstrapMode.CredentialPrompt, saved.BootstrapMode);
+            Assert.Equal("CredentialPrompt", saved.AuthenticationMode);
+        }
+        finally
+        {
+            TryDelete(Path.GetDirectoryName(path));
+        }
+    }
+
+    [Fact]
     public void GetProfile_ReturnsCaseInsensitiveProfile()
     {
         var path = CreateTempFilePath();

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace PowerForge;
 
@@ -8,7 +9,7 @@ namespace PowerForge;
 public static class PrivateGalleryRepositoryEndpoints
 {
     /// <summary>
-    /// Resolves Azure Artifacts, JFrog, or generic NuGet private-gallery inputs into concrete repository endpoints.
+    /// Resolves Azure Artifacts, JFrog, GitHub Packages, or generic NuGet private-gallery inputs into concrete repository endpoints.
     /// </summary>
     public static PrivateGalleryRepositoryEndpoint Create(
         PrivateGalleryProvider provider,
@@ -21,7 +22,8 @@ public static class PrivateGalleryRepositoryEndpoints
         string? repositorySourceUri = null,
         string? repositoryPublishUri = null,
         string? jfrogBaseUri = null,
-        string? jfrogRepository = null)
+        string? jfrogRepository = null,
+        string? gitHubOwner = null)
     {
         if (provider == PrivateGalleryProvider.AzureArtifacts)
         {
@@ -87,8 +89,34 @@ public static class PrivateGalleryRepositoryEndpoints
                 remoteRepository);
         }
 
+        if (provider == PrivateGalleryProvider.GitHubPackages)
+        {
+            var owner = NormalizeGitHubOwner(gitHubOwner) ?? NormalizeGitHubOwner(repository);
+            if (string.IsNullOrWhiteSpace(owner))
+                throw new ArgumentException("GitHubOwner or Repository is required for GitHub Packages.", nameof(gitHubOwner));
+
+            var githubName = ResolveRepositoryName(repositoryName, owner);
+            if (string.IsNullOrWhiteSpace(githubName))
+                throw new ArgumentException("RepositoryName is required for GitHub Packages when no owner is provided.", nameof(repositoryName));
+
+            var serviceIndex = NormalizeOptional(repositoryUri) ?? $"https://nuget.pkg.github.com/{Uri.EscapeDataString(owner!)}/index.json";
+            var sourceUri = NormalizeOptional(repositorySourceUri) ?? serviceIndex;
+
+            return new PrivateGalleryRepositoryEndpoint(
+                PrivateGalleryProvider.GitHubPackages,
+                githubName!,
+                null,
+                null,
+                owner!,
+                sourceUri,
+                NormalizeOptional(repositoryPublishUri) ?? sourceUri,
+                serviceIndex,
+                null,
+                null);
+        }
+
         if (provider != PrivateGalleryProvider.NuGet)
-            throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, NuGet.", nameof(provider));
+            throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, GitHubPackages, NuGet.", nameof(provider));
 
         var genericName = ResolveRepositoryName(repositoryName, repository);
         if (string.IsNullOrWhiteSpace(genericName))
@@ -124,6 +152,18 @@ public static class PrivateGalleryRepositoryEndpoints
             return null;
 
         return value!.Trim().Trim('/');
+    }
+
+    private static string? NormalizeGitHubOwner(string? value)
+    {
+        var owner = NormalizeOptional(value);
+        if (owner is null)
+            return null;
+
+        if (owner.Contains('/') || owner.Contains('\\') || owner.Any(char.IsWhiteSpace))
+            throw new ArgumentException("GitHub owner must be a single GitHub user or organization name.", nameof(value));
+
+        return owner;
     }
 }
 
@@ -188,4 +228,7 @@ public sealed class PrivateGalleryRepositoryEndpoint
 
     /// <summary>JFrog NuGet repository key when the provider is JFrog.</summary>
     public string? JFrogRepository { get; }
+
+    /// <summary>GitHub user or organization namespace when the provider is GitHub Packages.</summary>
+    public string? GitHubOwner => Provider == PrivateGalleryProvider.GitHubPackages ? Repository : null;
 }

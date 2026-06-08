@@ -23,6 +23,7 @@ internal static class ModuleRepositoryProfileResultMapper
             RepositoryPublishUri = profile.RepositoryPublishUri,
             JFrogBaseUri = profile.JFrogBaseUri,
             JFrogRepository = profile.JFrogRepository,
+            GitHubOwner = profile.GitHubOwner,
             Tool = profile.Tool,
             BootstrapMode = profile.BootstrapMode,
             Trusted = profile.Trusted,

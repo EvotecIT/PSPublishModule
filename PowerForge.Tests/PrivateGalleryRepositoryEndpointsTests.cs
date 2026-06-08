@@ -68,6 +68,46 @@ public sealed class PrivateGalleryRepositoryEndpointsTests
     }
 
     [Fact]
+    public void Create_GitHubPackagesOwner_ReturnsGitHubNuGetServiceIndex()
+    {
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            PrivateGalleryProvider.GitHubPackages,
+            repositoryName: "Licensing",
+            gitHubOwner: "EvotecIT");
+
+        Assert.Equal(PrivateGalleryProvider.GitHubPackages, endpoint.Provider);
+        Assert.Equal("Licensing", endpoint.RepositoryName);
+        Assert.Equal("EvotecIT", endpoint.Repository);
+        Assert.Equal("EvotecIT", endpoint.GitHubOwner);
+        Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", endpoint.PSResourceGetUri);
+        Assert.Equal(endpoint.PSResourceGetUri, endpoint.PowerShellGetSourceUri);
+        Assert.Equal(endpoint.PSResourceGetUri, endpoint.PowerShellGetPublishUri);
+    }
+
+    [Fact]
+    public void Create_GitHubAliasUsesRepositoryAsOwnerWhenOwnerIsOmitted()
+    {
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            PrivateGalleryProvider.GitHub,
+            repository: "EvotecIT");
+
+        Assert.Equal(PrivateGalleryProvider.GitHubPackages, endpoint.Provider);
+        Assert.Equal("EvotecIT", endpoint.RepositoryName);
+        Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", endpoint.PSResourceGetUri);
+    }
+
+    [Fact]
+    public void Create_GitHubPackagesRejectsMultiSegmentOwner()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => PrivateGalleryRepositoryEndpoints.Create(
+            PrivateGalleryProvider.GitHubPackages,
+            repositoryName: "Licensing",
+            gitHubOwner: "EvotecIT/Licensing"));
+
+        Assert.Contains("single GitHub user or organization", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Create_GenericNuGet_RequiresExplicitRepositoryUri()
     {
         var ex = Assert.Throws<ArgumentException>(() => PrivateGalleryRepositoryEndpoints.Create(
@@ -90,12 +130,14 @@ public sealed class PrivateGalleryRepositoryEndpointsTests
 
     [Theory]
     [InlineData(PrivateGalleryProvider.JFrog)]
+    [InlineData(PrivateGalleryProvider.GitHubPackages)]
     [InlineData(PrivateGalleryProvider.NuGet)]
     public void Create_RejectsResolvedPowerShellGalleryName(PrivateGalleryProvider provider)
     {
         var ex = Assert.Throws<ArgumentException>(() => PrivateGalleryRepositoryEndpoints.Create(
             provider,
             repositoryName: "PSGallery",
+            repository: "EvotecIT",
             repositoryUri: "https://example.test/v3/index.json"));
 
         Assert.Contains("PSGallery", ex.Message, StringComparison.OrdinalIgnoreCase);

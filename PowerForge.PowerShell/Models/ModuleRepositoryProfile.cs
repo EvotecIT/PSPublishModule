@@ -16,6 +16,7 @@ internal sealed class ModuleRepositoryProfile
     public string RepositoryPublishUri { get; set; } = string.Empty;
     public string JFrogBaseUri { get; set; } = string.Empty;
     public string JFrogRepository { get; set; } = string.Empty;
+    public string GitHubOwner { get; set; } = string.Empty;
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.PSResourceGet;
     public PrivateGalleryBootstrapMode BootstrapMode { get; set; } = PrivateGalleryBootstrapMode.ExistingSession;
     public bool Trusted { get; set; } = true;

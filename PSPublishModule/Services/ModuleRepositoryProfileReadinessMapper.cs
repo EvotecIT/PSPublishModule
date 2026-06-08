@@ -26,7 +26,8 @@ internal static class ModuleRepositoryProfileReadinessMapper
             profile.RepositorySourceUri,
             profile.RepositoryPublishUri,
             profile.JFrogBaseUri,
-            profile.JFrogRepository);
+            profile.JFrogRepository,
+            profile.GitHubOwner);
 
         var existingSessionReady = endpoint.Provider == PrivateGalleryProvider.AzureArtifacts &&
                                    PrivateGalleryVersionPolicy.IsExistingSessionBootstrapReady(status);
@@ -51,6 +52,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
             RepositoryPublishUri = endpoint.PowerShellGetPublishUri,
             JFrogBaseUri = endpoint.JFrogBaseUri ?? string.Empty,
             JFrogRepository = endpoint.JFrogRepository ?? string.Empty,
+            GitHubOwner = endpoint.GitHubOwner ?? string.Empty,
             PowerShellGetSourceUri = endpoint.PowerShellGetSourceUri,
             PowerShellGetPublishUri = endpoint.PowerShellGetPublishUri,
             PSResourceGetUri = endpoint.PSResourceGetUri,

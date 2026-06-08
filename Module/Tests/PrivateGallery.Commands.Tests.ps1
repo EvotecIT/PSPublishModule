@@ -640,6 +640,9 @@ Describe 'Private gallery command metadata' {
         $profile.Parameters.Keys | Should -Contain 'RepositoryUri'
         $profile.Parameters.Keys | Should -Contain 'JFrogBaseUri'
         $profile.Parameters.Keys | Should -Contain 'JFrogRepository'
+        $profile.Parameters.Keys | Should -Contain 'GitHubOwner'
+        $profile.Parameters['GitHubOwner'].Aliases | Should -Contain 'Owner'
+        $profile.Parameters['GitHubOwner'].Aliases | Should -Contain 'Namespace'
         $profile.Parameters.Keys | Should -Contain 'Scope'
 
         $exportProfile = $module.ExportedCmdlets['Export-ModuleRepositoryProfile']
@@ -706,6 +709,21 @@ Describe 'Private gallery command metadata' {
         $profile.RepositoryUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'
         $profile.RepositorySourceUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
         $profile.JFrogRepository | Should -Be 'powershell-virtual'
+        $profile.BootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
+        $profile.AuthenticationMode | Should -Be 'CredentialPrompt'
+    }
+
+    It 'saves GitHub Packages profiles with owner-scoped NuGet endpoints' {
+        $profile = Set-ModuleRepositoryProfile -Name 'Licensing' -Provider GitHubPackages -GitHubOwner 'EvotecIT' -RepositoryName 'github-evotec'
+
+        $profile.Name | Should -Be 'Licensing'
+        $profile.Provider.ToString() | Should -Be 'GitHubPackages'
+        $profile.GitHubOwner | Should -Be 'EvotecIT'
+        $profile.Repository | Should -Be 'EvotecIT'
+        $profile.RepositoryName | Should -Be 'github-evotec'
+        $profile.RepositoryUri | Should -Be 'https://nuget.pkg.github.com/EvotecIT/index.json'
+        $profile.RepositorySourceUri | Should -Be $profile.RepositoryUri
+        $profile.RepositoryPublishUri | Should -Be $profile.RepositoryUri
         $profile.BootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
         $profile.AuthenticationMode | Should -Be 'CredentialPrompt'
     }
@@ -1026,6 +1044,42 @@ Describe 'Private gallery command metadata' {
         $result.Source | Should -Be 'https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json'
         $result.Pushed | Should -Contain $packagePath
         $result.Failed | Should -BeNullOrEmpty
+    }
+
+    It 'uses GitHub token environment variables for GitHub Packages NuGet publishing' {
+        Set-ModuleRepositoryProfile -Name 'LicensingPackages' -Provider GitHubPackages -GitHubOwner 'EvotecIT' -RepositoryName 'github-evotec' | Out-Null
+        $packageRoot = Join-Path $script:PrivateGalleryProfileRoot 'github-packages'
+        New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+        $packagePath = Join-Path $packageRoot 'Licensing.Verification.1.0.0.nupkg'
+        Set-Content -LiteralPath $packagePath -Value 'placeholder' -NoNewline
+        $previousToken = $env:GITHUB_TOKEN
+        $previousGhToken = $env:GH_TOKEN
+
+        try {
+            $env:GITHUB_TOKEN = 'test-token'
+            Remove-Item Env:\GH_TOKEN -ErrorAction SilentlyContinue
+
+            $result = Publish-NugetPackage -Path $packageRoot -ProfileName 'LicensingPackages' -SkipDuplicate -WhatIf
+
+            $result.Success | Should -BeTrue
+            $result.ProfileName | Should -Be 'LicensingPackages'
+            $result.RepositoryName | Should -Be 'github-evotec'
+            $result.Source | Should -Be 'https://nuget.pkg.github.com/EvotecIT/index.json'
+            $result.Pushed | Should -Contain $packagePath
+            $result.Failed | Should -BeNullOrEmpty
+        } finally {
+            if ($null -eq $previousToken) {
+                Remove-Item Env:\GITHUB_TOKEN -ErrorAction SilentlyContinue
+            } else {
+                $env:GITHUB_TOKEN = $previousToken
+            }
+
+            if ($null -eq $previousGhToken) {
+                Remove-Item Env:\GH_TOKEN -ErrorAction SilentlyContinue
+            } else {
+                $env:GH_TOKEN = $previousGhToken
+            }
+        }
     }
 
     It 'requires an API key when publishing packages to saved JFrog profiles' {

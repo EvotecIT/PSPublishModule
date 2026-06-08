@@ -44,6 +44,9 @@ public sealed class ModuleRepositoryProfileResult
     /// <summary>JFrog NuGet repository key, when applicable.</summary>
     public string JFrogRepository { get; set; } = string.Empty;
 
+    /// <summary>GitHub user or organization namespace, when applicable.</summary>
+    public string GitHubOwner { get; set; } = string.Empty;
+
     /// <summary>Registration tool selected for this profile.</summary>
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.PSResourceGet;
 
