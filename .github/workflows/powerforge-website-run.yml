@@ -114,19 +114,27 @@ jobs:
         run: |
           $resolvedRepository = [string]'${{ inputs.powerforge_repository }}'
           $resolvedRef = [string]'${{ inputs.powerforge_ref }}'
+          $workflowRepository = [string]'${{ job.workflow_repository }}'
+          $workflowRef = [string]'${{ job.workflow_ref }}'
+          $workflowSha = [string]'${{ job.workflow_sha }}'
+
+          if ([string]::IsNullOrWhiteSpace($resolvedRepository)) {
+            $resolvedRepository = $workflowRepository
+          }
 
           if ([string]::IsNullOrWhiteSpace($resolvedRepository)) {
             $resolvedRepository = 'EvotecIT/PSPublishModule'
           }
 
           if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
-            $resolvedRef = [string]'${{ github.workflow_sha }}'
+            $resolvedRef = $workflowSha
           }
 
           if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
-            throw "Unable to resolve the shared workflow commit SHA. Pass powerforge_ref explicitly if github.workflow_sha is unavailable."
+            throw "Unable to resolve the shared workflow commit SHA from job.workflow_sha. Pass powerforge_ref explicitly."
           }
 
+          Write-Host "Resolved shared workflow source from $workflowRef to $resolvedRepository@$resolvedRef"
           "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
