@@ -50,7 +50,7 @@ Resolves the Azure Artifacts NuGet v3 source from the saved profile, installs mi
 ## PARAMETERS
 
 ### -ApiKey
-API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.
+API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.
 
 ```yaml
 Type: String

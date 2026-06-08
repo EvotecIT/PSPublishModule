@@ -11,12 +11,12 @@ Executes the unified repository release workflow from a JSON configuration.
 ## SYNTAX
 ### Config (Default)
 ```powershell
-Invoke-PowerForgeRelease [-ConfigPath <string>] [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSignModule] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-PowerForgeRelease [-ConfigPath <string>] [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSignModule] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-SubmitWinget] [-SkipWingetSubmit] [-WingetSubmitMode <string>] [-WingetToolPath <string>] [-WingetTokenEnvName <string>] [-WingetTokenFilePath <string>] [-WingetPullRequestTitle <string>] [-WingetOpenBrowser] [-WingetReplace] [-WingetReplaceVersion <string>] [-WingetAllowInteractiveAuthentication] [-WingetTimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Project
 ```powershell
-Invoke-PowerForgeRelease -Project <ConfigurationProject> [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSignModule] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-PowerForgeRelease -Project <ConfigurationProject> [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSignModule] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-SubmitWinget] [-SkipWingetSubmit] [-WingetSubmitMode <string>] [-WingetToolPath <string>] [-WingetTokenEnvName <string>] [-WingetTokenFilePath <string>] [-WingetPullRequestTitle <string>] [-WingetOpenBrowser] [-WingetReplace] [-WingetReplaceVersion <string>] [-WingetAllowInteractiveAuthentication] [-WingetTimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -745,6 +745,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -SkipWingetSubmit
+Disables Winget submission even when enabled by release configuration.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -SkipWorkspaceValidation
 Skips workspace validation defined by the release config.
 
@@ -785,6 +801,22 @@ Type: DotNetPublishStyle[]
 Parameter Sets: Config, Project
 Aliases: Style
 Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SubmitWinget
+Submits generated Winget manifests with wingetcreate after release assets are available.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -846,6 +878,166 @@ Validates configuration through plan-only execution.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetAllowInteractiveAuthentication
+Allows wingetcreate to prompt for GitHub authentication when no token is resolved.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetOpenBrowser
+Allows wingetcreate to open the submitted pull request in a browser.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetPullRequestTitle
+Pull request title template passed to wingetcreate.
+
+```yaml
+Type: String
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetReplace
+Enables wingetcreate replacement mode.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetReplaceVersion
+Optional version passed with wingetcreate replacement mode.
+
+```yaml
+Type: String
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetSubmitMode
+Winget submission mode used by wingetcreate.
+
+```yaml
+Type: String
+Parameter Sets: Config, Project
+Aliases: None
+Possible values: Manifest, Update
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetTimeoutSeconds
+Timeout in seconds for each wingetcreate invocation.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetTokenEnvName
+Environment variable containing the GitHub token for wingetcreate.
+
+```yaml
+Type: String
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetTokenFilePath
+File containing the GitHub token for wingetcreate.
+
+```yaml
+Type: String
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -WingetToolPath
+Optional wingetcreate executable path.
+
+```yaml
+Type: String
 Parameter Sets: Config, Project
 Aliases: None
 Possible values:

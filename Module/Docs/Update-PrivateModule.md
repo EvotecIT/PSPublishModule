@@ -312,7 +312,7 @@ Private gallery provider used for automatic repository registration.
 Type: PrivateGalleryProvider
 Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: AzureArtifacts, Azure, JFrog, NuGet
+Possible values: AzureArtifacts, Azure, JFrog, NuGet, GitHubPackages, GitHub
 
 Required: False
 Position: named

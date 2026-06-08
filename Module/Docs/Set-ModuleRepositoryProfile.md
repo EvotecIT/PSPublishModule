@@ -11,7 +11,7 @@ Creates or updates a saved private module repository profile.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Set-ModuleRepositoryProfile [-Name] <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-Repository <string>] [-RepositoryName <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-ModuleRepositoryProfile [-Name] <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-Repository <string>] [-RepositoryName <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-GitHubOwner <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -102,6 +102,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -GitHubOwner
+GitHub user or organization namespace for GitHub Packages. Defaults from Repository when omitted.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: Owner, Namespace
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -JFrogBaseUri
 JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.
 
@@ -173,7 +189,7 @@ Private gallery provider.
 Type: PrivateGalleryProvider
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: AzureArtifacts, Azure, JFrog, NuGet
+Possible values: AzureArtifacts, Azure, JFrog, NuGet, GitHubPackages, GitHub
 
 Required: False
 Position: named

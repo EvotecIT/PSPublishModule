@@ -286,7 +286,7 @@ Private gallery provider.
 Type: PrivateGalleryProvider
 Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: AzureArtifacts, Azure, JFrog, NuGet
+Possible values: AzureArtifacts, Azure, JFrog, NuGet, GitHubPackages, GitHub
 
 Required: False
 Position: named

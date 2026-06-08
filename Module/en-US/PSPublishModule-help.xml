@@ -190,6 +190,8 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
             <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
@@ -643,6 +645,8 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
           <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PrivateGalleryProvider</maml:name>
@@ -5762,6 +5766,8 @@ authenticated access through the selected bootstrap mode.</maml:para>
             <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
@@ -6088,6 +6094,8 @@ authenticated access through the selected bootstrap mode.</maml:para>
           <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PrivateGalleryProvider</maml:name>
@@ -7556,6 +7564,8 @@ the requested modules.</maml:para>
             <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
@@ -8105,6 +8115,8 @@ the requested modules.</maml:para>
           <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PrivateGalleryProvider</maml:name>
@@ -12976,6 +12988,18 @@ and parent directories for standard release config file names.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipWingetSubmit</maml:name>
+          <maml:description>
+            <maml:para>Disables Winget submission even when enabled by release configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipWorkspaceValidation</maml:name>
           <maml:description>
             <maml:para>Skips workspace validation defined by the release config.</maml:para>
@@ -13015,6 +13039,18 @@ and parent directories for standard release config file names.</maml:para>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>DotNetPublishStyle[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SubmitWinget</maml:name>
+          <maml:description>
+            <maml:para>Submits generated Winget manifests with wingetcreate after release assets are available.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -13069,6 +13105,130 @@ and parent directories for standard release config file names.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetAllowInteractiveAuthentication</maml:name>
+          <maml:description>
+            <maml:para>Allows wingetcreate to prompt for GitHub authentication when no token is resolved.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetOpenBrowser</maml:name>
+          <maml:description>
+            <maml:para>Allows wingetcreate to open the submitted pull request in a browser.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetPullRequestTitle</maml:name>
+          <maml:description>
+            <maml:para>Pull request title template passed to wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetReplace</maml:name>
+          <maml:description>
+            <maml:para>Enables wingetcreate replacement mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetReplaceVersion</maml:name>
+          <maml:description>
+            <maml:para>Optional version passed with wingetcreate replacement mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetSubmitMode</maml:name>
+          <maml:description>
+            <maml:para>Winget submission mode used by wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTokenEnvName</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the GitHub token for wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTokenFilePath</maml:name>
+          <maml:description>
+            <maml:para>File containing the GitHub token for wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetToolPath</maml:name>
+          <maml:description>
+            <maml:para>Optional wingetcreate executable path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -13661,6 +13821,18 @@ and parent directories for standard release config file names.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipWingetSubmit</maml:name>
+          <maml:description>
+            <maml:para>Disables Winget submission even when enabled by release configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipWorkspaceValidation</maml:name>
           <maml:description>
             <maml:para>Skips workspace validation defined by the release config.</maml:para>
@@ -13700,6 +13872,18 @@ and parent directories for standard release config file names.</maml:para>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>DotNetPublishStyle[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SubmitWinget</maml:name>
+          <maml:description>
+            <maml:para>Submits generated Winget manifests with wingetcreate after release assets are available.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -13754,6 +13938,130 @@ and parent directories for standard release config file names.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetAllowInteractiveAuthentication</maml:name>
+          <maml:description>
+            <maml:para>Allows wingetcreate to prompt for GitHub authentication when no token is resolved.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetOpenBrowser</maml:name>
+          <maml:description>
+            <maml:para>Allows wingetcreate to open the submitted pull request in a browser.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetPullRequestTitle</maml:name>
+          <maml:description>
+            <maml:para>Pull request title template passed to wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetReplace</maml:name>
+          <maml:description>
+            <maml:para>Enables wingetcreate replacement mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetReplaceVersion</maml:name>
+          <maml:description>
+            <maml:para>Optional version passed with wingetcreate replacement mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetSubmitMode</maml:name>
+          <maml:description>
+            <maml:para>Winget submission mode used by wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTokenEnvName</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the GitHub token for wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTokenFilePath</maml:name>
+          <maml:description>
+            <maml:para>File containing the GitHub token for wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetToolPath</maml:name>
+          <maml:description>
+            <maml:para>Optional wingetcreate executable path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -14359,6 +14667,18 @@ and parent directories for standard release config file names.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipWingetSubmit</maml:name>
+        <maml:description>
+          <maml:para>Disables Winget submission even when enabled by release configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SkipWorkspaceValidation</maml:name>
         <maml:description>
           <maml:para>Skips workspace validation defined by the release config.</maml:para>
@@ -14398,6 +14718,18 @@ and parent directories for standard release config file names.</maml:para>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>DotNetPublishStyle[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SubmitWinget</maml:name>
+        <maml:description>
+          <maml:para>Submits generated Winget manifests with wingetcreate after release assets are available.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -14452,6 +14784,130 @@ and parent directories for standard release config file names.</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetAllowInteractiveAuthentication</maml:name>
+        <maml:description>
+          <maml:para>Allows wingetcreate to prompt for GitHub authentication when no token is resolved.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetOpenBrowser</maml:name>
+        <maml:description>
+          <maml:para>Allows wingetcreate to open the submitted pull request in a browser.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetPullRequestTitle</maml:name>
+        <maml:description>
+          <maml:para>Pull request title template passed to wingetcreate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetReplace</maml:name>
+        <maml:description>
+          <maml:para>Enables wingetcreate replacement mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetReplaceVersion</maml:name>
+        <maml:description>
+          <maml:para>Optional version passed with wingetcreate replacement mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetSubmitMode</maml:name>
+        <maml:description>
+          <maml:para>Winget submission mode used by wingetcreate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetTimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetTokenEnvName</maml:name>
+        <maml:description>
+          <maml:para>Environment variable containing the GitHub token for wingetcreate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetTokenFilePath</maml:name>
+        <maml:description>
+          <maml:para>File containing the GitHub token for wingetcreate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetToolPath</maml:name>
+        <maml:description>
+          <maml:para>Optional wingetcreate executable path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -15112,6 +15568,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipWingetSubmit</maml:name>
+          <maml:description>
+            <maml:para>Disables Winget submission even when enabled by project configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipWorkspaceValidation</maml:name>
           <maml:description>
             <maml:para>Skips workspace validation defined by the project object.</maml:para>
@@ -15155,6 +15623,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SubmitWinget</maml:name>
+          <maml:description>
+            <maml:para>Submits generated Winget manifests with wingetcreate after release assets are available.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Targets">
           <maml:name>Target</maml:name>
           <maml:description>
@@ -15193,6 +15673,130 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetAllowInteractiveAuthentication</maml:name>
+          <maml:description>
+            <maml:para>Allows wingetcreate to prompt for GitHub authentication when no token is resolved.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetOpenBrowser</maml:name>
+          <maml:description>
+            <maml:para>Allows wingetcreate to open the submitted pull request in a browser.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetPullRequestTitle</maml:name>
+          <maml:description>
+            <maml:para>Pull request title template passed to wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetReplace</maml:name>
+          <maml:description>
+            <maml:para>Enables wingetcreate replacement mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetReplaceVersion</maml:name>
+          <maml:description>
+            <maml:para>Optional version passed with wingetcreate replacement mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetSubmitMode</maml:name>
+          <maml:description>
+            <maml:para>Winget submission mode used by wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTokenEnvName</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the GitHub token for wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetTokenFilePath</maml:name>
+          <maml:description>
+            <maml:para>File containing the GitHub token for wingetcreate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WingetToolPath</maml:name>
+          <maml:description>
+            <maml:para>Optional wingetcreate executable path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -15579,6 +16183,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipWingetSubmit</maml:name>
+        <maml:description>
+          <maml:para>Disables Winget submission even when enabled by project configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SkipWorkspaceValidation</maml:name>
         <maml:description>
           <maml:para>Skips workspace validation defined by the project object.</maml:para>
@@ -15622,6 +16238,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SubmitWinget</maml:name>
+        <maml:description>
+          <maml:para>Submits generated Winget manifests with wingetcreate after release assets are available.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Targets">
         <maml:name>Target</maml:name>
         <maml:description>
@@ -15660,6 +16288,130 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetAllowInteractiveAuthentication</maml:name>
+        <maml:description>
+          <maml:para>Allows wingetcreate to prompt for GitHub authentication when no token is resolved.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetOpenBrowser</maml:name>
+        <maml:description>
+          <maml:para>Allows wingetcreate to open the submitted pull request in a browser.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetPullRequestTitle</maml:name>
+        <maml:description>
+          <maml:para>Pull request title template passed to wingetcreate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetReplace</maml:name>
+        <maml:description>
+          <maml:para>Enables wingetcreate replacement mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetReplaceVersion</maml:name>
+        <maml:description>
+          <maml:para>Optional version passed with wingetcreate replacement mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetSubmitMode</maml:name>
+        <maml:description>
+          <maml:para>Winget submission mode used by wingetcreate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetTimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetTokenEnvName</maml:name>
+        <maml:description>
+          <maml:para>Environment variable containing the GitHub token for wingetcreate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetTokenFilePath</maml:name>
+        <maml:description>
+          <maml:para>File containing the GitHub token for wingetcreate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WingetToolPath</maml:name>
+        <maml:description>
+          <maml:para>Optional wingetcreate executable path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -33494,7 +34246,7 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
-            <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</maml:para>
+            <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -33546,7 +34298,7 @@ This makes repeated publishing runs idempotent when the package already exists.<
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
-            <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</maml:para>
+            <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -33610,7 +34362,7 @@ This makes repeated publishing runs idempotent when the package already exists.<
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ApiKey</maml:name>
         <maml:description>
-          <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</maml:para>
+          <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -34323,6 +35075,8 @@ Install-PSResource, Install-Module, or both are available for the configured rep
             <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
@@ -34776,6 +35530,8 @@ Install-PSResource, Install-Module, or both are available for the configured rep
           <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PrivateGalleryProvider</maml:name>
@@ -36512,6 +37268,18 @@ Credential Provider so Entra ID/MFA is handled by the provider instead of storin
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Owner,Namespace">
+          <maml:name>GitHubOwner</maml:name>
+          <maml:description>
+            <maml:para>GitHub user or organization namespace for GitHub Packages. Defaults from Repository when omitted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JFrogBaseUri</maml:name>
           <maml:description>
@@ -36571,6 +37339,8 @@ Credential Provider so Entra ID/MFA is handled by the provider instead of storin
             <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
@@ -36742,6 +37512,18 @@ Credential Provider so Entra ID/MFA is handled by the provider instead of storin
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Owner,Namespace">
+        <maml:name>GitHubOwner</maml:name>
+        <maml:description>
+          <maml:para>GitHub user or organization namespace for GitHub Packages. Defaults from Repository when omitted.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>JFrogBaseUri</maml:name>
         <maml:description>
@@ -36801,6 +37583,8 @@ Credential Provider so Entra ID/MFA is handled by the provider instead of storin
           <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PrivateGalleryProvider</maml:name>
@@ -39382,6 +40166,8 @@ Install-PSResource, Install-Module, or both are available for the configured rep
             <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
@@ -39835,6 +40621,8 @@ Install-PSResource, Install-Module, or both are available for the configured rep
           <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PrivateGalleryProvider</maml:name>
@@ -40242,6 +41030,8 @@ are provided, the repository registration is refreshed before the update is atte
             <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PrivateGalleryProvider</maml:name>
@@ -40755,6 +41545,8 @@ are provided, the repository registration is refreshed before the update is atte
           <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">JFrog</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">NuGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHubPackages</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PrivateGalleryProvider</maml:name>
