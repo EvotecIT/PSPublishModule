@@ -57,6 +57,18 @@ internal static class PowerForgeReleaseRequestMapper
         request.PackageSignThumbprint = ChooseString(request.PackageSignThumbprint, options.PackageSignThumbprint);
         request.PackageSignStore = ChooseString(request.PackageSignStore, options.PackageSignStore);
         request.PackageSignTimestampUrl = ChooseString(request.PackageSignTimestampUrl, options.PackageSignTimestampUrl);
+        request.SubmitWinget = ChooseBool(request.SubmitWinget, options.SubmitWinget);
+        request.WingetSubmitToolPath = ChooseString(request.WingetSubmitToolPath, options.WingetSubmitToolPath);
+        request.WingetSubmitTokenFilePath = ChooseString(request.WingetSubmitTokenFilePath, options.WingetSubmitTokenFilePath);
+        request.WingetSubmitTokenEnvName = ChooseString(request.WingetSubmitTokenEnvName, options.WingetSubmitTokenEnvName);
+        request.WingetSubmitPrTitle = ChooseString(request.WingetSubmitPrTitle, options.WingetSubmitPrTitle);
+        request.WingetSubmitNoOpen = ChooseBool(request.WingetSubmitNoOpen, options.WingetSubmitNoOpen);
+        request.WingetSubmitReplace = ChooseBool(request.WingetSubmitReplace, options.WingetSubmitReplace);
+        request.WingetSubmitReplaceVersion = ChooseString(request.WingetSubmitReplaceVersion, options.WingetSubmitReplaceVersion);
+        request.WingetSubmitAllowInteractiveAuthentication = ChooseBool(request.WingetSubmitAllowInteractiveAuthentication, options.WingetSubmitAllowInteractiveAuthentication);
+        request.WingetSubmitTimeoutSeconds = options.WingetSubmitTimeoutSeconds ?? request.WingetSubmitTimeoutSeconds;
+        if (options.WingetSubmitMode.HasValue)
+            request.WingetSubmitMode = options.WingetSubmitMode;
 
         if (options.SignOnMissingTool.HasValue)
             request.SignOnMissingTool = options.SignOnMissingTool;
@@ -140,6 +152,18 @@ internal static class PowerForgeReleaseRequestMapper
             PackageSignThumbprint = source.PackageSignThumbprint,
             PackageSignStore = source.PackageSignStore,
             PackageSignTimestampUrl = source.PackageSignTimestampUrl,
+            SubmitWinget = source.SubmitWinget,
+            WingetSubmitMode = source.WingetSubmitMode,
+            WingetSubmitToolPath = source.WingetSubmitToolPath,
+            WingetSubmitToken = source.WingetSubmitToken,
+            WingetSubmitTokenFilePath = source.WingetSubmitTokenFilePath,
+            WingetSubmitTokenEnvName = source.WingetSubmitTokenEnvName,
+            WingetSubmitPrTitle = source.WingetSubmitPrTitle,
+            WingetSubmitNoOpen = source.WingetSubmitNoOpen,
+            WingetSubmitReplace = source.WingetSubmitReplace,
+            WingetSubmitReplaceVersion = source.WingetSubmitReplaceVersion,
+            WingetSubmitAllowInteractiveAuthentication = source.WingetSubmitAllowInteractiveAuthentication,
+            WingetSubmitTimeoutSeconds = source.WingetSubmitTimeoutSeconds,
             InstallerMsBuildProperties = new Dictionary<string, string>(source.InstallerMsBuildProperties, StringComparer.OrdinalIgnoreCase),
             Targets = source.Targets.ToArray(),
             Runtimes = source.Runtimes.ToArray(),

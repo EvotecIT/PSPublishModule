@@ -115,6 +115,7 @@ Unified release entrypoint
   - `Outputs.Staging.*Path` values may point multiple categories at the same folder when you want a flat `UploadReady` layout such as `NuGet` + `GitHub`
   - `Outputs.Staging.*NameTemplate` values let the staged copies use release-facing names instead of raw internal build names
 - `Winget` in `release.json` when you want PowerForge to emit portable/signed release manifests from the same staged assets
+  - set `Winget.Submit: true` (or pass `--submit-winget`) to submit the generated manifests with `wingetcreate` after the release assets are available
 - top-level `GitHub` in `release.json` when you want the unified staged release itself uploaded as one repo release instead of using package-host or per-target tool release publishing
   - `--keep-symbols` for symbol-preserving tool/app outputs
   - `--skip-release-checksums` when you want the staged release folder but do not want a top-level `SHA256SUMS.txt`
@@ -173,6 +174,13 @@ Example Winget generation from staged assets:
   "Enabled": true,
   "OutputPath": "Artifacts/UploadReady/Winget",
   "InstallerUrlTemplate": "https://github.com/ExampleOrg/ExampleApp/releases/download/v{PackageVersion}/{FileName}",
+  "Submit": true,
+  "Submission": {
+    "Mode": "Manifest",
+    "TokenEnvName": "WINGET_CREATE_GITHUB_TOKEN",
+    "PullRequestTitle": "Submit {PackageIdentifier} {PackageVersion}",
+    "NoOpen": true
+  },
   "Packages": [
     {
       "PackageIdentifier": "ExampleOrg.ExampleApp.Tray",
@@ -200,6 +208,10 @@ Example Winget generation from staged assets:
 - `{FileName}` resolves to the staged filename after any `*NameTemplate` rewrite, not the raw internal artifact filename
 - when `--stage-root` (or `Outputs.Staging.RootPath`) is active, a relative `Winget.OutputPath` is resolved under that active staged release root so per-run `UploadReady\<release-id>\Winget` layouts work without hard-coded absolute paths
 - set `NestedInstallerType` explicitly for archive-based installers when you want a reusable config that is not implicitly “portable zip only”
+- `Winget.Submission.Mode: "Manifest"` submits the generated YAML via `wingetcreate submit <manifest>`, while `"Update"` calls `wingetcreate update <PackageIdentifier> --urls ... --version ... --submit` for existing Winget packages
+- `Winget.Submission.TokenEnvName` defaults to `WINGET_CREATE_GITHUB_TOKEN`; `TokenFilePath` is also supported, and inline `Token` exists only for temporary/manual use because command-line token arguments can be logged by external tooling
+- `Winget.Submission.NoOpen` defaults to `true` so CI runs do not try to open a browser; pass `--winget-open-browser` for interactive desktop runs
+- command-line overrides include `--submit-winget`, `--skip-winget-submit`, `--winget-submit-mode Manifest|Update`, `--winget-tool-path`, `--winget-token-env`, `--winget-token-file`, `--winget-pr-title`, `--winget-replace [version]`, `--winget-open-browser`, and `--winget-allow-interactive-auth`
 
 Example unified GitHub release publishing from staged assets:
 
