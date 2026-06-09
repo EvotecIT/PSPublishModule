@@ -50,7 +50,7 @@ public sealed class AutoVersionResolutionTests
             const string moduleName = "TestModule";
             WriteMinimalModule(source.FullName, moduleName, "1.2.3");
 
-            var pipeline = new ModuleBuildPipeline(new NullLogger());
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
             var spec = new ModuleBuildSpec
             {
                 Name = moduleName,
@@ -84,7 +84,7 @@ public sealed class AutoVersionResolutionTests
             const string moduleName = "TestModule";
             WriteMinimalModule(staging.FullName, moduleName, "4.5.6");
 
-            var pipeline = new ModuleBuildPipeline(new NullLogger());
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
             var spec = new ModuleInstallSpec
             {
                 Name = moduleName,
@@ -127,4 +127,3 @@ public sealed class AutoVersionResolutionTests
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
     }
 }
-

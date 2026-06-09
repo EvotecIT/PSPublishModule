@@ -1,0 +1,42 @@
+{
+  "$schema": "../../../Schemas/powerforge.plugins.schema.json",
+  "ProjectRoot": "../../..",
+  "Configuration": "Release",
+  "Catalog": [
+    {
+      "Id": "sample-public-plugin",
+      "ProjectPath": "src/Sample.PublicPlugin/Sample.PublicPlugin.csproj",
+      "Groups": [
+        "public",
+        "pack-public"
+      ],
+      "Framework": "net10.0",
+      "PackageId": "Sample.PublicPlugin",
+      "AssemblyName": "Sample.PublicPlugin",
+      "Manifest": {
+        "Enabled": true,
+        "FileName": "plugin.manifest.json",
+        "EntryTypeMatchBaseType": "IPluginContract",
+        "Properties": {
+          "displayName": "{packageId}",
+          "entryAssembly": "{entryAssembly}",
+          "entryType": "{entryType}"
+        }
+      }
+    },
+    {
+      "Id": "sample-private-plugin",
+      "ProjectPath": "src/Sample.PrivatePlugin/Sample.PrivatePlugin.csproj",
+      "Groups": [
+        "private",
+        "pack-private"
+      ],
+      "MsBuildProperties": {
+        "ExternalRoot": "{projectRoot}"
+      },
+      "Manifest": {
+        "Enabled": false
+      }
+    }
+  ]
+}

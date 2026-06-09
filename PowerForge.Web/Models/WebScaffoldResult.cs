@@ -9,8 +9,16 @@ public sealed class WebScaffoldResult
     public int CreatedFileCount { get; set; }
     /// <summary>Template engine used for the scaffold.</summary>
     public string ThemeEngine { get; set; } = string.Empty;
+    /// <summary>Maintenance profile used for generated maintenance preset/workflow.</summary>
+    public string MaintenanceProfile { get; set; } = string.Empty;
     /// <summary>Site name used during scaffolding.</summary>
     public string SiteName { get; set; } = string.Empty;
     /// <summary>Base URL used during scaffolding.</summary>
     public string BaseUrl { get; set; } = string.Empty;
+    /// <summary>Starter profile used during scaffolding.</summary>
+    public string StarterProfile { get; set; } = string.Empty;
+    /// <summary>Optional first suite project slug materialized by the scaffold.</summary>
+    public string? FirstSuiteProjectSlug { get; set; }
+    /// <summary>Optional first suite project surface materialized by the scaffold.</summary>
+    public string? FirstSuiteProjectSurface { get; set; }
 }

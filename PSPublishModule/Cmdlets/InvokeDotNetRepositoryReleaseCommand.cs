@@ -1,7 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -161,85 +159,72 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         ILogger logger = interactive
             ? new SpectreConsoleLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
-        var service = new DotNetRepositoryReleaseService(logger);
-
-        var root = string.IsNullOrWhiteSpace(Path)
-            ? SessionState.Path.CurrentFileSystemLocation.Path
-            : SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
-
-        var secret = ResolveSecret(NugetCredentialSecret, NugetCredentialSecretFilePath, NugetCredentialSecretEnvName);
-        var credential = (!string.IsNullOrWhiteSpace(NugetCredentialUserName) || !string.IsNullOrWhiteSpace(secret))
-            ? new RepositoryCredential
-            {
-                UserName = string.IsNullOrWhiteSpace(NugetCredentialUserName) ? null : NugetCredentialUserName!.Trim(),
-                Secret = secret
-            }
-            : null;
-
-        var publishApiKey = ResolveSecret(PublishApiKey, PublishApiKeyFilePath, PublishApiKeyEnvName);
-
-        var expectedByProject = ParseExpectedVersionMap(ExpectedVersionMap);
-
-        var mappedStore = CertificateStore == CertificateStoreLocation.LocalMachine
-            ? PowerForge.CertificateStoreLocation.LocalMachine
-            : PowerForge.CertificateStoreLocation.CurrentUser;
-
-        var spec = new DotNetRepositoryReleaseSpec
+        var currentPath = SessionState.Path.CurrentFileSystemLocation.Path;
+        var preparation = new DotNetRepositoryReleasePreparationService().Prepare(new DotNetRepositoryReleasePreparationRequest
         {
-            RootPath = root,
+            CurrentPath = currentPath,
+            RootPath = Path,
             ExpectedVersion = ExpectedVersion,
-            ExpectedVersionsByProject = expectedByProject.Count == 0 ? null : expectedByProject,
+            ExpectedVersionMap = ExpectedVersionMap,
             ExpectedVersionMapAsInclude = ExpectedVersionMapAsInclude.IsPresent,
             ExpectedVersionMapUseWildcards = ExpectedVersionMapUseWildcards.IsPresent,
-            IncludeProjects = IncludeProject,
-            ExcludeProjects = ExcludeProject,
+            IncludeProject = IncludeProject,
+            ExcludeProject = ExcludeProject,
             ExcludeDirectories = ExcludeDirectories,
-            VersionSources = NugetSource,
-            VersionSourceCredential = credential,
+            NugetSource = NugetSource,
             IncludePrerelease = IncludePrerelease.IsPresent,
+            NugetCredentialUserName = NugetCredentialUserName,
+            NugetCredentialSecret = NugetCredentialSecret,
+            NugetCredentialSecretFilePath = NugetCredentialSecretFilePath,
+            NugetCredentialSecretEnvName = NugetCredentialSecretEnvName,
             Configuration = Configuration,
             OutputPath = OutputPath,
             CertificateThumbprint = CertificateThumbprint,
-            CertificateStore = mappedStore,
+            CertificateStore = CertificateStore == CertificateStoreLocation.LocalMachine
+                ? PowerForge.CertificateStoreLocation.LocalMachine
+                : PowerForge.CertificateStoreLocation.CurrentUser,
             TimeStampServer = TimeStampServer,
-            Pack = !SkipPack.IsPresent,
+            SkipPack = SkipPack.IsPresent,
             Publish = Publish.IsPresent,
             PublishSource = PublishSource,
-            PublishApiKey = publishApiKey,
+            PublishApiKey = PublishApiKey,
+            PublishApiKeyFilePath = PublishApiKeyFilePath,
+            PublishApiKeyEnvName = PublishApiKeyEnvName,
             SkipDuplicate = SkipDuplicate.IsPresent,
             PublishFailFast = PublishFailFast.IsPresent
-        };
+        });
 
-        spec.WhatIf = true;
-        var plan = service.Execute(spec);
-
-        if (!ShouldProcess(root, "Release .NET repository packages"))
-        {
-            if (interactive)
-                WriteRepositorySummary(plan, isPlan: true);
-            WriteObject(plan);
-            return;
-        }
-
-        spec.WhatIf = false;
-        var result = service.Execute(spec);
+        var executeBuild = ShouldProcess(preparation.RootPath, "Release .NET repository packages");
+        var result = new DotNetRepositoryReleaseWorkflowService(logger).Execute(preparation, executeBuild);
         if (interactive)
-            WriteRepositorySummary(result, isPlan: false);
+        {
+            var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(result);
+            var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: !executeBuild);
+            WriteRepositorySummary(display);
+        }
         WriteObject(result);
     }
 
-    private static void WriteRepositorySummary(DotNetRepositoryReleaseResult result, bool isPlan)
+    private static void WriteRepositorySummary(DotNetRepositoryReleaseDisplayModel display)
     {
-        if (result is null) return;
+        if (display is null) return;
 
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
+        static string ColorTag(ConsoleColor? color)
+            => color switch
+            {
+                ConsoleColor.Green => "green",
+                ConsoleColor.Gray => "grey",
+                ConsoleColor.Red => "red",
+                ConsoleColor.Yellow => "yellow",
+                _ => "white"
+            };
 
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
-        var title = isPlan ? "Plan" : "Summary";
         var icon = unicode ? "✅" : "*";
 
-        AnsiConsole.Write(new Rule($"[green]{icon} {title}[/]").LeftJustified());
+        AnsiConsole.Write(new Rule($"[green]{icon} {display.Title}[/]").LeftJustified());
 
         var table = new Table()
             .Border(border)
@@ -250,19 +235,15 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             .AddColumn(new TableColumn("Status").NoWrap())
             .AddColumn(new TableColumn("Error"));
 
-        foreach (var project in result.Projects.OrderBy(p => p.ProjectName, StringComparer.OrdinalIgnoreCase))
+        foreach (var project in display.Projects)
         {
-            var packable = project.IsPackable ? "Yes" : "No";
-            var version = string.IsNullOrWhiteSpace(project.OldVersion) && string.IsNullOrWhiteSpace(project.NewVersion)
-                ? string.Empty
-                : $"{project.OldVersion ?? "?"} -> {project.NewVersion ?? "?"}";
-            var packages = project.Packages.Count.ToString();
-            var status = string.IsNullOrWhiteSpace(project.ErrorMessage)
-                ? (project.IsPackable ? "[green]Ok[/]" : "[grey]Skipped[/]")
-                : "[red]Fail[/]";
-            var error = TrimForTable(project.ErrorMessage);
-
-            table.AddRow(Esc(project.ProjectName), packable, Esc(version), packages, status, Esc(error));
+            table.AddRow(
+                Esc(project.ProjectName),
+                project.Packable,
+                Esc(project.VersionDisplay),
+                project.PackageCount,
+                $"[{ColorTag(project.StatusColor)}]{Esc(project.StatusText)}[/]",
+                Esc(project.ErrorPreview));
         }
 
         AnsiConsole.Write(table);
@@ -272,89 +253,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        var totalProjects = result.Projects.Count;
-        var packableProjects = result.Projects.Count(p => p.IsPackable);
-        var failedProjects = result.Projects.Count(p => !string.IsNullOrWhiteSpace(p.ErrorMessage));
-        var totalPackages = result.Projects.Sum(p => p.Packages.Count);
-
-        totals.AddRow("Projects", totalProjects.ToString());
-        totals.AddRow("Packable", packableProjects.ToString());
-        totals.AddRow("Failed", failedProjects.ToString());
-        totals.AddRow("Packages", totalPackages.ToString());
-        if (result.PublishedPackages.Count > 0)
-            totals.AddRow("Published", result.PublishedPackages.Count.ToString());
-        if (!string.IsNullOrWhiteSpace(result.ResolvedVersion))
-            totals.AddRow("Resolved version", Esc(result.ResolvedVersion));
+        foreach (var row in display.Totals)
+            totals.AddRow(row.Label, Esc(row.Value));
 
         AnsiConsole.Write(totals);
     }
 
-    private static string TrimForTable(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        var trimmed = value!.Trim();
-        const int max = 140;
-        if (trimmed.Length <= max) return trimmed;
-        return trimmed.Substring(0, max - 3) + "...";
-    }
-
-    private Dictionary<string, string> ParseExpectedVersionMap(IDictionary? entries)
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (entries is null || entries.Count == 0) return map;
-
-        foreach (DictionaryEntry entry in entries)
-        {
-            var key = entry.Key?.ToString()?.Trim();
-            var value = entry.Value?.ToString()?.Trim();
-
-            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
-            {
-                ThrowTerminatingError(new ErrorRecord(
-                    new ArgumentException("ExpectedVersionMap entries must include both project name and version."),
-                    "InvalidExpectedVersionMapEntry",
-                    ErrorCategory.InvalidArgument,
-                    entries));
-            }
-
-            map[key!] = value!;
-        }
-
-        return map;
-    }
-
-    private static string? ResolveSecret(string? inline, string? filePath, string? envName)
-    {
-        if (!string.IsNullOrWhiteSpace(filePath))
-        {
-            try
-            {
-                var full = System.IO.Path.GetFullPath(filePath!.Trim().Trim('"'));
-                if (File.Exists(full))
-                    return File.ReadAllText(full).Trim();
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning($"ResolveSecret file read failed: {ex.GetType().Name}: {ex.Message}");
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(envName))
-        {
-            try
-            {
-                var value = Environment.GetEnvironmentVariable(envName);
-                if (!string.IsNullOrWhiteSpace(value)) return value.Trim();
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning($"ResolveSecret env read failed: {ex.GetType().Name}: {ex.Message}");
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(inline))
-            return inline!.Trim();
-
-        return null;
-    }
 }

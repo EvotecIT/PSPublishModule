@@ -1,0 +1,255 @@
+using PowerForge.Web;
+using ImageMagick;
+using System.Xml.Linq;
+
+namespace PowerForge.Tests;
+
+public partial class WebSiteAuditOptimizeBuildTests
+{
+    [Fact]
+    public void OptimizeDetailed_RespectsHtmlIncludeExcludeAndMaxHtmlFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-html-scope-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "docs"));
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><head><title>t</title></head><body><h1> Hello </h1></body></html>");
+            File.WriteAllText(Path.Combine(root, "docs", "a.html"), "<!doctype html><html><head><title>t</title></head><body><h1> A </h1></body></html>");
+            File.WriteAllText(Path.Combine(root, "docs", "b.html"), "<!doctype html><html><head><title>t</title></head><body><h1> B </h1></body></html>");
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                MinifyHtml = true,
+                HtmlInclude = new[] { "docs/*.html" },
+                HtmlExclude = new[] { "docs/b.html" },
+                MaxHtmlFiles = 1
+            });
+
+            Assert.Equal(3, result.HtmlFileCount);
+            Assert.Equal(1, result.HtmlSelectedFileCount);
+            Assert.Equal(1, result.HtmlMinifiedCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_PreservesQuotedJsonLdScriptType()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-jsonld-quote-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var htmlPath = Path.Combine(root, "index.html");
+            File.WriteAllText(htmlPath,
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Example</title>
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example"}</script>
+                </head>
+                <body><h1>Example</h1></body>
+                </html>
+                """);
+
+            WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                MinifyHtml = true
+            });
+
+            var optimized = File.ReadAllText(htmlPath);
+            Assert.Contains("type=\"application/ld+json\"", optimized, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("type=application/ld+json", optimized, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_WritesRoot404HtmlForNotFoundSlug()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-build-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var contentRoot = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(contentRoot);
+            File.WriteAllText(Path.Combine(contentRoot, "404.md"),
+                """
+                ---
+                title: Page not found
+                slug: 404
+                ---
+
+                # Not found
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[] { new MenuItemSpec { Title = "Home", Url = "/" } }
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "404.html")));
+            Assert.False(File.Exists(Path.Combine(outputRoot, "404", "index.html")));
+            var html = File.ReadAllText(Path.Combine(outputRoot, "404.html"));
+            Assert.Contains("<link rel=\"canonical\" href=\"https://example.test/404.html\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/404/\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_LanguageRootRebase_PreservesFileAssetUrls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-build-language-root-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var contentRoot = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(contentRoot);
+            File.WriteAllText(Path.Combine(contentRoot, "index.md"),
+                """
+                ---
+                title: Home
+                ---
+
+            # Home
+
+            <img src="/assets/logo.png" alt="Logo" />
+            """);
+            var localizedContentRoot = Path.Combine(contentRoot, "pl");
+            Directory.CreateDirectory(localizedContentRoot);
+            File.WriteAllText(Path.Combine(localizedContentRoot, "index.md"),
+                """
+                ---
+                title: Start
+                ---
+
+                # Start
+
+                <img src="/assets/logo.png" alt="Logo" />
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Default = true, BaseUrl = "https://example.test" },
+                        new LanguageSpec { Code = "pl", BaseUrl = "https://pl.example.test", RenderAtRoot = true }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                },
+                AssetRegistry = new AssetRegistrySpec
+                {
+                    Bundles = new[]
+                    {
+                        new AssetBundleSpec
+                        {
+                            Name = "main",
+                            Css = new[] { "/assets/app.css" },
+                            Js = new[] { "/assets/app.js" }
+                        }
+                    },
+                    RouteBundles = new[]
+                    {
+                        new RouteBundleSpec { Match = "**", Bundles = new[] { "main" } }
+                    },
+                    Preloads = new[]
+                    {
+                        new PreloadSpec { Href = "/assets/font.woff2", As = "font", Type = "font/woff2" }
+                    }
+                },
+                Feed = new FeedSpec
+                {
+                    Enabled = true
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot, language: "pl", languageAsRoot: true);
+
+            var html = File.ReadAllText(Path.Combine(outputRoot, "index.html"));
+            Assert.Contains("href=\"/assets/app.css\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/assets/app.js\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/assets/font.woff2\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/assets/logo.png\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/assets/app.css/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/assets/app.js/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/assets/font.woff2/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/assets/logo.png/", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+}

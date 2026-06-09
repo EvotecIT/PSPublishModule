@@ -1,6 +1,4 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
 
@@ -93,100 +91,31 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
     /// <summary>Emits file-consistency configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        FileConsistencyScope? scope = null;
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(Scope)))
-            scope = Scope;
-
-        ProjectKind? projectKind = null;
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(ProjectKind)))
-            projectKind = ProjectKind;
-
-        Dictionary<string, FileConsistencyEncoding>? overrides = null;
-        if (EncodingOverrides is { Count: > 0 })
-        {
-            var resolved = new Dictionary<string, FileConsistencyEncoding>(StringComparer.OrdinalIgnoreCase);
-            foreach (DictionaryEntry entry in EncodingOverrides)
-            {
-                var trimmedKey = entry.Key?.ToString()?.Trim();
-                if (string.IsNullOrWhiteSpace(trimmedKey)) continue;
-                var key = trimmedKey!;
-
-                if (entry.Value is FileConsistencyEncoding encoding)
-                {
-                    resolved[key] = encoding;
-                    continue;
-                }
-
-                if (entry.Value is string text &&
-                    Enum.TryParse<FileConsistencyEncoding>(text.Trim(), ignoreCase: true, out var parsed))
-                {
-                    resolved[key] = parsed;
-                    continue;
-                }
-
-                throw new PSArgumentException(
-                    $"EncodingOverrides value for '{key}' must be a FileConsistencyEncoding or string.");
-            }
-            overrides = resolved;
-        }
-
-        Dictionary<string, FileConsistencyLineEnding>? lineEndingOverrides = null;
-        if (LineEndingOverrides is { Count: > 0 })
-        {
-            var resolved = new Dictionary<string, FileConsistencyLineEnding>(StringComparer.OrdinalIgnoreCase);
-            foreach (DictionaryEntry entry in LineEndingOverrides)
-            {
-                var trimmedKey = entry.Key?.ToString()?.Trim();
-                if (string.IsNullOrWhiteSpace(trimmedKey)) continue;
-                var key = trimmedKey!;
-
-                if (entry.Value is FileConsistencyLineEnding ending)
-                {
-                    resolved[key] = ending;
-                    continue;
-                }
-
-                if (entry.Value is string text &&
-                    Enum.TryParse<FileConsistencyLineEnding>(text.Trim(), ignoreCase: true, out var parsed))
-                {
-                    resolved[key] = parsed;
-                    continue;
-                }
-
-                throw new PSArgumentException(
-                    $"LineEndingOverrides value for '{key}' must be a FileConsistencyLineEnding or string.");
-            }
-            lineEndingOverrides = resolved;
-        }
-
-        var settings = new FileConsistencySettings
+        var cfg = new FileConsistencyConfigurationFactory().Create(new FileConsistencyConfigurationRequest
         {
             Enable = Enable.IsPresent,
             FailOnInconsistency = FailOnInconsistency.IsPresent,
             Severity = Severity,
             RequiredEncoding = RequiredEncoding,
             RequiredLineEnding = RequiredLineEnding,
-            ProjectKind = projectKind,
+            ProjectKind = ProjectKind,
+            ProjectKindSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(ProjectKind)),
             IncludePatterns = IncludePatterns,
-            Scope = scope,
+            Scope = Scope,
+            ScopeSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(Scope)),
             AutoFix = AutoFix.IsPresent,
             CreateBackups = CreateBackups.IsPresent,
             MaxInconsistencyPercentage = MaxInconsistencyPercentage,
-            ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
-            ExcludeFiles = ExcludeFiles ?? Array.Empty<string>(),
-            EncodingOverrides = overrides,
-            LineEndingOverrides = lineEndingOverrides,
+            ExcludeDirectories = ExcludeDirectories,
+            ExcludeFiles = ExcludeFiles,
+            EncodingOverrides = EncodingOverrides,
+            LineEndingOverrides = LineEndingOverrides,
             UpdateProjectRoot = UpdateProjectRoot.IsPresent,
             ExportReport = ExportReport.IsPresent,
             ReportFileName = ReportFileName,
             CheckMixedLineEndings = CheckMixedLineEndings.IsPresent,
             CheckMissingFinalNewline = CheckMissingFinalNewline.IsPresent
-        };
-
-        var cfg = new ConfigurationFileConsistencySegment
-        {
-            Settings = settings
-        };
+        });
 
         WriteObject(cfg);
     }

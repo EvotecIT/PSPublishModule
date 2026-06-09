@@ -13,6 +13,9 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellCompatibilityAnalyzer
 {
+    private static string CountLabel(int count, string singular, string plural)
+        => $"{count} {(count == 1 ? singular : plural)}";
+
     private sealed class Feature
     {
         internal Feature(string pattern, string name, string description)
@@ -118,20 +121,17 @@ public sealed class PowerShellCompatibilityAnalyzer
         var percentageText = crossCompatibilityPercentage.ToString("0.0", CultureInfo.InvariantCulture);
         var message = status switch
         {
-            CheckStatus.Pass => $"All {totalFiles} files are cross-compatible",
-            CheckStatus.Warning => $"{filesWithIssues} files have compatibility issues but {percentageText}% are cross-compatible",
-            _ => $"{filesWithIssues} files have compatibility issues, only {percentageText}% are cross-compatible"
+            CheckStatus.Pass => $"All {totalFiles} files are cross-compatible (PS 5.1: {ps51Compatible}/{totalFiles}, PS 7: {ps7Compatible}/{totalFiles})",
+            CheckStatus.Warning => $"{CountLabel(filesWithIssues, "file", "files")} have compatibility issues, but {percentageText}% remain cross-compatible",
+            _ => $"{CountLabel(filesWithIssues, "file", "files")} have compatibility issues, and only {percentageText}% are cross-compatible"
         };
 
-        var recommendations = filesWithIssues > 0
-            ? new[]
-            {
-                "Review files with compatibility issues",
-                "Consider using UTF8BOM encoding for Windows PowerShell 5.1 support",
-                "Replace deprecated cmdlets with modern alternatives",
-                "Test code in both Windows PowerShell 5.1 and PowerShell 7 environments"
-            }
-            : Array.Empty<string>();
+        var recommendations = results
+            .SelectMany(r => r.Issues)
+            .Select(i => i.Recommendation)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         return new PowerShellCompatibilitySummary(
             status: status,
@@ -257,7 +257,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                                 issues,
                                 type: PowerShellCompatibilityIssueType.PowerShell7Feature,
                                 description: $"{feature.Name}: {feature.Description}",
-                                recommendation: "Consider using alternative syntax for PowerShell 5.1 compatibility",
+                                recommendation: "Use PowerShell 5.1 compatible syntax",
                                 severity: PowerShellCompatibilitySeverity.High);
                         }
                     }
@@ -284,7 +284,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                                 issues,
                                 type: PowerShellCompatibilityIssueType.PowerShell51Feature,
                                 description: $"{feature.Name}: {feature.Description}",
-                                recommendation: "Consider updating to PowerShell 7 compatible alternatives",
+                                recommendation: "Use a PowerShell 7 compatible alternative",
                                 severity: PowerShellCompatibilitySeverity.High);
                         }
                     }
@@ -307,7 +307,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                                 issues,
                                 type: PowerShellCompatibilityIssueType.PlatformSpecific,
                                 description: $"{feature.Name}: {feature.Description}",
-                                recommendation: "Consider cross-platform alternatives or add platform checks",
+                                recommendation: "Use a cross-platform alternative or add platform checks",
                                 severity: PowerShellCompatibilitySeverity.Medium);
                         }
                     }
@@ -328,7 +328,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                                 issues,
                                 type: PowerShellCompatibilityIssueType.DotNetFramework,
                                 description: $"{assembly} assembly may not be available in PowerShell 7",
-                                recommendation: "Verify assembly availability or find .NET Core/.NET 5+ alternatives",
+                                recommendation: "Use a PowerShell 7 compatible assembly or guard this code path",
                                 severity: PowerShellCompatibilitySeverity.Medium);
                         }
                     }
@@ -342,7 +342,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                                 issues,
                                 type: PowerShellCompatibilityIssueType.ClassInheritance,
                                 description: "Class inheritance from System types may behave differently between versions",
-                                recommendation: "Test class behavior across PowerShell versions",
+                                recommendation: "Test this class across PowerShell versions",
                                 severity: PowerShellCompatibilitySeverity.Low);
                         }
                     }
@@ -355,7 +355,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                             issues,
                             type: PowerShellCompatibilityIssueType.Workflow,
                             description: "PowerShell workflows are not supported in PowerShell 7",
-                            recommendation: "Convert workflow to functions or use Windows PowerShell 5.1",
+                            recommendation: "Convert this workflow to functions or keep it on Windows PowerShell 5.1",
                             severity: PowerShellCompatibilitySeverity.High);
                     }
 
@@ -368,7 +368,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                             issues,
                             type: PowerShellCompatibilityIssueType.ISE,
                             description: "PowerShell ISE is not available in PowerShell 7",
-                            recommendation: "Use Visual Studio Code or other editors for PowerShell 7",
+                            recommendation: "Use Visual Studio Code or another PowerShell 7 editor",
                             severity: PowerShellCompatibilitySeverity.Medium);
                     }
                 }
@@ -449,7 +449,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                 issues,
                 type: PowerShellCompatibilityIssueType.Encoding,
                 description: "UTF8 without BOM may cause issues in PowerShell 5.1 with special characters",
-                recommendation: "Consider using UTF8BOM encoding for cross-version compatibility",
+                recommendation: "Save this file as UTF8BOM for Windows PowerShell 5.1",
                 severity: PowerShellCompatibilitySeverity.Medium);
         }
         else if (encoding.Value == TextEncodingKind.Ascii)
@@ -458,7 +458,7 @@ public sealed class PowerShellCompatibilityAnalyzer
                 issues,
                 type: PowerShellCompatibilityIssueType.Encoding,
                 description: "ASCII encoding with special characters will cause issues in PowerShell 5.1",
-                recommendation: "Convert to UTF8BOM encoding to properly handle special characters",
+                recommendation: "Convert this file to UTF8BOM",
                 severity: PowerShellCompatibilitySeverity.High);
         }
     }
@@ -504,4 +504,3 @@ public sealed class PowerShellCompatibilityAnalyzer
             severity: severity));
     }
 }
-

@@ -1,0 +1,33 @@
+{
+  "$schema": "../../Schemas/powerforge.web.themespec.schema.json",
+  "schemaVersion": 2,
+  "name": "mytheme",
+  "engine": "scriban",
+  "defaultLayout": "base",
+  "layoutsPath": "layouts",
+  "partialsPath": "partials",
+  "assetsPath": "assets",
+  "scriptsPath": "scripts",
+  "features": ["docs", "apiDocs", "search"],
+  "featureContracts": {
+    "apiDocs": {
+      "requiredPartials": ["api-header", "api-footer"],
+      "cssHrefs": ["/css/app.css", "/css/api.css"],
+      "requiredCssSelectors": [".pf-api-layout", ".pf-api-sidebar", ".pf-api-content"]
+    },
+    "docs": {
+      "requiredLayouts": ["docs"]
+    }
+  },
+  "tokens": {
+    "color": {
+      "bg": "#0b0b12",
+      "panel": "rgba(13, 18, 30, 0.85)",
+      "ink": "#e6e9f3",
+      "muted": "#9aa3b2",
+      "accent": "#a78bfa",
+      "border": "rgba(148, 163, 184, 0.18)"
+    }
+  }
+}
+

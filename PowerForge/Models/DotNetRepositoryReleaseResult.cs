@@ -24,6 +24,12 @@ public sealed class DotNetRepositoryReleaseResult
 
     /// <summary>Packages pushed to the feed (if publishing).</summary>
     public List<string> PublishedPackages { get; } = new();
+
+    /// <summary>Packages that were skipped during publish because they already existed in the feed.</summary>
+    public List<string> SkippedDuplicatePackages { get; } = new();
+
+    /// <summary>Packages that failed to publish.</summary>
+    public List<string> FailedPackages { get; } = new();
 }
 
 /// <summary>
@@ -36,6 +42,9 @@ public sealed class DotNetRepositoryProjectResult
 
     /// <summary>Resolved csproj path.</summary>
     public string CsprojPath { get; set; } = string.Empty;
+
+    /// <summary>Resolved NuGet package identifier.</summary>
+    public string PackageId { get; set; } = string.Empty;
 
     /// <summary>Whether the project is considered packable.</summary>
     public bool IsPackable { get; set; }

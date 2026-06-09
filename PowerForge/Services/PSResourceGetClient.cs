@@ -15,6 +15,8 @@ public sealed class PSResourceInfo
     public string Name { get; }
     /// <summary>Resolved resource version.</summary>
     public string Version { get; }
+    /// <summary>Resolved prerelease label when the repository reports it separately.</summary>
+    public string? PreRelease { get; }
     /// <summary>Resource GUID (when available).</summary>
     public string? Guid { get; }
     /// <summary>Repository name (when available).</summary>
@@ -27,10 +29,11 @@ public sealed class PSResourceInfo
     /// <summary>
     /// Creates a new instance.
     /// </summary>
-    public PSResourceInfo(string name, string version, string? repository, string? author, string? description, string? guid = null)
+    public PSResourceInfo(string name, string version, string? repository, string? author, string? description, string? guid = null, string? preRelease = null)
     {
         Name = name;
         Version = version;
+        PreRelease = string.IsNullOrWhiteSpace(preRelease) ? null : preRelease;
         Guid = guid;
         Repository = repository;
         Author = author;
@@ -242,6 +245,25 @@ public sealed class PSResourceSaveOptions
 /// </summary>
 public sealed partial class PSResourceGetClient
 {
+    /// <summary>Availability details for the PSResourceGet module.</summary>
+    public sealed class AvailabilityInfo
+    {
+        /// <summary>
+        /// Gets or sets a value indicating whether PSResourceGet is available in the current PowerShell host.
+        /// </summary>
+        public bool Available { get; set; }
+
+        /// <summary>
+        /// Gets or sets the detected PSResourceGet version when available.
+        /// </summary>
+        public string? Version { get; set; }
+
+        /// <summary>
+        /// Gets or sets the probe message returned when availability detection fails.
+        /// </summary>
+        public string? Message { get; set; }
+    }
+
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
 
@@ -252,6 +274,38 @@ public sealed partial class PSResourceGetClient
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    /// <summary>
+    /// Checks whether <c>Microsoft.PowerShell.PSResourceGet</c> is available in the current PowerShell environment.
+    /// </summary>
+    public bool IsAvailable(out string? message, TimeSpan? timeout = null)
+    {
+        var info = GetAvailability(timeout);
+        message = info.Message;
+        return info.Available;
+    }
+
+    /// <summary>
+    /// Gets PSResourceGet availability details, including the discovered module version when available.
+    /// </summary>
+    public AvailabilityInfo GetAvailability(TimeSpan? timeout = null)
+    {
+        var result = RunScript(BuildAvailabilityScript(), Array.Empty<string>(), timeout ?? TimeSpan.FromMinutes(1));
+        if (result.ExitCode == 0)
+        {
+            return new AvailabilityInfo
+            {
+                Available = ParseAvailability(result.StdOut),
+                Version = ParseAvailabilityVersion(result.StdOut)
+            };
+        }
+
+        return new AvailabilityInfo
+        {
+            Available = false,
+            Message = TryExtractError(result.StdOut) ?? result.StdErr
+        };
     }
 
     /// <summary>
@@ -470,7 +524,8 @@ public sealed partial class PSResourceGetClient
             var author = EmptyToNull(Decode(parts[5]));
             var desc = EmptyToNull(Decode(parts[6]));
             var guid = parts.Length > 7 ? EmptyToNull(Decode(parts[7])) : null;
-            list.Add(new PSResourceInfo(name, version, repo, author, desc, guid));
+            var preRelease = parts.Length > 8 ? EmptyToNull(Decode(parts[8])) : null;
+            list.Add(new PSResourceInfo(name, version, repo, author, desc, guid, preRelease));
         }
         return list;
     }
@@ -526,21 +581,50 @@ public sealed partial class PSResourceGetClient
     private static string BuildFindScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Find-PSResource.ps1");
-}
+    }
+
+    private static string BuildAvailabilityScript()
+    {
+        return EmbeddedScripts.Load("Scripts/PSResourceGet/Test-Availability.ps1");
+    }
 
     private static string BuildPublishScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Publish-PSResource.ps1");
-}
+    }
 
     private static string BuildInstallScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Install-PSResource.ps1");
-}
+    }
 
     private static string BuildSaveScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Save-PSResource.ps1");
-}
+    }
+
+    private static bool ParseAvailability(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFPSRG::AVAILABLE::", StringComparison.Ordinal)) continue;
+            var flag = line.Substring("PFPSRG::AVAILABLE::".Length);
+            return string.Equals(flag, "1", StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
+    private static string? ParseAvailabilityVersion(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFPSRG::VERSION::", StringComparison.Ordinal)) continue;
+            var value = Decode(line.Substring("PFPSRG::VERSION::".Length));
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        return null;
+    }
 }
 

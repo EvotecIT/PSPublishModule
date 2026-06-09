@@ -44,24 +44,15 @@ public sealed class BuildDocumentationConfiguration
     /// <summary>Enable documentation generation.</summary>
     public bool Enable { get; set; }
 
-    /// <summary>Remove files from docs folder before generating new docs.</summary>
-    public bool StartClean { get; set; }
-
-    /// <summary>Run a post-update step after generating new docs.</summary>
-    public bool UpdateWhenNew { get; set; }
-
     /// <summary>
     /// When enabled, also syncs the generated external help file back to the project root
-    /// (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>) during <c>UpdateWhenNew</c>.
+    /// (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>) when project docs are synced.
     /// By default, external help is generated in staging and included in artefacts, but not copied into the project.
     /// </summary>
     public bool SyncExternalHelpToProjectRoot { get; set; }
 
-    /// <summary>Documentation tool selection.</summary>
-    public DocumentationTool Tool { get; set; } = DocumentationTool.PowerForge;
-
     /// <summary>
-    /// When enabled, converts <c>about_*.help.txt</c> / <c>about_*.txt</c> topic files found in the module
+    /// When enabled, converts <c>about_*.help.txt</c> / <c>about_*.txt</c> / <c>about_*.md</c> / <c>about_*.markdown</c> topic files found in the module
     /// into markdown pages under <c>Docs/About</c>.
     /// </summary>
     public bool IncludeAboutTopics { get; set; } = true;
@@ -85,4 +76,11 @@ public sealed class BuildDocumentationConfiguration
     /// Optional external help file name override. When empty, defaults to <c>&lt;ModuleName&gt;-help.xml</c>.
     /// </summary>
     public string ExternalHelpFileName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional extra source paths for <c>about_*</c> topic files.
+    /// Relative paths are resolved from the staging root (for example: <c>Help\About</c>).
+    /// Absolute paths are also supported.
+    /// </summary>
+    public string[] AboutTopicsSourcePath { get; set; } = System.Array.Empty<string>();
 }

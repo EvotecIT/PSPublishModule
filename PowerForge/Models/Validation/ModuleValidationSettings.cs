@@ -24,7 +24,7 @@ public sealed class ModuleValidationSettings
     /// <summary>Module structure checks (manifest, exports, file presence).</summary>
     public ModuleStructureValidationSettings Structure { get; set; } = new();
 
-    /// <summary>Documentation coverage checks (synopsis/description/examples).</summary>
+    /// <summary>Documentation coverage checks (synopsis/description/examples/parameter docs/type docs).</summary>
     public DocumentationValidationSettings Documentation { get; set; } = new();
 
     /// <summary>PSScriptAnalyzer checks.</summary>
@@ -87,6 +87,12 @@ public sealed class DocumentationValidationSettings
     /// <summary>Minimum examples per command (default 1).</summary>
     public int MinExampleCountPerCommand { get; set; } = 1;
 
+    /// <summary>Minimum percentage of parameters that must have descriptions (default 0 = disabled).</summary>
+    public int MinParameterDescriptionPercent { get; set; }
+
+    /// <summary>Minimum percentage of unique input/output types that must have descriptions (default 0 = disabled).</summary>
+    public int MinTypeDescriptionPercent { get; set; }
+
     /// <summary>Command names to exclude from documentation checks.</summary>
     public string[] ExcludeCommands { get; set; } = System.Array.Empty<string>();
 
@@ -113,6 +119,9 @@ public sealed class ScriptAnalyzerValidationSettings
 
     /// <summary>Skip the check if PSScriptAnalyzer is not available.</summary>
     public bool SkipIfUnavailable { get; set; } = true;
+
+    /// <summary>Install PSScriptAnalyzer on demand before running validation.</summary>
+    public bool InstallIfUnavailable { get; set; }
 
     /// <summary>Timeout for analysis, in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 300;

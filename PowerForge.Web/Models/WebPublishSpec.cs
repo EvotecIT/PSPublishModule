@@ -77,12 +77,42 @@ public sealed class WebPublishOptimizeSpec
     public string? CriticalCss { get; set; }
     /// <summary>CSS file glob pattern.</summary>
     public string? CssPattern { get; set; }
+    /// <summary>CSS loading strategy after critical CSS injection (blocking, preload, or async).</summary>
+    public string? CssStrategy { get; set; }
     /// <summary>When true, minify HTML output.</summary>
     public bool MinifyHtml { get; set; }
     /// <summary>When true, minify CSS output.</summary>
     public bool MinifyCss { get; set; }
     /// <summary>When true, minify JavaScript output.</summary>
     public bool MinifyJs { get; set; }
+    /// <summary>When true, optimize image assets.</summary>
+    public bool OptimizeImages { get; set; }
+    /// <summary>File extensions considered for image optimization.</summary>
+    public string[] ImageExtensions { get; set; } = Array.Empty<string>();
+    /// <summary>Optional include patterns for image optimization.</summary>
+    public string[] ImageInclude { get; set; } = Array.Empty<string>();
+    /// <summary>Optional exclude patterns for image optimization.</summary>
+    public string[] ImageExclude { get; set; } = Array.Empty<string>();
+    /// <summary>Image quality target (1-100).</summary>
+    public int? ImageQuality { get; set; }
+    /// <summary>When true, strip image metadata while optimizing.</summary>
+    public bool? ImageStripMetadata { get; set; }
+    /// <summary>When true, generate WebP variants for supported source images.</summary>
+    public bool ImageGenerateWebp { get; set; }
+    /// <summary>When true, generate AVIF variants for supported source images.</summary>
+    public bool ImageGenerateAvif { get; set; }
+    /// <summary>When true, rewrite image src URLs to preferred next-gen variants when available.</summary>
+    public bool ImagePreferNextGen { get; set; }
+    /// <summary>Responsive widths (pixels) for generated image variants.</summary>
+    public int[] ResponsiveImageWidths { get; set; } = Array.Empty<int>();
+    /// <summary>When true, add loading/decoding hints to rewritten img tags.</summary>
+    public bool EnhanceImageTags { get; set; }
+    /// <summary>Maximum allowed final bytes per image file (0 disables).</summary>
+    public long? ImageMaxBytesPerFile { get; set; }
+    /// <summary>Maximum allowed total final image bytes (0 disables).</summary>
+    public long? ImageMaxTotalBytes { get; set; }
+    /// <summary>When true, fail optimize stage when image budgets are exceeded.</summary>
+    public bool ImageFailOnBudget { get; set; }
     /// <summary>When true, hash static assets.</summary>
     public bool HashAssets { get; set; }
     /// <summary>File extensions to hash.</summary>

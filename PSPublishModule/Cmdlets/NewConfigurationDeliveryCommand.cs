@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
 
@@ -16,18 +15,28 @@ namespace PSPublishModule;
 /// <para>
 /// This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.
 /// </para>
+/// <para>
+/// Merge behavior for generated delivery commands can be fine-tuned with <see cref="PreservePaths"/> and
+/// <see cref="OverwritePaths"/> so selected relative paths keep local changes or are refreshed during updates.
+/// </para>
 /// </remarks>
 /// <example>
 /// <summary>Bundle Internals and generate Install/Update commands</summary>
 /// <prefix>PS&gt; </prefix>
-/// <code>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand</code>
-/// <para>Generates public Install/Update helpers and bundles README/CHANGELOG into the module.</para>
+/// <code>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand -Sign</code>
+/// <para>Generates public Install/Update helpers, bundles README/CHANGELOG into the module, and requests signing for bundled internals during build.</para>
 /// </example>
 /// <example>
 /// <summary>Configure repository-backed docs display</summary>
 /// <prefix>PS&gt; </prefix>
 /// <code>New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'</code>
 /// <para>Helps modules expose docs from a repository path in a consistent order.</para>
+/// </example>
+/// <example>
+/// <summary>Configure merge policies and custom helper names</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'</code>
+/// <para>Generates custom delivery helpers and preserves selected local files while refreshing binaries and templates during merge installs.</para>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationDelivery")]
 public sealed class NewConfigurationDeliveryCommand : PSCmdlet
@@ -37,6 +46,11 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
 
     /// <summary>Relative path inside the module that contains internal deliverables.</summary>
     [Parameter] public string InternalsPath { get; set; } = "Internals";
+
+    /// <summary>
+    /// When set, requests signing for files under <see cref="InternalsPath"/> using the configured module signing settings/certificate.
+    /// </summary>
+    [Parameter] public SwitchParameter Sign { get; set; }
 
     /// <summary>Include module root README.* during installation.</summary>
     [Parameter] public SwitchParameter IncludeRootReadme { get; set; }
@@ -83,6 +97,18 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     [Parameter] public string[]? DocumentationOrder { get; set; }
 
     /// <summary>
+    /// Optional wildcard patterns (relative to Internals) that should be preserved during merge installs by generated Install-/Update- helpers.
+    /// Example: <c>Config/**</c>.
+    /// </summary>
+    [Parameter] public string[]? PreservePaths { get; set; }
+
+    /// <summary>
+    /// Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs by generated Install-/Update- helpers.
+    /// Example: <c>Artefacts/**</c>.
+    /// </summary>
+    [Parameter] public string[]? OverwritePaths { get; set; }
+
+    /// <summary>
     /// When set, generates a public Install-&lt;ModuleName&gt; helper function during build that copies Internals to a destination folder.
     /// </summary>
     [Parameter] public SwitchParameter GenerateInstallCommand { get; set; }
@@ -105,11 +131,10 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     /// <summary>Emits delivery configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        if (!Enable.IsPresent) return;
-
-        var delivery = new DeliveryOptionsConfiguration
+        var settings = new DeliveryConfigurationFactory().Create(new DeliveryConfigurationRequest
         {
-            Enable = true,
+            Enable = Enable.IsPresent,
+            Sign = Sign.IsPresent,
             InternalsPath = InternalsPath,
             IncludeRootReadme = IncludeRootReadme.IsPresent,
             IncludeRootChangelog = IncludeRootChangelog.IsPresent,
@@ -117,7 +142,7 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
             ReadmeDestination = ReadmeDestination,
             ChangelogDestination = ChangelogDestination,
             LicenseDestination = LicenseDestination,
-            ImportantLinks = NormalizeImportantLinks(ImportantLinks),
+            ImportantLinks = ImportantLinks,
             IntroText = IntroText,
             UpgradeText = UpgradeText,
             IntroFile = IntroFile,
@@ -125,36 +150,15 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
             RepositoryPaths = RepositoryPaths,
             RepositoryBranch = RepositoryBranch,
             DocumentationOrder = DocumentationOrder,
-            GenerateInstallCommand = GenerateInstallCommand.IsPresent || !string.IsNullOrWhiteSpace(InstallCommandName),
-            GenerateUpdateCommand = GenerateUpdateCommand.IsPresent || !string.IsNullOrWhiteSpace(UpdateCommandName),
-            InstallCommandName = string.IsNullOrWhiteSpace(InstallCommandName) ? null : InstallCommandName!.Trim(),
-            UpdateCommandName = string.IsNullOrWhiteSpace(UpdateCommandName) ? null : UpdateCommandName!.Trim(),
-            Schema = "1.3"
-        };
-
-        WriteObject(new ConfigurationOptionsSegment
-        {
-            Options = new ConfigurationOptions
-            {
-                Delivery = delivery
-            }
+            PreservePaths = PreservePaths,
+            OverwritePaths = OverwritePaths,
+            GenerateInstallCommand = GenerateInstallCommand.IsPresent,
+            GenerateUpdateCommand = GenerateUpdateCommand.IsPresent,
+            InstallCommandName = InstallCommandName,
+            UpdateCommandName = UpdateCommandName
         });
-    }
 
-    private static DeliveryImportantLink[]? NormalizeImportantLinks(DeliveryImportantLink[]? links)
-    {
-        if (links is null || links.Length == 0) return null;
-
-        var output = new List<DeliveryImportantLink>();
-        foreach (var link in links)
-        {
-            if (link is null) continue;
-            if (string.IsNullOrWhiteSpace(link.Title) || string.IsNullOrWhiteSpace(link.Url))
-                continue;
-
-            output.Add(new DeliveryImportantLink { Title = link.Title.Trim(), Url = link.Url.Trim() });
-        }
-
-        return output.Count == 0 ? null : output.ToArray();
+        if (settings is not null)
+            WriteObject(settings);
     }
 }

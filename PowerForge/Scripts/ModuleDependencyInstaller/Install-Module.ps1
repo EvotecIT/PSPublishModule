@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Name,
   [string]$RequiredVersion,
   [string]$MinimumVersion,
@@ -11,6 +11,15 @@ $ProgressPreference = 'SilentlyContinue'
 
 function Enc([string]$s) {
   return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$s)))
+}
+
+try {
+  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
+} catch {
+  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
+  $b64 = Enc $msg
+  Write-Output ('PFMOD::ERROR::' + $b64)
+  exit 3
 }
 
 try {
@@ -39,4 +48,3 @@ try {
   Write-Output ('PFMOD::ERROR::' + $b64)
   exit 1
 }
-

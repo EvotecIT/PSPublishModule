@@ -1,0 +1,2146 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using PowerForge;
+using PowerForge.Web;
+
+namespace PowerForge.Web.Cli;
+
+internal static partial class WebPipelineRunner
+{
+    private static void ExecuteApiDocs(
+        JsonElement step,
+        string label,
+        string baseDir,
+        bool fast,
+        string effectiveMode,
+        WebConsoleLogger? logger,
+        WebPipelineStepResult stepResult)
+    {
+        var batchInputs = GetArrayOfObjects(step, "inputs") ?? GetArrayOfObjects(step, "entries");
+        if (batchInputs is { Length: > 0 })
+        {
+            ExecuteApiDocsBatch(step, batchInputs, label, baseDir, fast, effectiveMode, logger, stepResult);
+            return;
+        }
+
+        string? injectedCriticalCssHtml = null;
+        PrismSpec? prismSpec = null;
+        string? assetPolicyMode = null;
+
+        var typeText = GetString(step, "type");
+        var xml = ResolvePath(baseDir, GetString(step, "xml"));
+        var help = ResolvePath(baseDir, GetString(step, "help") ?? GetString(step, "helpPath") ?? GetString(step, "help-path"));
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        var assembly = ResolvePath(baseDir, GetString(step, "assembly"));
+        var title = GetString(step, "title");
+        var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url") ?? "/api";
+        var languageCode = GetString(step, "language") ?? GetString(step, "languageCode") ?? GetString(step, "language-code");
+        var format = GetString(step, "format");
+        var css = GetString(step, "css") ?? GetString(step, "cssHref") ?? GetString(step, "css-href");
+        var criticalCssPath = ResolvePath(baseDir, GetString(step, "criticalCssPath") ?? GetString(step, "critical-css-path") ?? GetString(step, "criticalCss") ?? GetString(step, "critical-css"));
+        var injectCriticalCss = GetBool(step, "injectCriticalCss") ?? GetBool(step, "inject-critical-css") ?? false;
+        var head = ResolvePath(baseDir, GetString(step, "headHtml") ?? GetString(step, "head-html"));
+        var header = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html"));
+        var footer = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html"));
+        var template = GetString(step, "template");
+        var templateRoot = ResolvePath(baseDir, GetString(step, "templateRoot") ?? GetString(step, "template-root"));
+        var indexTemplate = ResolvePath(baseDir, GetString(step, "templateIndex") ?? GetString(step, "template-index"));
+        var typeTemplate = ResolvePath(baseDir, GetString(step, "templateType") ?? GetString(step, "template-type"));
+        var docsIndexTemplate = ResolvePath(baseDir, GetString(step, "templateDocsIndex") ?? GetString(step, "template-docs-index"));
+        var docsTypeTemplate = ResolvePath(baseDir, GetString(step, "templateDocsType") ?? GetString(step, "template-docs-type"));
+        var docsScript = ResolvePath(baseDir, GetString(step, "docsScript") ?? GetString(step, "docs-script"));
+        var searchScript = ResolvePath(baseDir, GetString(step, "searchScript") ?? GetString(step, "search-script"));
+        var docsHome = GetString(step, "docsHome") ?? GetString(step, "docsHomeUrl") ??
+                       GetString(step, "docs-home") ?? GetString(step, "docs-home-url");
+        var suiteTitle = GetApiSuiteString(step, "suiteTitle", "suite-title");
+        var suiteCurrentId = GetApiSuiteString(step, "suiteCurrentId", "suite-current-id");
+        var suiteHomeUrl = GetApiSuiteString(step, "suiteHomeUrl", "suite-home-url");
+        var suiteHomeLabel = GetApiSuiteString(step, "suiteHomeLabel", "suite-home-label");
+        var suiteSearchUrl = GetApiSuiteString(step, "suiteSearchUrl", "suite-search-url");
+        var suiteXrefMapUrl = GetApiSuiteString(step, "suiteXrefMapUrl", "suite-xref-map-url");
+        var suiteCoverageUrl = GetApiSuiteString(step, "suiteCoverageUrl", "suite-coverage-url");
+        var suiteRelatedContentUrl = GetApiSuiteString(step, "suiteRelatedContentUrl", "suite-related-content-url");
+        var suiteNarrativeUrl = GetApiSuiteString(step, "suiteNarrativeUrl", "suite-narrative-url");
+        var suiteEntries = GetApiSuiteEntries(step);
+        var sidebar = GetString(step, "sidebar") ?? GetString(step, "sidebarPosition") ?? GetString(step, "sidebar-position");
+        var bodyClass = GetString(step, "bodyClass") ?? GetString(step, "body-class");
+        var legacyAliasMode = GetString(step, "legacyAliasMode") ?? GetString(step, "legacy-alias-mode") ??
+                              GetString(step, "legacyFlatAliasMode") ?? GetString(step, "legacy-flat-alias-mode");
+        var displayNameMode = GetString(step, "displayNameMode") ?? GetString(step, "display-name-mode");
+        var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
+        var sourcePathPrefix = GetString(step, "sourcePathPrefix") ?? GetString(step, "source-path-prefix");
+        var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ??
+                        GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
+        var coverageReportPath = ResolvePath(baseDir, GetString(step, "coverageReport") ?? GetString(step, "coverage-report") ?? GetString(step, "coverageReportPath") ?? GetString(step, "coverage-report-path"));
+        var generateCoverageReport = GetBool(step, "generateCoverageReport") ?? GetBool(step, "generate-coverage-report") ?? true;
+        var xrefMapPath = ResolvePath(baseDir, GetString(step, "xrefMap") ?? GetString(step, "xref-map") ?? GetString(step, "xrefMapPath") ?? GetString(step, "xref-map-path"));
+        var generateXrefMap = GetBool(step, "generateXrefMap") ?? GetBool(step, "generate-xref-map") ?? true;
+        var generateMemberXrefs = GetBool(step, "generateMemberXrefs") ?? GetBool(step, "generate-member-xrefs") ?? true;
+        var memberXrefKindsText = GetString(step, "memberXrefKinds") ?? GetString(step, "member-xref-kinds");
+        var memberXrefKindsArray = GetArrayOfStrings(step, "memberXrefKinds") ?? GetArrayOfStrings(step, "member-xref-kinds");
+        var memberXrefMaxPerType = GetInt(step, "memberXrefMaxPerType") ?? GetInt(step, "member-xref-max-per-type") ?? 0;
+        var powerShellExamplesPath = ResolvePath(baseDir, GetString(step, "psExamplesPath") ?? GetString(step, "ps-examples-path") ?? GetString(step, "powerShellExamplesPath") ?? GetString(step, "powershell-examples-path"));
+        var relatedContentManifest = GetString(step, "relatedContentManifest") ?? GetString(step, "related-content-manifest") ??
+                                     GetString(step, "exampleManifest") ?? GetString(step, "example-manifest");
+        var relatedContentManifestArray = GetArrayOfStrings(step, "relatedContentManifests") ?? GetArrayOfStrings(step, "related-content-manifests") ??
+                                          GetArrayOfStrings(step, "exampleManifests") ?? GetArrayOfStrings(step, "example-manifests");
+        var generatePowerShellFallbackExamples = GetBool(step, "generatePowerShellFallbackExamples") ?? GetBool(step, "generate-powershell-fallback-examples") ?? true;
+        var powerShellFallbackExampleLimit = GetInt(step, "powerShellFallbackExampleLimit") ?? GetInt(step, "powershell-fallback-example-limit") ?? 2;
+        var validatePowerShellExamples = GetBool(step, "validatePowerShellExamples") ?? GetBool(step, "validate-powershell-examples") ?? false;
+        var powerShellExampleValidationReportPath = ResolvePath(baseDir, GetString(step, "powerShellExampleValidationReport") ?? GetString(step, "powershell-example-validation-report") ?? GetString(step, "powerShellExampleValidationReportPath") ?? GetString(step, "powershell-example-validation-report-path"));
+        var powerShellExampleValidationTimeoutSeconds = GetInt(step, "powerShellExampleValidationTimeoutSeconds") ?? GetInt(step, "powershell-example-validation-timeout-seconds") ?? 60;
+        var failOnPowerShellExampleValidation = GetBool(step, "failOnPowerShellExampleValidation") ?? GetBool(step, "fail-on-powershell-example-validation") ?? false;
+        var executePowerShellExamples = GetBool(step, "executePowerShellExamples") ?? GetBool(step, "execute-powershell-examples") ?? false;
+        var powerShellExampleExecutionTimeoutSeconds = GetInt(step, "powerShellExampleExecutionTimeoutSeconds") ?? GetInt(step, "powershell-example-execution-timeout-seconds") ?? 60;
+        var failOnPowerShellExampleExecution = GetBool(step, "failOnPowerShellExampleExecution") ?? GetBool(step, "fail-on-powershell-example-execution") ?? false;
+        if (failOnPowerShellExampleValidation)
+            validatePowerShellExamples = true;
+        if (executePowerShellExamples || failOnPowerShellExampleExecution)
+            executePowerShellExamples = true;
+        if (executePowerShellExamples)
+            validatePowerShellExamples = true;
+        var generateGitFreshness = GetBool(step, "generateGitFreshness") ?? GetBool(step, "generate-git-freshness") ?? false;
+        var gitFreshnessNewDays = GetInt(step, "gitFreshnessNewDays") ?? GetInt(step, "git-freshness-new-days") ?? 14;
+        var gitFreshnessUpdatedDays = GetInt(step, "gitFreshnessUpdatedDays") ?? GetInt(step, "git-freshness-updated-days") ?? 90;
+        var sourceUrlMappings = GetApiDocsSourceUrlMappings(
+            step,
+            "sourceUrlMappings",
+            "source-url-mappings",
+            "sourceMappings",
+            "source-mappings");
+        var powerShellManifestPath = ResolvePath(baseDir, GetString(step, "psManifestPath") ?? GetString(step, "ps-manifest-path") ?? GetString(step, "powerShellManifestPath") ?? GetString(step, "powershell-manifest-path"));
+        var powerShellCommandMetadataPath = ResolvePath(baseDir, GetString(step, "psCommandMetadataPath") ?? GetString(step, "ps-command-metadata-path") ?? GetString(step, "powerShellCommandMetadataPath") ?? GetString(step, "powershell-command-metadata-path"));
+        var includeUndocumented = GetBool(step, "includeUndocumented") ?? GetBool(step, "include-undocumented") ?? true;
+        var nav = ResolvePath(baseDir, GetString(step, "nav") ?? GetString(step, "navJson") ?? GetString(step, "nav-json"));
+        var navContextPath = GetString(step, "navContextPath") ?? GetString(step, "nav-context-path") ??
+                             GetString(step, "navContextRoute") ?? GetString(step, "nav-context-route");
+        var navContextCollection = GetString(step, "navContextCollection") ?? GetString(step, "nav-context-collection");
+        var navContextLayout = GetString(step, "navContextLayout") ?? GetString(step, "nav-context-layout");
+        var navContextProject = GetString(step, "navContextProject") ?? GetString(step, "nav-context-project");
+        var navSurfaceName = GetString(step, "navSurface") ?? GetString(step, "nav-surface") ??
+                             GetString(step, "navSurfaceName") ?? GetString(step, "nav-surface-name");
+        var includeNamespaces = GetString(step, "includeNamespace") ?? GetString(step, "include-namespace");
+        var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
+        var includeTypes = GetString(step, "includeType") ?? GetString(step, "include-type");
+        var excludeTypes = GetString(step, "excludeType") ?? GetString(step, "exclude-type");
+        var quickStartTypes = GetString(step, "quickStartTypes") ?? GetString(step, "quickstartTypes") ??
+                              GetString(step, "quick-start-types") ?? GetString(step, "quickstart-types");
+        var siteName = GetString(step, "siteName") ?? GetString(step, "site-name");
+        var socialImage = GetString(step, "socialImage") ?? GetString(step, "social-image");
+        var socialImageWidth = GetInt(step, "socialImageWidth") ?? GetInt(step, "social-image-width");
+        var socialImageHeight = GetInt(step, "socialImageHeight") ?? GetInt(step, "social-image-height");
+        var socialTwitterCard = GetString(step, "socialTwitterCard") ?? GetString(step, "social-twitter-card");
+        var socialTwitterSite = GetString(step, "socialTwitterSite") ?? GetString(step, "social-twitter-site");
+        var socialTwitterCreator = GetString(step, "socialTwitterCreator") ?? GetString(step, "social-twitter-creator");
+        var socialAutoGenerate = GetBool(step, "socialAutoGenerate") ?? GetBool(step, "social-auto-generate");
+        var socialCardPath = GetString(step, "socialCardPath") ?? GetString(step, "social-card-path");
+        var socialCardWidth = GetInt(step, "socialCardWidth") ?? GetInt(step, "social-card-width");
+        var socialCardHeight = GetInt(step, "socialCardHeight") ?? GetInt(step, "social-card-height");
+        var siteBaseUrl = GetString(step, "siteBaseUrl") ?? GetString(step, "site-base-url");
+        var brandUrl = GetString(step, "brandUrl") ?? GetString(step, "brand-url");
+        var brandIcon = GetString(step, "brandIcon") ?? GetString(step, "brand-icon");
+        var suppressWarnings = GetArrayOfStrings(step, "suppressWarnings");
+        var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
+        var ciStrictDefaults = UseCiStrictDefaults(effectiveMode, fast);
+        var failOnWarnings = GetBool(step, "failOnWarnings") ?? ciStrictDefaults;
+        var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
+        var coveragePreviewCount = GetInt(step, "coveragePreviewCount") ?? GetInt(step, "coverage-preview") ?? (isDev ? 2 : 5);
+        var coverageThresholds = GetApiDocsCoverageThresholds(step);
+        var failOnCoverage = GetBool(step, "failOnCoverage") ?? GetBool(step, "fail-on-coverage") ?? (coverageThresholds.Count > 0);
+
+        var apiType = ApiDocsType.CSharp;
+        if (!string.IsNullOrWhiteSpace(typeText) &&
+            Enum.TryParse<ApiDocsType>(typeText, true, out var parsedType))
+            apiType = parsedType;
+
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("apidocs requires out.");
+        if (apiType == ApiDocsType.CSharp && string.IsNullOrWhiteSpace(xml))
+            throw new InvalidOperationException("apidocs requires xml for CSharp.");
+        if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(help))
+            throw new InvalidOperationException("apidocs requires help for PowerShell.");
+
+        string? configPath = null;
+        try
+        {
+            try
+            {
+                legacyAliasMode = WebCliHelpers.NormalizeApiDocsLegacyAliasMode(legacyAliasMode);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException($"{label}: {ex.Message}", ex);
+            }
+
+            var preflightWarnings = ValidateApiDocsPreflight(
+                apiType,
+                sourceRoot,
+                sourceUrl,
+                sourceUrlMappings,
+                nav,
+                navSurfaceName,
+                navContextPath,
+                powerShellExamplesPath,
+                ResolveRelatedContentManifestPaths(baseDir, relatedContentManifest, relatedContentManifestArray));
+            var filteredPreflightWarnings = suppressWarnings is { Length: > 0 }
+                ? WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings)
+                : preflightWarnings;
+            if (filteredPreflightWarnings.Length > 0)
+            {
+                logger?.Warn($"{label}: apidocs preflight warnings: {filteredPreflightWarnings.Length}");
+
+                var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
+                if (previewLimit > 0)
+                {
+                    foreach (var warning in filteredPreflightWarnings.Where(static w => !string.IsNullOrWhiteSpace(w)).Take(previewLimit))
+                    {
+                        logger?.Warn($"{label}: {warning}");
+                    }
+
+                    var remaining = filteredPreflightWarnings.Length - previewLimit;
+                    if (remaining > 0)
+                        logger?.Warn($"{label}: (+{remaining} more warnings)");
+                }
+
+                if (failOnWarnings)
+                {
+                    var headline = filteredPreflightWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
+                                   ?? "API docs preflight warnings encountered.";
+                    throw new InvalidOperationException(headline);
+                }
+            }
+
+            // Best-practice default: when pipeline runs at a website repo root, assume ./site.json
+            // unless the step overrides it explicitly. This prevents "API reference has no navigation"
+            // and theme drift when agents forget to wire config/nav.
+            configPath = ResolvePath(baseDir, GetString(step, "config"));
+            if (string.IsNullOrWhiteSpace(configPath))
+            {
+                var defaultSiteConfig = Path.Combine(baseDir, "site.json");
+                if (File.Exists(defaultSiteConfig))
+                    configPath = defaultSiteConfig;
+            }
+
+            // If the user configured header/footer paths but they don't exist, treat them as unset so
+            // we can fall back to theme fragments (or embedded fragments) deterministically.
+            if (!string.IsNullOrWhiteSpace(head) && !File.Exists(Path.GetFullPath(head)))
+            {
+                logger?.Warn($"{label}: apidocs headHtml not found: {head}");
+                head = null;
+            }
+            if (!string.IsNullOrWhiteSpace(header) && !File.Exists(Path.GetFullPath(header)))
+            {
+                logger?.Warn($"{label}: apidocs headerHtml not found: {header}");
+                header = null;
+            }
+            if (!string.IsNullOrWhiteSpace(footer) && !File.Exists(Path.GetFullPath(footer)))
+            {
+                logger?.Warn($"{label}: apidocs footerHtml not found: {footer}");
+                footer = null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(configPath))
+            {
+                if (string.IsNullOrWhiteSpace(nav))
+                {
+                    // Prefer site-nav.json when the repo provides it (static/data). This supports navigation profiles
+                    // and avoids "API reference has no navigation" drift across sites.
+                    try
+                    {
+                        var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                        var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
+                        var relativeRoot = Path.IsPathRooted(dataRoot) ? "data" : dataRoot.TrimStart('/', '\\');
+                        var staticNavPath = Path.Combine(plan.RootPath, "static", relativeRoot, "site-nav.json");
+                        nav = File.Exists(staticNavPath) ? staticNavPath : configPath;
+                    }
+                    catch
+                    {
+                        nav = configPath;
+                    }
+                }
+
+                TryResolveApiFragmentsFromTheme(configPath, ref head, ref header, ref footer);
+
+                if (injectCriticalCss)
+                {
+                    try
+                    {
+                        var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                        var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                        injectedCriticalCssHtml = RenderCriticalCssHtml(spec.AssetRegistry, plan.RootPath);
+                        if (!string.IsNullOrWhiteSpace(injectedCriticalCssHtml))
+                            criticalCssPath = null; // avoid accidental double-injection if both are set
+                    }
+                    catch
+                    {
+                        // Best-effort: critical CSS injection is optional.
+                    }
+                }
+
+                try
+                {
+                    var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                    prismSpec = spec.Prism;
+                    assetPolicyMode = spec.AssetPolicy?.Mode;
+                    siteName ??= spec.Social?.SiteName ?? spec.Name;
+                    socialImage ??= spec.Social?.Image;
+                    socialImageWidth ??= spec.Social?.ImageWidth;
+                    socialImageHeight ??= spec.Social?.ImageHeight;
+                    socialTwitterCard ??= spec.Social?.TwitterCard;
+                    socialTwitterSite ??= spec.Social?.TwitterSite;
+                    socialTwitterCreator ??= spec.Social?.TwitterCreator;
+                    socialAutoGenerate ??= spec.Social?.AutoGenerateCards;
+                    var generatedCardsPath = spec.Social?.GeneratedCardsPath;
+                    socialCardPath ??= string.IsNullOrWhiteSpace(generatedCardsPath)
+                        ? null
+                        : generatedCardsPath.TrimEnd('/') + "/api";
+                    socialCardWidth ??= spec.Social?.GeneratedCardWidth;
+                    socialCardHeight ??= spec.Social?.GeneratedCardHeight;
+                    siteBaseUrl ??= spec.BaseUrl;
+                }
+                catch
+                {
+                    // Best-effort: API docs can still fall back to default Prism CDN settings.
+                }
+            }
+
+            var options = new WebApiDocsOptions
+            {
+                Type = apiType,
+                XmlPath = xml ?? string.Empty,
+                HelpPath = help,
+                PowerShellModuleManifestPath = powerShellManifestPath,
+                PowerShellCommandMetadataPath = powerShellCommandMetadataPath,
+                AssemblyPath = assembly,
+                OutputPath = outPath,
+                Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
+                BaseUrl = baseUrl,
+                SiteBaseUrl = siteBaseUrl,
+                LanguageCode = languageCode,
+                Format = format,
+                CssHref = css,
+                CriticalCssHtml = injectedCriticalCssHtml,
+                CriticalCssPath = criticalCssPath,
+                HeadHtmlPath = head,
+                HeaderHtmlPath = header,
+                FooterHtmlPath = footer,
+                Template = template,
+                TemplateRootPath = templateRoot,
+                IndexTemplatePath = indexTemplate,
+                TypeTemplatePath = typeTemplate,
+                DocsIndexTemplatePath = docsIndexTemplate,
+                DocsTypeTemplatePath = docsTypeTemplate,
+                DocsScriptPath = docsScript,
+                SearchScriptPath = searchScript,
+                DocsHomeUrl = docsHome,
+                ApiSuiteTitle = suiteTitle,
+                ApiSuiteCurrentId = suiteCurrentId,
+                ApiSuiteHomeUrl = suiteHomeUrl,
+                ApiSuiteHomeLabel = suiteHomeLabel,
+                ApiSuiteSearchUrl = suiteSearchUrl,
+                ApiSuiteXrefMapUrl = suiteXrefMapUrl,
+                ApiSuiteCoverageUrl = suiteCoverageUrl,
+                ApiSuiteRelatedContentUrl = suiteRelatedContentUrl,
+                ApiSuiteNarrativeUrl = suiteNarrativeUrl,
+                SidebarPosition = sidebar,
+                BodyClass = bodyClass,
+                LegacyAliasMode = legacyAliasMode,
+                InjectPrismAssets = GetBool(step, "injectPrism") ?? GetBool(step, "inject-prism") ?? true,
+                Prism = prismSpec,
+                AssetPolicyMode = assetPolicyMode,
+                DisplayNameMode = displayNameMode,
+                SourceRootPath = sourceRoot,
+                SourcePathPrefix = sourcePathPrefix,
+                SourceUrlPattern = sourceUrl,
+                GenerateCoverageReport = generateCoverageReport,
+                CoverageReportPath = coverageReportPath,
+                GenerateXrefMap = generateXrefMap,
+                GenerateMemberXrefs = generateMemberXrefs,
+                MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
+                XrefMapPath = xrefMapPath,
+                GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
+                PowerShellExamplesPath = powerShellExamplesPath,
+                PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
+                GenerateGitFreshness = generateGitFreshness,
+                GitFreshnessNewDays = gitFreshnessNewDays,
+                GitFreshnessUpdatedDays = gitFreshnessUpdatedDays,
+                IncludeUndocumentedTypes = includeUndocumented,
+                NavJsonPath = nav,
+                SiteConfigPath = configPath,
+                // Default to root context for profile selection to avoid accidental "API header has different nav"
+                // when sites define /api profiles that override menus. Sites that want /api-specific menus can set navContextPath explicitly.
+                NavContextPath = navContextPath,
+                NavContextCollection = navContextCollection,
+                NavContextLayout = navContextLayout,
+                NavContextProject = navContextProject,
+                NavSurfaceName = navSurfaceName,
+                SiteName = siteName,
+                SocialImage = socialImage,
+                SocialImageWidth = socialImageWidth,
+                SocialImageHeight = socialImageHeight,
+                SocialTwitterCard = socialTwitterCard,
+                SocialTwitterSite = socialTwitterSite,
+                SocialTwitterCreator = socialTwitterCreator,
+                AutoGenerateSocialCards = socialAutoGenerate ?? false,
+                SocialCardPath = socialCardPath,
+                SocialCardWidth = socialCardWidth ?? 1200,
+                SocialCardHeight = socialCardHeight ?? 630,
+                BrandUrl = brandUrl,
+                BrandIcon = brandIcon
+            };
+        if (suiteEntries.Length > 0)
+            options.ApiSuiteEntries.AddRange(suiteEntries);
+        foreach (var relatedContentManifestPath in ResolveRelatedContentManifestPaths(baseDir, relatedContentManifest, relatedContentManifestArray))
+            options.RelatedContentManifestPaths.Add(relatedContentManifestPath);
+        if (TryGetObject(step, "templateTokens", out var templateTokens) ||
+            TryGetObject(step, "template-tokens", out templateTokens))
+        {
+            foreach (var property in templateTokens.EnumerateObject())
+            {
+                var value = property.Value.ValueKind switch
+                {
+                    JsonValueKind.Null => null,
+                    JsonValueKind.String => property.Value.GetString(),
+                    JsonValueKind.True => "true",
+                    JsonValueKind.False => "false",
+                    _ => property.Value.ToString()
+                };
+
+                if (string.IsNullOrWhiteSpace(property.Name))
+                    continue;
+
+                options.TemplateTokens[property.Name] = value;
+            }
+        }
+        if (sourceUrlMappings.Length > 0)
+            options.SourceUrlMappings.AddRange(sourceUrlMappings);
+
+        var includeList = CliPatternHelper.SplitPatterns(includeNamespaces);
+        var excludeList = CliPatternHelper.SplitPatterns(excludeNamespaces);
+        var includeTypeList = CliPatternHelper.SplitPatterns(includeTypes);
+        var excludeTypeList = CliPatternHelper.SplitPatterns(excludeTypes);
+        if (includeList.Length > 0)
+            options.IncludeNamespacePrefixes.AddRange(includeList);
+        if (excludeList.Length > 0)
+            options.ExcludeNamespacePrefixes.AddRange(excludeList);
+        if (includeTypeList.Length > 0)
+            options.IncludeTypeNames.AddRange(includeTypeList);
+        if (excludeTypeList.Length > 0)
+            options.ExcludeTypeNames.AddRange(excludeTypeList);
+        var quickStartTypeList = CliPatternHelper.SplitPatterns(quickStartTypes);
+        if (quickStartTypeList.Length > 0)
+            options.QuickStartTypeNames.AddRange(quickStartTypeList);
+        var memberXrefKindList = new List<string>();
+        if (!string.IsNullOrWhiteSpace(memberXrefKindsText))
+            memberXrefKindList.AddRange(CliPatternHelper.SplitPatterns(memberXrefKindsText));
+        if (memberXrefKindsArray is { Length: > 0 })
+        {
+            foreach (var entry in memberXrefKindsArray)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                    continue;
+                memberXrefKindList.AddRange(CliPatternHelper.SplitPatterns(entry));
+            }
+        }
+        if (memberXrefKindList.Count > 0)
+            options.MemberXrefKinds.AddRange(memberXrefKindList);
+
+        WebApiDocsPowerShellExampleValidationResult? powerShellExampleValidation = null;
+        string? powerShellExampleValidationPath = null;
+        if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples)
+        {
+            powerShellExampleValidation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = help ?? string.Empty,
+                PowerShellModuleManifestPath = powerShellManifestPath,
+                PowerShellExamplesPath = powerShellExamplesPath,
+                TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                ExecuteMatchedExamples = executePowerShellExamples,
+                ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
+            });
+            powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
+                outPath!,
+                powerShellExampleValidationReportPath,
+                powerShellExampleValidation,
+                new WebApiDocsPowerShellExampleValidationOptions
+                {
+                    HelpPath = help ?? string.Empty,
+                    PowerShellModuleManifestPath = powerShellManifestPath,
+                    PowerShellExamplesPath = powerShellExamplesPath,
+                    TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                    PreferPwsh = true,
+                    ExecuteMatchedExamples = executePowerShellExamples,
+                    ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
+                });
+            options.PowerShellExampleValidationResult = powerShellExampleValidation;
+        }
+
+        var res = WebApiDocsGenerator.Generate(options);
+        if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
+            res.PowerShellExampleValidationPath = powerShellExampleValidationPath;
+
+        if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples && powerShellExampleValidation is not null)
+        {
+            if (failOnPowerShellExampleValidation &&
+                (!powerShellExampleValidation.ValidationSucceeded || powerShellExampleValidation.InvalidSyntaxFileCount > 0))
+            {
+                var reason = !powerShellExampleValidation.ValidationSucceeded
+                    ? "PowerShell example validation did not complete successfully."
+                    : $"PowerShell example validation found {powerShellExampleValidation.InvalidSyntaxFileCount} invalid script(s).";
+                throw new InvalidOperationException($"{reason} Report: {powerShellExampleValidationPath}");
+            }
+            if (failOnPowerShellExampleExecution &&
+                (!powerShellExampleValidation.ExecutionCompleted || powerShellExampleValidation.FailedExecutionFileCount > 0))
+            {
+                var reason = !powerShellExampleValidation.ExecutionCompleted
+                    ? "PowerShell example execution did not complete successfully."
+                    : $"PowerShell example execution failed for {powerShellExampleValidation.FailedExecutionFileCount} script(s).";
+                throw new InvalidOperationException($"{reason} Report: {powerShellExampleValidationPath}");
+            }
+        }
+        var note = res.UsedReflectionFallback ? " (reflection)" : string.Empty;
+        var filteredWarnings = suppressWarnings is { Length: > 0 }
+            ? WebVerifyPolicy.FilterWarnings(
+                res.Warnings
+                    .Concat(powerShellExampleValidation?.Warnings ?? Array.Empty<string>())
+                    .ToArray(),
+                suppressWarnings)
+            : res.Warnings
+                .Concat(powerShellExampleValidation?.Warnings ?? Array.Empty<string>())
+                .ToArray();
+
+        if (filteredWarnings.Length > 0)
+        {
+            var firstWarning = filteredWarnings[0];
+            if (!string.IsNullOrWhiteSpace(firstWarning))
+            {
+                var trimmed = firstWarning.Length > 120
+                    ? $"{firstWarning.Substring(0, 117)}..."
+                    : firstWarning;
+                note += $" (warn: {trimmed})";
+            }
+            else
+            {
+                note += $" ({filteredWarnings.Length} warnings)";
+            }
+
+            logger?.Warn($"{label}: apidocs warnings: {filteredWarnings.Length}");
+
+            var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
+            if (previewLimit > 0)
+            {
+                foreach (var warning in filteredWarnings.Where(static w => !string.IsNullOrWhiteSpace(w)).Take(previewLimit))
+                {
+                    logger?.Warn($"{label}: {warning}");
+                }
+
+                var remaining = filteredWarnings.Length - previewLimit;
+                if (remaining > 0)
+                    logger?.Warn($"{label}: (+{remaining} more warnings)");
+            }
+
+            if (failOnWarnings)
+            {
+                var headline = filteredWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w)) ?? "API docs warnings encountered.";
+                throw new InvalidOperationException(headline);
+            }
+        }
+
+        if (coverageThresholds.Count > 0)
+        {
+            var coverageFailures = EvaluateApiDocsCoverageThresholds(res.CoveragePath, coverageThresholds, out var coverageHeadline);
+            if (coverageFailures.Count > 0)
+            {
+                note += $" (coverage: {coverageFailures.Count} issue(s))";
+                logger?.Warn($"{label}: apidocs coverage threshold failures: {coverageFailures.Count}");
+
+                var previewLimit = Math.Clamp(coveragePreviewCount, 0, 20);
+                if (previewLimit > 0)
+                {
+                    foreach (var failure in coverageFailures.Take(previewLimit))
+                        logger?.Warn($"{label}: {failure}");
+
+                    var remaining = coverageFailures.Count - previewLimit;
+                    if (remaining > 0)
+                        logger?.Warn($"{label}: (+{remaining} more coverage issues)");
+                }
+
+                if (failOnCoverage)
+                    throw new InvalidOperationException(coverageHeadline ?? "API docs coverage thresholds failed.");
+            }
+        }
+
+        stepResult.Success = true;
+        if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
+            note += $" (ps-example-validation: {Path.GetFileName(powerShellExampleValidationPath)})";
+        if (!string.IsNullOrWhiteSpace(res.PowerShellExampleMediaManifestPath))
+            note += $" (ps-example-media: {Path.GetFileName(res.PowerShellExampleMediaManifestPath)})";
+        stepResult.Message = $"API docs {res.TypeCount} types{note}";
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                BuildApiDocsFailureMessage(label, apiType, xml, help, assembly, outPath, configPath, nav, sourceRoot, ex),
+                ex);
+        }
+    }
+
+    private static void ExecuteApiDocsBatch(
+        JsonElement parentStep,
+        JsonElement[] inputs,
+        string label,
+        string baseDir,
+        bool fast,
+        string effectiveMode,
+        WebConsoleLogger? logger,
+        WebPipelineStepResult stepResult)
+    {
+        if (inputs.Length == 0)
+            throw new InvalidOperationException("apidocs batch requires at least one input object.");
+
+        var suite = BuildApiSuiteSpec(parentStep, inputs);
+        var completed = 0;
+        var notes = new List<string>();
+        for (var index = 0; index < inputs.Length; index++)
+        {
+            var input = inputs[index];
+            var inputLabel = GetString(input, "id") ??
+                             GetString(input, "name") ??
+                             GetString(input, "title") ??
+                             $"input-{index + 1}";
+
+            using var merged = CreateMergedApiDocsStepDocument(
+                parentStep,
+                input,
+                mergedNode => ApplyApiSuiteToStepNode(mergedNode, suite, GetApiSuiteInputId(input, index)));
+            var nestedResult = new WebPipelineStepResult { Task = "apidocs" };
+            try
+            {
+                ExecuteApiDocs(
+                    merged.RootElement,
+                    $"{label}/{inputLabel}",
+                    baseDir,
+                    fast,
+                    effectiveMode,
+                    logger,
+                    nestedResult);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"apidocs batch input '{inputLabel}' failed: {ex.Message}", ex);
+            }
+
+            completed++;
+            if (!string.IsNullOrWhiteSpace(nestedResult.Message))
+            {
+                var note = nestedResult.Message!;
+                if (note.Length > 100)
+                    note = $"{note.Substring(0, 97)}...";
+                notes.Add($"{inputLabel}: {note}");
+            }
+        }
+
+        var summary = string.Join("; ", notes.Take(2));
+        var suffix = notes.Count > 2 ? $" (+{notes.Count - 2} more)" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = string.IsNullOrWhiteSpace(summary)
+            ? $"API docs batch {completed} input(s)"
+            : $"API docs batch {completed} input(s): {summary}{suffix}";
+    }
+
+    private static JsonDocument CreateMergedApiDocsStepDocument(
+        JsonElement parentStep,
+        JsonElement input,
+        Action<JsonObject>? transform = null)
+    {
+        var parentNode = JsonNode.Parse(parentStep.GetRawText()) as JsonObject
+                         ?? throw new InvalidOperationException("apidocs batch parent step must be a JSON object.");
+        parentNode.Remove("inputs");
+        parentNode.Remove("entries");
+
+        if (input.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("apidocs batch inputs must be JSON objects.");
+
+        foreach (var property in input.EnumerateObject())
+            parentNode[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+
+        transform?.Invoke(parentNode);
+        return JsonDocument.Parse(parentNode.ToJsonString());
+    }
+
+    private static string? GetApiSuiteString(JsonElement source, string primaryName, string aliasName)
+    {
+        var direct = GetString(source, primaryName) ?? GetString(source, aliasName);
+        if (!string.IsNullOrWhiteSpace(direct))
+            return direct;
+
+        if (TryGetObject(source, "suite", out var suiteObject))
+        {
+            direct = GetString(suiteObject, primaryName) ?? GetString(suiteObject, aliasName);
+            if (!string.IsNullOrWhiteSpace(direct))
+                return direct;
+        }
+
+        if (TryGetObject(source, "apiSuite", out var apiSuiteObject) ||
+            TryGetObject(source, "api-suite", out apiSuiteObject))
+        {
+            direct = GetString(apiSuiteObject, primaryName) ?? GetString(apiSuiteObject, aliasName);
+            if (!string.IsNullOrWhiteSpace(direct))
+                return direct;
+        }
+
+        return null;
+    }
+
+    private static WebApiDocsSuiteEntry[] GetApiSuiteEntries(JsonElement source)
+    {
+        var entries = new List<WebApiDocsSuiteEntry>();
+        AddApiSuiteEntries(entries, GetArrayOfObjects(source, "suiteEntries"));
+        AddApiSuiteEntries(entries, GetArrayOfObjects(source, "suite-entries"));
+
+        if (TryGetObject(source, "suite", out var suiteObject))
+            AddApiSuiteEntries(entries, GetArrayOfObjects(suiteObject, "entries"));
+
+        if (TryGetObject(source, "apiSuite", out var apiSuiteObject) ||
+            TryGetObject(source, "api-suite", out apiSuiteObject))
+        {
+            AddApiSuiteEntries(entries, GetArrayOfObjects(apiSuiteObject, "entries"));
+        }
+
+        return entries
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Label) && !string.IsNullOrWhiteSpace(entry.Href))
+            .GroupBy(static entry => string.IsNullOrWhiteSpace(entry.Id) ? entry.Href : entry.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderBy(static entry => entry.Order ?? int.MaxValue)
+            .ThenBy(static entry => entry.Label, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static void AddApiSuiteEntries(List<WebApiDocsSuiteEntry> entries, JsonElement[]? items)
+    {
+        if (items is not { Length: > 0 })
+            return;
+
+        foreach (var item in items)
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var entry = new WebApiDocsSuiteEntry
+            {
+                Id = GetString(item, "id") ?? string.Empty,
+                Label = GetString(item, "label") ?? GetString(item, "name") ?? string.Empty,
+                Href = GetString(item, "href") ?? GetString(item, "url") ?? string.Empty,
+                Summary = GetString(item, "summary") ?? GetString(item, "description"),
+                Order = GetInt(item, "order")
+            };
+            if (!string.IsNullOrWhiteSpace(entry.Label) && !string.IsNullOrWhiteSpace(entry.Href))
+                entries.Add(entry);
+        }
+    }
+
+    private static ApiSuiteStepSpec? BuildApiSuiteSpec(JsonElement parentStep, JsonElement[] inputs)
+    {
+        if (inputs.Length <= 1)
+            return null;
+
+        var entries = GetApiSuiteEntries(parentStep).ToList();
+        if (entries.Count == 0)
+        {
+            for (var index = 0; index < inputs.Length; index++)
+            {
+                var input = inputs[index];
+                var href = GetString(input, "suiteHref") ??
+                           GetString(input, "suite-href") ??
+                           GetString(input, "baseUrl") ??
+                           GetString(input, "base-url");
+                if (string.IsNullOrWhiteSpace(href))
+                    continue;
+
+                entries.Add(new WebApiDocsSuiteEntry
+                {
+                    Id = GetApiSuiteInputId(input, index),
+                    Label = GetString(input, "suiteLabel") ??
+                            GetString(input, "suite-label") ??
+                            GetString(input, "label") ??
+                            GetString(input, "name") ??
+                            GetString(input, "title") ??
+                            GetString(input, "id") ??
+                            $"API {index + 1}",
+                    Href = href,
+                    Summary = GetString(input, "suiteSummary") ??
+                              GetString(input, "suite-summary") ??
+                              GetString(input, "summary") ??
+                              GetString(input, "description"),
+                    Order = GetInt(input, "suiteOrder") ?? GetInt(input, "suite-order") ?? index
+                });
+            }
+        }
+
+        if (entries.Count <= 1)
+            return null;
+
+        return new ApiSuiteStepSpec
+        {
+            Title = GetApiSuiteString(parentStep, "suiteTitle", "suite-title"),
+            HomeUrl = GetApiSuiteString(parentStep, "suiteHomeUrl", "suite-home-url"),
+            HomeLabel = GetApiSuiteString(parentStep, "suiteHomeLabel", "suite-home-label"),
+            Entries = entries
+                .GroupBy(static entry => string.IsNullOrWhiteSpace(entry.Id) ? entry.Href : entry.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(static group => group.First())
+                .OrderBy(static entry => entry.Order ?? int.MaxValue)
+                .ThenBy(static entry => entry.Label, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+        };
+    }
+
+    private static string GetApiSuiteInputId(JsonElement input, int index)
+    {
+        var id = GetString(input, "suiteId") ??
+                 GetString(input, "suite-id") ??
+                 GetString(input, "id");
+        if (!string.IsNullOrWhiteSpace(id))
+            return id.Trim();
+
+        id = GetString(input, "name") ?? GetString(input, "title");
+        if (!string.IsNullOrWhiteSpace(id))
+            return NormalizeSlug(id) ?? $"api-{index + 1}";
+
+        return $"api-{index + 1}";
+    }
+
+    private static void ApplyApiSuiteToStepNode(JsonObject node, ApiSuiteStepSpec? suite, string currentId)
+    {
+        if (suite is null || node is null || suite.Entries.Count <= 1)
+            return;
+
+        SetJsonPropertyIfMissing(node, "suiteTitle", suite.Title);
+        SetJsonPropertyIfMissing(node, "suiteHomeUrl", suite.HomeUrl);
+        SetJsonPropertyIfMissing(node, "suiteHomeLabel", suite.HomeLabel);
+        SetJsonPropertyIfMissing(node, "suiteCurrentId", currentId);
+        if (!HasAnyJsonProperty(node, "suiteEntries", "suite-entries"))
+            node["suiteEntries"] = BuildApiSuiteEntriesNode(suite.Entries);
+    }
+
+    private static bool HasAnyJsonProperty(JsonObject node, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (node.ContainsKey(name))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void SetJsonPropertyIfMissing(JsonObject node, string name, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || HasAnyJsonProperty(node, name))
+            return;
+
+        node[name] = value;
+    }
+
+    private static JsonArray BuildApiSuiteEntriesNode(IReadOnlyList<WebApiDocsSuiteEntry> entries)
+    {
+        var array = new JsonArray();
+        foreach (var entry in entries ?? Array.Empty<WebApiDocsSuiteEntry>())
+        {
+            array.Add(new JsonObject
+            {
+                ["id"] = entry.Id,
+                ["label"] = entry.Label,
+                ["href"] = entry.Href,
+                ["summary"] = entry.Summary,
+                ["order"] = entry.Order
+            });
+        }
+
+        return array;
+    }
+
+    internal static string[] ValidateApiDocsPreflight(
+        ApiDocsType apiType,
+        string? sourceRoot,
+        string? sourceUrl,
+        IReadOnlyList<WebApiDocsSourceUrlMapping> sourceUrlMappings,
+        string? navPath,
+        string? navSurfaceName,
+        string? navContextPath,
+        string? powerShellExamplesPath,
+        IReadOnlyList<string>? relatedContentManifestPaths)
+    {
+        var warnings = new List<string>();
+
+        var hasMappings = sourceUrlMappings is { Count: > 0 };
+        var hasSourceRoot = !string.IsNullOrWhiteSpace(sourceRoot);
+        var hasSourceUrl = !string.IsNullOrWhiteSpace(sourceUrl);
+        if (hasMappings && !hasSourceRoot && !hasSourceUrl)
+        {
+            warnings.Add("[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceUrlMappings are configured but both sourceRoot and sourceUrl are empty; source links will be disabled.");
+        }
+
+        if (hasSourceRoot)
+        {
+            var fullSourceRoot = Path.GetFullPath(sourceRoot!);
+            if (!Directory.Exists(fullSourceRoot))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceRoot path does not exist: {fullSourceRoot}");
+            }
+        }
+
+        if (hasSourceUrl && !ContainsAnyPathToken(sourceUrl!))
+        {
+            warnings.Add("[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceUrl does not include a path token ({path}, {pathNoRoot}, or {pathNoPrefix}).");
+        }
+
+        if (hasSourceRoot &&
+            hasSourceUrl &&
+            !hasMappings &&
+            sourceUrl!.IndexOf("{pathNoRoot}", StringComparison.OrdinalIgnoreCase) < 0 &&
+            sourceUrl!.IndexOf("{root}", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            var fullSourceRoot = Path.GetFullPath(sourceRoot!);
+            if (Directory.Exists(fullSourceRoot) &&
+                TryExtractGitHubRepoName(sourceUrl, out var repoName) &&
+                !string.IsNullOrWhiteSpace(repoName))
+            {
+                var sourceRootName = new DirectoryInfo(fullSourceRoot).Name;
+                var nestedRepoRoot = Path.Combine(fullSourceRoot, repoName);
+                if (!string.Equals(sourceRootName, repoName, StringComparison.OrdinalIgnoreCase) &&
+                    Directory.Exists(nestedRepoRoot) &&
+                    !LooksLikeGitRepositoryRoot(fullSourceRoot))
+                {
+                    warnings.Add(
+                        $"[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceRoot '{fullSourceRoot}' looks one level above repo '{repoName}'. " +
+                        "Use the repo folder as sourceRoot, or switch sourceUrl to {root}/sourceUrlMappings for mixed-repo layouts.");
+                }
+            }
+        }
+
+        if (hasMappings)
+        {
+            var seenPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var mapping in sourceUrlMappings)
+            {
+                if (mapping is null)
+                    continue;
+                var prefix = (mapping.PathPrefix ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(prefix))
+                    continue;
+
+                if (!seenPrefixes.Add(prefix))
+                {
+                    warnings.Add($"[PFWEB.APIDOCS.SOURCE] API docs source preflight: duplicate sourceUrlMappings pathPrefix '{prefix}'.");
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(navSurfaceName) && string.IsNullOrWhiteSpace(navPath))
+        {
+            warnings.Add("[PFWEB.APIDOCS.NAV] API docs nav preflight: navSurface is set but nav/navJson is empty; navSurface cannot be resolved.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(navPath))
+        {
+            var fullNavPath = Path.GetFullPath(navPath);
+            if (!File.Exists(fullNavPath))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.NAV] API docs nav preflight: nav/navJson file was not found: {fullNavPath}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(navContextPath))
+        {
+            var trimmed = navContextPath.Trim();
+            if (!trimmed.StartsWith("/", StringComparison.Ordinal) &&
+                !trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.NAV] API docs nav preflight: navContextPath '{navContextPath}' should be root-relative (for example '/api/').");
+            }
+        }
+
+        if (apiType == ApiDocsType.PowerShell && !string.IsNullOrWhiteSpace(powerShellExamplesPath))
+        {
+            var fullExamplesPath = Path.GetFullPath(powerShellExamplesPath);
+            if (!Directory.Exists(fullExamplesPath) && !File.Exists(fullExamplesPath))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.POWERSHELL] API docs PowerShell preflight: psExamplesPath was not found: {fullExamplesPath}");
+            }
+        }
+
+        if (relatedContentManifestPaths is { Count: > 0 })
+        {
+            foreach (var manifestPath in relatedContentManifestPaths.Where(static path => !string.IsNullOrWhiteSpace(path)))
+            {
+                var fullManifestPath = Path.GetFullPath(manifestPath);
+                if (!File.Exists(fullManifestPath))
+                {
+                    warnings.Add($"[PFWEB.APIDOCS.RELATED] API docs related content preflight: manifest was not found: {fullManifestPath}");
+                }
+            }
+        }
+
+        return warnings.ToArray();
+    }
+
+    private static string[] ResolveRelatedContentManifestPaths(
+        string baseDir,
+        string? relatedContentManifest,
+        string[]? relatedContentManifestArray)
+    {
+        var paths = new List<string>();
+        if (!string.IsNullOrWhiteSpace(relatedContentManifest))
+            paths.AddRange(CliPatternHelper.SplitPatterns(relatedContentManifest));
+
+        if (relatedContentManifestArray is { Length: > 0 })
+        {
+            foreach (var entry in relatedContentManifestArray)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                    continue;
+
+                paths.AddRange(CliPatternHelper.SplitPatterns(entry));
+            }
+        }
+
+        return paths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolvePath(baseDir, path) ?? path)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool ContainsAnyPathToken(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value.IndexOf("{path}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               value.IndexOf("{pathNoRoot}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               value.IndexOf("{pathNoPrefix}", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool TryExtractGitHubRepoName(string pattern, out string repoName)
+    {
+        repoName = string.Empty;
+        if (string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        var candidate = pattern
+            .Replace("{path}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{pathNoRoot}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{pathNoPrefix}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{root}", "SampleRepo", StringComparison.OrdinalIgnoreCase)
+            .Replace("{line}", "1", StringComparison.OrdinalIgnoreCase);
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
+            return false;
+        if (!string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length < 2)
+            return false;
+
+        repoName = segments[1];
+        return !string.IsNullOrWhiteSpace(repoName);
+    }
+
+    private static bool LooksLikeGitRepositoryRoot(string path)
+    {
+        var gitPath = Path.Combine(path, ".git");
+        return Directory.Exists(gitPath) || File.Exists(gitPath);
+    }
+
+    private static List<ApiDocsCoverageThreshold> GetApiDocsCoverageThresholds(JsonElement step)
+    {
+        var thresholds = new List<ApiDocsCoverageThreshold>();
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSummaryPercent", "min-type-summary-percent", "types.summary.percent", "Type summary coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeRemarksPercent", "min-type-remarks-percent", "types.remarks.percent", "Type remarks coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeCodeExamplesPercent", "min-type-code-examples-percent", "types.codeExamples.percent", "Type code examples coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeRelatedContentPercent", "min-type-related-content-percent", "types.relatedContent.percent", "Type curated related-content coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minQuickStartRelatedContentPercent", "min-quick-start-related-content-percent", "types.quickStartRelatedContent.percent", "Quick start curated related-content coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSummaryPercent", "min-member-summary-percent", "members.summary.percent", "Member summary coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberCodeExamplesPercent", "min-member-code-examples-percent", "members.codeExamples.percent", "Member code examples coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberRelatedContentPercent", "min-member-related-content-percent", "members.relatedContent.percent", "Member curated related-content coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSummaryPercent", "min-powershell-summary-percent", "powershell.summary.percent", "PowerShell command summary coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellRemarksPercent", "min-powershell-remarks-percent", "powershell.remarks.percent", "PowerShell command remarks coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellCodeExamplesPercent", "min-powershell-code-examples-percent", "powershell.codeExamples.percent", "PowerShell command code examples coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellAuthoredHelpCodeExamplesPercent", "min-powershell-authored-help-code-examples-percent", "powershell.authoredHelpCodeExamples.percent", "PowerShell authored-help code examples coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellImportedScriptCodeExamplesPercent", "min-powershell-imported-script-code-examples-percent", "powershell.importedScriptCodeExamples.percent", "PowerShell imported-script code examples coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellImportedScriptPlaybackMediaPercent", "min-powershell-imported-script-playback-media-percent", "powershell.importedScriptPlaybackMedia.percent", "PowerShell imported-script playback media coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellImportedScriptPlaybackMediaWithPosterPercent", "min-powershell-imported-script-playback-media-with-poster-percent", "powershell.importedScriptPlaybackMediaWithPoster.percent", "PowerShell imported-script playback media poster coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellParameterSummaryPercent", "min-powershell-parameter-summary-percent", "powershell.parameters.percent", "PowerShell parameter summary coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSourcePathPercent", "min-type-source-path-percent", "source.types.path.percent", "Type source path coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSourceUrlPercent", "min-type-source-url-percent", "source.types.url.percent", "Type source URL coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSourcePathPercent", "min-member-source-path-percent", "source.members.path.percent", "Member source path coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSourceUrlPercent", "min-member-source-url-percent", "source.members.url.percent", "Member source URL coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourcePathPercent", "min-powershell-source-path-percent", "source.powershell.path.percent", "PowerShell command source path coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourceUrlPercent", "min-powershell-source-url-percent", "source.powershell.url.percent", "PowerShell command source URL coverage", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellGeneratedFallbackOnlyExamplePercent", "max-powershell-generated-fallback-only-example-percent", "powershell.generatedFallbackOnlyExamples.percent", "PowerShell generated-only fallback example percent", powerShellCommandMetric: true, formatAsPercent: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellGeneratedFallbackOnlyExampleCount", "max-powershell-generated-fallback-only-example-count", "powershell.generatedFallbackOnlyExamples.covered", "PowerShell generated-only fallback example count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount", "max-powershell-imported-script-playback-media-without-poster-count", "powershell.importedScriptPlaybackMediaWithoutPoster.covered", "PowerShell imported-script playback media without poster count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaUnsupportedSidecarCount", "max-powershell-imported-script-playback-media-unsupported-sidecar-count", "powershell.importedScriptPlaybackMediaUnsupportedSidecars.covered", "PowerShell imported-script playback media with unsupported sidecars count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaOversizedAssetCount", "max-powershell-imported-script-playback-media-oversized-asset-count", "powershell.importedScriptPlaybackMediaOversizedAssets.covered", "PowerShell imported-script playback media with oversized assets count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaStaleAssetCount", "max-powershell-imported-script-playback-media-stale-asset-count", "powershell.importedScriptPlaybackMediaStaleAssets.covered", "PowerShell imported-script playback media with stale assets count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxQuickStartMissingRelatedContentCount", "max-quick-start-missing-related-content-count", "types.quickStartMissingRelatedContent.count", "Quick start types missing curated related content count");
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceInvalidUrlCount", "max-type-source-invalid-url-count", "source.types.invalidUrl.count", "Type source invalid URL count");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceInvalidUrlCount", "max-member-source-invalid-url-count", "source.members.invalidUrl.count", "Member source invalid URL count");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceInvalidUrlCount", "max-powershell-source-invalid-url-count", "source.powershell.invalidUrl.count", "PowerShell command source invalid URL count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceUnresolvedTemplateCount", "max-type-source-unresolved-template-count", "source.types.unresolvedTemplateToken.count", "Type source unresolved template token count");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceUnresolvedTemplateCount", "max-member-source-unresolved-template-count", "source.members.unresolvedTemplateToken.count", "Member source unresolved template token count");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceUnresolvedTemplateCount", "max-powershell-source-unresolved-template-count", "source.powershell.unresolvedTemplateToken.count", "PowerShell command source unresolved template token count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceRepoMismatchHints", "max-type-source-repo-mismatch-hints", "source.types.repoMismatchHints.count", "Type source repo-mismatch hints");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceRepoMismatchHints", "max-member-source-repo-mismatch-hints", "source.members.repoMismatchHints.count", "Member source repo-mismatch hints");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceRepoMismatchHints", "max-powershell-source-repo-mismatch-hints", "source.powershell.repoMismatchHints.count", "PowerShell command source repo-mismatch hints", powerShellCommandMetric: true);
+        return thresholds;
+    }
+
+    private static void AddCoverageMinPercentThreshold(
+        List<ApiDocsCoverageThreshold> thresholds,
+        JsonElement step,
+        string primaryName,
+        string aliasName,
+        string metricPath,
+        string label,
+        bool powerShellCommandMetric = false)
+    {
+        var value = GetDouble(step, primaryName) ?? GetDouble(step, aliasName);
+        if (!value.HasValue)
+            return;
+
+        if (value.Value is < 0 or > 100)
+            throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be between 0 and 100.");
+
+        thresholds.Add(new ApiDocsCoverageThreshold
+        {
+            Label = label,
+            MetricPath = metricPath,
+            TargetValue = value.Value,
+            Comparison = ApiDocsCoverageComparison.Minimum,
+            FormatAsPercent = true,
+            SkipWhenNoPowerShellCommands = powerShellCommandMetric
+        });
+    }
+
+    private static void AddCoverageMaxThreshold(
+        List<ApiDocsCoverageThreshold> thresholds,
+        JsonElement step,
+        string primaryName,
+        string aliasName,
+        string metricPath,
+        string label,
+        bool powerShellCommandMetric = false,
+        bool formatAsPercent = false)
+    {
+        var value = GetDouble(step, primaryName) ?? GetDouble(step, aliasName);
+        if (!value.HasValue)
+            return;
+
+        if (value.Value < 0)
+            throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be greater than or equal to 0.");
+        if (formatAsPercent && value.Value > 100)
+            throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be less than or equal to 100.");
+
+        thresholds.Add(new ApiDocsCoverageThreshold
+        {
+            Label = label,
+            MetricPath = metricPath,
+            TargetValue = value.Value,
+            Comparison = ApiDocsCoverageComparison.Maximum,
+            FormatAsPercent = formatAsPercent,
+            SkipWhenNoPowerShellCommands = powerShellCommandMetric
+        });
+    }
+
+    private static List<string> EvaluateApiDocsCoverageThresholds(
+        string? coveragePath,
+        IReadOnlyList<ApiDocsCoverageThreshold> thresholds,
+        out string? headline)
+    {
+        headline = null;
+        var failures = new List<string>();
+        if (thresholds.Count == 0)
+            return failures;
+
+        if (string.IsNullOrWhiteSpace(coveragePath) || !File.Exists(coveragePath))
+        {
+            var message = "API docs coverage report not found; cannot evaluate coverage thresholds. Enable GenerateCoverageReport or set coverageReport path.";
+            failures.Add(message);
+            headline = message;
+            return failures;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(coveragePath));
+        var root = doc.RootElement;
+
+        var commandCount = 0;
+        if (TryGetJsonDoubleByPath(root, "powershell.commandCount", out var commandCountRaw))
+            commandCount = (int)Math.Round(commandCountRaw);
+
+        foreach (var threshold in thresholds)
+        {
+            if (threshold.SkipWhenNoPowerShellCommands && commandCount <= 0)
+                continue;
+
+            if (!TryGetJsonDoubleByPath(root, threshold.MetricPath, out var actual))
+            {
+                failures.Add($"{threshold.Label}: metric '{threshold.MetricPath}' is missing from coverage report.");
+                continue;
+            }
+
+            if (threshold.Comparison == ApiDocsCoverageComparison.Minimum && actual + 0.0001 < threshold.TargetValue)
+            {
+                failures.Add($"{threshold.Label}: {FormatCoverageValue(actual, threshold.FormatAsPercent)} is below required {FormatCoverageValue(threshold.TargetValue, threshold.FormatAsPercent)}.");
+            }
+            else if (threshold.Comparison == ApiDocsCoverageComparison.Maximum && actual - threshold.TargetValue > 0.0001)
+            {
+                failures.Add($"{threshold.Label}: {FormatCoverageValue(actual, threshold.FormatAsPercent)} exceeds allowed {FormatCoverageValue(threshold.TargetValue, threshold.FormatAsPercent)}.");
+            }
+        }
+
+        headline = failures.FirstOrDefault();
+        return failures;
+    }
+
+    private static string FormatCoverageValue(double value, bool asPercent)
+    {
+        return asPercent ? $"{value:0.##}%" : $"{value:0.##}";
+    }
+
+    private static bool TryGetJsonDoubleByPath(JsonElement root, string path, out double value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var current = root;
+        foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(part, out current))
+                return false;
+        }
+
+        if (current.ValueKind == JsonValueKind.Number && current.TryGetDouble(out value))
+            return true;
+        if (current.ValueKind == JsonValueKind.String &&
+            double.TryParse(current.GetString(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value))
+            return true;
+        return false;
+    }
+
+    private sealed class ApiSuiteStepSpec
+    {
+        public string? Title { get; init; }
+        public string? HomeUrl { get; init; }
+        public string? HomeLabel { get; init; }
+        public IReadOnlyList<WebApiDocsSuiteEntry> Entries { get; init; } = Array.Empty<WebApiDocsSuiteEntry>();
+    }
+
+    private sealed class ApiDocsCoverageThreshold
+    {
+        public string Label { get; init; } = string.Empty;
+        public string MetricPath { get; init; } = string.Empty;
+        public double TargetValue { get; init; }
+        public ApiDocsCoverageComparison Comparison { get; init; } = ApiDocsCoverageComparison.Minimum;
+        public bool FormatAsPercent { get; init; } = true;
+        public bool SkipWhenNoPowerShellCommands { get; init; }
+    }
+
+    private enum ApiDocsCoverageComparison
+    {
+        Minimum,
+        Maximum
+    }
+
+    private static string RenderCriticalCssHtml(AssetRegistrySpec? assets, string rootPath)
+    {
+        if (assets?.CriticalCss is null || assets.CriticalCss.Length == 0)
+            return string.Empty;
+        if (string.IsNullOrWhiteSpace(rootPath))
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var css in assets.CriticalCss)
+        {
+            if (css is null || string.IsNullOrWhiteSpace(css.Path))
+                continue;
+
+            var fullPath = Path.IsPathRooted(css.Path)
+                ? css.Path
+                : Path.Combine(rootPath, css.Path);
+            if (!File.Exists(fullPath))
+                continue;
+
+            sb.Append("<style>");
+            sb.Append(File.ReadAllText(fullPath));
+            sb.AppendLine("</style>");
+        }
+        return sb.ToString();
+    }
+
+    private static void ExecuteChangelog(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        var sourceText = GetString(step, "source");
+        var changelog = ResolvePath(baseDir, GetString(step, "changelog") ?? GetString(step, "changelogPath") ?? GetString(step, "changelog-path"));
+        var repo = GetString(step, "repo");
+        var repoUrl = GetString(step, "repoUrl") ?? GetString(step, "repo-url");
+        var token = GetString(step, "token");
+        var maxValue = GetInt(step, "max") ?? 0;
+        var title = GetString(step, "title");
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("changelog requires out.");
+
+        var source = WebChangelogSource.Auto;
+        if (!string.IsNullOrWhiteSpace(sourceText) &&
+            Enum.TryParse<WebChangelogSource>(sourceText, true, out var parsedSource))
+            source = parsedSource;
+
+        var options = new WebChangelogOptions
+        {
+            Source = source,
+            ChangelogPath = changelog,
+            OutputPath = outPath,
+            Repo = repo,
+            RepoUrl = repoUrl,
+            Token = token,
+            Title = title,
+            MaxReleases = maxValue <= 0 ? null : maxValue
+        };
+
+        var res = WebChangelogGenerator.Generate(options);
+        var note = res.Source != WebChangelogSource.Auto ? $" ({res.Source.ToString().ToLowerInvariant()})" : string.Empty;
+        if (res.Warnings.Length > 0)
+        {
+            var firstWarning = res.Warnings[0];
+            if (!string.IsNullOrWhiteSpace(firstWarning))
+            {
+                var trimmed = firstWarning.Length > 120
+                    ? $"{firstWarning.Substring(0, 117)}..."
+                    : firstWarning;
+                note += $" (warn: {trimmed})";
+            }
+        }
+
+        stepResult.Success = true;
+        stepResult.Message = $"Changelog {res.ReleaseCount} releases{note}";
+    }
+
+    private static void ExecuteReleaseHub(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("release-hub requires out.");
+        var existingOutputContent = File.Exists(outPath)
+            ? File.ReadAllText(outPath)
+            : null;
+
+        var sourceText = GetString(step, "source");
+        var source = WebChangelogSource.Auto;
+        if (!string.IsNullOrWhiteSpace(sourceText) &&
+            Enum.TryParse<WebChangelogSource>(sourceText, true, out var parsedSource))
+            source = parsedSource;
+
+        var token = GetString(step, "token");
+        var tokenEnv = GetString(step, "tokenEnv") ?? GetString(step, "token-env");
+        if (string.IsNullOrWhiteSpace(token) && !string.IsNullOrWhiteSpace(tokenEnv))
+            token = Environment.GetEnvironmentVariable(tokenEnv);
+
+        var maxReleases = GetInt(step, "maxReleases") ?? GetInt(step, "max-releases") ?? GetInt(step, "max");
+        var pageSize = GetInt(step, "pageSize") ?? GetInt(step, "page-size");
+        var maxPages = GetInt(step, "maxPages") ?? GetInt(step, "max-pages");
+        var products = ParseReleaseHubProducts(step);
+        var rules = ParseReleaseHubAssetRules(step);
+        var options = new WebReleaseHubOptions
+        {
+            Source = source,
+            ChangelogPath = ResolvePath(baseDir, GetString(step, "changelog") ?? GetString(step, "changelogPath") ?? GetString(step, "changelog-path")),
+            ReleasesPath = ResolvePath(baseDir, GetString(step, "releasesPath") ?? GetString(step, "releases-path")),
+            OutputPath = outPath,
+            BaseDirectory = baseDir,
+            Repo = GetString(step, "repo"),
+            RepoUrl = GetString(step, "repoUrl") ?? GetString(step, "repo-url"),
+            Token = token,
+            Title = GetString(step, "title"),
+            DefaultChannel = GetString(step, "defaultChannel") ?? GetString(step, "default-channel"),
+            IncludeAssets = GetBool(step, "includeAssets") ?? GetBool(step, "include-assets") ?? true,
+            IncludeDraft = GetBool(step, "includeDraft") ?? GetBool(step, "include-draft") ?? false,
+            IncludePrerelease = GetBool(step, "includePrerelease") ?? GetBool(step, "include-prerelease") ?? true,
+            MaxReleases = maxReleases is > 0 ? maxReleases : null,
+            PageSize = pageSize is > 0 ? pageSize.Value : 100,
+            MaxPages = maxPages is > 0 ? maxPages.Value : 5
+        };
+        options.Products.AddRange(products);
+        options.AssetRules.AddRange(rules);
+
+        var result = WebReleaseHubGenerator.Generate(options);
+        if (!string.IsNullOrWhiteSpace(existingOutputContent) &&
+            result.Warnings.Length > 0 &&
+            TryPreserveExistingReleaseHub(existingOutputContent, outPath))
+        {
+            var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
+            result = new WebReleaseHubResult
+            {
+                OutputPath = outPath,
+                ReleaseCount = preservedDocument?.Releases.Count ?? 0,
+                AssetCount = preservedDocument?.Releases.Sum(static release => release.Assets.Count) ?? 0,
+                Source = result.Source,
+                Warnings = result.Warnings
+                    .Concat(new[] { "Preserved existing release-hub output after warning-only empty refresh." })
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            };
+            stepResult.Success = true;
+            stepResult.Message = $"Release hub fallback: preserved existing '{outPath}' after warning-only empty refresh.";
+            return;
+        }
+
+        var note = result.Source != WebChangelogSource.Auto ? $" ({result.Source.ToString().ToLowerInvariant()})" : string.Empty;
+        if (result.Warnings.Length > 0)
+            note += $" ({result.Warnings.Length} warnings)";
+        stepResult.Success = true;
+        stepResult.Message = $"Release hub {result.ReleaseCount} releases, {result.AssetCount} assets{note}";
+    }
+
+    private static List<WebReleaseHubProductInput> ParseReleaseHubProducts(JsonElement step)
+    {
+        var parsed = new List<WebReleaseHubProductInput>();
+        var arrays = new[]
+        {
+            GetArrayOfObjects(step, "products"),
+            GetArrayOfObjects(step, "releaseProducts"),
+            GetArrayOfObjects(step, "release-products")
+        };
+
+        foreach (var array in arrays)
+        {
+            if (array is null || array.Length == 0)
+                continue;
+
+            foreach (var item in array)
+            {
+                var id = GetString(item, "id") ?? GetString(item, "product");
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+                parsed.Add(new WebReleaseHubProductInput
+                {
+                    Id = id,
+                    Name = GetString(item, "name") ?? GetString(item, "label"),
+                    Order = GetInt(item, "order")
+                });
+            }
+        }
+
+        return parsed;
+    }
+
+    private static bool TryPreserveExistingReleaseHub(string existingJson, string outputPath)
+    {
+        if (string.IsNullOrWhiteSpace(existingJson) || !File.Exists(outputPath))
+            return false;
+
+        var existing = TryReadReleaseHubDocument(existingJson);
+        // The generator has already written outputPath; read it here to compare old vs newly generated release data.
+        var generated = TryReadReleaseHubDocument(File.ReadAllText(outputPath));
+        if (existing is null || generated is null)
+            return false;
+
+        if (existing.Releases.Count <= 0 || generated.Releases.Count > 0)
+            return false;
+
+        File.WriteAllText(outputPath, existingJson);
+        return true;
+    }
+
+    private static WebReleaseHubDocument? TryReadReleaseHubDocument(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<WebReleaseHubDocument>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static List<WebReleaseHubAssetRuleInput> ParseReleaseHubAssetRules(JsonElement step)
+    {
+        var parsed = new List<WebReleaseHubAssetRuleInput>();
+        var arrays = new[]
+        {
+            GetArrayOfObjects(step, "assetRules"),
+            GetArrayOfObjects(step, "asset-rules"),
+            GetArrayOfObjects(step, "rules")
+        };
+
+        foreach (var array in arrays)
+        {
+            if (array is null || array.Length == 0)
+                continue;
+
+            foreach (var item in array)
+            {
+                var product = GetString(item, "product") ?? GetString(item, "id");
+                if (string.IsNullOrWhiteSpace(product))
+                    continue;
+
+                var rule = new WebReleaseHubAssetRuleInput
+                {
+                    Product = product,
+                    Label = GetString(item, "label") ?? GetString(item, "name"),
+                    Regex = GetString(item, "regex"),
+                    Channel = GetString(item, "channel"),
+                    Platform = GetString(item, "platform"),
+                    Arch = GetString(item, "arch"),
+                    Kind = GetString(item, "kind"),
+                    Priority = GetInt(item, "priority")
+                };
+
+                var match = GetArrayOfStrings(item, "match");
+                if (match is { Length: > 0 })
+                    rule.Match.AddRange(match.Where(static value => !string.IsNullOrWhiteSpace(value)));
+                var contains = GetArrayOfStrings(item, "contains");
+                if (contains is { Length: > 0 })
+                    rule.Contains.AddRange(contains.Where(static value => !string.IsNullOrWhiteSpace(value)));
+
+                parsed.Add(rule);
+            }
+        }
+
+        return parsed;
+    }
+
+    private static void ExecuteVersionHub(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("version-hub requires out.");
+
+        var discoverRoot = ResolvePath(baseDir, GetString(step, "discoverRoot") ?? GetString(step, "discover-root"));
+        var discoverPattern = GetString(step, "discoverPattern") ?? GetString(step, "discover-pattern") ?? "v*";
+        var basePath = GetString(step, "basePath") ?? GetString(step, "base-path") ?? "/docs/";
+        var setLatestFromNewest = GetBool(step, "setLatestFromNewest") ?? GetBool(step, "set-latest-from-newest") ?? true;
+        var title = GetString(step, "title");
+
+        var entries = ParseVersionHubEntries(step);
+        var result = WebVersionHubGenerator.Generate(new WebVersionHubOptions
+        {
+            OutputPath = outPath,
+            BaseDirectory = baseDir,
+            Title = title,
+            Entries = entries,
+            DiscoverRoot = discoverRoot,
+            DiscoverPattern = discoverPattern,
+            BasePath = basePath,
+            SetLatestFromNewest = setLatestFromNewest
+        });
+
+        var warningNote = result.Warnings.Length > 0 ? $" ({result.Warnings.Length} warnings)" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = string.IsNullOrWhiteSpace(result.LatestVersion)
+            ? $"Version hub {result.VersionCount} versions{warningNote}"
+            : $"Version hub {result.VersionCount} versions (latest {result.LatestVersion}){warningNote}";
+    }
+
+    private static List<WebVersionHubEntryInput> ParseVersionHubEntries(JsonElement step)
+    {
+        var parsed = new List<WebVersionHubEntryInput>();
+        var arrays = new[]
+        {
+            GetArrayOfObjects(step, "versions"),
+            GetArrayOfObjects(step, "entries")
+        };
+
+        foreach (var array in arrays)
+        {
+            if (array is null || array.Length == 0)
+                continue;
+
+            foreach (var item in array)
+            {
+                var aliases = GetArrayOfStrings(item, "aliases") ?? Array.Empty<string>();
+                parsed.Add(new WebVersionHubEntryInput
+                {
+                    Id = GetString(item, "id"),
+                    Version = GetString(item, "version"),
+                    Label = GetString(item, "label"),
+                    Path = GetString(item, "path") ?? GetString(item, "url"),
+                    Channel = GetString(item, "channel"),
+                    Support = GetString(item, "support"),
+                    Latest = GetBool(item, "latest") ?? false,
+                    Lts = GetBool(item, "lts") ?? false,
+                    Deprecated = GetBool(item, "deprecated") ?? false,
+                    Aliases = aliases
+                        .Where(static value => !string.IsNullOrWhiteSpace(value))
+                        .Select(static value => value.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                });
+            }
+        }
+
+        return parsed;
+    }
+
+    private static void ExecutePackageHub(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("package-hub requires out.");
+
+        var title = GetString(step, "title");
+        var projects = new List<string>();
+        AddInputPaths(projects, GetString(step, "project"));
+        AddInputPaths(projects, GetString(step, "projects"));
+        AddInputPaths(projects, GetArrayOfStrings(step, "projectFiles"));
+        AddInputPaths(projects, GetArrayOfStrings(step, "project-files"));
+
+        var modules = new List<string>();
+        AddInputPaths(modules, GetString(step, "module"));
+        AddInputPaths(modules, GetString(step, "modules"));
+        AddInputPaths(modules, GetArrayOfStrings(step, "moduleFiles"));
+        AddInputPaths(modules, GetArrayOfStrings(step, "module-files"));
+
+        var options = new WebPackageHubOptions
+        {
+            OutputPath = outPath,
+            BaseDirectory = baseDir,
+            Title = title
+        };
+        options.ProjectPaths.AddRange(projects
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+        options.ModulePaths.AddRange(modules
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        var result = WebPackageHubGenerator.Generate(options);
+        var warningNote = result.Warnings.Length > 0
+            ? $" ({result.Warnings.Length} warnings)"
+            : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = $"Package hub {result.LibraryCount} libraries, {result.ModuleCount} modules{warningNote}";
+    }
+
+    private static void ExecuteLlms(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+        if (string.IsNullOrWhiteSpace(siteRoot))
+            throw new InvalidOperationException("llms requires siteRoot.");
+
+        var apiLevelText = GetString(step, "apiLevel") ?? GetString(step, "api-level");
+        var res = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = siteRoot,
+            ProjectFile = ResolvePath(baseDir, GetString(step, "project")),
+            ApiIndexPath = ResolvePath(baseDir, GetString(step, "apiIndex") ?? GetString(step, "api-index")),
+            ApiBase = GetString(step, "apiBase") ?? "/api",
+            Name = GetString(step, "name"),
+            PackageId = GetString(step, "package") ?? GetString(step, "packageId"),
+            Version = GetString(step, "version"),
+            QuickstartPath = ResolvePath(baseDir, GetString(step, "quickstart")),
+            Overview = GetString(step, "overview"),
+            License = GetString(step, "license"),
+            Targets = GetString(step, "targets"),
+            ExtraContentPath = ResolvePath(baseDir, GetString(step, "extra")),
+            ApiDetailLevel = ParseApiDetailLevel(apiLevelText),
+            ApiMaxTypes = GetInt(step, "apiMaxTypes") ?? 200,
+            ApiMaxMembers = GetInt(step, "apiMaxMembers") ?? 2000
+        });
+        stepResult.Success = true;
+        stepResult.Message = $"LLMS generated ({res.Version})";
+    }
+
+    private static void ExecuteCompatibilityMatrix(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outputPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outputPath))
+            throw new InvalidOperationException("compat-matrix requires out.");
+
+        var markdownOutputPath = ResolvePath(baseDir,
+            GetString(step, "markdownOut") ??
+            GetString(step, "markdown-out") ??
+            GetString(step, "markdownOutput") ??
+            GetString(step, "markdown-output"));
+
+        var includeDependencies = GetBool(step, "includeDependencies") ??
+                                  GetBool(step, "include-dependencies") ??
+                                  true;
+        var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
+
+        var csprojInputs = new List<string>();
+        AddInputPaths(csprojInputs, GetString(step, "csproj"));
+        AddInputPaths(csprojInputs, GetString(step, "project"));
+        AddInputPaths(csprojInputs, GetString(step, "csprojFiles"));
+        AddInputPaths(csprojInputs, GetString(step, "csproj-files"));
+        AddInputPaths(csprojInputs, GetArrayOfStrings(step, "csprojFiles"));
+        AddInputPaths(csprojInputs, GetArrayOfStrings(step, "csproj-files"));
+        AddInputPaths(csprojInputs, GetArrayOfStrings(step, "projects"));
+
+        var psd1Inputs = new List<string>();
+        AddInputPaths(psd1Inputs, GetString(step, "psd1"));
+        AddInputPaths(psd1Inputs, GetString(step, "psd1Files"));
+        AddInputPaths(psd1Inputs, GetString(step, "psd1-files"));
+        AddInputPaths(psd1Inputs, GetArrayOfStrings(step, "psd1Files"));
+        AddInputPaths(psd1Inputs, GetArrayOfStrings(step, "psd1-files"));
+
+        var options = new WebCompatibilityMatrixOptions
+        {
+            OutputPath = outputPath,
+            MarkdownOutputPath = markdownOutputPath,
+            BaseDirectory = baseDir,
+            Title = GetString(step, "title"),
+            IncludeDependencies = includeDependencies
+        };
+        options.CsprojFiles.AddRange(csprojInputs
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => ResolvePath(baseDir, value) ?? value)
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+        options.Psd1Files.AddRange(psd1Inputs
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => ResolvePath(baseDir, value) ?? value)
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        if (step.TryGetProperty("entries", out var entriesElement) && entriesElement.ValueKind == JsonValueKind.Array)
+            options.Entries.AddRange(ParseCompatibilityEntries(entriesElement));
+
+        var result = WebCompatibilityMatrixGenerator.Generate(options);
+        if (failOnWarnings && result.Warnings.Length > 0)
+        {
+            throw new InvalidOperationException(result.Warnings.FirstOrDefault(static warning => !string.IsNullOrWhiteSpace(warning))
+                                                ?? "compat-matrix generated warnings.");
+        }
+
+        var note = result.Warnings.Length > 0 ? $" ({result.Warnings.Length} warnings)" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = $"Compatibility matrix {result.EntryCount} entries{note}";
+    }
+
+    private static IEnumerable<WebCompatibilityMatrixEntryInput> ParseCompatibilityEntries(JsonElement entriesElement)
+    {
+        foreach (var item in entriesElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+
+            yield return new WebCompatibilityMatrixEntryInput
+            {
+                Type = GetString(item, "type"),
+                Id = GetString(item, "id"),
+                Name = GetString(item, "name"),
+                Version = GetString(item, "version"),
+                SourcePath = GetString(item, "sourcePath") ?? GetString(item, "source-path") ?? GetString(item, "source"),
+                TargetFrameworks = (GetArrayOfStrings(item, "targetFrameworks")
+                                    ?? GetArrayOfStrings(item, "target-frameworks")
+                                    ?? GetArrayOfStrings(item, "tfms")
+                                    ?? Array.Empty<string>()).ToList(),
+                PowerShellEditions = (GetArrayOfStrings(item, "powerShellEditions")
+                                      ?? GetArrayOfStrings(item, "powershellEditions")
+                                      ?? GetArrayOfStrings(item, "psEditions")
+                                      ?? GetArrayOfStrings(item, "ps-editions")
+                                      ?? Array.Empty<string>()).ToList(),
+                PowerShellVersion = GetString(item, "powerShellVersion")
+                                    ?? GetString(item, "powershellVersion")
+                                    ?? GetString(item, "psVersion")
+                                    ?? GetString(item, "ps-version"),
+                Dependencies = (GetArrayOfStrings(item, "dependencies")
+                                ?? GetArrayOfStrings(item, "dependsOn")
+                                ?? Array.Empty<string>()).ToList(),
+                Status = GetString(item, "status"),
+                Notes = GetString(item, "notes"),
+                Url = GetString(item, "url")
+            };
+        }
+    }
+
+    private static void ExecuteSitemap(JsonElement step, string baseDir, string lastBuildOutPath, WebPipelineStepResult stepResult)
+    {
+        var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+        var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url");
+        var language = GetString(step, "language") ?? GetString(step, "lang");
+        var configPath = ResolvePath(baseDir, GetString(step, "config"));
+        if (!string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath))
+        {
+            var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                baseUrl = ResolveSitemapBaseUrl(spec, language);
+        }
+
+        if (string.IsNullOrWhiteSpace(siteRoot) && !string.IsNullOrWhiteSpace(lastBuildOutPath))
+            siteRoot = lastBuildOutPath;
+
+        if (string.IsNullOrWhiteSpace(siteRoot) || string.IsNullOrWhiteSpace(baseUrl))
+            throw new InvalidOperationException("sitemap requires siteRoot and baseUrl (or config + prior build output).");
+
+        var entries = GetSitemapEntries(step, "entries");
+        var entriesJson = ResolvePath(baseDir,
+            GetString(step, "entriesJson") ??
+            GetString(step, "entriesFile") ??
+            GetString(step, "entries-json") ??
+            GetString(step, "entries-file"));
+        var includeHtml = GetBool(step, "includeHtmlFiles");
+        var includeNoIndexHtml = GetBool(step, "includeNoIndexHtml") ?? GetBool(step, "include-noindex-html");
+        var includeText = GetBool(step, "includeTextFiles");
+        var includeNoIndexPages = GetBool(step, "includeNoIndexPages") ?? GetBool(step, "include-no-index-pages");
+        var noDefaultExclude = GetBool(step, "noDefaultExclude") ?? GetBool(step, "no-default-exclude");
+        var excludePatterns = GetArrayOfStrings(step, "excludePatterns") ?? GetArrayOfStrings(step, "exclude-patterns");
+        var includeLanguageAlternates = GetBool(step, "includeLanguageAlternates");
+        var useGeneratedSitemapMetadata =
+            GetBool(step, "useGeneratedSitemapMetadata") ??
+            GetBool(step, "use-generated-sitemap-metadata") ??
+            (!(GetBool(step, "noGeneratedSitemapMetadata") ??
+               GetBool(step, "no-generated-sitemap-metadata") ??
+               false));
+        var generateBrowserStylesheet =
+            GetBool(step, "generateBrowserStylesheet") ??
+            GetBool(step, "generate-browser-stylesheet") ??
+            GetBool(step, "browserStylesheet") ??
+            GetBool(step, "browser-stylesheet");
+        var browserStylesheetHref =
+            GetString(step, "browserStylesheetHref") ??
+            GetString(step, "browser-stylesheet-href");
+        var includeGeneratedHtmlRouteInXml =
+            GetBool(step, "includeGeneratedHtmlRouteInXml") ??
+            GetBool(step, "include-generated-html-route-in-xml") ??
+            false;
+        var sitemapIndex = ResolvePath(baseDir,
+            GetString(step, "sitemapIndex") ??
+            GetString(step, "sitemap-index") ??
+            GetString(step, "indexOut") ??
+            GetString(step, "index-out"));
+        var newsOutput = ResolvePath(baseDir,
+            GetString(step, "newsOutput") ??
+            GetString(step, "newsOut") ??
+            GetString(step, "news-output") ??
+            GetString(step, "news-out"));
+        var newsPaths = GetArrayOfStrings(step, "newsPaths") ?? GetArrayOfStrings(step, "news-paths");
+        var newsMetadata = GetSitemapNewsMetadata(step);
+        var newsEnabled = !string.IsNullOrWhiteSpace(newsOutput) ||
+                          (newsPaths?.Length ?? 0) > 0 ||
+                          newsMetadata is not null;
+        var imageOutput = ResolvePath(baseDir,
+            GetString(step, "imageOutput") ??
+            GetString(step, "imageOut") ??
+            GetString(step, "image-output") ??
+            GetString(step, "image-out"));
+        var imagePaths = GetArrayOfStrings(step, "imagePaths") ?? GetArrayOfStrings(step, "image-paths");
+        var imageEnabled = !string.IsNullOrWhiteSpace(imageOutput) ||
+                           (imagePaths?.Length ?? 0) > 0;
+        var videoOutput = ResolvePath(baseDir,
+            GetString(step, "videoOutput") ??
+            GetString(step, "videoOut") ??
+            GetString(step, "video-output") ??
+            GetString(step, "video-out"));
+        var videoPaths = GetArrayOfStrings(step, "videoPaths") ?? GetArrayOfStrings(step, "video-paths");
+        var videoEnabled = !string.IsNullOrWhiteSpace(videoOutput) ||
+                           (videoPaths?.Length ?? 0) > 0;
+        var jsonEnabled = GetBool(step, "json") ?? false;
+        var jsonOutput = ResolvePath(baseDir,
+            GetString(step, "jsonOutput") ??
+            GetString(step, "jsonOut") ??
+            GetString(step, "json-output") ??
+            GetString(step, "json-out"));
+        var htmlEnabled = GetBool(step, "html") ?? false;
+        var htmlOutput = ResolvePath(baseDir, GetString(step, "htmlOutput") ?? GetString(step, "htmlOut") ?? GetString(step, "html-out"));
+        var htmlTemplate = ResolvePath(baseDir, GetString(step, "htmlTemplate") ?? GetString(step, "html-template"));
+        var htmlCss = GetString(step, "htmlCss") ?? GetString(step, "html-css");
+        var htmlTitle = GetString(step, "htmlTitle") ?? GetString(step, "html-title");
+        if (!htmlEnabled)
+        {
+            htmlEnabled = !string.IsNullOrWhiteSpace(htmlOutput) ||
+                          !string.IsNullOrWhiteSpace(htmlTemplate) ||
+                          !string.IsNullOrWhiteSpace(htmlCss) ||
+                          !string.IsNullOrWhiteSpace(htmlTitle);
+        }
+        if (!jsonEnabled)
+            jsonEnabled = !string.IsNullOrWhiteSpace(jsonOutput) || htmlEnabled;
+
+        var res = WebSitemapGenerator.Generate(new WebSitemapOptions
+        {
+            SiteRoot = siteRoot,
+            BaseUrl = baseUrl,
+            OutputPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output")),
+            ApiSitemapPath = ResolvePath(baseDir, GetString(step, "apiSitemap") ?? GetString(step, "api-sitemap")),
+            ExtraPaths = GetArrayOfStrings(step, "extraPaths") ?? GetArrayOfStrings(step, "extra-paths"),
+            Entries = entries.Length == 0 ? null : entries,
+            EntriesJsonPath = entriesJson,
+            UseGeneratedSitemapMetadata = useGeneratedSitemapMetadata,
+            IncludeHtmlFiles = includeHtml ?? true,
+            IncludeNoIndexHtml = includeNoIndexHtml ?? false,
+            UseDefaultExcludePatterns = !(noDefaultExclude ?? false),
+            ExcludePatterns = excludePatterns,
+            IncludeTextFiles = includeText ?? true,
+            IncludeNoIndexPages = includeNoIndexPages ?? false,
+            IncludeLanguageAlternates = includeLanguageAlternates ?? true,
+            GenerateHtml = htmlEnabled,
+            GenerateJson = jsonEnabled,
+            JsonOutputPath = jsonOutput,
+            HtmlOutputPath = htmlOutput,
+            HtmlTemplatePath = htmlTemplate,
+            HtmlCssHref = htmlCss,
+            HtmlTitle = htmlTitle,
+            IncludeGeneratedHtmlRouteInXml = includeGeneratedHtmlRouteInXml,
+            GenerateBrowserStylesheet = generateBrowserStylesheet ?? true,
+            BrowserStylesheetHref = browserStylesheetHref,
+            SitemapIndexPath = sitemapIndex,
+            NewsSitemap = !newsEnabled
+                ? null
+                : new WebSitemapNewsOptions
+                {
+                    OutputPath = newsOutput,
+                    PathPatterns = newsPaths,
+                    PublicationName = newsMetadata?.PublicationName,
+                    PublicationLanguage = newsMetadata?.PublicationLanguage,
+                    Genres = newsMetadata?.Genres,
+                    Access = newsMetadata?.Access,
+                    Keywords = newsMetadata?.Keywords
+                },
+            ImageSitemap = !imageEnabled
+                ? null
+                : new WebSitemapImageOptions
+                {
+                    OutputPath = imageOutput,
+                    PathPatterns = imagePaths
+                },
+            VideoSitemap = !videoEnabled
+                ? null
+                : new WebSitemapVideoOptions
+                {
+                    OutputPath = videoOutput,
+                    PathPatterns = videoPaths
+                }
+        });
+
+        stepResult.Success = true;
+        var details = new List<string> { $"{res.UrlCount} urls", $"{res.LastModifiedCount} lastmod" };
+        if (!string.IsNullOrWhiteSpace(res.NewsOutputPath))
+            details.Add("news");
+        if (!string.IsNullOrWhiteSpace(res.ImageOutputPath))
+            details.Add("images");
+        if (!string.IsNullOrWhiteSpace(res.VideoOutputPath))
+            details.Add("videos");
+        if (!string.IsNullOrWhiteSpace(res.IndexOutputPath))
+            details.Add("index");
+        stepResult.Message = $"Sitemap {string.Join(", ", details)}";
+        if (res.Warnings is { Length: > 0 })
+            stepResult.Message += $"; warnings: {string.Join(" | ", res.Warnings)}";
+    }
+
+    private static string ResolveSitemapBaseUrl(SiteSpec spec, string? language)
+    {
+        if (spec is null)
+            return string.Empty;
+
+        if (spec.Localization?.Enabled == true &&
+            spec.Localization.Languages is { Length: > 0 } &&
+            !string.IsNullOrWhiteSpace(language))
+        {
+            var targetLanguage = NormalizeLanguageKey(language);
+            foreach (var languageSpec in spec.Localization.Languages)
+            {
+                if (languageSpec is null || languageSpec.Disabled || string.IsNullOrWhiteSpace(languageSpec.Code))
+                    continue;
+
+                var code = NormalizeLanguageKey(languageSpec.Code);
+                var prefix = string.IsNullOrWhiteSpace(languageSpec.Prefix)
+                    ? code
+                    : NormalizeLanguageKey(languageSpec.Prefix);
+                if (code.Equals(targetLanguage, StringComparison.OrdinalIgnoreCase) ||
+                    prefix.Equals(targetLanguage, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.IsNullOrWhiteSpace(languageSpec.BaseUrl))
+                        return languageSpec.BaseUrl!;
+                    break;
+                }
+            }
+        }
+
+        return spec.BaseUrl;
+    }
+
+    private static string NormalizeLanguageKey(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
+    }
+
+    private static WebSitemapNewsOptions? GetSitemapNewsMetadata(JsonElement step)
+    {
+        if (!TryGetObject(step, "newsMetadata", out var metadata) &&
+            !TryGetObject(step, "news-metadata", out metadata))
+        {
+            return null;
+        }
+
+        return new WebSitemapNewsOptions
+        {
+            PublicationName = GetString(metadata, "publicationName") ??
+                              GetString(metadata, "publication-name") ??
+                              GetString(metadata, "name"),
+            PublicationLanguage = GetString(metadata, "publicationLanguage") ??
+                                  GetString(metadata, "publication-language") ??
+                                  GetString(metadata, "language"),
+            Genres = GetString(metadata, "genres"),
+            Access = GetString(metadata, "access"),
+            Keywords = GetString(metadata, "keywords")
+        };
+    }
+
+    private static bool TryGetObject(JsonElement source, string name, out JsonElement result)
+    {
+        if (source.ValueKind == JsonValueKind.Object &&
+            source.TryGetProperty(name, out var value) &&
+            value.ValueKind == JsonValueKind.Object)
+        {
+            result = value;
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    private static void ExecuteXrefMerge(
+        JsonElement step,
+        string label,
+        string baseDir,
+        bool fast,
+        string effectiveMode,
+        WebConsoleLogger? logger,
+        WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("xref-merge requires out.");
+
+        var inputs = new List<string>();
+        AddInputPaths(inputs, GetString(step, "map"));
+        AddInputPaths(inputs, GetString(step, "maps"));
+        AddInputPaths(inputs, GetString(step, "input"));
+        AddInputPaths(inputs, GetString(step, "inputs"));
+        AddInputPaths(inputs, GetString(step, "source"));
+        AddInputPaths(inputs, GetString(step, "sources"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "mapFiles"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "map-files"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "inputsArray"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "inputs-array"));
+
+        var resolvedInputs = inputs
+            .Where(static input => !string.IsNullOrWhiteSpace(input))
+            .Select(input => ResolvePath(baseDir, input) ?? input)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (resolvedInputs.Count == 0)
+            throw new InvalidOperationException("xref-merge requires at least one input map path (map/maps/input/inputs/source/sources).");
+
+        var topOnly = GetBool(step, "topOnly") ?? GetBool(step, "top-only") ?? false;
+        var recursive = GetBool(step, "recursive") ?? GetBool(step, "includeSubdirectories") ?? !topOnly;
+        var pattern = GetString(step, "pattern") ?? "*.json";
+        var preferLast = GetBool(step, "preferLast") ?? GetBool(step, "prefer-last") ?? false;
+        var failOnDuplicates = GetBool(step, "failOnDuplicates") ?? GetBool(step, "fail-on-duplicates") ?? false;
+        var maxReferences = GetInt(step, "maxReferences") ?? GetInt(step, "max-references") ?? 0;
+        var maxDuplicates = GetInt(step, "maxDuplicates") ?? GetInt(step, "max-duplicates") ?? 0;
+        var maxReferenceGrowthCount = GetInt(step, "maxReferenceGrowthCount") ?? GetInt(step, "max-reference-growth-count") ?? 0;
+        var maxReferenceGrowthPercent = GetDouble(step, "maxReferenceGrowthPercent") ?? GetDouble(step, "max-reference-growth-percent") ?? 0;
+        var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
+        var ciStrictDefaults = UseCiStrictDefaults(effectiveMode, fast);
+        var failOnWarnings = GetBool(step, "failOnWarnings") ?? ciStrictDefaults;
+        var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
+
+        var options = new WebXrefMergeOptions
+        {
+            OutputPath = outPath,
+            Pattern = string.IsNullOrWhiteSpace(pattern) ? "*.json" : pattern,
+            Recursive = recursive,
+            PreferLast = preferLast,
+            FailOnDuplicateIds = failOnDuplicates,
+            MaxReferences = maxReferences <= 0 ? 0 : maxReferences,
+            MaxDuplicates = maxDuplicates <= 0 ? 0 : maxDuplicates,
+            MaxReferenceGrowthCount = maxReferenceGrowthCount <= 0 ? 0 : maxReferenceGrowthCount,
+            MaxReferenceGrowthPercent = maxReferenceGrowthPercent <= 0 ? 0 : maxReferenceGrowthPercent
+        };
+        options.Inputs.AddRange(resolvedInputs);
+
+        var result = WebXrefMapMerger.Merge(options);
+        var warnings = result.Warnings ?? Array.Empty<string>();
+        if (warnings.Length > 0)
+        {
+            logger?.Warn($"{label}: xref-merge warnings: {warnings.Length}");
+
+            var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
+            if (previewLimit > 0)
+            {
+                foreach (var warning in warnings.Where(static warning => !string.IsNullOrWhiteSpace(warning)).Take(previewLimit))
+                    logger?.Warn($"{label}: {warning}");
+
+                var remaining = warnings.Length - previewLimit;
+                if (remaining > 0)
+                    logger?.Warn($"{label}: (+{remaining} more warnings)");
+            }
+
+            if (failOnWarnings)
+            {
+                var headline = warnings.FirstOrDefault(static warning => !string.IsNullOrWhiteSpace(warning))
+                               ?? "xref-merge warnings encountered.";
+                throw new InvalidOperationException(headline);
+            }
+        }
+
+        var noteParts = new List<string>();
+        if (result.DuplicateCount > 0)
+            noteParts.Add($"duplicates: {result.DuplicateCount}");
+        if (result.ReferenceDeltaCount.HasValue)
+        {
+            var deltaText = result.ReferenceDeltaCount.Value >= 0 ? $"+{result.ReferenceDeltaCount.Value}" : result.ReferenceDeltaCount.Value.ToString();
+            if (result.ReferenceDeltaPercent.HasValue)
+                noteParts.Add($"delta: {deltaText} ({result.ReferenceDeltaPercent.Value:0.##}%)");
+            else
+                noteParts.Add($"delta: {deltaText}");
+        }
+        var note = noteParts.Count > 0 ? $" ({string.Join(", ", noteParts)})" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = $"Xref merge {result.ReferenceCount} refs from {result.SourceCount} sources{note}";
+    }
+
+    private static void AddInputPaths(List<string> target, string? value)
+    {
+        if (target is null || string.IsNullOrWhiteSpace(value))
+            return;
+        foreach (var item in CliPatternHelper.SplitPatterns(value))
+        {
+            if (!string.IsNullOrWhiteSpace(item))
+                target.Add(item);
+        }
+    }
+
+    private static void AddInputPaths(List<string> target, string[]? values)
+    {
+        if (target is null || values is null || values.Length == 0)
+            return;
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+            AddInputPaths(target, value);
+        }
+    }
+}

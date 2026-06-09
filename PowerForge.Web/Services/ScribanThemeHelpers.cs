@@ -1,0 +1,1347 @@
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Globalization;
+
+namespace PowerForge.Web;
+
+/// <summary>
+/// Helper methods exposed to Scriban templates as <c>pf</c>.
+/// These helpers exist to keep theme navigation rendering consistent across sites.
+/// </summary>
+internal sealed class ScribanThemeHelpers
+{
+    private readonly ThemeRenderContext _context;
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex HtmlTagRegex = new("<[^>]+>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex AspectRatioRegex = new("^\\s*(?<w>\\d+(?:\\.\\d+)?)\\s*(?:/|:)\\s*(?<h>\\d+(?:\\.\\d+)?)\\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ObjectPositionTokenRegex = new("^-?(?:\\d+(?:\\.\\d+)?)(?:%|px|rem|em|vw|vh)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+
+    public ScribanThemeHelpers(ThemeRenderContext context)
+    {
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+    }
+
+    internal static int ParseInt(object? value, int defaultValue)
+    {
+        if (value is null)
+            return defaultValue;
+
+        if (value is int i)
+            return i;
+
+        if (value is long l)
+            return unchecked((int)l);
+
+        if (value is double d)
+            return (int)Math.Round(d);
+
+        if (value is string s && int.TryParse(s, out var parsed))
+            return parsed;
+
+        try
+        {
+            return Convert.ToInt32(value);
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    internal static bool ParseBool(object? value, bool defaultValue)
+    {
+        if (value is null)
+            return defaultValue;
+
+        if (value is bool b)
+            return b;
+
+        if (value is int i)
+            return i != 0;
+
+        if (value is long l)
+            return l != 0;
+
+        if (value is double d)
+            return d != 0d;
+
+        if (value is string s)
+        {
+            if (bool.TryParse(s, out var parsedBool))
+                return parsedBool;
+            if (int.TryParse(s, out var parsedInt))
+                return parsedInt != 0;
+        }
+
+        return defaultValue;
+    }
+
+    public NavigationMenu? Menu(string? name)
+    {
+        var key = (name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return null;
+
+        return (_context.Navigation.Menus ?? Array.Empty<NavigationMenu>())
+            .FirstOrDefault(m => m is not null && string.Equals(m.Name, key, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public NavigationSurfaceRuntime? Surface(string? name)
+    {
+        var key = (name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return null;
+
+        return (_context.Navigation.Surfaces ?? Array.Empty<NavigationSurfaceRuntime>())
+            .FirstOrDefault(s => s is not null && string.Equals(s.Name, key, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public string NavLinks(string? menuName = "main", int maxDepth = 1)
+    {
+        var menu = Menu(menuName);
+        if (menu?.Items is null || menu.Items.Length == 0)
+            return string.Empty;
+
+        var depth = Math.Clamp(maxDepth, 1, 6);
+        return string.Concat(menu.Items.Select(item => BuildNavItemHtml(item, depth, 1)));
+    }
+
+    public string NavActions()
+    {
+        var actions = _context.Navigation.Actions ?? Array.Empty<NavigationItem>();
+        if (actions.Length == 0)
+            return string.Empty;
+
+        return string.Concat(actions.Select(BuildActionHtml));
+    }
+
+    public string MenuTree(string? menuName = "main", int maxDepth = 3)
+    {
+        var menu = Menu(menuName);
+        if (menu?.Items is null || menu.Items.Length == 0)
+            return string.Empty;
+
+        var depth = Math.Clamp(maxDepth, 1, 10);
+        return $"<ul data-pf-menu=\"{Html(menu.Name)}\">{string.Concat(menu.Items.Select(item => BuildMenuTreeItemHtml(item, depth, 1)))}</ul>";
+    }
+
+    public string ReleaseButton(
+        string? product,
+        string? channel = null,
+        string? platform = null,
+        string? arch = null,
+        string? kind = null,
+        string? label = null,
+        string? cssClass = null,
+        string? dataPath = null)
+    {
+        return ReleaseHubRenderer.RenderReleaseButton(
+            _context.Data,
+            _context.Site.Markdown,
+            product,
+            channel,
+            platform,
+            arch,
+            kind,
+            label,
+            cssClass,
+            dataPath);
+    }
+
+    public string ReleaseButtons(
+        string? product,
+        string? channel = null,
+        int limit = 0,
+        string? groupBy = null,
+        string? platform = null,
+        string? arch = null,
+        string? kind = null,
+        string? cssClass = null,
+        string? dataPath = null)
+    {
+        return ReleaseHubRenderer.RenderReleaseButtons(
+            _context.Data,
+            _context.Site.Markdown,
+            product,
+            channel,
+            limit,
+            groupBy,
+            platform,
+            arch,
+            kind,
+            cssClass,
+            dataPath);
+    }
+
+    public string ReleaseChangelog(
+        string? product = null,
+        int limit = 20,
+        bool includePreview = true,
+        string? cssClass = null,
+        string? dataPath = null)
+    {
+        return ReleaseHubRenderer.RenderReleaseChangelog(
+            _context.Data,
+            _context.Site.Markdown,
+            product,
+            limit,
+            includePreview,
+            cssClass,
+            dataPath);
+    }
+
+    public string EditorialCards(
+        int maxItems = 0,
+        int excerptLength = 160,
+        bool showCollection = true,
+        bool showDate = true,
+        bool showTags = true,
+        bool showImage = true,
+        string? imageAspect = null,
+        string? fallbackImage = null,
+        string? variant = null,
+        string? gridClass = null,
+        string? cardClass = null,
+        bool? showCategories = null,
+        bool? linkTaxonomy = null)
+    {
+        var items = _context.Items ?? Array.Empty<ContentItem>();
+        if (items.Count == 0)
+            return string.Empty;
+
+        var currentCollection = ResolveCurrentCollection();
+        var collectionCards = currentCollection?.EditorialCards;
+        var take = maxItems > 0 ? maxItems : int.MaxValue;
+        var maxExcerptLength = Math.Clamp(excerptLength, 40, 600);
+        var normalizedAspect = NormalizeAspectRatio(CoalesceTrimmed(imageAspect, collectionCards?.ImageAspect));
+        var normalizedVariant = NormalizeEditorialVariant(CoalesceTrimmed(variant, collectionCards?.Variant));
+        var resolvedGridClass = CoalesceTrimmed(gridClass, collectionCards?.GridClass);
+        var resolvedCardClass = CoalesceTrimmed(cardClass, collectionCards?.CardClass);
+        var resolvedShowCategories = showCategories ?? collectionCards?.ShowCategories ?? false;
+        var resolvedLinkTaxonomy = linkTaxonomy ?? collectionCards?.LinkTaxonomy ?? false;
+        var defaultFallbackImage = CoalesceTrimmed(fallbackImage, collectionCards?.Image, _context.Site?.Social?.Image) ?? string.Empty;
+
+        var selected = items
+            .Where(static item => item is not null && !item.Draft && !string.IsNullOrWhiteSpace(item.OutputPath))
+            .Take(take)
+            .ToArray();
+        if (selected.Length == 0)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+        sb.Append("<div class=\"").Append(Html(BuildEditorialGridClass(normalizedVariant, resolvedGridClass))).Append("\">");
+        for (var index = 0; index < selected.Length; index++)
+        {
+            var item = selected[index];
+            var title = string.IsNullOrWhiteSpace(item.Title) ? item.OutputPath : item.Title;
+            var summary = ResolveSummary(item, maxExcerptLength);
+            var image = showImage ? ResolveCardImage(item.Meta, defaultFallbackImage) : string.Empty;
+            var imageAlt = ResolveCardImageAlt(item.Meta, title);
+            var imageFitRaw = ResolveCardImageFit(item.Meta, collectionCards?.ImageFit);
+            var imagePositionRaw = ResolveCardImagePosition(item.Meta, collectionCards?.ImagePosition);
+            var imageFit = NormalizeObjectFit(imageFitRaw);
+            var imagePosition = NormalizeObjectPosition(imagePositionRaw);
+            var imageStyle = BuildCardImageStyle(imageFitRaw, imageFit, imagePositionRaw, imagePosition);
+
+            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index, resolvedCardClass))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\" aria-label=\"").Append(Html(BuildEditorialCardAriaLabel(title))).Append("\">");
+            if (!string.IsNullOrWhiteSpace(image))
+            {
+                var imageDimensions = WebImageDimensions.TryResolve(image, sourcePath: null, _context.RootPath, out var resolvedDimensions)
+                    ? resolvedDimensions
+                    : default;
+                sb.Append("<span class=\"pf-editorial-card-media\"");
+                if (!string.IsNullOrWhiteSpace(normalizedAspect))
+                    sb.Append(" style=\"aspect-ratio: ").Append(Html(normalizedAspect)).Append(";\"");
+                sb.Append(">");
+                sb.Append("<img class=\"pf-editorial-card-image\" src=\"").Append(Html(image)).Append("\" alt=\"").Append(Html(imageAlt)).Append("\"");
+                if (imageDimensions.Width > 0)
+                    sb.Append(" width=\"").Append(imageDimensions.Width).Append("\"");
+                if (imageDimensions.Height > 0)
+                    sb.Append(" height=\"").Append(imageDimensions.Height).Append("\"");
+                if (!string.IsNullOrWhiteSpace(imageStyle))
+                    sb.Append(" style=\"").Append(Html(imageStyle)).Append("\"");
+                sb.Append(" loading=\"lazy\" decoding=\"async\" />");
+                sb.Append("</span>");
+            }
+
+            if (showCollection || showDate)
+            {
+                sb.Append("<p class=\"pf-editorial-meta\">");
+                if (showCollection && !string.IsNullOrWhiteSpace(item.Collection))
+                    sb.Append("<span>").Append(Html(item.Collection)).Append("</span>");
+                if (showDate && item.Date.HasValue)
+                    sb.Append("<time datetime=\"").Append(item.Date.Value.ToString("yyyy-MM-dd")).Append("\">")
+                      .Append(item.Date.Value.ToString("yyyy-MM-dd"))
+                      .Append("</time>");
+                sb.Append("</p>");
+            }
+
+            sb.Append("<h2>").Append(Html(title)).Append("</h2>");
+            if (!string.IsNullOrWhiteSpace(summary))
+                sb.Append("<p class=\"pf-editorial-summary\">").Append(Html(summary)).Append("</p>");
+
+            if (showTags || resolvedShowCategories)
+            {
+                var tags = showTags
+                    ? (item.Tags ?? Array.Empty<string>())
+                        .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+                        .Select(static tag => tag.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Take(6)
+                        .ToArray()
+                    : Array.Empty<string>();
+                var categories = resolvedShowCategories
+                    ? ResolveTaxonomyValues(item, "categories")
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Take(6)
+                        .ToArray()
+                    : Array.Empty<string>();
+
+                if (tags.Length > 0 || categories.Length > 0)
+                {
+                    sb.Append("<div class=\"pf-editorial-tags\">");
+                    foreach (var category in categories)
+                        AppendTaxonomyChip(sb, "categories", category, "pf-chip pf-chip--category", resolvedLinkTaxonomy);
+                    foreach (var tag in tags)
+                        AppendTaxonomyChip(sb, "tags", tag, "pf-chip pf-chip--tag", resolvedLinkTaxonomy);
+                    sb.Append("</div>");
+                }
+            }
+
+            sb.Append("</a>");
+        }
+        sb.Append("</div>");
+        return sb.ToString();
+    }
+
+    public string EditorialPager(string newerLabel = "Newer posts", string olderLabel = "Older posts", string cssClass = "pf-pagination")
+    {
+        var pagination = _context.Pagination;
+        if (pagination is null || pagination.TotalPages <= 1)
+            return string.Empty;
+
+        var newer = string.IsNullOrWhiteSpace(newerLabel) ? "Newer posts" : newerLabel.Trim();
+        var older = string.IsNullOrWhiteSpace(olderLabel) ? "Older posts" : olderLabel.Trim();
+        var classes = string.IsNullOrWhiteSpace(cssClass) ? "pf-pagination" : cssClass.Trim();
+        var previousLink = pagination.HasPrevious && !string.IsNullOrWhiteSpace(pagination.PreviousUrl)
+            ? BuildSimpleAnchorHtml(pagination.PreviousUrl, newer)
+            : string.Empty;
+        var nextLink = pagination.HasNext && !string.IsNullOrWhiteSpace(pagination.NextUrl)
+            ? BuildSimpleAnchorHtml(pagination.NextUrl, older)
+            : string.Empty;
+
+        return $"<nav class=\"{Html(classes)}\" aria-label=\"Pagination\"><div>{previousLink}</div><div>{nextLink}</div></nav>";
+    }
+
+    public string EditorialPostNav(
+        string backLabel = "Back to list",
+        string newerLabel = "Newer post",
+        string olderLabel = "Older post",
+        string relatedHeading = "Related posts",
+        int relatedCount = 3,
+        string cssClass = "pf-post-nav")
+    {
+        var page = _context.Page;
+        if (page is null || string.IsNullOrWhiteSpace(page.OutputPath) || string.IsNullOrWhiteSpace(page.Collection))
+            return string.Empty;
+
+        var collection = ResolveCurrentCollection();
+        var collectionHref = ResolveCollectionHref(collection, page.Collection);
+        var backText = string.IsNullOrWhiteSpace(backLabel) ? "Back to list" : backLabel.Trim();
+        var newerText = string.IsNullOrWhiteSpace(newerLabel) ? "Newer post" : newerLabel.Trim();
+        var olderText = string.IsNullOrWhiteSpace(olderLabel) ? "Older post" : olderLabel.Trim();
+        var relatedTitle = string.IsNullOrWhiteSpace(relatedHeading) ? "Related posts" : relatedHeading.Trim();
+        var classes = string.IsNullOrWhiteSpace(cssClass) ? "pf-post-nav" : cssClass.Trim();
+
+        var sourceItems = _context.AllItems.Count > 0
+            ? _context.AllItems
+            : _context.Items;
+        var localizationEnabled = _context.Site?.Localization?.Enabled == true;
+        var currentLanguage = ResolveEffectiveLanguageCode(_context.Page?.Language);
+        var posts = sourceItems
+            .Where(item =>
+                item is not null &&
+                !item.Draft &&
+                string.Equals(item.Collection, page.Collection, StringComparison.OrdinalIgnoreCase) &&
+                item.Kind == PageKind.Page &&
+                (!localizationEnabled ||
+                 ResolveEffectiveLanguageCode(item.Language).Equals(currentLanguage, StringComparison.OrdinalIgnoreCase)) &&
+                !string.IsNullOrWhiteSpace(item.OutputPath))
+            .OrderByDescending(item => item.Date ?? DateTime.MinValue)
+            .ThenBy(item => item.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (posts.Length == 0)
+            return string.Empty;
+
+        var currentIndex = Array.FindIndex(posts, candidate =>
+            string.Equals(NormalizePath(candidate.OutputPath), NormalizePath(page.OutputPath), StringComparison.OrdinalIgnoreCase));
+
+        ContentItem? newer = null;
+        ContentItem? older = null;
+        if (currentIndex >= 0)
+        {
+            if (currentIndex > 0)
+                newer = posts[currentIndex - 1];
+            if (currentIndex < posts.Length - 1)
+                older = posts[currentIndex + 1];
+        }
+
+        var related = ResolveRelatedPosts(posts, page, currentIndex, Math.Clamp(relatedCount, 1, 8));
+        if (string.IsNullOrWhiteSpace(collectionHref) && newer is null && older is null && related.Length == 0)
+            return string.Empty;
+
+        var backLink = string.IsNullOrWhiteSpace(collectionHref)
+            ? string.Empty
+            : BuildAnchorHtml(collectionHref, backText, "pf-post-nav-back");
+        var newerLink = newer is null ? string.Empty : BuildPostNavDirectionalLink("pf-post-nav-newer", newer.OutputPath, newerText, newer.Title);
+        var olderLink = older is null ? string.Empty : BuildPostNavDirectionalLink("pf-post-nav-older", older.OutputPath, olderText, older.Title);
+        var relatedHtml = related.Length == 0 ? string.Empty : BuildRelatedPostsHtml(relatedTitle, related);
+
+        return $"<section class=\"{Html(classes)}\"><div class=\"pf-post-nav-top\">{backLink}<nav class=\"pf-post-nav-links\" aria-label=\"Post navigation\">{newerLink}{olderLink}</nav></div>{relatedHtml}</section>";
+    }
+
+    private static string BuildSimpleAnchorHtml(string href, string text)
+        => $"<a href=\"{Html(href)}\">{Html(text)}</a>";
+
+    private static string BuildAnchorHtml(string href, string text, string cssClass)
+        => $"<a class=\"{Html(cssClass)}\" href=\"{Html(href)}\">{Html(text)}</a>";
+
+    private static string BuildPostNavDirectionalLink(string cssClass, string href, string label, string? title)
+    {
+        var resolvedTitle = string.IsNullOrWhiteSpace(title) ? href : title;
+        return $"<a class=\"{Html(cssClass)}\" href=\"{Html(href)}\">{Html(label)}: {Html(resolvedTitle)}</a>";
+    }
+
+    private string BuildRelatedPostsHtml(string relatedTitle, IReadOnlyList<ContentItem> related)
+    {
+        var relatedItemsHtml = string.Concat(related.Select(candidate =>
+        {
+            var relatedTextValue = string.IsNullOrWhiteSpace(candidate.Title) ? candidate.OutputPath : candidate.Title;
+            return $"<li><a href=\"{Html(candidate.OutputPath)}\" aria-label=\"{Html(BuildRelatedPostAriaLabel(relatedTextValue))}\">{Html(relatedTextValue)}</a></li>";
+        }));
+
+        return $"<div class=\"pf-post-nav-related\"><h2>{Html(relatedTitle)}</h2><ul>{relatedItemsHtml}</ul></div>";
+    }
+
+    private static string BuildNavItemHtml(NavigationItem item, int maxDepth, int depth)
+    {
+        if (item is null)
+            return string.Empty;
+
+        var text = string.IsNullOrWhiteSpace(item.Text) ? item.Title : item.Text;
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var hasUrl = !string.IsNullOrWhiteSpace(item.Url);
+        var hasChildren = item.Items is { Length: > 0 } && depth < maxDepth;
+
+        if (hasChildren)
+        {
+            // Minimal dropdown structure that themes can style/replace.
+            var open = item.IsActive || item.IsAncestor ? " open" : string.Empty;
+            var icon = string.IsNullOrWhiteSpace(item.IconHtml) ? string.Empty : item.IconHtml;
+            var childrenHtml = string.Concat((item.Items ?? Array.Empty<NavigationItem>()).Select(child => BuildNavItemHtml(child, maxDepth, depth + 1)));
+            return $"<details class=\"pf-nav-group\"{open}><summary class=\"pf-nav-group__summary\">{icon}{Html(text)}</summary><div class=\"pf-nav-group__items\">{childrenHtml}</div></details>";
+        }
+
+        if (!hasUrl)
+            return string.Empty;
+
+        var cls = BuildClass(item, null);
+        var attributes = new List<string> { $"href=\"{Html(item.Url!)}\"" };
+        if (!string.IsNullOrWhiteSpace(cls))
+            attributes.Add($"class=\"{Html(cls)}\"");
+        if (!string.IsNullOrWhiteSpace(item.Target))
+            attributes.Add($"target=\"{Html(item.Target!)}\"");
+        if (!string.IsNullOrWhiteSpace(item.Rel))
+            attributes.Add($"rel=\"{Html(item.Rel!)}\"");
+        if (!string.IsNullOrWhiteSpace(item.AriaLabel))
+            attributes.Add($"aria-label=\"{Html(item.AriaLabel!)}\"");
+
+        var itemIcon = string.IsNullOrWhiteSpace(item.IconHtml) ? string.Empty : item.IconHtml;
+        return $"<a {string.Join(" ", attributes)}>{itemIcon}{Html(text)}</a>";
+    }
+
+    private static string BuildMenuTreeItemHtml(NavigationItem item, int maxDepth, int depth)
+    {
+        if (item is null)
+            return string.Empty;
+
+        var text = string.IsNullOrWhiteSpace(item.Text) ? item.Title : item.Text;
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var hasUrl = !string.IsNullOrWhiteSpace(item.Url);
+        var children = item.Items ?? Array.Empty<NavigationItem>();
+        var hasChildren = children.Length > 0 && depth < maxDepth;
+
+        var cls = BuildClass(item, "pf-menu__item");
+        var classAttr = string.IsNullOrWhiteSpace(cls) ? string.Empty : $" class=\"{Html(cls)}\"";
+        var body = hasUrl
+            ? $"<a href=\"{Html(item.Url!)}\">{Html(text)}</a>"
+            : $"<span>{Html(text)}</span>";
+        var childrenHtml = hasChildren
+            ? $"<ul>{string.Concat(children.Select(child => BuildMenuTreeItemHtml(child, maxDepth, depth + 1)))}</ul>"
+            : string.Empty;
+        return $"<li{classAttr}>{body}{childrenHtml}</li>";
+    }
+
+    private static string BuildActionHtml(NavigationItem action)
+    {
+        if (action is null)
+            return string.Empty;
+
+        var isButton = string.Equals(action.Kind, "button", StringComparison.OrdinalIgnoreCase);
+        var hasUrl = !string.IsNullOrWhiteSpace(action.Url);
+
+        var title = action.Title;
+        var ariaLabel = string.IsNullOrWhiteSpace(action.AriaLabel) ? title : action.AriaLabel;
+        var iconHtml = string.IsNullOrWhiteSpace(action.IconHtml) ? null : action.IconHtml;
+        var text = string.IsNullOrWhiteSpace(action.Text) ? null : action.Text;
+        var hasIcon = !string.IsNullOrWhiteSpace(iconHtml);
+        if (text is null && !hasIcon && !string.IsNullOrWhiteSpace(title))
+            text = title;
+
+        var content = hasIcon && !string.IsNullOrWhiteSpace(text)
+            ? $"{iconHtml} {Html(text)}"
+            : hasIcon
+                ? iconHtml!
+                : !string.IsNullOrWhiteSpace(text)
+                    ? Html(text)
+                    : string.Empty;
+
+        if (isButton)
+        {
+            var buttonAttributes = new List<string> { "type=\"button\"" };
+            if (!string.IsNullOrWhiteSpace(action.CssClass))
+                buttonAttributes.Add($"class=\"{Html(action.CssClass!)}\"");
+            if (!string.IsNullOrWhiteSpace(title))
+                buttonAttributes.Add($"title=\"{Html(title)}\"");
+            if (!string.IsNullOrWhiteSpace(ariaLabel))
+                buttonAttributes.Add($"aria-label=\"{Html(ariaLabel!)}\"");
+            return $"<button {string.Join(" ", buttonAttributes)}>{content}</button>";
+        }
+
+        if (!hasUrl)
+            return string.Empty;
+
+        var attributes = new List<string> { $"href=\"{Html(action.Url!)}\"" };
+        if (!string.IsNullOrWhiteSpace(action.CssClass))
+            attributes.Add($"class=\"{Html(action.CssClass!)}\"");
+        if (!string.IsNullOrWhiteSpace(action.Target))
+            attributes.Add($"target=\"{Html(action.Target!)}\"");
+        if (!string.IsNullOrWhiteSpace(action.Rel))
+            attributes.Add($"rel=\"{Html(action.Rel!)}\"");
+        if (!string.IsNullOrWhiteSpace(title))
+            attributes.Add($"title=\"{Html(title)}\"");
+        if (!string.IsNullOrWhiteSpace(ariaLabel))
+            attributes.Add($"aria-label=\"{Html(ariaLabel!)}\"");
+        return $"<a {string.Join(" ", attributes)}>{content}</a>";
+    }
+
+    private static string ResolveSummary(ContentItem item, int maxLength)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Description))
+            return Truncate(item.Description.Trim(), maxLength);
+
+        if (string.IsNullOrWhiteSpace(item.HtmlContent))
+            return string.Empty;
+
+        var plain = HtmlTagRegex.Replace(item.HtmlContent, " ");
+        plain = WhitespaceRegex.Replace(plain, " ").Trim();
+        return Truncate(plain, maxLength);
+    }
+
+    private CollectionSpec? ResolveCurrentCollection()
+    {
+        var collectionName = _context.Page?.Collection;
+        if (string.IsNullOrWhiteSpace(collectionName))
+            return null;
+
+        var collections = _context.Site?.Collections;
+        if (collections is null || collections.Length == 0)
+            return null;
+
+        var match = collections.FirstOrDefault(collection =>
+            collection is not null &&
+            !string.IsNullOrWhiteSpace(collection.Name) &&
+            collection.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase));
+
+        return match is null ? null : CollectionPresetDefaults.Apply(match);
+    }
+
+    private ContentItem[] ResolveRelatedPosts(
+        IReadOnlyList<ContentItem> orderedCollectionItems,
+        ContentItem page,
+        int currentIndex,
+        int maxItems)
+    {
+        if (orderedCollectionItems is null || orderedCollectionItems.Count == 0 || maxItems <= 0)
+            return Array.Empty<ContentItem>();
+
+        var currentTags = (page.Tags ?? Array.Empty<string>())
+            .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(static tag => tag.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var candidates = orderedCollectionItems
+            .Where((candidate, index) => index != currentIndex && !string.IsNullOrWhiteSpace(candidate.OutputPath))
+            .Select(candidate => new
+            {
+                Item = candidate,
+                Score = currentTags.Count == 0
+                    ? 0
+                    : (candidate.Tags ?? Array.Empty<string>())
+                        .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+                        .Select(static tag => tag.Trim())
+                        .Count(tag => currentTags.Contains(tag))
+            })
+            .OrderByDescending(entry => entry.Score)
+            .ThenByDescending(entry => entry.Item.Date ?? DateTime.MinValue)
+            .ThenBy(entry => entry.Item.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => entry.Item)
+            .Take(maxItems)
+            .ToArray();
+
+        return candidates;
+    }
+
+    private string ResolveCollectionHref(CollectionSpec? collection, string? collectionName)
+    {
+        string route;
+        if (collection is not null && !string.IsNullOrWhiteSpace(collection.Output))
+            route = collection.Output;
+        else if (string.IsNullOrWhiteSpace(collectionName))
+            return string.Empty;
+        else
+        {
+            var normalized = collectionName.Trim();
+            route = "/" + normalized.Trim('/');
+        }
+
+        return ApplyCurrentLanguageToRoute(route, ensureTrailingSlash: true);
+    }
+
+    private void AppendTaxonomyChip(
+        StringBuilder sb,
+        string taxonomyName,
+        string value,
+        string cssClass,
+        bool linkTaxonomy)
+    {
+        if (sb is null || string.IsNullOrWhiteSpace(value))
+            return;
+
+        var text = value.Trim();
+        if (!linkTaxonomy)
+        {
+            sb.Append("<span class=\"").Append(Html(cssClass)).Append("\">").Append(Html(text)).Append("</span>");
+            return;
+        }
+
+        var href = BuildTaxonomyTermHref(taxonomyName, text);
+        if (string.IsNullOrWhiteSpace(href))
+        {
+            sb.Append("<span class=\"").Append(Html(cssClass)).Append("\">").Append(Html(text)).Append("</span>");
+            return;
+        }
+
+        sb.Append("<a class=\"").Append(Html(cssClass)).Append("\" href=\"").Append(Html(href)).Append("\"")
+          .Append(" aria-label=\"").Append(Html(BuildTaxonomyChipAriaLabel(taxonomyName, text))).Append("\">")
+          .Append(Html(text))
+          .Append("</a>");
+    }
+
+    internal string BuildTaxonomyChipAriaLabel(string taxonomyName, string value)
+    {
+        var label = value?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(label))
+            return string.Empty;
+
+        var languageCode = ResolveEffectiveLanguageCode(_context.Page?.Language);
+        var normalizedTaxonomy = taxonomyName?.Trim() ?? string.Empty;
+        var prefix = normalizedTaxonomy.Equals("categories", StringComparison.OrdinalIgnoreCase)
+            ? languageCode switch
+            {
+                "pl" => "Kategoria",
+                "fr" => "Catégorie",
+                "de" => "Kategorie",
+                "es" => "Categoría",
+                _ => "Category"
+            }
+            : normalizedTaxonomy.Equals("tags", StringComparison.OrdinalIgnoreCase)
+                ? languageCode switch
+                {
+                    "es" => "Etiqueta",
+                    _ => "Tag"
+                }
+                : string.IsNullOrWhiteSpace(normalizedTaxonomy)
+                    ? "Topic"
+                    : CultureInfo.InvariantCulture.TextInfo.ToTitleCase(normalizedTaxonomy.ToLowerInvariant());
+
+        return prefix + ": " + label;
+    }
+
+    private IEnumerable<string> ResolveTaxonomyValues(ContentItem item, string taxonomyName)
+    {
+        if (item is null || string.IsNullOrWhiteSpace(taxonomyName))
+            return Array.Empty<string>();
+
+        if (string.Equals(taxonomyName, "tags", StringComparison.OrdinalIgnoreCase))
+            return item.Tags ?? Array.Empty<string>();
+
+        if (string.Equals(taxonomyName, "categories", StringComparison.OrdinalIgnoreCase) &&
+            item.Categories is { Length: > 0 })
+        {
+            return item.Categories;
+        }
+
+        if (item.Meta is null || item.Meta.Count == 0)
+            return Array.Empty<string>();
+
+        if (!item.Meta.TryGetValue(taxonomyName, out var value) || value is null)
+            return Array.Empty<string>();
+
+        if (value is string single)
+        {
+            if (single.Contains(',', StringComparison.Ordinal))
+                return single
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(static token => !string.IsNullOrWhiteSpace(token))
+                    .ToArray();
+            return string.IsNullOrWhiteSpace(single) ? Array.Empty<string>() : new[] { single.Trim() };
+        }
+
+        if (value is IEnumerable<object?> values)
+        {
+            return values
+                .Select(static entry => entry?.ToString() ?? string.Empty)
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry))
+                .Select(static entry => entry.Trim())
+                .ToArray();
+        }
+
+        var text = value.ToString();
+        return string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : new[] { text.Trim() };
+    }
+
+    private string BuildTaxonomyTermHref(string taxonomyName, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var basePath = ResolveTaxonomyBasePath(taxonomyName);
+        if (string.IsNullOrWhiteSpace(basePath))
+            return string.Empty;
+
+        var slug = Slugify(value);
+        if (string.IsNullOrWhiteSpace(slug))
+            return EnsureTrailingSlash(basePath);
+
+        return EnsureTrailingSlash($"{basePath.TrimEnd('/')}/{slug}");
+    }
+
+    private string ResolveTaxonomyBasePath(string taxonomyName)
+    {
+        if (string.IsNullOrWhiteSpace(taxonomyName))
+            return string.Empty;
+
+        string basePath;
+        var configured = _context.Site?.Taxonomies?
+            .FirstOrDefault(taxonomy =>
+                taxonomy is not null &&
+                !string.IsNullOrWhiteSpace(taxonomy.Name) &&
+                taxonomy.Name.Equals(taxonomyName, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(configured?.BasePath))
+            basePath = EnsureLeadingSlash(configured.BasePath);
+        else if (taxonomyName.Equals("tags", StringComparison.OrdinalIgnoreCase))
+            basePath = "/tags";
+        else if (taxonomyName.Equals("categories", StringComparison.OrdinalIgnoreCase))
+            basePath = "/categories";
+        else
+            basePath = "/" + taxonomyName.Trim().Trim('/');
+
+        return ApplyCurrentLanguageToRoute(basePath, ensureTrailingSlash: false);
+    }
+
+    private string ApplyCurrentLanguageToRoute(string route, bool ensureTrailingSlash)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return ensureTrailingSlash ? "/" : string.Empty;
+        if (IsAbsoluteOrProtocolUrl(route))
+            return route;
+
+        var normalized = EnsureLeadingSlash(route).Trim();
+        var stripped = StripKnownLanguagePrefix(normalized);
+
+        var currentLanguage = ResolveCurrentLanguage();
+        var localization = _context.Site?.Localization;
+        if (currentLanguage is null || localization?.Enabled != true)
+            return ensureTrailingSlash ? EnsureTrailingSlash(stripped) : stripped;
+
+        if (ShouldRenderLanguageAtRoot(currentLanguage, localization))
+            return ensureTrailingSlash ? EnsureTrailingSlash(stripped) : stripped;
+
+        if (currentLanguage.IsDefault && !localization.PrefixDefaultLanguage)
+            return ensureTrailingSlash ? EnsureTrailingSlash(stripped) : stripped;
+
+        var prefix = NormalizeLanguageToken(currentLanguage.Prefix);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return ensureTrailingSlash ? EnsureTrailingSlash(stripped) : stripped;
+
+        var withoutLeadingSlash = stripped.TrimStart('/');
+        var prefixed = string.IsNullOrWhiteSpace(withoutLeadingSlash)
+            ? "/" + prefix
+            : "/" + prefix + "/" + withoutLeadingSlash;
+
+        return ensureTrailingSlash ? EnsureTrailingSlash(prefixed) : prefixed;
+    }
+
+    private string ResolveEffectiveLanguageCode(string? language)
+    {
+        var runtimeDefault = (_context.Localization.Languages ?? Array.Empty<LocalizationLanguageRuntime>())
+            .FirstOrDefault(static language => language is not null && language.IsDefault);
+        var defaultCode = NormalizeLanguageToken(runtimeDefault?.Code);
+        if (string.IsNullOrWhiteSpace(defaultCode))
+            defaultCode = NormalizeLanguageToken(_context.Site?.Localization?.DefaultLanguage);
+        if (string.IsNullOrWhiteSpace(defaultCode))
+            defaultCode = "en";
+
+        var token = NormalizeLanguageToken(language);
+        if (string.IsNullOrWhiteSpace(token))
+            return defaultCode;
+
+        foreach (var candidate in _context.Localization.Languages ?? Array.Empty<LocalizationLanguageRuntime>())
+        {
+            if (candidate is null)
+                continue;
+
+            var code = NormalizeLanguageToken(candidate.Code);
+            if (token.Equals(code, StringComparison.OrdinalIgnoreCase))
+                return string.IsNullOrWhiteSpace(code) ? defaultCode : code;
+
+            var prefix = NormalizeLanguageToken(candidate.Prefix);
+            if (!string.IsNullOrWhiteSpace(prefix) && token.Equals(prefix, StringComparison.OrdinalIgnoreCase))
+                return string.IsNullOrWhiteSpace(code) ? defaultCode : code;
+        }
+
+        return token;
+    }
+
+    private LocalizationLanguageRuntime? ResolveCurrentLanguage()
+    {
+        var token = NormalizeLanguageToken(_context.Localization.Current?.Code);
+        if (string.IsNullOrWhiteSpace(token))
+            token = NormalizeLanguageToken(_context.Page?.Language);
+
+        if (string.IsNullOrWhiteSpace(token))
+            return _context.Localization.Languages?.FirstOrDefault();
+
+        var languages = _context.Localization.Languages ?? Array.Empty<LocalizationLanguageRuntime>();
+        foreach (var language in languages)
+        {
+            if (language is null)
+                continue;
+
+            var code = NormalizeLanguageToken(language.Code);
+            if (token.Equals(code, StringComparison.OrdinalIgnoreCase))
+                return language;
+
+            var prefix = NormalizeLanguageToken(language.Prefix);
+            if (!string.IsNullOrWhiteSpace(prefix) && token.Equals(prefix, StringComparison.OrdinalIgnoreCase))
+                return language;
+        }
+
+        return _context.Localization.Current;
+    }
+
+    private string StripKnownLanguagePrefix(string route)
+    {
+        var normalized = EnsureLeadingSlash(route);
+        var languages = _context.Localization.Languages ?? Array.Empty<LocalizationLanguageRuntime>();
+        if (languages.Length == 0)
+            return normalized;
+
+        foreach (var language in languages)
+        {
+            if (language is null)
+                continue;
+
+            var prefix = NormalizeLanguageToken(language.Prefix);
+            if (string.IsNullOrWhiteSpace(prefix))
+                continue;
+
+            var segment = "/" + prefix;
+            if (normalized.Equals(segment, StringComparison.OrdinalIgnoreCase))
+                return "/";
+            if (normalized.StartsWith(segment + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                var remainder = normalized.Substring(segment.Length);
+                return string.IsNullOrWhiteSpace(remainder) ? "/" : EnsureLeadingSlash(remainder);
+            }
+        }
+
+        return normalized;
+    }
+
+    private bool ShouldRenderLanguageAtRoot(LocalizationLanguageRuntime currentLanguage, LocalizationSpec localization)
+    {
+        if (currentLanguage is null || localization is null)
+            return false;
+
+        var currentPath = EnsureLeadingSlash(!string.IsNullOrWhiteSpace(_context.Page?.OutputPath)
+            ? _context.Page.OutputPath
+            : _context.CurrentPath);
+        var prefix = NormalizeLanguageToken(currentLanguage.Prefix);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return true;
+
+        if (currentPath.Equals("/", StringComparison.Ordinal))
+        {
+            if (currentLanguage.IsDefault && !localization.PrefixDefaultLanguage)
+                return true;
+        }
+
+        var prefixedRoot = "/" + prefix;
+        if (currentPath.Equals(prefixedRoot, StringComparison.OrdinalIgnoreCase) ||
+            currentPath.StartsWith(prefixedRoot + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsAbsoluteOrProtocolUrl(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return false;
+        if (route.StartsWith("//", StringComparison.Ordinal))
+            return true;
+        return Uri.TryCreate(route, UriKind.Absolute, out _);
+    }
+
+    private static string NormalizeLanguageToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
+    }
+
+    private static string EnsureLeadingSlash(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "/";
+        return path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path.Trim();
+    }
+
+    private static string EnsureTrailingSlash(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "/";
+
+        var trimmed = EnsureLeadingSlash(path).TrimEnd('/');
+        if (trimmed.Length == 0)
+            return "/";
+        return trimmed + "/";
+    }
+
+    private static string NormalizePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "/";
+
+        var normalized = value.Replace('\\', '/').Trim();
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized;
+        return normalized;
+    }
+
+    private static string Slugify(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return string.Empty;
+
+        var lower = input.Trim().ToLowerInvariant();
+        var sb = new StringBuilder(lower.Length);
+        foreach (var ch in lower)
+        {
+            if (char.IsLetterOrDigit(ch))
+            {
+                sb.Append(ch);
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch) || ch == '-' || ch == '_')
+                sb.Append('-');
+        }
+
+        var slug = sb.ToString();
+        while (slug.Contains("--", StringComparison.Ordinal))
+            slug = slug.Replace("--", "-", StringComparison.Ordinal);
+        return slug.Trim('-');
+    }
+
+    private static string? CoalesceTrimmed(params string?[] values)
+    {
+        if (values is null || values.Length == 0)
+            return null;
+
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return null;
+    }
+
+    private static string ResolveCardImage(IReadOnlyDictionary<string, object?>? meta, string? fallbackImage)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image",
+                "card.image",
+                "cardImage",
+                "cardImage.src",
+                "card.image.src",
+                "image",
+                "cover",
+                "thumbnail",
+                "social_image",
+                "social.image",
+                "socialImage"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackImage) ? string.Empty : fallbackImage.Trim();
+    }
+
+    private static string ResolveCardImageAlt(IReadOnlyDictionary<string, object?>? meta, string fallbackText)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_alt",
+                "card.image.alt",
+                "cardImageAlt",
+                "cardImage.alt",
+                "image_alt",
+                "imageAlt",
+                "social_image_alt",
+                "social.image.alt"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackText) ? string.Empty : fallbackText.Trim();
+    }
+
+    private static string? ResolveCardImageFit(IReadOnlyDictionary<string, object?>? meta, string? fallbackValue)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_fit",
+                "card.image.fit",
+                "cardImageFit",
+                "image_fit",
+                "imageFit"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackValue) ? null : fallbackValue.Trim();
+    }
+
+    private static string? ResolveCardImagePosition(IReadOnlyDictionary<string, object?>? meta, string? fallbackValue)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_position",
+                "card.image.position",
+                "cardImagePosition",
+                "image_position",
+                "imagePosition"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackValue) ? null : fallbackValue.Trim();
+    }
+
+    private static string BuildCardImageStyle(string? fitRaw, string normalizedFit, string? positionRaw, string normalizedPosition)
+    {
+        var declarations = new List<string>();
+        if (!string.IsNullOrWhiteSpace(fitRaw))
+            declarations.Add($"object-fit: {normalizedFit};");
+        if (!string.IsNullOrWhiteSpace(positionRaw))
+            declarations.Add($"object-position: {normalizedPosition};");
+        return declarations.Count == 0 ? string.Empty : string.Join(" ", declarations);
+    }
+
+    private static string? TryGetMetaString(IReadOnlyDictionary<string, object?> meta, string key)
+    {
+        if (meta is null || string.IsNullOrWhiteSpace(key))
+            return null;
+
+        if (!key.Contains('.', StringComparison.Ordinal))
+        {
+            if (meta.TryGetValue(key, out var value))
+                return NormalizeMetaValue(value);
+            return null;
+        }
+
+        var current = (object?)meta;
+        var parts = key.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            if (current is IReadOnlyDictionary<string, object?> readOnlyMap)
+            {
+                if (!readOnlyMap.TryGetValue(part, out current))
+                    return null;
+                continue;
+            }
+
+            if (current is Dictionary<string, object?> map)
+            {
+                if (!map.TryGetValue(part, out current))
+                    return null;
+                continue;
+            }
+
+            return null;
+        }
+
+        return NormalizeMetaValue(current);
+    }
+
+    private static string? NormalizeMetaValue(object? value)
+    {
+        if (value is null)
+            return null;
+        var text = value.ToString();
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
+    private static string Truncate(string text, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(text) || maxLength <= 0 || text.Length <= maxLength)
+            return text;
+
+        var safe = Math.Max(8, maxLength - 1);
+        return text.Substring(0, safe).TrimEnd() + "…";
+    }
+
+    private static string NormalizeAspectRatio(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "16 / 9";
+
+        var match = AspectRatioRegex.Match(value.Trim());
+        if (!match.Success)
+            return "16 / 9";
+
+        if (!double.TryParse(match.Groups["w"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var w) || w <= 0)
+            return "16 / 9";
+        if (!double.TryParse(match.Groups["h"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) || h <= 0)
+            return "16 / 9";
+
+        return $"{w.ToString("0.####", CultureInfo.InvariantCulture)} / {h.ToString("0.####", CultureInfo.InvariantCulture)}";
+    }
+
+    private static string NormalizeEditorialVariant(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "default";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "compact" => "compact",
+            "hero" => "hero",
+            "featured" => "featured",
+            _ => "default"
+        };
+    }
+
+    private static string NormalizeObjectFit(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "cover";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "fill" => "fill",
+            "contain" => "contain",
+            "cover" => "cover",
+            "none" => "none",
+            "scale-down" => "scale-down",
+            _ => "cover"
+        };
+    }
+
+    private static string NormalizeObjectPosition(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "center";
+
+        var collapsed = WhitespaceRegex.Replace(value.Trim(), " ");
+        if (string.IsNullOrWhiteSpace(collapsed))
+            return "center";
+
+        var tokens = collapsed.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0 || tokens.Length > 4)
+            return "center";
+
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            var token = tokens[i];
+            var lower = token.ToLowerInvariant();
+            if (lower is "left" or "right" or "center" or "top" or "bottom")
+            {
+                tokens[i] = lower;
+                continue;
+            }
+
+            if (!ObjectPositionTokenRegex.IsMatch(token))
+                return "center";
+        }
+
+        return string.Join(" ", tokens);
+    }
+
+    private static string BuildEditorialGridClass(string variant, string? additionalClass)
+    {
+        var baseline = variant switch
+        {
+            "compact" => "pf-editorial-grid pf-editorial-grid--compact",
+            "hero" => "pf-editorial-grid pf-editorial-grid--hero",
+            "featured" => "pf-editorial-grid pf-editorial-grid--featured",
+            _ => "pf-editorial-grid"
+        };
+        return MergeClassList(baseline, additionalClass);
+    }
+
+    private static string BuildEditorialCardClass(string variant, int index, string? additionalClass)
+    {
+        var baseline = "pf-editorial-card";
+        if (variant == "compact")
+            baseline = "pf-editorial-card pf-editorial-card--compact";
+        else if (variant == "featured")
+            baseline = "pf-editorial-card pf-editorial-card--featured";
+        else if (variant == "hero" && index == 0)
+            baseline = "pf-editorial-card pf-editorial-card--hero";
+        return MergeClassList(baseline, additionalClass);
+    }
+
+    private static string MergeClassList(string baseline, string? additionalClass)
+    {
+        var ordered = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var token in TokenizeCssClassList(baseline))
+        {
+            if (seen.Add(token))
+                ordered.Add(token);
+        }
+
+        foreach (var token in TokenizeCssClassList(additionalClass))
+        {
+            if (seen.Add(token))
+                ordered.Add(token);
+        }
+
+        return ordered.Count == 0 ? string.Empty : string.Join(" ", ordered);
+    }
+
+    private static IEnumerable<string> TokenizeCssClassList(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            yield break;
+
+        var parts = value.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            if (!string.IsNullOrWhiteSpace(part))
+                yield return part;
+        }
+    }
+
+    private static string BuildClass(NavigationItem item, string? baseClass)
+    {
+        var cls = new List<string>();
+        if (!string.IsNullOrWhiteSpace(baseClass))
+            cls.Add(baseClass);
+        if (!string.IsNullOrWhiteSpace(item.CssClass))
+            cls.Add(item.CssClass!.Trim());
+        if (item.IsActive)
+            cls.Add("is-active");
+        else if (item.IsAncestor)
+            cls.Add("is-ancestor");
+        return cls.Count == 0 ? string.Empty : string.Join(" ", cls);
+    }
+
+    internal string BuildEditorialCardAriaLabel(string title)
+    {
+        var label = string.IsNullOrWhiteSpace(title) ? "Entry" : title.Trim();
+        return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
+        {
+            "pl" => "Otwórz artykuł: " + label,
+            "fr" => "Ouvrir l'article: " + label,
+            "de" => "Artikel öffnen: " + label,
+            "es" => "Abrir artículo: " + label,
+            _ => "Open article: " + label
+        };
+    }
+
+    internal string BuildRelatedPostAriaLabel(string title)
+    {
+        var label = string.IsNullOrWhiteSpace(title) ? "Post" : title.Trim();
+        return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
+        {
+            "pl" => "Powiązany artykuł: " + label,
+            "fr" => "Article associé: " + label,
+            "de" => "Zugehöriger Beitrag: " + label,
+            "es" => "Artículo relacionado: " + label,
+            _ => "Related post: " + label
+        };
+    }
+
+    private static string Html(string value) => System.Web.HttpUtility.HtmlEncode(value ?? string.Empty);
+}

@@ -11,7 +11,7 @@ Configures delivery metadata for bundling and installing internal docs/examples.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
+New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-Sign] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-PreservePaths <string[]>] [-OverwritePaths <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -20,21 +20,31 @@ generate public helper commands (Install-<ModuleName> / Update-<ModuleName>) tha
 
 This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.
 
+Merge behavior for generated delivery commands can be fine-tuned with PreservePaths and
+OverwritePaths so selected relative paths keep local changes or are refreshed during updates.
+
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand
+PS> New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand -Sign
 ```
 
-Generates public Install/Update helpers and bundles README/CHANGELOG into the module.
+Generates public Install/Update helpers, bundles README/CHANGELOG into the module, and requests signing for bundled internals during build.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'
+PS> New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'
 ```
 
 Helps modules expose docs from a repository path in a consistent order.
+
+### EXAMPLE 3
+```powershell
+PS> New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'
+```
+
+Generates custom delivery helpers and preserves selected local files while refreshing binaries and templates during merge installs.
 
 ## PARAMETERS
 
@@ -45,6 +55,7 @@ Where to bundle CHANGELOG.* within the built module.
 Type: DeliveryBundleDestination
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Internals, Root, Both, None
 
 Required: False
 Position: named
@@ -60,6 +71,7 @@ Optional file-name order for Internals\\Docs when rendering documentation.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -75,6 +87,7 @@ Enables delivery metadata emission.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -90,6 +103,7 @@ When set, generates a public Install-<ModuleName> helper function during build t
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -105,6 +119,7 @@ When set, generates a public Update-<ModuleName> helper function during build th
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -114,12 +129,13 @@ Accept wildcard characters: True
 ```
 
 ### -ImportantLinks
-Important links (Title/Url). Accepts legacy hashtable array (@{ Title='..'; Url='..' }) or T:PowerForge.DeliveryImportantLink[].
+Important links (Title/Url). Accepts legacy hashtable array (@{ Title='..'; Url='..' }) or DeliveryImportantLink[].
 
 ```yaml
 Type: DeliveryImportantLink[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -135,6 +151,7 @@ Include module root CHANGELOG.* during installation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -150,6 +167,7 @@ Include module root LICENSE.* during installation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -165,6 +183,7 @@ Include module root README.* during installation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -180,6 +199,7 @@ Optional override name for the generated install command. When empty, defaults t
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -195,6 +215,7 @@ Relative path inside the module that contains internal deliverables.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -210,6 +231,7 @@ Relative path (within the module root) to a Markdown/text file to use as Intro c
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -225,6 +247,7 @@ Text lines shown to users after Install-ModuleDocumentation completes.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -240,6 +263,41 @@ Where to bundle LICENSE.* within the built module.
 Type: DeliveryBundleDestination
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Internals, Root, Both, None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OverwritePaths
+Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs by generated Install-/Update- helpers.
+Example: Artefacts/**.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PreservePaths
+Optional wildcard patterns (relative to Internals) that should be preserved during merge installs by generated Install-/Update- helpers.
+Example: Config/**.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -255,6 +313,7 @@ Where to bundle README.* within the built module.
 Type: DeliveryBundleDestination
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Internals, Root, Both, None
 
 Required: False
 Position: named
@@ -270,6 +329,7 @@ Optional branch name to use when fetching remote documentation.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -285,6 +345,23 @@ One or more repository-relative paths from which to display remote documentation
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Sign
+When set, requests signing for files under InternalsPath using the configured module signing settings/certificate.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -300,6 +377,7 @@ Optional override name for the generated update command. When empty, defaults to
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -315,6 +393,7 @@ Relative path (within the module root) to a Markdown/text file to use for Upgrad
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -330,6 +409,7 @@ Text lines with upgrade instructions shown when requested.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -352,4 +432,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

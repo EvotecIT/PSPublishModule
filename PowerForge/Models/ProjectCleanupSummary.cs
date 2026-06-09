@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Summary returned by <see cref="ProjectCleanupService"/> when producing detailed output.
+/// Summary returned by the project cleanup workflow when producing detailed output.
 /// </summary>
 public sealed class ProjectCleanupSummary
 {
@@ -32,4 +32,3 @@ public sealed class ProjectCleanupSummary
     /// <summary>Delete method.</summary>
     public string DeleteMethod { get; set; } = string.Empty;
 }
-

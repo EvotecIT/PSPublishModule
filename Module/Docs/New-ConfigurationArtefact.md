@@ -11,7 +11,7 @@ Tells the module to create an artefact of a specified type.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
+New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-RequiredModulesExcludeModuleName <string[]>] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -21,7 +21,17 @@ Unpacked (folder) for inspection or offline installation.
 When -AddRequiredModules is enabled, required modules are copied from locally available modules (Get-Module -ListAvailable) and,
 when configured, downloaded (via Save-PSResource/Save-Module) before being copied into the artefact.
 
+Only RequiredModule dependencies participate in artefact bundling. ExternalModule dependencies are
+intentionally excluded because they represent dependencies that should remain separately installed on the target
+machine.
+
+RequiredModulesSource controls the packaging strategy: Installed means local-only copy,
+Auto means prefer local and download when missing, and Download means always download. When omitted,
+the default is Installed.
+
 Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and publish only a specific artefact.
+
+For a broader dependency workflow explanation, see about_ModuleDependencies.
 
 ## EXAMPLES
 
@@ -30,20 +40,38 @@ Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and pub
 New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Packed'
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'
 ```
 
+
+### EXAMPLE 3
+```powershell
+New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Download -RequiredModulesRepository 'PSGallery'
+```
+
+Use this when you want packaging to ignore whatever is already installed on the build machine.
+
+### EXAMPLE 4
+```powershell
+New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -RequiredModulesSource Auto -RequiredModulesTool Auto
+```
+
+This is a good default for developer machines that may already have some dependencies installed.
+
 ## PARAMETERS
 
 ### -AddRequiredModules
-Add required modules to artefact by copying them over.
+Add RequiredModule dependencies to the artefact by copying or downloading them. This does not include
+ExternalModule dependencies.
 
 ```yaml
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: RequiredModules
+Possible values:
 
 Required: False
 Position: named
@@ -59,6 +87,7 @@ The name of the artefact. If not specified, the default name will be used.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -68,12 +97,13 @@ Accept wildcard characters: True
 ```
 
 ### -CopyDirectories
-Directories to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or T:PowerForge.ArtefactCopyMapping[]
+Directories to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or ArtefactCopyMapping[]
 
 ```yaml
 Type: ArtefactCopyMapping[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -89,6 +119,7 @@ Define if destination directories should be relative to artefact root.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -98,12 +129,13 @@ Accept wildcard characters: True
 ```
 
 ### -CopyFiles
-Files to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or T:PowerForge.ArtefactCopyMapping[]
+Files to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or ArtefactCopyMapping[]
 
 ```yaml
 Type: ArtefactCopyMapping[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -119,6 +151,7 @@ Define if destination files should be relative to artefact root.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -134,6 +167,7 @@ Do not clear artefact output directory before creating artefact.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -149,6 +183,7 @@ Enable artefact creation. By default artefact creation is disabled.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -164,6 +199,7 @@ Optional ID of the artefact (to be used by New-ConfigurationPublish).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -179,6 +215,7 @@ Include tag name in artefact name. By default tag name is not included.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -194,6 +231,7 @@ Path where main module (or required module) will be copied to.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -209,6 +247,7 @@ Path where artefact will be created.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -224,6 +263,7 @@ ScriptBlock that will be added at the end of the script (Script / ScriptPacked).
 Type: ScriptBlock
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: 0
@@ -239,6 +279,7 @@ Path to file that will be added at the end of the script (Script / ScriptPacked)
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -254,6 +295,7 @@ ScriptBlock that will be added at the beginning of the script (Script / ScriptPa
 Type: ScriptBlock
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: 1
@@ -269,6 +311,7 @@ Path to file that will be added at the beginning of the script (Script / ScriptP
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -284,6 +327,7 @@ Repository credential secret (password/token) in clear text used when downloadin
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -299,6 +343,7 @@ Repository credential secret (password/token) in a clear-text file used when dow
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -314,6 +359,24 @@ Repository credential username (basic auth) used when downloading required modul
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequiredModulesExcludeModuleName
+Required module names that should not be copied into this artefact when -AddRequiredModules is enabled.
+This only affects artefact bundling; it does not remove modules from the generated manifest.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -323,12 +386,14 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredModulesPath
-Path where required modules will be copied to.
+Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under
+the artefact output.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -338,12 +403,14 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredModulesRepository
-Repository name used when downloading required modules (Save-PSResource / Save-Module).
+Repository name used when downloading required modules (Save-PSResource / Save-Module). Set this
+when packaging should resolve from a specific gallery or private feed.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -353,12 +420,15 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredModulesSource
-Source used when resolving required modules (Auto / Installed / Download). When omitted, PowerForge defaults to Installed (no download).
+Source used when resolving required modules (Auto / Installed / Download). When omitted,
+PowerForge defaults to Installed, which means packaging expects the dependency to already exist on the
+machine.
 
 ```yaml
 Type: RequiredModulesSource
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Auto, Installed, Download
 
 Required: False
 Position: named
@@ -368,12 +438,14 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredModulesTool
-Tool used when downloading required modules (Save-PSResource / Save-Module).
+Tool used when downloading required modules (Save-PSResource / Save-Module). Auto prefers
+PSResourceGet and falls back to PowerShellGet when necessary.
 
 ```yaml
 Type: ModuleSaveTool
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Auto, PSResourceGet, PowerShellGet
 
 Required: False
 Position: named
@@ -389,6 +461,7 @@ The name of the script artefact (alias: FileName).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: FileName
+Possible values:
 
 Required: False
 Position: named
@@ -404,6 +477,7 @@ Artefact type to generate.
 Type: ArtefactType
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Unpacked, Packed, Script, ScriptPacked
 
 Required: True
 Position: named
@@ -426,4 +500,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

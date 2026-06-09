@@ -10,10 +10,10 @@ public sealed class OutputsSpec
     public OutputRuleSpec[] Rules { get; set; } = Array.Empty<OutputRuleSpec>();
 }
 
-/// <summary>Defines a named output format (html/rss/json).</summary>
+/// <summary>Defines a named output format (html/rss/atom/jsonfeed/json).</summary>
 public sealed class OutputFormatSpec
 {
-    /// <summary>Format name (html, rss, json).</summary>
+    /// <summary>Format name (html, rss, atom, jsonfeed, json).</summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>MIME type for the format.</summary>

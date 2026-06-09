@@ -1,5 +1,25 @@
 ﻿# PSPublishModule Changelog
 
+## Unreleased
+### What's Changed
+- Added `Import-IsolatedModule` with a built-in `ExchangeOnlineManagement` profile that loads EXO binary assemblies through a module-scoped AssemblyLoadContext, allowing EXO's OData 7.22 dependency line to coexist with Az.Storage's OData 7.6 line in the same PowerShell 7 process.
+- Added a built-in `MicrosoftTeams` profile for `Import-IsolatedModule` that loads the Teams connect, Teams cmdlet, policy administration, and ConfigAPI binary surfaces through `MicrosoftTeams.ALC`.
+- Added `Import-IsolatedModule -PreferIsolatedModulePath` so downstream modules that import a profiled module by name can opt into resolving the generated isolated copy first for the current PowerShell process.
+- Added opt-in module-scoped `UseAssemblyLoadContext` / `NETAssemblyLoadContext` loading for binary modules. The PowerShell Core export bridge uses the private `PSModuleInfo.AddExportedCmdlet` method when available and falls back to a warning if a future PowerShell version removes it.
+- Preserved binary module aliases in the module-scoped AssemblyLoadContext export bridge so forced re-imports keep DSL aliases available.
+- Updated core PSPublishModule/PowerForge package references used by the release build.
+- Add reusable dotnet publish command hooks (`Hooks[]`) for restore, build, target publish, and bundle phases.
+- Add bundle composition primitives for primary subdirectories, copy items, module includes, and generated scripts.
+- Add bundle post-process signing and MSI harvest exclude patterns for package/MSI reuse across projects.
+- DotNet publish CLI overrides (`--target`, `--runtime`, `--framework`, `--style`) are applied before profile resolution so profile-filtered plan/export output matches the executed run.
+- DotNet publish `manifest.json` now emits readable string values for enum fields such as `Category`, `Kind`, and `Style` instead of numeric enum values. Consumers that parse the manifest should treat this as a manifest-contract change.
+- Generated WiX installer inputs can now set `Required` to block generated dialog navigation until the value is provided.
+- Generated WiX required-input prompts now list the required field labels for the current dialog.
+- Generated WiX authoring now validates WiX identifiers, product upgrade GUIDs, and public MSI input properties before writing installer source.
+- Generated WiX authoring now enforces the WiX 72-character identifier limit.
+- Generated installer inputs now carry validation metadata (`MinLength`, `MaxLength`, `ValidationPattern`, `ValidationMessage`) with authoring-time checks for metadata shape and default values.
+- Generated installer definition validation now lives in a dedicated validator instead of the WiX source emitter.
+
 ## 2.0.19 - 2025.06.17
 ### What's Changed
 * Improve error handling in release utilities by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/32

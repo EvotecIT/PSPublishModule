@@ -1,4 +1,4 @@
-Import-Module .\PSPublishModule.psd1 -Force
+﻿Import-Module .\PSPublishModule.psd1 -Force
 $Output = Get-PowerShellCompatibility -Path "C:\Support\Github\ADEssentials" -Recurse
 $Output | Format-List
 $Output.Summary | Format-Table

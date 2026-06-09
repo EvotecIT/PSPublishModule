@@ -11,30 +11,57 @@ Enables or disables creation of documentation from the module using PowerForge.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-Tool <DocumentationTool>] [<CommonParameters>]
+New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
 This cmdlet emits documentation configuration segments that are consumed by Invoke-ModuleBuild / Build-Module.
 It controls markdown generation (in -Path), optional external help generation (MAML, e.g. en-US\<ModuleName>-help.xml),
-and whether generated documentation should be synced back to the project root.
+and project-root documentation sync. When -Enable is used, PowerForge generates documentation, cleans stale files in the configured docs folder,
+and updates the project documentation path by default.
 
-About topics are supported via about_*.help.txt / about_*.txt files present in the module source. When enabled,
-these are converted into markdown pages under Docs\About.
+About topics are supported via about_*.help.txt / about_*.txt / about_*.md / about_*.markdown files present in the module source. When enabled,
+these are converted into markdown pages under Docs\About. Additional source roots can be provided via
+AboutTopicsSourcePath.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot
+New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot
 ```
+
 
 ### EXAMPLE 2
 ```powershell
 New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SkipAboutTopics -SkipFallbackExamples
 ```
 
+
+### EXAMPLE 3
+```powershell
+New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -AboutTopicsSourcePath 'Help\About','Internals\About'
+```
+
+
 ## PARAMETERS
+
+### -AboutTopicsSourcePath
+Optional extra source paths for about_* topic files (.help.txt, .txt, .md, .markdown).
+Relative paths are resolved from the staging root (for example: 'Help\About').
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -Enable
 Enables creation of documentation from the module.
@@ -43,6 +70,7 @@ Enables creation of documentation from the module.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -58,6 +86,7 @@ Culture folder for generated external help (default: en-US).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -73,6 +102,7 @@ Optional file name override for external help (default: <ModuleName>-help.xml).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -88,6 +118,7 @@ Path to the folder where documentation will be created.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -103,6 +134,7 @@ Path to the readme file that will be used for the documentation.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -118,6 +150,7 @@ Disable conversion of about_* topics into markdown pages.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -133,6 +166,7 @@ Disable external help (MAML) generation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -148,21 +182,7 @@ Disable generating basic fallback examples for cmdlets missing examples.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -StartClean
-Removes all files from the documentation folder before creating new documentation.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -172,44 +192,14 @@ Accept wildcard characters: True
 ```
 
 ### -SyncExternalHelpToProjectRoot
-When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced
+When enabled, the generated external help file is also synced
 back to the project root (e.g. en-US\<ModuleName>-help.xml).
 
 ```yaml
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Tool
-Documentation engine (legacy parameter; kept for compatibility).
-
-```yaml
-Type: DocumentationTool
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -UpdateWhenNew
-When enabled, generated documentation is also synced back to the project folder
-(not only to the staging build output).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -232,4 +222,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

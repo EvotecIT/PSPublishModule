@@ -40,9 +40,9 @@ Example:
 ```json
 {
   "extends": ["../shared/site.base.json"],
-  "name": "IntelligenceX",
+  "name": "ExampleDocs",
   "baseUrl": "https://example.com",
-  "defaultTheme": "intelligencex",
+  "defaultTheme": "exampledocs",
   "navigation": {
     "menus": [
       { "name": "main", "items": [{ "title": "Home", "url": "/" }] }
@@ -80,10 +80,22 @@ meta.eyebrow: Documentation
 # Getting Started
 ```
 
+Markdown parsing target is GitHub-like flavor (GFM-style) for predictable docs behavior.
+Notably, definition-list parsing is disabled by default, so prose like `Q:` / `A:` does not
+silently turn into `<dl>/<dt>/<dd>` structures.
+
 Supported fields:
 - `title`, `description`, `date`
 - `tags`, `aliases`
 - `slug`, `order`, `draft`
+- `language` / `lang` (page language code when localization is enabled)
+- `translation_key` (shared key used to map the same page across languages)
+  - aliases: `translation.key`, `translationKey`, `i18n.key`, `i18n.translation_key`, `i18n.translationKey`, `i18n.group`
+- `i18n.routes.<lang>` / `i18n.route.<lang>` (explicit per-language route override for language switch/hreflang)
+  - aliases: `i18n.urls.<lang>`, `i18n.url.<lang>`, `translations.<lang>.route`, `translations.<lang>.url`, `translations.<lang>.path`
+- `i18n.aliases.<lang>` (per-language legacy aliases that generate redirects)
+  - aliases: `aliases.<lang>`, `translations.<lang>.aliases`, `translations.<lang>.alias`
+  - optional shared aliases: `i18n.aliases.default`, `i18n.aliases.all`, `aliases.default`, `aliases.all`
 - `layout`, `template`, `collection`
 - `canonical`, `editpath`
 - `meta.*` (custom data exposed to templates)
@@ -92,6 +104,11 @@ Supported fields:
   - `meta.format` = `html` (skip markdown rendering)
   - `meta.body_class` (optional body class)
   - `meta.social` (enable social tags for this page when configured)
+  - `meta.social_card` (force/skip generated social card for this page)
+  - `meta.social_card_badge` (generated card top-right badge text)
+  - `meta.social_card_route` (generated card bottom route label text)
+  - `meta.social_card_style` (generated card style: `default`/`docs`/`api`/`editorial`)
+  - `meta.social_card_variant` (generated card layout variant: `standard`/`hero`/`compact`)
   - `meta.structured_data` (enable JSON‑LD breadcrumbs for this page when configured)
   - `meta.head_html` (raw HTML appended into `<head>`)
   - `meta.head_file` (path to a file appended into `<head>`)
@@ -107,6 +124,37 @@ Supported fields:
   - `meta.prism_css_light` / `meta.prism_css_dark` (local Prism theme paths)
   - `meta.prism_core` / `meta.prism_autoloader` (local Prism script paths)
   - `meta.prism_lang_path` (local Prism language components base path)
+  - `meta.xref` / `meta.xrefs` / `meta.uid` / `meta.uids` (optional xref IDs for this page)
+
+### Xref links (docs <-> API)
+Use `xref:` links in markdown to reference symbols/pages by ID:
+
+```markdown
+[Install guide](xref:docs.install)
+[String.Length](xref:System.String#Length)
+```
+
+The engine resolves xrefs from:
+- page IDs declared in front matter (`xref`/`xrefs`/`uid`/`uids`)
+- implicit page IDs (`collection:slug`, route, translation key, source-based IDs)
+- optional external map files from `site.json -> Xref.MapFiles`
+  - API docs generators can emit DocFX-style `xrefmap.json` files (C# + PowerShell), which are valid `MapFiles` inputs.
+
+Optional `site.json` config:
+
+```json
+{
+  "Xref": {
+    "Enabled": true,
+    "MapFiles": ["xrefmap.json"],
+    "WarnOnMissing": true,
+    "EmitMap": true,
+    "MaxWarnings": 25
+  }
+}
+```
+
+When `EmitMap` is enabled, the build writes `_powerforge/xrefmap.json`.
 
 ### Syntax highlighting
 PowerForge.Web automatically injects Prism assets when a page contains fenced code blocks.
@@ -120,6 +168,7 @@ PowerForge.Web resolves missing values using simple defaults:
 - `slug`: `front matter slug` → filename
 - `description`: `front matter description` (no automatic fallback)
 - `date`: `front matter date` (no git/mtime fallback yet)
+  - `verify` warns when editorial posts (`blog`/`news`/`changelog` presets) omit `date`
 
 ### Content templating
 Use `meta.content_engine` when you need template logic inside page content.
@@ -187,6 +236,57 @@ Output:
 Trailing slash behavior is controlled by `site.json` → `TrailingSlash`:
 - `always` / `never` / `ignore`
 
+### Localization (multi-language routing)
+Enable multi-language URLs in `site.json`:
+```json
+{
+  "Localization": {
+    "Enabled": true,
+    "DefaultLanguage": "en",
+    "PrefixDefaultLanguage": false,
+    "DetectFromPath": true,
+    "FallbackToDefaultLanguage": true,
+    "Languages": [
+      { "Code": "en", "Label": "English", "Default": true, "BaseUrl": "https://example.com" },
+      { "Code": "pl", "Label": "Polski", "BaseUrl": "https://example.pl" }
+    ]
+  }
+}
+```
+
+When `DetectFromPath` is enabled, a leading language folder in content paths is used as language marker and removed from slug generation:
+- `content/docs/en/index.md` → `/docs/` (default language, no prefix when `PrefixDefaultLanguage=false`)
+- `content/docs/pl/index.md` → `/pl/docs/`
+
+Use `translation_key` when page paths differ per language and you still want reliable language switcher links.
+This is the recommended way to keep one logical page mapped across translated slugs.
+
+If you need strict/manual mapping, add explicit route overrides in front matter:
+- `i18n.routes.en: /docs/faq-english/`
+- `i18n.routes.pl: /pl/docs/faq-polski/`
+
+Nested front matter blocks are supported natively as well (recommended for readability):
+- `i18n:` -> `group`, `language`, `aliases.<lang>`
+- `translations:` -> `<lang>.route|url|path`, `<lang>.aliases`
+
+This is useful when language variants have different slugs and do not share the same source ID history.
+
+When `FallbackToDefaultLanguage` is enabled and a translated page is missing,
+language switcher links resolve to the default-language route instead of a non-existent target-language URL.
+
+Use language-level `BaseUrl` when localized variants live on different domains.
+When set, `hreflang` head links and sitemap alternates use the language domain instead of the site `BaseUrl`.
+
+When localization is enabled and at least two languages are configured:
+- Page `<head>` output includes `rel="alternate"` language links (`hreflang`) for localized variants.
+- The default language variant also emits `hreflang="x-default"`.
+- Search output is emitted as:
+  - `/search/index.json` (all languages)
+  - `/search/<language>/index.json` (language shard, for example `/search/pl/index.json`)
+  - `/search/collections/<collection>/index.json` (collection shard, for example `/search/collections/docs/index.json`)
+  - `/search/manifest.json` (discoverability manifest for shards + search surface path)
+  - `/search/index.html` (auto-generated search page when `Features` includes `search` and no custom page exists)
+
 ## Collections
 Collections map markdown inputs to output routes:
 ```json
@@ -196,11 +296,96 @@ Collections map markdown inputs to output routes:
   "Output": "/docs",
   "DefaultLayout": "docs",
   "ListLayout": "docs-list",
-  "Include": ["*.md", "**/*.md"]
+  "Include": ["*.md", "**/*.md"],
+  "SortBy": "order",
+  "SortOrder": "asc"
 }
 ```
 
 `ListLayout` is used for `_index.md` section pages.
+
+### Collection presets
+Use `Preset` for WordPress-like behavior with sensible defaults:
+
+- `blog`: `post` + `list`, newest-first, page size `10`, auto section index enabled
+- `news`: `post` + `list`, newest-first, page size `15`, auto section index enabled
+- `changelog` (also `release-notes` / `releases`): `post` + `list`, newest-first, page size `30`, auto section index enabled
+- `editorial`: generic editorial stream (`post` + `list`, newest-first, auto section index)
+- `docs`: `docs` + `docs-list`, order-first
+- `knowledgebase` / `kb`: docs-like ordering and layouts
+- `pages` / `landing`: page-oriented ordering defaults
+
+Example with a custom collection name:
+
+```json
+{
+  "Name": "updates",
+  "Preset": "blog",
+  "Input": "content/updates",
+  "Output": "/updates"
+}
+```
+
+This gives blog behavior even though the collection name is not literally `blog`.
+
+### Auto-generated section indexes
+For editorial-like collections you can let PowerForge generate the landing page
+when no non-draft `_index.md`/`slug:index` page exists:
+
+```json
+{
+  "Name": "blog",
+  "Input": "content/blog",
+  "Output": "/blog",
+  "ListLayout": "list",
+  "AutoGenerateSectionIndex": true,
+  "AutoSectionTitle": "Blog",
+  "AutoSectionDescription": "Product updates and walkthroughs."
+}
+```
+
+This removes the need to manually maintain a blog/news landing page file just to expose latest posts.
+
+### Collection-level editorial card defaults
+You can define default card rendering behavior for a collection, so themes can call
+`{{ pf.editorial_cards }}` without repeating image and class arguments everywhere:
+
+```json
+{
+  "Name": "blog",
+  "Preset": "blog",
+  "Input": "content/blog",
+  "Output": "/blog",
+  "EditorialCards": {
+    "Image": "/images/blog-fallback.png",
+    "ImageAspect": "3:2",
+    "ImageFit": "contain",
+    "ImagePosition": "top center",
+    "Variant": "featured",
+    "GridClass": "blog-grid",
+    "CardClass": "blog-card"
+  }
+}
+```
+
+Supported `EditorialCards` fields:
+- `Image`: fallback card image when a post has no image metadata
+- `ImageAspect`: default aspect ratio (for example `16/9`, `4:3`, `3:2`)
+- `ImageFit`: default `object-fit` (`cover`, `contain`, `fill`, `none`, `scale-down`)
+- `ImagePosition`: default `object-position` (for example `center`, `top center`, `20% 30%`)
+- `Variant`: default helper variant (`default`, `compact`, `hero`, `featured`)
+- `GridClass`, `CardClass`: default CSS class overrides for wrapper/card elements
+- `ShowCategories`: default `show_categories` helper behavior when argument is omitted
+- `LinkTaxonomy`: default `link_taxonomy` helper behavior when argument is omitted
+
+### Collection sorting
+`SortBy` and `SortOrder` apply to section list item ordering:
+- Supported `SortBy`: `order`, `date`, `title`, `slug`, `route` (`path`/`url` aliases)
+- `SortOrder`: `asc` / `desc`
+
+Default behavior:
+- editorial collections (`blog`/`news`) default to `date desc` (newest first)
+- other collections default to `order asc`, then title
 
 ### TOC overrides
 Collections can define a table of contents file (DocFX‑style):
@@ -222,6 +407,24 @@ When `UseToc` is true, `powerforge web verify` warns about pages that are
 missing from the TOC. If `UseToc` is true but no `toc.json` / `toc.yml` is found,
 `powerforge web verify` emits a warning so you don’t silently fall back.
 
+### Translation completeness per collection
+By default, localization verification expects every `translation_key` to exist in
+every configured site language. For mixed sites, you can narrow that expectation
+per collection:
+
+```json
+{
+  "Name": "blog",
+  "Preset": "blog",
+  "Input": "content/blog",
+  "Output": "/blog",
+  "ExpectedTranslationLanguages": [ "en", "pl" ]
+}
+```
+
+Use this when a collection intentionally publishes only a subset of the site’s
+languages, while other collections still require the full localization set.
+
 ## Data files
 JSON files under `data/` become `data.<fileName>` in Scriban.
 ```
@@ -242,6 +445,16 @@ When no `data/site-nav.json` exists in the site output, PowerForge.Web will
 emit one based on `site.json` navigation (including auto‑generated menus).
 If you provide your own `data/site-nav.json` (for example via `static/data`),
 the generator will **not** overwrite it.
+
+The generated `site-nav.json` also includes:
+- `schemaVersion`: export payload version (allows safe evolution for external consumers)
+- `format`: stable payload identifier (`powerforge.site-nav`)
+- `surfaceCanonicalNames`: canonical surface keys (`main`, `docs`, `apidocs`, `products`)
+- `surfaceAliases`: alias map for compatibility (`api` -> `apidocs`)
+- `profiles`: exported `Navigation.Profiles` rules (so other tools can select the same nav your theme uses)
+- `surfaces`: resolved navigation projections for stable "nav surfaces" like `main`, `docs`, `apidocs`, `products`.
+  - surface keys are exported in canonical form (`apidocs`, not `api`/`apiDocs`).
+  - Use `Navigation.Surfaces` in `site.json` to define/override; each surface captures the selected profile context and resolved menu projections (`primary`, optional `sidebar`, optional `products`).
 
 ### Markdown-friendly data fields
 Data keys ending with `_md` or `_markdown` are automatically rendered as HTML.
@@ -371,6 +584,7 @@ Examples:
 {{< cards data="features" >}}
 {{< metrics data="stats" >}}
 {{< showcase data="showcase" >}}
+{{< map query="Evotec Services, Mikolow" title="Office map" >}}
 {{< app src="/playground/" label="Launch Playground" title="Playground" >}}
 {{< edit-link >}}
 ```
@@ -380,8 +594,80 @@ Shortcodes can be implemented as:
 - theme partials `partials/shortcodes/<name>.html`
 
 ## Navigation
-Navigation lives in `site.json` under `Navigation.Menus` with optional `Navigation.Actions`.
+Navigation lives in `site.json` under `Navigation`:
+- `Navigation.Menus` (primary structures)
+- `Navigation.Actions` (header CTA/icon links)
+- `Navigation.Regions` (named slots like `header.left`, `header.right`, `mobile.drawer`)
+- `Navigation.Footer` (columns + legal links)
+- `Navigation.Profiles` (path/layout/collection/project scoped overrides)
+
 Templates receive a computed `navigation` object with active states.
+
+Best practice (theme rendering):
+- Use menu names (e.g. `main`, `docs`) rather than index-based access (`navigation.menus[0]`) so your theme is deterministic across sites.
+- In Scriban themes you can use built-in helpers exposed as `pf`:
+  - `{{ pf.nav_links "main" }}` renders the main menu as a flat list of `<a>` elements (supports `is-active` / `is-ancestor` classes).
+  - `{{ pf.nav_actions }}` renders `Navigation.Actions` as links/buttons.
+  - `{{ pf.menu_tree "docs" 4 }}` renders a nested `<ul>` tree for sidebar menus.
+  - `{{ pf.editorial_cards }}` renders reusable card markup from current list context (`items`) with optional arguments:
+    - `max_items` (default `0` = all)
+    - `excerpt_length` (default `160`)
+    - `show_collection`, `show_date`, `show_tags`, `show_image` (defaults `true`)
+    - `image_aspect` (optional; when omitted, helper uses `collection.EditorialCards.ImageAspect`, then `16/9`)
+    - `fallback_image` (optional; when omitted, helper uses `collection.EditorialCards.Image`, then `site.social.image`)
+    - `variant` (optional; when omitted, helper uses `collection.EditorialCards.Variant`, then `"default"`; options: `"default"`, `"compact"`, `"hero"`, `"featured"`)
+    - `grid_class` (optional; when omitted, helper uses `collection.EditorialCards.GridClass`)
+    - `card_class` (optional; when omitted, helper uses `collection.EditorialCards.CardClass`)
+    - `show_categories` (optional; when omitted, helper uses `collection.EditorialCards.ShowCategories`, then `false`; reads `categories` taxonomy/meta values)
+    - `link_taxonomy` (optional; when omitted, helper uses `collection.EditorialCards.LinkTaxonomy`, then `false`; renders tag/category chips as links to taxonomy term pages)
+    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" true true }}`
+    - Per-item front matter metadata (stored under `meta`) supported by helper:
+      - `cardImage` / `card_image` / `card.image`
+      - `cardImageAlt` / `card_image_alt` / `card.image.alt`
+      - `cardImageFit` / `card_image_fit` / `card.image.fit`
+      - `cardImagePosition` / `card_image_position` / `card.image.position`
+    - Image fallback priority: card-specific image keys → generic image keys (`image`/`cover`/`thumbnail`) → social image keys → collection/site fallback.
+    - Verify integration: if the theme defines `featureContracts.blog/news`, verify checks that variant and override selectors used by `pf.editorial_cards` are declared in `requiredCssSelectors`, with copy/paste contract hints (including likely `cssHrefs` candidates when detectable) when missing.
+  - `{{ pf.editorial_pager }}` renders previous/next pagination links from runtime `pagination`:
+    - `newer_label` (default `"Newer posts"`)
+    - `older_label` (default `"Older posts"`)
+    - `css_class` (default `"pf-pagination"`)
+    - Example: `{{ pf.editorial_pager "Newer" "Older" }}`
+  - `{{ pf.editorial_post_nav }}` renders post-level navigation for editorial collections (back to list, newer/older links, related posts):
+    - `back_label` (default `"Back to list"`)
+    - `newer_label` (default `"Newer post"`)
+    - `older_label` (default `"Older post"`)
+    - `related_heading` (default `"Related posts"`)
+    - `related_count` (default `3`, max `8`)
+    - `css_class` (default `"pf-post-nav"`)
+    - Example: `{{ pf.editorial_post_nav "Back to blog" "Newer" "Older" "You may also like" 4 "post-nav" }}`
+
+### Navigation surfaces (stable projections)
+The runtime `navigation` object exposes `navigation.surfaces` as named projections.
+PowerForge can infer defaults (`main`, `docs`, `apidocs`, `products`) from features/menus, but production sites should define `Navigation.Surfaces` explicitly so verify/nav-lint checks stay deterministic.
+This helps themes avoid hard-coding assumptions like "docs sidebar == menu named docs" and supports multi-surface headers (main/products/docs).
+Example:
+```json
+{
+  "Navigation": {
+    "Surfaces": [
+      { "Name": "main", "PrimaryMenu": "main" },
+      { "Name": "docs", "PrimaryMenu": "main", "SidebarMenu": "docs" },
+      { "Name": "products", "PrimaryMenu": "main", "ProductsMenu": "products" }
+    ]
+  }
+}
+```
+In Scriban you can then do:
+```scriban
+{{ if navigation.surfaces && navigation.surfaces.size > 0 }}
+  {{ for s in navigation.surfaces }}
+    {{ if s.name == "docs" && s.sidebar }}
+      {{ for link in s.sidebar.items }} ... {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+```
 
 ### Default auto navigation
 If `Navigation` is **omitted**, PowerForge.Web generates sensible defaults:
@@ -394,7 +680,7 @@ To disable this default behavior, define `Navigation` and set:
 ```
 
 `Navigation.Actions` is for header buttons/icons (theme toggles, GitHub, CTA).
-These items can be links or buttons and are exposed as `navigation.actions`.
+These items are exposed as `navigation.actions`.
 
 ### Auto navigation (folder‑driven)
 You can also generate navigation from folder structure:
@@ -429,19 +715,137 @@ Example actions (link + button):
 }
 ```
 
+### Visibility rules (per menu/per item)
+Use visibility filters to scope nav elements:
+```json
+{
+  "Navigation": {
+    "Menus": [
+      {
+        "Name": "main",
+        "Visibility": { "Paths": ["/docs/**"] },
+        "Items": [
+          { "Title": "Docs", "Url": "/docs/" },
+          {
+            "Title": "API",
+            "Url": "/api/",
+            "Visibility": { "Projects": ["core"] }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Regions + footer + profiles
+Use regions for complex headers and profiles for route-specific nav variants:
+```json
+{
+  "Navigation": {
+    "Regions": [
+      { "Name": "header.left", "Menus": ["main"] },
+      { "Name": "header.right", "IncludeActions": true }
+    ],
+    "Footer": {
+      "Label": "default",
+      "Menus": ["footer-product", "footer-company"],
+      "Legal": [
+        { "Title": "Privacy", "Url": "/privacy/" },
+        { "Title": "Terms", "Url": "/terms/" }
+      ]
+    },
+    "Profiles": [
+      {
+        "Name": "api",
+        "Paths": ["/api/**"],
+        "Priority": 20,
+        "InheritMenus": false,
+        "Menus": [
+          {
+            "Name": "main",
+            "Items": [
+              { "Title": "API Home", "Url": "/api/" },
+              { "Title": "Docs", "Url": "/docs/" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Mega menu sections
+Each menu item can optionally define `Sections`/`Columns` for richer dropdowns:
+```json
+{
+  "Title": "Products",
+  "Sections": [
+    {
+      "Title": "SDK",
+      "Items": [
+        { "Title": ".NET", "Url": "/docs/library/overview/" },
+        { "Title": "PowerShell", "Url": "/docs/powershell/overview/" }
+      ]
+    }
+  ]
+}
+```
+
+### Verify policy defaults
+Set global verify policy defaults in `site.json`:
+```json
+{
+  "Verify": {
+    "FailOnWarnings": true,
+    "FailOnNavLint": true,
+    "FailOnThemeContract": true,
+    "SuppressWarnings": [
+      "PFWEB.NAV.LINT",
+      "PFWEB.THEME.CONTRACT"
+    ]
+  }
+}
+```
+Notes:
+- Applied by `powerforge-web verify` and `powerforge-web doctor`.
+- CLI flags with the same names also enable these checks.
+- Pipeline `verify`/`doctor` step fields override these defaults when specified.
+
+`SuppressWarnings` supports:
+- warning codes (for warnings prefixed like `[PFWEB.NAV.LINT] ...`)
+- substring matches (case-insensitive)
+- wildcard patterns (`*`, `?`)
+- regex patterns prefixed with `re:`
+
+See `Docs/PowerForge.Web.WarningCodes.md` for the current code catalog.
+
 ## Redirects + aliases
 Use `aliases` in front matter for old URLs.  
 Use `Redirects` or `RouteOverrides` in `site.json` for permanent site‑level rules.
 
 Notes:
 - Aliases emit **exact** 301 redirects to the final page route.
+- Alias redirects are emitted for both slash variants (for example `/old-post` and `/old-post/`) so legacy blog links stay non-breaking.
+- Set `EnableLegacyAmpRedirects: true` in `site.json` to auto-generate compatibility redirects from `/.../amp` routes to canonical HTML pages.
 - `RouteOverrides` are applied before `Redirects` when generating redirect outputs.
 - Redirects are emitted to host-specific formats:
   - `_redirects` (Netlify)
   - `staticwebapp.config.json` (Azure Static Web Apps)
   - `vercel.json` (Vercel)
+  - `.htaccess` (Apache/mod_rewrite)
+  - `nginx.redirects.conf` (Nginx include snippet)
+  - `web.config` (IIS URL Rewrite)
 - A full machine-readable list is written to:
   - `_powerforge/redirects.json`
+
+Example (`site.json`):
+```json
+{
+  "EnableLegacyAmpRedirects": true
+}
+```
 
 ## Sitemap behavior
 The `sitemap` task generates entries automatically and can be augmented by
@@ -451,10 +855,22 @@ Defaults:
 - All generated `.html` files under `_site/` are included.
 - `robots.txt`, `llms.txt`, `llms.json`, `llms-full.txt` are included when present.
 - Paths are normalized to trailing‑slash routes when they map to `index.html`.
+- If localization config exists in `_powerforge/site-spec.json`, sitemap entries include localized alternates (`xhtml:link`, `hreflang`, `x-default`).
+- When localization languages define `BaseUrl`, sitemap alternates use those per-language domains.
+- Optional JSON output (`json: true`) writes a resolved machine-readable sitemap (`sitemap/index.json`) including URL/title/section metadata.
+- Optional news sitemap output (`newsOut`) emits a Google News-compatible sitemap from selected routes.
+- Optional image sitemap output (`imageOut`) emits image discovery entries for selected routes.
+- Optional video sitemap output (`videoOut`) emits video discovery entries for selected routes.
+- Optional sitemap index output (`sitemapIndex`) emits a `sitemapindex` file referencing generated XML sitemap files.
 
 Explicit entries:
 - `entries` in the sitemap task override auto‑generated metadata for the same path.
+- `entriesJson` can load entries from a JSON file (`[{...}]` or `{ "entries":[...] }`).
 - If a path is not present in auto output, it is still added to the sitemap.
+- `newsPaths` controls which routes are included in `newsOut`; defaults target `**/news/**`.
+- `newsMetadata` can set publication name/language and optional genres/access/keywords.
+- `imagePaths`/`videoPaths` control which routes are included in `imageOut`/`videoOut`.
+- `entries[].images` and `entries[].videos` can be used to provide explicit media URLs when route discovery is not enough.
 
 Example task:
 ```json
@@ -485,19 +901,345 @@ themes/nova/assets/app.css
     "Enabled": true,
     "SiteName": "ProductX",
     "Image": "/assets/icon.png",
-    "TwitterCard": "summary"
+    "ImageWidth": 1200,
+    "ImageHeight": 630,
+    "TwitterCard": "summary_large_image",
+    "TwitterSite": "@productx",
+    "TwitterCreator": "@author",
+    "AutoGenerateCards": true,
+    "GeneratedCardsPath": "/assets/social/generated",
+    "GeneratedCardWidth": 1200,
+    "GeneratedCardHeight": 630,
+    "GeneratedCardStyle": "default",
+    "GeneratedCardVariant": "product",
+    "GeneratedCardTheme": "product-modern",
+    "GeneratedCardLogo": "/assets/brand/logo.png",
+    "GeneratedCardThemes": {
+      "product-modern": {
+        "Style": "default",
+        "Variant": "product",
+        "ColorScheme": "light",
+        "Logo": "/assets/brand/logo.png",
+        "Tokens": {
+          "socialCard": {
+            "accent": "#2563eb",
+            "backgroundStart": "#ffffff",
+            "backgroundEnd": "#f8fafc",
+            "surface": "#eef2ff",
+            "textPrimary": "#0f172a",
+            "textSecondary": "#475569",
+            "badgeRadius": "16px"
+          }
+        },
+        "Metrics": [
+          { "Icon": "star", "Value": "8k", "Label": "Stars" },
+          { "Icon": "issue", "Value": "55", "Label": "Issues" },
+          { "Icon": "fork", "Value": "948", "Label": "Forks" }
+        ]
+      },
+      "editorial-modern": {
+        "Style": "blog",
+        "Variant": "editorial",
+        "ColorScheme": "light"
+      }
+    },
+    "GeneratedCardThemesByCollection": {
+      "blog": "editorial-modern",
+      "news": "editorial-modern"
+    },
+    "GeneratedCardStylesByCollection": {
+      "docs": "docs",
+      "blog": "editorial",
+      "pages": "default"
+    },
+    "GeneratedCardVariantsByCollection": {
+      "pages": "hero",
+      "docs": "compact",
+      "blog": "compact"
+    }
   },
   "StructuredData": {
     "Enabled": true,
-    "Breadcrumbs": true
+    "Breadcrumbs": true,
+    "Website": true,
+    "Organization": true,
+    "OrganizationLegalName": "Example Software Ltd.",
+    "OrganizationDescription": "AI-powered developer tooling.",
+    "OrganizationLogo": "/assets/brand/logo.png",
+    "OrganizationSameAs": [
+      "https://github.com/example/exampledocs",
+      "https://social.example.com/example"
+    ],
+    "OrganizationEmail": "support@example.com",
+    "OrganizationTelephone": "+1-555-0100",
+    "OrganizationContactUrl": "/contact/",
+    "Article": true,
+    "FaqPage": true,
+    "HowTo": true,
+    "SoftwareApplication": true,
+    "Product": true,
+    "NewsArticle": true
   }
 }
 ```
-Pages opt‑in using front matter:
+When enabled in `site.json`, social tags and structured data are emitted by default for pages.
+When `Social.AutoGenerateCards` is `true`, PowerForge.Web generates PNG social cards from
+page title/description and uses them for `og:image`/`twitter:image` (unless a page sets `meta.social_image`).
+By default this applies to share-priority pages (`home`, section pages, `pages` collection, editorial collections like `blog`/`news`).
+Per-page override:
+`meta.social_card: true` to force generation, `meta.social_card: false` to skip.
+You can also control generated card presentation:
+- `meta.social_card_badge`: top-right category badge text
+- `meta.social_card_route`: bottom route label text
+- `meta.social_card_theme`: named generated card theme from `Social.GeneratedCardThemes`
+- `meta.social_card_style`: style key (`home`, `default`, `docs`, `api`, `blog`, `contact`, `examples`, `downloads`, `release`, `feed`, `benchmark`, `code`)
+- `meta.social_card_variant`: layout variant (`product`, `spotlight`, `shelf`, `reference`, `editorial`, `inline-image`, `connect`, `metrics`, `timeline`, `feed`, `code`)
+- `meta.social_card_logo`: optional logo path/URL used inside generated cards
+- `meta.social_card_image`: optional inline media path/URL for generated cards
+- `meta.social_card_image_inline`: force/skip inline media rendering for generated cards
+- `meta.social_card_metrics`: optional list/string of metric chips rendered on generated cards
+
+Generated card colors are theme-aware when theme tokens are present:
+- generic theme tokens under `Tokens.color.*` are used as the default palette source
+  - expected keys: `bg`, `panel`, `ink`, `muted`, `accent`, `border`
+- optional dedicated overrides under `Tokens.socialCard.*` take precedence when present
+  - supported keys: `backgroundStart`, `backgroundMid`, `backgroundEnd`, `surface`, `surfaceStroke`, `accent`, `accentSoft`, `accentStrong`, `textPrimary`, `textSecondary`, `chipBackground`, `chipBorder`, `chipText`
+- when no usable theme tokens are available, PowerForge.Web falls back to built-in card palettes
+
+Named generated card themes make the same visual system portable across multiple sites without
+copying front matter to every page. `Social.GeneratedCardThemes` entries can set `Style`, `Variant`,
+`ColorScheme`, `Logo`, `AllowRemoteMediaFetch`, and `Tokens`; `Tokens` are deep-merged over the active
+theme manifest tokens before rendering. Use `Social.GeneratedCardTheme` as the site default,
+`Social.GeneratedCardThemesByCollection` for collection defaults, or `meta.social_card_theme` for a
+single page. Direct page overrides and collection-specific style/variant/color maps still win over
+named theme defaults.
+
+Generated card typography/layout can also follow theme tokens:
+- generic font tokens under `Tokens.font.*`
+  - `display` is used for title/eyebrow by default
+  - `body` is used for description/badge/footer by default
+- optional dedicated typography overrides under `Tokens.socialCard.*`
+  - supported font keys: `fontDisplay`, `fontBody`, `fontMono`, `fontEyebrow`, `fontBadge`, `fontFooter`
+- generic radius tokens under `Tokens.radius.*`
+  - `base` is used as the fallback for panel/frame radius
+  - `sm` is used as the fallback for badge/footer/top-band radius
+- optional dedicated layout overrides under `Tokens.socialCard.*`
+  - supported size keys: `frameInset`, `panelInset`, `contentPadding`, `safeMarginX`, `safeMarginY`, `topBandHeight`
+  - supported vertical rhythm keys: `badgeToEyebrowGap`, `eyebrowToTitleGap`, `titleToDescriptionGap`, `descriptionToFooterGap`
+  - supported radius keys: `frameRadius`, `panelRadius`, `footerRadius`, `badgeRadius`, `topBandRadius`
+  - supported badge/footer keys: `badgeAlign` (`left`/`right`), `badgePaddingX`, `badgeHeight`, `badgeFontSize`, `badgeMinWidth`, `badgeMaxWidth`, `footerPaddingX`, `footerHeight`, `footerFontSize`, `footerMinWidth`, `footerMaxWidth`
+  - supported text size keys: `eyebrowFontSize`, `titleFontSize`, `descriptionFontSize`
+  - supported metric keys: `metricRowHeight`, `descriptionToMetricsGap`, `metricValueFontSize`, `metricLabelFontSize`, `metricIconSize`
+  - optional optical alignment: title text uses measured glyph ink alignment by default; set `titleOpticalOffset` explicitly to override, set `titleInkAlignInset` to tune the target visible inset, or set `titleOpticalOffsetMode: "none"` to force raw SVG text-origin alignment; set `monogramOpticalOffset` to tune fallback logo/monogram centering
+
+Generated card data widgets:
+- Metric chips can be defined at site level (`Social.GeneratedCardMetrics`), named-theme level (`Social.GeneratedCardThemes.<name>.Metrics`), or page level (`meta.social_card_metrics` / `meta.social.metrics`).
+- Page-level metrics replace theme/site metrics for that page. Named-theme metrics replace site defaults when the theme is selected.
+- When no metrics are configured, project pages can infer metrics from hub metadata such as `meta.project_github_stars`, `meta.project_github_forks`, `meta.project_github_open_issues`, `meta.project_downloads_total`, `meta.project_psgallery_downloads`, `meta.project_release_latest_tag`, `meta.project_github_language`, `meta.project_surface_docs`, and `meta.project_surface_examples`.
+- Each metric supports `Icon`, `Value`, `Label`, and optional `Color`. Values should be short (`8k`, `55`, `1.2M`) so cards stay legible in link previews.
+- Preferred built-in metric icons are semantic names: `star`, `issue`, `fork`, `users`, `download`, `discussion`, `pull-request`, `commit`, `tag`, `shield`, `clock`, `book`, `code`, `globe`, `activity`, `scale`, `lock`, `rocket`, `alert`, `x`, `check`, and `package`. Common aliases such as `stars`, `issues`, `pull-requests`, `release`, `security`, `docs`, `license`, and `deploy` are normalized. Older placeholder glyphs such as `*`, `!`, and `Y` are mapped to proper icons, but new configs should use semantic names.
+- Front matter can use an object list:
+  ```yaml
+  social_card_metrics:
+    - icon: "star"
+      value: "8k"
+      label: "Stars"
+    - icon: "issue"
+      value: "55"
+      label: "Issues"
+  ```
+- Short string form is also supported for simple pages: `social_card_metrics: "8k|Stars|star;55|Issues|issue;948|Forks|fork"`.
+- Treat metric cards as data-driven layouts, similar to Railway-style OG layouts: data enters as structured config, while rendering stays in the PowerForge.Web engine. Avoid generating custom images from PowerShell scripts unless a site needs an external data prefetch step.
+
+Recommended generated-card presets for owned sites:
+- Project overview pages: `style: default`, `variant: product` or `variant: metrics`; use inferred GitHub/Gallery/release metrics where available.
+- Project examples and sample pages: `style: examples`, `variant: code`; metrics can show examples, snippets, downloads, or supported formats.
+- API/reference pages: `style: api`, `variant: reference`.
+- Docs pages: `style: docs`, `variant: shelf`.
+- Blog/news/RSS/feed pages: `style: blog` for editorial pages, `style: feed` / `variant: feed` for feed landing pages.
+- Changelog/release pages: `style: release`, `variant: timeline`.
+- Benchmark/status/Syncse-style system pages: `style: benchmark`, `variant: metrics`.
+- QR/barcode/code-generation pages: `style: code`, `variant: code`, with `code`, `download`, `globe`, or `check` metrics as appropriate.
+
+Generated card design guidelines:
+- Keep the content column visually disciplined: badge, eyebrow, title, and description should read as one left-aligned block. The renderer aligns title ink optically so bold display glyphs such as `E`, `A`, or `T` do not appear shifted.
+- Keep vertical rhythm balanced: the badge-to-eyebrow and eyebrow-to-title gaps should feel related, while title-to-description should leave enough air for wrapped titles. Use the vertical rhythm tokens rather than changing renderer coordinates.
+- Treat the badge as metadata, not the main brand. It should be compact, centered in its pill, and secondary to the title block.
+- Use the eyebrow for brand/product/collection context. Keep it short enough to scan at social-card sizes.
+- Prefer a real logo from site/page/theme config. If no logo is available, the fallback monogram is optically centered inside its frame and can be tuned with `monogramOpticalOffset`.
+- Keep brand panels decorative and low contrast. They should support recognition without competing with the title.
+- Keep cards theme-consistent across owned sites by defining named card themes once per site, then assigning them through `GeneratedCardTheme`, `GeneratedCardThemesByCollection`, or `meta.social_card_theme`.
+- Prefer token changes over page front matter when a visual decision applies to a whole site or collection. Page-level overrides are for exceptions.
+- Validate new card styles with at least one short homepage-style title, one long wrapped editorial title, and one docs/API/reference card before shipping a theme.
+- For data-heavy cards, prefer one clear metric row over dense dashboards. If a layout needs charts, language bars, or repository-style callouts, add a reusable renderer layout/variant rather than embedding one-off SVG snippets in front matter.
+
+Generated cards can also include a site/page logo and editorial inline media:
+- logo source precedence: `meta.social_card_logo` -> `meta.social.logo` -> named generated card theme `Logo` -> `Social.GeneratedCardLogo` -> `StructuredData.OrganizationLogo`
+- inline media source precedence: `meta.social_card_image` / `meta.social.card_image` / `meta.social_card_media` -> existing social image metadata -> first body image for editorial collections
+- editorial cards automatically switch to the `inline-image` layout when inline media resolves successfully, unless `meta.social_card_image_inline: false`
+- SVG logo/media files are sanitized before raster rendering; scripts, event handlers, external references, and XML doctypes are rejected. Remote media fetches are opt-in and cached with bounded size/entry limits for the current build process.
+
+Generated social-card values are resolved in this order:
+1. per-page `meta.social_card_*` overrides
+2. collection defaults from `Social.GeneratedCard*ByCollection`
+3. selected named generated-card theme defaults
+4. global `Social.GeneratedCardStyle` / `Social.GeneratedCardVariant` / `Social.GeneratedCard*` site defaults
+5. built-in heuristics (for example: home -> `spotlight`, docs -> `shelf`, api -> `reference`, blog -> `editorial` or `inline-image`, contact -> `connect`)
+
+If `meta.social_image` is not set, editorial posts (for example `blog`/`news`/`changelog`) also try to use:
+- explicit image aliases such as `image`, `cover_image`, `thumbnail`, `og_image`, or `twitter_image`
+- then the first markdown or inline HTML image in the post body
+- and only then fall back to generated/default site image.
+Pages can opt out using front matter:
 ```
-meta.social: true
-meta.structured_data: true
+meta.social: false
+meta.structured_data: false
 ```
+
+Structured-data profile metadata (per-page front matter):
+```
+# FAQPage: list items as "Question|Answer"
+meta.faq.questions:
+  - "What does this tool do?|It automates release validation."
+  - "Can I run offline?|Yes, for local workflows."
+
+# HowTo: list steps as "Step Name|Step text"
+meta.howto.name: Publish Module
+meta.howto.description: End-to-end release flow.
+meta.howto.total_time: PT20M
+meta.howto.tools:
+  - PowerShell 7
+meta.howto.supplies:
+  - Repository access
+meta.howto.steps:
+  - "Build|Run dotnet build."
+  - "Test|Run dotnet test."
+
+# Product
+meta.product.name: ExampleDocs Pro
+meta.product.brand: Example
+meta.product.sku: EX-PRO-01
+meta.product.price: 49.99
+meta.product.price_currency: USD
+meta.product.rating_value: 4.8
+meta.product.rating_count: 137
+
+# SoftwareApplication
+meta.software.name: ExampleDocs CLI
+meta.software.application_category: DeveloperApplication
+meta.software.operating_system: Windows, Linux, macOS
+meta.software.version: 1.4.0
+meta.software.download_url: /downloads/ix-cli
+meta.software.price: 0
+meta.software.price_currency: USD
+```
+
+News article profile behavior:
+- if `StructuredData.NewsArticle` is `true`, collection `news` pages emit `NewsArticle` JSON-LD.
+- if both `Article` and `NewsArticle` are enabled, `NewsArticle` is preferred for news pages, while non-news article-like pages still emit `Article`.
+
+Optional per-page social overrides:
+```
+meta.social_title: "Custom share title"
+meta.social_description: "Custom share description"
+meta.social_image: "/assets/social/custom-card.png"
+meta.social_image_alt: "Card image alt text"
+meta.social_image_width: 1200
+meta.social_image_height: 630
+meta.social_twitter_site: "@productx"
+meta.social_twitter_creator: "@author"
+meta.social_card_badge: "GUIDE"
+meta.social_card_route: "/docs/getting-started"
+meta.social_card_style: "docs"
+meta.social_card_variant: "compact"
+```
+Image aliases also accepted as explicit social overrides: `meta.image`, `meta.cover_image`, `meta.thumbnail`, `meta.og_image`, `meta.twitter_image`.
+
+## SEO templates (site + collection)
+Define snippet-style templates in `site.json`:
+```json
+{
+  "Seo": {
+    "Enabled": true,
+    "Templates": {
+      "Title": "{title} | {site}",
+      "Description": "{title}: {description}"
+    }
+  }
+}
+```
+
+Collection-level override:
+```json
+{
+  "Collections": [
+    {
+      "Name": "blog",
+      "Input": "content/blog",
+      "Output": "/blog",
+      "Seo": {
+        "Templates": {
+          "Title": "{title} ({date}) | {site}",
+          "Description": "{collection} update: {title}"
+        }
+      }
+    }
+  ]
+}
+```
+
+Supported tokens:
+- `{title}`
+- `{site}`
+- `{collection}`
+- `{date}` (`yyyy-MM-dd`)
+- `{project}`
+- `{lang}`
+
+Optional per-page overrides in front matter:
+```yaml
+meta.seo_title: "Custom SEO title"
+meta.seo_description: "Custom SEO description"
+```
+
+Each build emits resolved SEO metadata at `_powerforge/seo-preview.json`.
+
+### Crawl policy (robots directives)
+Use route-scoped crawl directives with optional bot-specific overrides:
+```json
+{
+  "Seo": {
+    "CrawlPolicy": {
+      "Enabled": true,
+      "DefaultRobots": "index,follow",
+      "Bots": [
+        { "Name": "googlebot", "Directives": "index,follow,max-image-preview:large" }
+      ],
+      "Rules": [
+        {
+          "Name": "search-noindex",
+          "Match": "/search/*",
+          "MatchType": "wildcard",
+          "Robots": "noindex,follow",
+          "Bots": [
+            { "Name": "googlebot", "Directives": "noindex,follow" }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+Rule behavior:
+- first matching rule wins
+- match types: `exact`, `prefix`, `wildcard`
+- page-level overrides win over policy:
+  - `meta.robots`
+  - `meta.googlebot` / `meta.bingbot` (or `meta.robots.googlebot`)
+
+Build output diagnostics:
+- `_powerforge/crawl-policy.json` (resolved directives per generated page)
 
 ## Head links + meta (site.json)
 Use structured head tags so themes don’t repeat favicons or preconnects.
@@ -534,18 +1276,51 @@ PowerForge.Web generates:
 - `/tags/` (taxonomy list)
 - `/tags/<term>/` (term pages)
 
+## Markdown image hints
+Use markdown-first image syntax and let PowerForge add sensible defaults on render:
+- missing `loading` becomes `lazy`
+- missing `decoding` becomes `async`
+
+You can tune or disable this in `site.json`:
+```json
+{
+  "Markdown": {
+    "AutoImageHints": true,
+    "DefaultImageLoading": "lazy",
+    "DefaultImageDecoding": "async"
+  }
+}
+```
+
 ## Outputs
-Enable multiple outputs (HTML/JSON/RSS) per page kind:
+Enable multiple outputs (HTML/JSON/RSS/Atom/JSON Feed) per page kind:
 ```json
 {
   "Outputs": {
     "Rules": [
-      { "Kind": "section", "Formats": ["html", "rss"] },
+      { "Kind": "section", "Formats": ["html", "rss", "atom", "jsonfeed"] },
       { "Kind": "page", "Formats": ["html", "json"] }
     ]
   }
 }
 ```
+
+Implicit defaults (when no explicit output rule/override exists):
+- editorial section pages (`blog`, `news`): `html` + `rss`
+- `tags`/`categories` taxonomy and term pages: `html` + `rss`
+
+Optional implicit feed formats:
+```json
+{
+  "Feed": {
+    "IncludeAtom": true,
+    "IncludeJsonFeed": true
+  }
+}
+```
+This adds `atom` (`index.atom.xml`) and `jsonfeed` (`index.feed.json`) to implicit editorial/taxonomy outputs while keeping existing RSS defaults.
+
+This gives zero-config feeds for common editorial/taxonomy layouts while keeping other page kinds HTML-only by default.
 
 ## Versioning
 Versioning metadata can be stored in `site.json` and used in templates:
@@ -554,15 +1329,39 @@ Versioning metadata can be stored in `site.json` and used in templates:
   "Versioning": {
     "Enabled": true,
     "BasePath": "/docs",
+    "HubPath": "./data/version-hub.json",
+    "GenerateAliasRedirects": true,
     "Current": "v2",
+    "LatestAliasPath": "/docs/latest/",
+    "LtsAliasPath": "/docs/lts/",
     "Versions": [
-      { "Name": "v2", "Label": "v2", "Url": "/docs/v2/", "Latest": true },
-      { "Name": "v1", "Label": "v1 (LTS)", "Url": "/docs/v1/", "Deprecated": true }
+      { "Name": "v2", "Label": "v2", "Url": "/docs/v2/", "Latest": true, "Aliases": ["stable"] },
+      { "Name": "v1", "Label": "v1 (LTS)", "Url": "/docs/v1/", "Lts": true, "Deprecated": true, "Aliases": ["legacy"] }
     ]
   }
 }
 ```
+`HubPath` is optional. When set and `Versions` is empty, PowerForge loads versions from the generated `version-hub.json`.
+
 This data is available under `site.versioning` in templates.
+PowerForge also exposes a resolved runtime object under `versioning` (plus shortcuts `current_version`, `latest_version`, `versions`) with:
+- normalized URLs
+- resolved current version (from `Current` or current page path)
+- resolved `versioning.lts` when any version is marked `Lts`
+- `is_current` flags for each version entry
+
+Recommended contract:
+- mark exactly one version as `Default`
+- mark exactly one version as `Latest`
+- optionally mark one version as `Lts`
+- keep `Current` aligned to a configured `Name`
+- use root-relative URLs (for example `/docs/v2/`)
+
+Redirect alias generation:
+- when `GenerateAliasRedirects` is true, build output includes host redirect files for:
+  - latest alias (default `<BasePath>/latest/` unless `LatestAliasPath` is set)
+  - lts alias when any version has `Lts:true` (default `<BasePath>/lts/` unless `LtsAliasPath` is set)
+  - per-version `Aliases` (for example `"stable"` -> `/docs/stable/`)
 
 ## Link checking
 Enable link checking in `site.json`:

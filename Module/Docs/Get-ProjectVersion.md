@@ -25,14 +25,14 @@ This is useful for multi-project repositories where you want to quickly verify v
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-ProjectVersion
+PS> Get-ProjectVersion
 ```
 
 Returns entries for discovered .csproj/.psd1/build scripts under the current folder.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-ProjectVersion -ModuleName 'MyModule' -Path 'C:\Projects'
+PS> Get-ProjectVersion -ModuleName 'MyModule' -Path 'C:\Projects'
 ```
 
 Useful when a repository contains multiple modules/projects but you need only one.
@@ -46,6 +46,7 @@ Path fragments (or folder names) to exclude from the search (in addition to defa
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -61,6 +62,7 @@ Optional module name to filter .csproj and .psd1 results.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -76,6 +78,7 @@ The root path to search for project files. Defaults to current directory.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -93,9 +96,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PSPublishModule.ProjectVersionInfo`
+- `PowerForge.ProjectVersionInfo`
 
 ## RELATED LINKS
 
 - None
-

@@ -29,14 +29,14 @@ When -ApprovedModules is specified, helper definitions are only accepted from th
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-MissingFunctions -FilePath '.\Build\Build-Module.ps1' -Summary
+PS> Get-MissingFunctions -FilePath '.\Build\Build-Module.ps1' -Summary
 ```
 
 Returns a list of functions referenced by the script that are not part of the script itself.
 
 ### EXAMPLE 2
 ```powershell
-PS>$sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }; Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'
+PS> $sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }; Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'
 ```
 
 Returns a structured report that can include helper function bodies sourced from approved modules.
@@ -50,6 +50,7 @@ Module names that are allowed sources for pulling inline helper function definit
 Type: String[]
 Parameter Sets: File, Code
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -65,6 +66,7 @@ ScriptBlock to analyze instead of a file. Alias: ScriptBlock.
 Type: ScriptBlock
 Parameter Sets: Code
 Aliases: ScriptBlock
+Possible values:
 
 Required: False
 Position: named
@@ -80,6 +82,7 @@ Path to a script file to analyze for missing function dependencies. Alias: Path.
 Type: String
 Parameter Sets: File
 Aliases: Path
+Possible values:
 
 Required: False
 Position: named
@@ -95,6 +98,7 @@ Known function names to treat as already available (exclude from missing list).
 Type: String[]
 Parameter Sets: File, Code
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -110,6 +114,7 @@ Function names to ignore when computing the missing set.
 Type: String[]
 Parameter Sets: File, Code
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -125,6 +130,7 @@ Return only a flattened summary list of functions used (objects with Name/Source
 Type: SwitchParameter
 Parameter Sets: File, Code
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -140,6 +146,7 @@ Return a typed report with Summary, SummaryFiltered, and Functions.
 Type: SwitchParameter
 Parameter Sets: File, Code
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -162,4 +169,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

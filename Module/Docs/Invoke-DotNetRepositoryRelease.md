@@ -25,10 +25,12 @@ updates csproj versions, packs, and optionally publishes packages.
 Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '1.2.X' -Publish -PublishApiKey $env:NUGET_API_KEY
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '2.0.X' -ExcludeProject 'OfficeIMO.Visio' -NugetSource 'C:\Packages' -Publish -PublishApiKey $env:NUGET_API_KEY
 ```
+
 
 ## PARAMETERS
 
@@ -39,6 +41,7 @@ Certificate store location used when searching for the signing certificate.
 Type: CertificateStoreLocation
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: CurrentUser, LocalMachine
 
 Required: False
 Position: named
@@ -54,6 +57,7 @@ Certificate thumbprint used for signing packages.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -69,6 +73,7 @@ Build configuration (Release/Debug).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Release, Debug
 
 Required: False
 Position: named
@@ -84,6 +89,7 @@ Directory names to exclude from discovery.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -99,6 +105,7 @@ Project names to exclude (csproj file name without extension).
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -114,6 +121,7 @@ Expected version (exact or X-pattern, e.g. 1.2.X).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Version
+Possible values:
 
 Required: False
 Position: named
@@ -129,6 +137,7 @@ Per-project expected versions (hashtable: ProjectName = Version).
 Type: IDictionary
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -144,6 +153,7 @@ When set, only projects listed in ExpectedVersionMap are processed.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -159,6 +169,7 @@ Allow wildcards (*, ?) in ExpectedVersionMap keys.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -174,6 +185,7 @@ Include prerelease versions when resolving versions.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -189,6 +201,7 @@ Project names to include (csproj file name without extension).
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -204,6 +217,7 @@ Credential secret/token for private NuGet sources.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -219,6 +233,7 @@ Name of environment variable containing the credential secret/token.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -234,6 +249,7 @@ Path to a file containing the credential secret/token.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -249,6 +265,7 @@ Credential username for private NuGet sources.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -264,6 +281,7 @@ NuGet sources (v3 index or local path) used for version resolution.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -279,6 +297,7 @@ Optional output path for packages.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -294,6 +313,7 @@ Root repository path.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -309,6 +329,7 @@ Publish packages to the feed.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -324,6 +345,7 @@ API key used for publishing packages.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -339,6 +361,7 @@ Name of environment variable containing the publish API key.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -354,6 +377,7 @@ Path to a file containing the publish API key.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -369,6 +393,7 @@ Stop on the first publish/signing failure.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -384,6 +409,7 @@ NuGet feed source for publishing.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -399,6 +425,7 @@ Skip duplicates when pushing packages.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -414,6 +441,7 @@ Skip dotnet pack step.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -429,6 +457,7 @@ Timestamp server URL used while signing packages.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -451,4 +480,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

@@ -1,0 +1,1195 @@
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+
+namespace PowerForge.Web;
+
+public static partial class WebApiDocsGenerator
+{
+    private sealed record GeneratedPowerShellExample(string Label, string Code);
+    private sealed record ImportedPowerShellExampleCandidate(string Command, string Snippet, string FilePath, int Score, int LineNumber);
+    private sealed record PowerShellPlaybackAssetHealth(bool HasUnsupportedSidecars, bool HasOversizedAssets, bool HasStaleAssets);
+    private const int GeneratedExampleNoRequiredParameterBonus = 14;
+    private const int GeneratedExampleSingleRequiredTargetScore = 36;
+    private const int GeneratedExampleRequiredCountPenalty = 10;
+    private const int GeneratedExampleSimpleRequiredSetBonus = 8;
+    private const int GeneratedExampleLargeRequiredSetPenalty = 8;
+    private const int GeneratedExampleFriendlyParameterBonus = 12;
+    private const int GeneratedExampleUnfriendlyParameterPenalty = 16;
+    private const int GeneratedExampleSpecialParameterValueBonus = 8;
+    private const int GeneratedExampleSwitchPenalty = 6;
+    private const int GeneratedExamplePreferredNameBonus = 30;
+    private const int GeneratedExamplePreferredSuffixBonus = 22;
+    private const int GeneratedExampleAdvancedObjectPenalty = 28;
+    private const int GeneratedExampleCommonParameterPenalty = 40;
+    private const long RecommendedPowerShellPlaybackAssetMaxBytes = 2 * 1024 * 1024;
+    private const long RecommendedPowerShellPlaybackPosterMaxBytes = 1024 * 1024;
+    private static readonly string[] SupportedPowerShellPlaybackExtensions = [".cast", ".asciinema"];
+    private static readonly string[] SupportedPowerShellPlaybackPosterExtensions = [".png", ".jpg", ".jpeg", ".webp"];
+    private static readonly string[] UnsupportedPowerShellPlaybackSidecarExtensions = [".gif", ".mp4", ".webm", ".mov", ".avi", ".mkv", ".bmp", ".tif", ".tiff", ".svg"];
+    private static readonly HashSet<string> FriendlyPowerShellExampleTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "String",
+        "Int32",
+        "int",
+        "Int64",
+        "long",
+        "UInt32",
+        "uint",
+        "UInt64",
+        "ulong",
+        "Int16",
+        "short",
+        "UInt16",
+        "ushort",
+        "Byte",
+        "SByte",
+        "Double",
+        "double",
+        "Single",
+        "float",
+        "Decimal",
+        "decimal",
+        "Boolean",
+        "Bool",
+        "Guid",
+        "Uri",
+        "DateTime",
+        "Hashtable",
+        "IDictionary",
+        "ScriptBlock",
+        "SwitchParameter"
+    };
+
+    private static readonly Regex PowerShellCommandTokenRegex = new(
+        @"\b[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9][A-Za-z0-9_.-]*\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
+    private static readonly Regex PowerShellCultureFolderRegex = new(
+        @"^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        RegexTimeout);
+
+    private static void AppendPowerShellFallbackExamples(
+        ApiDocModel apiDoc,
+        string inputHelpPath,
+        string resolvedHelpPath,
+        string? manifestPath,
+        WebApiDocsOptions options,
+        WebApiDocsPowerShellExampleValidationResult? validationResult,
+        List<string> warnings)
+    {
+        if (apiDoc is null || options is null || !options.GeneratePowerShellFallbackExamples)
+            return;
+
+        var limit = Math.Clamp(options.PowerShellFallbackExampleLimitPerCommand, 1, 5);
+        var commandTypes = apiDoc.Types.Values
+            .Where(IsPowerShellCommandType)
+            .Where(static type => !HasCodeExample(type))
+            .OrderBy(type => type.FullName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (commandTypes.Count == 0)
+            return;
+
+        var commandNames = commandTypes.Select(type => type.Name).ToArray();
+        var files = ResolvePowerShellExampleScriptFiles(inputHelpPath, resolvedHelpPath, manifestPath, options, warnings);
+        var snippetsByCommand = CollectPowerShellExamplesFromScripts(files, commandNames, limit, warnings);
+        var validationByFile = BuildPowerShellExampleValidationLookup(validationResult);
+        var inspectedPlaybackMediaFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var type in commandTypes)
+        {
+            if (snippetsByCommand.TryGetValue(type.Name, out var snippets) && snippets.Count > 0)
+            {
+                var stagedAssetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var emittedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var snippet in snippets.Take(limit))
+                {
+                    type.Examples.Add(new ApiExampleModel
+                    {
+                        Kind = "code",
+                        Text = snippet.Snippet,
+                        Origin = ApiExampleOrigins.ImportedScript
+                    });
+
+                    var mediaExample = BuildPowerShellImportedExampleMedia(
+                        snippet.FilePath,
+                        options,
+                        validationByFile,
+                        inspectedPlaybackMediaFiles,
+                        stagedAssetPaths,
+                        emittedArtifactPaths,
+                        warnings);
+                    if (mediaExample is not null)
+                        type.Examples.Add(mediaExample);
+                }
+                continue;
+            }
+
+            foreach (var fallback in BuildGeneratedPowerShellExamples(type, limit))
+            {
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "text",
+                    Text = fallback.Label,
+                    Origin = ApiExampleOrigins.GeneratedFallback
+                });
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "code",
+                    Text = fallback.Code,
+                    Origin = ApiExampleOrigins.GeneratedFallback
+                });
+            }
+        }
+    }
+
+    private static bool IsPowerShellCommandType(ApiTypeModel type)
+    {
+        if (type is null || string.IsNullOrWhiteSpace(type.Name))
+            return false;
+        if (type.Name.StartsWith("about_", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return type.Kind.Equals("Cmdlet", StringComparison.OrdinalIgnoreCase) ||
+               type.Kind.Equals("Function", StringComparison.OrdinalIgnoreCase) ||
+               type.Kind.Equals("Alias", StringComparison.OrdinalIgnoreCase) ||
+               type.Kind.Equals("Command", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasCodeExample(ApiTypeModel type)
+        => type.Examples.Any(ex =>
+            ex is not null &&
+            ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(ex.Text));
+
+    private static IReadOnlyList<string> ResolvePowerShellExampleScriptFiles(
+        string inputHelpPath,
+        string resolvedHelpPath,
+        string? manifestPath,
+        WebApiDocsOptions options,
+        List<string> warnings)
+    {
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(options.PowerShellExamplesPath))
+        {
+            var explicitPath = Path.GetFullPath(options.PowerShellExamplesPath);
+            if (File.Exists(explicitPath) && explicitPath.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+            {
+                files.Add(explicitPath);
+            }
+            else if (Directory.Exists(explicitPath))
+            {
+                foreach (var file in SafeEnumerateFiles(explicitPath, "*.ps1", SearchOption.AllDirectories))
+                    files.Add(file);
+            }
+            else
+            {
+                warnings?.Add($"API docs coverage: PowerShell examples path not found: {options.PowerShellExamplesPath}");
+            }
+        }
+
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(inputHelpPath) && Directory.Exists(inputHelpPath))
+            roots.Add(Path.GetFullPath(inputHelpPath));
+
+        var helpDir = Path.GetDirectoryName(resolvedHelpPath);
+        if (!string.IsNullOrWhiteSpace(helpDir) && Directory.Exists(helpDir))
+        {
+            roots.Add(Path.GetFullPath(helpDir));
+            var parent = Directory.GetParent(helpDir);
+            if (parent is not null &&
+                parent.Exists &&
+                ShouldProbePowerShellHelpParentDirectory(helpDir))
+            {
+                roots.Add(parent.FullName);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(manifestPath))
+        {
+            var manifestDir = Path.GetDirectoryName(manifestPath);
+            if (!string.IsNullOrWhiteSpace(manifestDir) && Directory.Exists(manifestDir))
+                roots.Add(Path.GetFullPath(manifestDir));
+        }
+
+        foreach (var root in roots)
+        {
+            if (Path.GetFileName(root).Equals("examples", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var file in SafeEnumerateFiles(root, "*.ps1", SearchOption.AllDirectories))
+                    files.Add(file);
+                continue;
+            }
+
+            foreach (var dir in SafeEnumerateDirectories(root, "Examples", SearchOption.AllDirectories))
+            {
+                foreach (var file in SafeEnumerateFiles(dir, "*.ps1", SearchOption.AllDirectories))
+                    files.Add(file);
+            }
+        }
+
+        return files.OrderBy(static f => f, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static bool ShouldProbePowerShellHelpParentDirectory(string helpDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(helpDirectory))
+            return false;
+
+        var folderName = Path.GetFileName(helpDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(folderName))
+            return false;
+
+        return folderName.Equals("help", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("docs", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("reference", StringComparison.OrdinalIgnoreCase) ||
+               PowerShellCultureFolderRegex.IsMatch(folderName);
+    }
+
+    private static Dictionary<string, List<ImportedPowerShellExampleCandidate>> CollectPowerShellExamplesFromScripts(
+        IReadOnlyList<string> files,
+        IReadOnlyList<string> commandNames,
+        int maxPerCommand,
+        List<string> warnings)
+    {
+        var dedupe = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var candidates = new Dictionary<string, List<ImportedPowerShellExampleCandidate>>(StringComparer.OrdinalIgnoreCase);
+        var limitPerCommand = Math.Max(1, maxPerCommand);
+        var results = new Dictionary<string, List<ImportedPowerShellExampleCandidate>>(StringComparer.OrdinalIgnoreCase);
+        if (files.Count == 0 || commandNames.Count == 0)
+            return results;
+
+        var commands = new HashSet<string>(commandNames, StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+        {
+            string[] lines;
+            try
+            {
+                lines = File.ReadAllLines(file);
+            }
+            catch (Exception ex)
+            {
+                warnings?.Add($"API docs coverage: skipped PowerShell examples file '{Path.GetFileName(file)}' ({ex.GetType().Name}: {ex.Message})");
+                continue;
+            }
+
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                foreach (var command in EnumeratePowerShellCommandTokensFromLine(line))
+                {
+                    if (!commands.Contains(command))
+                        continue;
+
+                    var snippet = CapturePowerShellExampleSnippet(lines, i);
+                    if (string.IsNullOrWhiteSpace(snippet))
+                        continue;
+
+                    if (!dedupe.TryGetValue(command, out var dedupeSet))
+                    {
+                        dedupeSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        dedupe[command] = dedupeSet;
+                    }
+
+                    if (!dedupeSet.Add(snippet))
+                        continue;
+
+                    if (!candidates.TryGetValue(command, out var commandCandidates))
+                    {
+                        commandCandidates = new List<ImportedPowerShellExampleCandidate>();
+                        candidates[command] = commandCandidates;
+                    }
+
+                    commandCandidates.Add(new ImportedPowerShellExampleCandidate(
+                        command,
+                        snippet,
+                        file,
+                        GetImportedPowerShellExampleScore(command, file, snippet, i),
+                        i));
+
+                    if (commandCandidates.Count > limitPerCommand * 3)
+                    {
+                        commandCandidates = commandCandidates
+                            .OrderByDescending(static candidate => candidate.Score)
+                            .ThenBy(static candidate => candidate.FilePath, StringComparer.OrdinalIgnoreCase)
+                            .ThenBy(static candidate => candidate.LineNumber)
+                            .Take(limitPerCommand)
+                            .ToList();
+                        candidates[command] = commandCandidates;
+                    }
+                }
+            }
+        }
+
+        foreach (var pair in candidates)
+        {
+            results[pair.Key] = pair.Value
+                .OrderByDescending(static candidate => candidate.Score)
+                .ThenBy(static candidate => candidate.FilePath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static candidate => candidate.LineNumber)
+                .Take(limitPerCommand)
+                .ToList();
+        }
+
+        return results;
+    }
+
+    private static Dictionary<string, WebApiDocsPowerShellExampleFileValidationResult> BuildPowerShellExampleValidationLookup(
+        WebApiDocsPowerShellExampleValidationResult? validationResult)
+    {
+        var lookup = new Dictionary<string, WebApiDocsPowerShellExampleFileValidationResult>(StringComparer.OrdinalIgnoreCase);
+        if (validationResult?.Files is null || validationResult.Files.Length == 0)
+            return lookup;
+
+        foreach (var file in validationResult.Files)
+        {
+            if (file is null || string.IsNullOrWhiteSpace(file.FilePath))
+                continue;
+
+            lookup[Path.GetFullPath(file.FilePath)] = file;
+        }
+
+        return lookup;
+    }
+
+    private static ApiExampleModel? BuildPowerShellImportedExampleMedia(
+        string? exampleFilePath,
+        WebApiDocsOptions options,
+        IReadOnlyDictionary<string, WebApiDocsPowerShellExampleFileValidationResult> validationByFile,
+        ISet<string>? inspectedPlaybackMediaFiles,
+        ISet<string>? stagedAssetPaths,
+        ISet<string> emittedArtifactPaths,
+        List<string>? warnings)
+    {
+        if (string.IsNullOrWhiteSpace(exampleFilePath) ||
+            options is null ||
+            string.IsNullOrWhiteSpace(options.OutputPath))
+        {
+            return null;
+        }
+
+        var normalizedExamplePath = Path.GetFullPath(exampleFilePath);
+        var playbackAssetHealth = AnalyzePowerShellImportedPlaybackAssets(normalizedExamplePath, inspectedPlaybackMediaFiles, warnings);
+        var playbackMedia = TryBuildPowerShellImportedPlaybackMedia(
+            normalizedExamplePath,
+            options,
+            playbackAssetHealth,
+            stagedAssetPaths,
+            emittedArtifactPaths,
+            warnings);
+        if (playbackMedia is not null)
+            return playbackMedia;
+
+        if (validationByFile is null || validationByFile.Count == 0)
+            return null;
+
+        if (!validationByFile.TryGetValue(normalizedExamplePath, out var validationFile) ||
+            validationFile.ExecutionSucceeded != true ||
+            string.IsNullOrWhiteSpace(validationFile.ExecutionArtifactPath))
+        {
+            return null;
+        }
+
+        var artifactPath = Path.GetFullPath(validationFile.ExecutionArtifactPath);
+        if (!File.Exists(artifactPath))
+            return null;
+        var stagedArtifactUrl = TryStageApiExampleAsset(
+            options.OutputPath,
+            options.BaseUrl,
+            artifactPath,
+            stagedAssetPaths,
+            warnings);
+        if (string.IsNullOrWhiteSpace(stagedArtifactUrl))
+            return null;
+
+        var stagedArtifactPath = TryResolveApiOutputPath(options.OutputPath, stagedArtifactUrl, options.BaseUrl) ?? artifactPath;
+        if (emittedArtifactPaths is not null && !emittedArtifactPaths.Add(stagedArtifactPath))
+            return null;
+
+        var artifactUrl = stagedArtifactUrl;
+
+        DateTimeOffset? capturedAtUtc = null;
+        DateTimeOffset? sourceUpdatedAtUtc = null;
+        TryReadFileTimestampUtc(stagedArtifactPath, out capturedAtUtc);
+        TryReadFileTimestampUtc(normalizedExamplePath, out sourceUpdatedAtUtc);
+
+        return new ApiExampleModel
+        {
+            Kind = "media",
+            Origin = ApiExampleOrigins.ImportedScript,
+            Media = new ApiExampleMediaModel
+            {
+                Type = "terminal",
+                Url = artifactUrl,
+                Title = "Open execution transcript",
+                Caption = $"Captured terminal transcript from executing {Path.GetFileName(exampleFilePath)}.",
+                Alt = "Execution transcript",
+                MimeType = "text/plain",
+                SourcePath = normalizedExamplePath,
+                AssetPath = stagedArtifactPath,
+                CapturedAtUtc = capturedAtUtc,
+                SourceUpdatedAtUtc = sourceUpdatedAtUtc
+            }
+        };
+    }
+
+    private static string? TryConvertApiOutputPathToRoute(string outputPath, string? baseUrl, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath) || string.IsNullOrWhiteSpace(filePath))
+            return null;
+
+        var root = Path.GetFullPath(outputPath);
+        var target = Path.GetFullPath(filePath);
+        var relative = Path.GetRelativePath(root, target);
+        if (string.IsNullOrWhiteSpace(relative) ||
+            relative.StartsWith("..", StringComparison.Ordinal) ||
+            Path.IsPathRooted(relative))
+        {
+            return null;
+        }
+
+        var normalizedBase = NormalizeApiRoute(baseUrl ?? "/api").TrimEnd('/');
+        return normalizedBase + "/" + relative.Replace('\\', '/');
+    }
+
+    private static string? TryResolveApiOutputPath(string outputPath, string route, string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath) || string.IsNullOrWhiteSpace(route))
+            return null;
+
+        var normalizedBase = NormalizeApiRoute(baseUrl ?? "/api").TrimEnd('/');
+        var normalizedRoute = route.Trim();
+        if (!normalizedRoute.StartsWith(normalizedBase + "/", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var relative = normalizedRoute.Substring(normalizedBase.Length + 1).Replace('/', Path.DirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(relative))
+            return null;
+
+        return Path.Combine(Path.GetFullPath(outputPath), relative);
+    }
+
+    private static ApiExampleModel? TryBuildPowerShellImportedPlaybackMedia(
+        string exampleFilePath,
+        WebApiDocsOptions options,
+        PowerShellPlaybackAssetHealth playbackAssetHealth,
+        ISet<string>? stagedAssetPaths,
+        ISet<string>? emittedArtifactPaths,
+        List<string>? warnings)
+    {
+        if (string.IsNullOrWhiteSpace(exampleFilePath) || options is null || string.IsNullOrWhiteSpace(options.OutputPath))
+            return null;
+
+        var castPath = ResolvePowerShellExamplePlaybackSidecar(exampleFilePath, SupportedPowerShellPlaybackExtensions);
+        if (string.IsNullOrWhiteSpace(castPath))
+            return null;
+
+        var castUrl = TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, castPath, stagedAssetPaths, warnings);
+        if (string.IsNullOrWhiteSpace(castUrl))
+            return null;
+
+        var stagedArtifactPath = TryResolveApiOutputPath(options.OutputPath, castUrl, options.BaseUrl) ?? Path.GetFullPath(castPath);
+        if (emittedArtifactPaths is not null && !emittedArtifactPaths.Add(stagedArtifactPath))
+            return null;
+
+        var posterPath = ResolvePowerShellExamplePlaybackSidecar(exampleFilePath, SupportedPowerShellPlaybackPosterExtensions);
+        var posterUrl = string.IsNullOrWhiteSpace(posterPath)
+            ? null
+            : TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, posterPath, stagedAssetPaths, warnings);
+        DateTimeOffset? capturedAtUtc = null;
+        DateTimeOffset? sourceUpdatedAtUtc = null;
+        TryReadFileTimestampUtc(castPath, out capturedAtUtc);
+        TryReadFileTimestampUtc(exampleFilePath, out sourceUpdatedAtUtc);
+
+        return new ApiExampleModel
+        {
+            Kind = "media",
+            Origin = ApiExampleOrigins.ImportedScript,
+            Media = new ApiExampleMediaModel
+            {
+                Type = "terminal",
+                Url = castUrl,
+                Title = "Open terminal playback",
+                Caption = $"Captured terminal playback for {Path.GetFileName(exampleFilePath)}.",
+                Alt = "Terminal playback",
+                PosterUrl = posterUrl,
+                MimeType = "application/x-asciicast",
+                SourcePath = exampleFilePath,
+                AssetPath = castPath,
+                PosterAssetPath = posterPath,
+                CapturedAtUtc = capturedAtUtc,
+                SourceUpdatedAtUtc = sourceUpdatedAtUtc,
+                HasUnsupportedSidecars = playbackAssetHealth.HasUnsupportedSidecars,
+                HasOversizedAssets = playbackAssetHealth.HasOversizedAssets,
+                HasStaleAssets = playbackAssetHealth.HasStaleAssets
+            }
+        };
+    }
+
+    private static PowerShellPlaybackAssetHealth AnalyzePowerShellImportedPlaybackAssets(
+        string exampleFilePath,
+        ISet<string>? inspectedPlaybackMediaFiles,
+        List<string>? warnings)
+    {
+        if (string.IsNullOrWhiteSpace(exampleFilePath) || warnings is null)
+            return new PowerShellPlaybackAssetHealth(false, false, false);
+
+        var normalizedExamplePath = Path.GetFullPath(exampleFilePath);
+        if (inspectedPlaybackMediaFiles is not null && !inspectedPlaybackMediaFiles.Add(normalizedExamplePath))
+            return new PowerShellPlaybackAssetHealth(false, false, false);
+
+        var hasUnsupportedSidecars = WarnOnUnsupportedPowerShellPlaybackSidecars(normalizedExamplePath, warnings);
+        var hasOversizedAssets = false;
+        var hasStaleAssets = false;
+
+        var castPath = ResolvePowerShellExamplePlaybackSidecar(normalizedExamplePath, SupportedPowerShellPlaybackExtensions);
+        var posterPath = ResolvePowerShellExamplePlaybackSidecar(normalizedExamplePath, SupportedPowerShellPlaybackPosterExtensions);
+        if (string.IsNullOrWhiteSpace(castPath))
+            return new PowerShellPlaybackAssetHealth(hasUnsupportedSidecars, false, false);
+
+        hasOversizedAssets |= WarnOnOversizedPowerShellPlaybackAsset(
+            castPath,
+            RecommendedPowerShellPlaybackAssetMaxBytes,
+            "playback sidecar",
+            warnings);
+        hasStaleAssets |= WarnOnStalePowerShellPlaybackAsset(
+            normalizedExamplePath,
+            castPath,
+            "playback sidecar",
+            warnings);
+
+        if (string.IsNullOrWhiteSpace(posterPath))
+            return new PowerShellPlaybackAssetHealth(hasUnsupportedSidecars, hasOversizedAssets, hasStaleAssets);
+
+        hasOversizedAssets |= WarnOnOversizedPowerShellPlaybackAsset(
+            posterPath,
+            RecommendedPowerShellPlaybackPosterMaxBytes,
+            "playback poster",
+            warnings);
+
+        var referencePath = File.GetLastWriteTimeUtc(castPath) > File.GetLastWriteTimeUtc(normalizedExamplePath)
+            ? castPath
+            : normalizedExamplePath;
+        hasStaleAssets |= WarnOnStalePowerShellPlaybackAsset(
+            referencePath,
+            posterPath,
+            "playback poster",
+            warnings);
+
+        return new PowerShellPlaybackAssetHealth(hasUnsupportedSidecars, hasOversizedAssets, hasStaleAssets);
+    }
+
+    private static bool WarnOnUnsupportedPowerShellPlaybackSidecars(
+        string exampleFilePath,
+        List<string> warnings)
+    {
+        var directory = Path.GetDirectoryName(exampleFilePath);
+        var baseName = Path.GetFileNameWithoutExtension(exampleFilePath);
+        if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(baseName))
+            return false;
+
+        var found = false;
+
+        foreach (var extension in UnsupportedPowerShellPlaybackSidecarExtensions)
+        {
+            var candidate = Path.Combine(directory, baseName + extension);
+            if (!File.Exists(candidate))
+                continue;
+
+            found = true;
+
+            warnings.Add(
+                $"API docs PowerShell coverage: unsupported playback sidecar '{Path.GetFileName(candidate)}'. " +
+                $"Supported playback assets are {string.Join(", ", SupportedPowerShellPlaybackExtensions)} with poster sidecars {string.Join(", ", SupportedPowerShellPlaybackPosterExtensions)}.");
+        }
+
+        return found;
+    }
+
+    private static bool WarnOnOversizedPowerShellPlaybackAsset(
+        string assetPath,
+        long recommendedMaxBytes,
+        string assetLabel,
+        List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(assetPath) || recommendedMaxBytes <= 0 || warnings is null)
+            return false;
+
+        try
+        {
+            var file = new FileInfo(assetPath);
+            if (!file.Exists || file.Length <= recommendedMaxBytes)
+                return false;
+
+            warnings.Add(
+                $"API docs PowerShell coverage: {assetLabel} '{file.Name}' is {FormatByteCount(file.Length)}, above the recommended {FormatByteCount(recommendedMaxBytes)}. " +
+                "Consider trimming or recompressing it to keep API pages lean.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"API docs PowerShell coverage: failed to inspect playback asset '{Path.GetFileName(assetPath)}' ({ex.GetType().Name}: {ex.Message})");
+            return false;
+        }
+    }
+
+    private static bool WarnOnStalePowerShellPlaybackAsset(
+        string referencePath,
+        string assetPath,
+        string assetLabel,
+        List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(referencePath) || string.IsNullOrWhiteSpace(assetPath) || warnings is null)
+            return false;
+        if (!File.Exists(referencePath) || !File.Exists(assetPath))
+            return false;
+
+        var referenceTimestamp = File.GetLastWriteTimeUtc(referencePath);
+        var assetTimestamp = File.GetLastWriteTimeUtc(assetPath);
+        if (assetTimestamp >= referenceTimestamp)
+            return false;
+
+        warnings.Add(
+            $"API docs PowerShell coverage: {assetLabel} '{Path.GetFileName(assetPath)}' looks stale because it is older than '{Path.GetFileName(referencePath)}'. " +
+            "Refresh the captured media so it matches the current example script.");
+        return true;
+    }
+
+    private static string FormatByteCount(long bytes)
+    {
+        if (bytes < 1024)
+            return $"{bytes} B";
+
+        var kib = bytes / 1024d;
+        if (kib < 1024d)
+            return $"{Math.Round(kib, 1, MidpointRounding.AwayFromZero):0.#} KiB";
+
+        var mib = kib / 1024d;
+        return $"{Math.Round(mib, 1, MidpointRounding.AwayFromZero):0.#} MiB";
+    }
+
+    private static bool TryReadFileTimestampUtc(string? filePath, out DateTimeOffset? timestampUtc)
+    {
+        timestampUtc = null;
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            return false;
+
+        try
+        {
+            timestampUtc = new DateTimeOffset(File.GetLastWriteTimeUtc(filePath), TimeSpan.Zero);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string? ResolvePowerShellExamplePlaybackSidecar(string exampleFilePath, params string[] extensions)
+    {
+        if (string.IsNullOrWhiteSpace(exampleFilePath) || extensions is null || extensions.Length == 0)
+            return null;
+
+        var directory = Path.GetDirectoryName(exampleFilePath);
+        var baseName = Path.GetFileNameWithoutExtension(exampleFilePath);
+        if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(baseName))
+            return null;
+
+        foreach (var extension in extensions)
+        {
+            if (string.IsNullOrWhiteSpace(extension))
+                continue;
+
+            var normalizedExtension = extension.StartsWith(".", StringComparison.Ordinal) ? extension : "." + extension;
+            var candidate = Path.Combine(directory, baseName + normalizedExtension);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private static string? TryStageApiExampleAsset(
+        string outputPath,
+        string? baseUrl,
+        string sourceFilePath,
+        ISet<string>? emittedAssetPaths,
+        List<string>? warnings)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath) || string.IsNullOrWhiteSpace(sourceFilePath) || !File.Exists(sourceFilePath))
+            return null;
+
+        try
+        {
+            var sourceFullPath = Path.GetFullPath(sourceFilePath);
+            var outputRoot = Path.GetFullPath(outputPath);
+            var stagedDirectory = Path.Combine(outputRoot, "powershell-example-media");
+            Directory.CreateDirectory(stagedDirectory);
+
+            var extension = Path.GetExtension(sourceFullPath);
+            var baseName = Path.GetFileNameWithoutExtension(sourceFullPath);
+            var fileName = $"{SanitizePowerShellExampleArtifactName(baseName)}-{ComputeStableShortHash(sourceFullPath)}{extension.ToLowerInvariant()}";
+            var destinationPath = Path.Combine(stagedDirectory, fileName);
+
+            if (!File.Exists(destinationPath) ||
+                File.GetLastWriteTimeUtc(sourceFullPath) != File.GetLastWriteTimeUtc(destinationPath))
+            {
+                File.Copy(sourceFullPath, destinationPath, overwrite: true);
+            }
+
+            if (emittedAssetPaths is not null && !emittedAssetPaths.Add(destinationPath))
+            {
+                // Already staged/referenced for this example group; still return the route.
+            }
+
+            return TryConvertApiOutputPathToRoute(outputRoot, baseUrl, destinationPath);
+        }
+        catch (Exception ex)
+        {
+            warnings?.Add($"API docs PowerShell coverage: failed to stage example media asset '{Path.GetFileName(sourceFilePath)}' ({ex.GetType().Name}: {ex.Message})");
+            return null;
+        }
+    }
+
+    private static string ComputeStableShortHash(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty));
+        return Convert.ToHexString(bytes[..4]).ToLowerInvariant();
+    }
+
+    private static string[] CollectPowerShellCommandTokensFromFile(string filePath, List<string>? warnings)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return Array.Empty<string>();
+
+        try
+        {
+            return CollectPowerShellCommandTokens(File.ReadAllLines(filePath));
+        }
+        catch (Exception ex)
+        {
+            warnings?.Add($"API docs PowerShell coverage: skipped PowerShell examples file '{Path.GetFileName(filePath)}' ({ex.GetType().Name}: {ex.Message})");
+            return Array.Empty<string>();
+        }
+    }
+
+    private static string[] CollectPowerShellCommandTokens(IEnumerable<string> lines)
+    {
+        if (lines is null)
+            return Array.Empty<string>();
+
+        return lines
+            .SelectMany(EnumeratePowerShellCommandTokensFromLine)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static command => command, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IEnumerable<string> EnumeratePowerShellCommandTokensFromLine(string? line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            yield break;
+
+        var trimmed = line.TrimStart();
+        if (trimmed.StartsWith("#", StringComparison.Ordinal))
+            yield break;
+
+        foreach (Match match in PowerShellCommandTokenRegex.Matches(line))
+        {
+            if (!string.IsNullOrWhiteSpace(match.Value))
+                yield return match.Value;
+        }
+    }
+
+    private static int GetImportedPowerShellExampleScore(string commandName, string filePath, string snippet, int lineNumber)
+    {
+        var score = 0;
+        var normalizedCommand = NormalizePowerShellExampleToken(commandName);
+        var commandNoun = GetPowerShellCommandNoun(commandName);
+        var normalizedNoun = NormalizePowerShellExampleToken(commandNoun);
+        var fileName = Path.GetFileNameWithoutExtension(filePath) ?? string.Empty;
+        var normalizedFileName = NormalizePowerShellExampleToken(fileName);
+        var normalizedPath = NormalizePowerShellExampleToken(filePath.Replace('\\', '/'));
+
+        if (!string.IsNullOrWhiteSpace(normalizedCommand))
+        {
+            if (string.Equals(normalizedFileName, normalizedCommand, StringComparison.Ordinal))
+                score += 140;
+            else if (normalizedFileName.Contains(normalizedCommand, StringComparison.Ordinal))
+                score += 100;
+
+            if (normalizedPath.Contains(normalizedCommand, StringComparison.Ordinal))
+                score += 35;
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedNoun))
+        {
+            if (string.Equals(normalizedFileName, normalizedNoun, StringComparison.Ordinal))
+                score += 70;
+            else if (normalizedFileName.Contains(normalizedNoun, StringComparison.Ordinal))
+                score += 35;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snippet))
+        {
+            var firstLine = snippet
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+                .FirstOrDefault(static line => !string.IsNullOrWhiteSpace(line))
+                ?.Trim() ?? string.Empty;
+            if (firstLine.StartsWith(commandName + " ", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(firstLine, commandName, StringComparison.OrdinalIgnoreCase))
+                score += 18;
+        }
+
+        score -= Math.Max(0, lineNumber);
+        return score;
+    }
+
+    private static string NormalizePowerShellExampleToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var chars = value
+            .Where(static ch => char.IsLetterOrDigit(ch))
+            .Select(static ch => char.ToLowerInvariant(ch))
+            .ToArray();
+        return new string(chars);
+    }
+
+    private static string GetPowerShellCommandNoun(string? commandName)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return string.Empty;
+
+        var dash = commandName.IndexOf('-', StringComparison.Ordinal);
+        if (dash < 0 || dash + 1 >= commandName.Length)
+            return commandName;
+
+        return commandName[(dash + 1)..];
+    }
+
+    private static string CapturePowerShellExampleSnippet(string[] lines, int startIndex)
+    {
+        if (lines is null || startIndex < 0 || startIndex >= lines.Length)
+            return string.Empty;
+
+        var startLine = lines[startIndex];
+        if (string.IsNullOrWhiteSpace(startLine))
+            return string.Empty;
+
+        var snippet = new List<string> { startLine.TrimEnd() };
+        for (var i = startIndex + 1; i < lines.Length && snippet.Count < 8; i++)
+        {
+            var previous = lines[i - 1].TrimEnd();
+            var currentRaw = lines[i];
+            var currentTrim = currentRaw.Trim();
+            if (string.IsNullOrWhiteSpace(currentTrim))
+                break;
+
+            var continuation = previous.EndsWith("`", StringComparison.Ordinal);
+            var indentedSwitch = (currentRaw.StartsWith(" ", StringComparison.Ordinal) || currentRaw.StartsWith("\t", StringComparison.Ordinal)) &&
+                                 (currentTrim.StartsWith("-", StringComparison.Ordinal) || currentTrim.StartsWith("|", StringComparison.Ordinal));
+
+            if (!continuation && !indentedSwitch)
+                break;
+
+            snippet.Add(currentRaw.TrimEnd());
+        }
+
+        return string.Join(Environment.NewLine, snippet).Trim();
+    }
+
+    private static IReadOnlyList<GeneratedPowerShellExample> BuildGeneratedPowerShellExamples(ApiTypeModel type, int limit)
+    {
+        if (type is null || string.IsNullOrWhiteSpace(type.Name) || limit <= 0)
+            return Array.Empty<GeneratedPowerShellExample>();
+
+        var examples = new List<GeneratedPowerShellExample>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var methods = type.Methods
+            .Where(static method => method is not null)
+            .OrderByDescending(GetGeneratedPowerShellExampleScore)
+            .ThenBy(static method => method.Parameters.Count(static p => !p.IsOptional))
+            .ThenBy(static method => method.Parameters.Count)
+            .ThenBy(static method => method.ParameterSetName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (methods.Count == 0)
+        {
+            return
+            [
+                new GeneratedPowerShellExample(
+                    "Generated fallback example from command name.",
+                    type.Name.Trim())
+            ];
+        }
+
+        foreach (var method in methods)
+        {
+            var code = BuildGeneratedPowerShellExample(type.Name, method);
+            if (string.IsNullOrWhiteSpace(code) || !seen.Add(code))
+                continue;
+
+            examples.Add(new GeneratedPowerShellExample(BuildGeneratedPowerShellExampleLabel(method), code));
+            if (examples.Count >= limit)
+                break;
+        }
+
+        return examples;
+    }
+
+    private static string? BuildGeneratedPowerShellExample(string commandName, ApiMemberModel? method)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return null;
+
+        var parameters = method?.Parameters ?? new List<ApiParameterModel>();
+        var picked = parameters
+            .Where(static p => !p.IsOptional)
+            .Take(4)
+            .ToList();
+
+        if (picked.Count == 0)
+        {
+            var candidate = parameters
+                .OrderByDescending(GetGeneratedPowerShellExampleParameterScore)
+                .ThenBy(static p => p.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+
+            if (candidate is not null)
+                picked.Add(candidate);
+        }
+
+        var parts = new List<string> { commandName };
+        foreach (var parameter in picked)
+        {
+            if (string.IsNullOrWhiteSpace(parameter.Name))
+                continue;
+
+            parts.Add("-" + parameter.Name);
+            if (IsPowerShellSwitchParameter(parameter.Type))
+                continue;
+            parts.Add(GetPowerShellSampleValue(parameter));
+        }
+
+        return string.Join(" ", parts.Where(static p => !string.IsNullOrWhiteSpace(p)));
+    }
+
+    private static string BuildGeneratedPowerShellExampleLabel(ApiMemberModel method)
+    {
+        if (!string.IsNullOrWhiteSpace(method?.ParameterSetName))
+            return $"Generated fallback example from parameter set '{method.ParameterSetName}'.";
+        return "Generated fallback example from command syntax.";
+    }
+
+    private static int GetGeneratedPowerShellExampleScore(ApiMemberModel method)
+    {
+        if (method is null)
+            return int.MinValue;
+
+        var parameters = method.Parameters
+            .Where(static parameter => parameter is not null)
+            .ToList();
+        var required = parameters.Where(static p => !p.IsOptional).ToList();
+        var optional = parameters.Where(static p => p.IsOptional).ToList();
+        var score = 0;
+
+        // Prefer parameter sets that read like a quick-start invocation: one clear required value,
+        // a small required surface area, and human-friendly parameter types.
+        if (required.Count == 0)
+        {
+            score += GeneratedExampleNoRequiredParameterBonus;
+        }
+        else
+        {
+            score += Math.Max(0, GeneratedExampleSingleRequiredTargetScore - Math.Abs(required.Count - 1) * GeneratedExampleRequiredCountPenalty);
+        }
+
+        if (required.Count <= 3)
+            score += GeneratedExampleSimpleRequiredSetBonus;
+        // Four required parameters is intentionally neutral; beyond that we start penalizing complexity.
+        if (required.Count > 4)
+            score -= (required.Count - 4) * GeneratedExampleLargeRequiredSetPenalty;
+
+        score += required.Sum(GetGeneratedPowerShellExampleParameterScore);
+        score += optional
+            .Select(GetGeneratedPowerShellExampleParameterScore)
+            .DefaultIfEmpty(0)
+            .Max() / 3;
+
+        return score;
+    }
+
+    private static int GetGeneratedPowerShellExampleParameterScore(ApiParameterModel? parameter)
+    {
+        if (parameter is null)
+            return int.MinValue;
+
+        var score = 0;
+        var name = parameter.Name?.Trim() ?? string.Empty;
+        var type = parameter.Type?.Trim() ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            if (name.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Path", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("LiteralPath", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Id", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Mode", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Uri", StringComparison.OrdinalIgnoreCase))
+                score += GeneratedExamplePreferredNameBonus;
+            else if (name.EndsWith("Name", StringComparison.OrdinalIgnoreCase) ||
+                     name.EndsWith("Path", StringComparison.OrdinalIgnoreCase) ||
+                     name.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
+                     name.EndsWith("Uri", StringComparison.OrdinalIgnoreCase))
+                score += GeneratedExamplePreferredSuffixBonus;
+
+            if (name.Equals("InputObject", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Credential", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Session", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("CimSession", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("PSSession", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("ScriptBlock", StringComparison.OrdinalIgnoreCase))
+                score -= GeneratedExampleAdvancedObjectPenalty;
+
+            if (name.Equals("WhatIf", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Confirm", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Verbose", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Debug", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("ErrorAction", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("WarningAction", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("InformationAction", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("ProgressAction", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("OutVariable", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("OutBuffer", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("PipelineVariable", StringComparison.OrdinalIgnoreCase))
+                score -= GeneratedExampleCommonParameterPenalty;
+        }
+
+        if (IsPowerShellFriendlyExampleType(type))
+            score += GeneratedExampleFriendlyParameterBonus;
+        else if (!string.IsNullOrWhiteSpace(type))
+            score -= GeneratedExampleUnfriendlyParameterPenalty;
+
+        if (parameter.PossibleValues.Count > 0)
+            score += GeneratedExampleSpecialParameterValueBonus;
+        // ScriptBlock is syntactically valid but usually too complex for a friendly default example,
+        // so a parameter literally named ScriptBlock is still scored down even though the type is "friendly".
+        if (IsPowerShellSwitchParameter(type))
+            score -= GeneratedExampleSwitchPenalty;
+
+        return score;
+    }
+
+    private static bool IsPowerShellFriendlyExampleType(string? typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+            return true;
+
+        var type = typeName.Trim();
+        if (type.EndsWith("[]", StringComparison.Ordinal))
+            return IsPowerShellFriendlyExampleType(type[..^2]);
+
+        return FriendlyPowerShellExampleTypes.Contains(type) ||
+               type.EndsWith(".String", StringComparison.OrdinalIgnoreCase) ||
+               type.EndsWith(".SwitchParameter", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPowerShellSwitchParameter(string? typeName)
+        => !string.IsNullOrWhiteSpace(typeName) &&
+           (typeName.Equals("SwitchParameter", StringComparison.OrdinalIgnoreCase) ||
+            (typeName.EndsWith(".SwitchParameter", StringComparison.OrdinalIgnoreCase) &&
+             typeName.Length > ".SwitchParameter".Length));
+
+    private static string GetPowerShellSampleValue(ApiParameterModel parameter)
+    {
+        if (parameter is not null && parameter.PossibleValues.Count > 0)
+        {
+            var possibleValue = parameter.PossibleValues
+                .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+            if (!string.IsNullOrWhiteSpace(possibleValue))
+            {
+                if (bool.TryParse(possibleValue, out var boolValue))
+                    return boolValue ? "$true" : "$false";
+
+                if (int.TryParse(possibleValue, out _))
+                    return possibleValue;
+
+                var escaped = possibleValue.Replace("'", "''", StringComparison.Ordinal);
+                return $"'{escaped}'";
+            }
+        }
+
+        return GetPowerShellSampleValue(parameter?.Name ?? string.Empty, parameter?.Type);
+    }
+
+    private static string GetPowerShellSampleValue(string parameterName, string? typeName)
+    {
+        var name = parameterName?.Trim() ?? string.Empty;
+        var type = typeName?.Trim() ?? string.Empty;
+
+        if (type.EndsWith("[]", StringComparison.Ordinal))
+        {
+            var inner = type[..^2];
+            return $"@({GetPowerShellSampleValue(name, inner)})";
+        }
+
+        if (type.Equals("Boolean", StringComparison.OrdinalIgnoreCase) || type.Equals("Bool", StringComparison.OrdinalIgnoreCase))
+            return "$true";
+        if (type.Equals("Int32", StringComparison.OrdinalIgnoreCase) || type.Equals("Int64", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("UInt32", StringComparison.OrdinalIgnoreCase) || type.Equals("UInt64", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("Int16", StringComparison.OrdinalIgnoreCase) || type.Equals("UInt16", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("Byte", StringComparison.OrdinalIgnoreCase) || type.Equals("SByte", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("int", StringComparison.OrdinalIgnoreCase) || type.Equals("long", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("uint", StringComparison.OrdinalIgnoreCase) || type.Equals("ulong", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("short", StringComparison.OrdinalIgnoreCase) || type.Equals("ushort", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("byte", StringComparison.OrdinalIgnoreCase) || type.Equals("sbyte", StringComparison.OrdinalIgnoreCase))
+            return "1";
+        if (type.Equals("Double", StringComparison.OrdinalIgnoreCase) || type.Equals("Single", StringComparison.OrdinalIgnoreCase) || type.Equals("Decimal", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("double", StringComparison.OrdinalIgnoreCase) || type.Equals("float", StringComparison.OrdinalIgnoreCase) || type.Equals("decimal", StringComparison.OrdinalIgnoreCase))
+            return "1";
+        if (type.Equals("DateTime", StringComparison.OrdinalIgnoreCase))
+            return "'2000-01-01'";
+        if (type.Equals("ScriptBlock", StringComparison.OrdinalIgnoreCase))
+            return "{ }";
+        if (type.Equals("Hashtable", StringComparison.OrdinalIgnoreCase) || type.Equals("IDictionary", StringComparison.OrdinalIgnoreCase))
+            return "@{}";
+
+        if (name.Equals("Path", StringComparison.OrdinalIgnoreCase) || name.EndsWith("Path", StringComparison.OrdinalIgnoreCase))
+            return "'C:\\Path'";
+        if (name.EndsWith("Name", StringComparison.OrdinalIgnoreCase))
+            return "'Name'";
+        if (name.EndsWith("Uri", StringComparison.OrdinalIgnoreCase))
+            return "'https://example.com'";
+
+        return "'Value'";
+    }
+
+    private static IEnumerable<string> SafeEnumerateDirectories(string path, string pattern, SearchOption searchOption)
+    {
+        try
+        {
+            return Directory.GetDirectories(path, pattern, searchOption);
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static IEnumerable<string> SafeEnumerateFiles(string path, string pattern, SearchOption searchOption)
+    {
+        try
+        {
+            return Directory.GetFiles(path, pattern, searchOption);
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+}

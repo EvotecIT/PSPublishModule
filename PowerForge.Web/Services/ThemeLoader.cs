@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Linq;
 
 namespace PowerForge.Web;
 
@@ -51,6 +52,25 @@ public sealed class ThemeLoader
     {
         if (string.IsNullOrWhiteSpace(themeRoot)) return null;
         if (string.IsNullOrWhiteSpace(partialName)) return null;
+
+        // Slot indirection allows portable themes: layouts can request a stable "slot"
+        // name, and the manifest maps that slot to a concrete partial name/path.
+        // Without this, manifest.Slots is effectively unused.
+        if (manifest?.Slots is not null && manifest.Slots.Count > 0)
+        {
+            var current = partialName;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current };
+            for (var i = 0; i < 8; i++)
+            {
+                if (!manifest.Slots.TryGetValue(current, out var slotMapped) || string.IsNullOrWhiteSpace(slotMapped))
+                    break;
+                if (!seen.Add(slotMapped))
+                    break;
+                current = slotMapped;
+            }
+
+            partialName = current;
+        }
 
         if (manifest?.Partials is not null && TryResolveMappedPath(themeRoot, manifest.Partials, partialName, out var mapped))
             return mapped;
@@ -110,8 +130,8 @@ public sealed class ThemeLoader
         if (!Directory.Exists(themeRoot))
             return null;
 
-        var manifestPath = Path.Combine(themeRoot, "theme.json");
-        if (!File.Exists(manifestPath))
+        var manifestPath = ResolveThemeManifestPath(themeRoot);
+        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
             return new ThemeManifest { Name = Path.GetFileName(themeRoot) };
 
         var json = File.ReadAllText(manifestPath);
@@ -133,6 +153,8 @@ public sealed class ThemeLoader
         var merged = new ThemeManifest
         {
             Name = string.IsNullOrWhiteSpace(child.Name) ? parent.Name : child.Name,
+            SchemaVersion = child.SchemaVersion ?? parent.SchemaVersion,
+            ContractVersion = child.ContractVersion ?? parent.ContractVersion,
             Version = child.Version ?? parent.Version,
             Author = child.Author ?? parent.Author,
             Engine = child.Engine ?? parent.Engine,
@@ -141,10 +163,14 @@ public sealed class ThemeLoader
             LayoutsPath = child.LayoutsPath ?? parent.LayoutsPath,
             PartialsPath = child.PartialsPath ?? parent.PartialsPath,
             AssetsPath = child.AssetsPath ?? parent.AssetsPath,
+            ScriptsPath = child.ScriptsPath ?? parent.ScriptsPath,
             Layouts = MergeDictionary(parent.Layouts, child.Layouts),
             Partials = MergeDictionary(parent.Partials, child.Partials),
+            Slots = MergeDictionary(parent.Slots, child.Slots),
             Tokens = MergeTokens(parent.Tokens, child.Tokens),
-            Assets = child.Assets ?? parent.Assets
+            Assets = child.Assets ?? parent.Assets,
+            Features = MergeStringArray(parent.Features, child.Features),
+            FeatureContracts = MergeFeatureContracts(parent.FeatureContracts, child.FeatureContracts)
         };
 
         return merged;
@@ -198,6 +224,86 @@ public sealed class ThemeLoader
             }
         }
         return merged;
+    }
+
+    private static string[] MergeStringArray(string[]? parent, string[]? child)
+    {
+        var p = parent ?? Array.Empty<string>();
+        var c = child ?? Array.Empty<string>();
+        if (p.Length == 0 && c.Length == 0)
+            return Array.Empty<string>();
+
+        return p.Concat(c)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static Dictionary<string, ThemeFeatureContractSpec>? MergeFeatureContracts(
+        Dictionary<string, ThemeFeatureContractSpec>? parent,
+        Dictionary<string, ThemeFeatureContractSpec>? child)
+    {
+        if (parent is null && child is null)
+            return null;
+
+        var merged = new Dictionary<string, ThemeFeatureContractSpec>(StringComparer.OrdinalIgnoreCase);
+        if (parent is not null)
+        {
+            foreach (var kvp in parent)
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value is null)
+                    continue;
+                merged[kvp.Key.Trim()] = CloneFeatureContract(kvp.Value);
+            }
+        }
+
+        if (child is not null)
+        {
+            foreach (var kvp in child)
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value is null)
+                    continue;
+
+                var key = kvp.Key.Trim();
+                if (merged.TryGetValue(key, out var existing))
+                {
+                    merged[key] = MergeFeatureContract(existing, kvp.Value);
+                }
+                else
+                {
+                    merged[key] = CloneFeatureContract(kvp.Value);
+                }
+            }
+        }
+
+        return merged.Count == 0 ? null : merged;
+    }
+
+    private static ThemeFeatureContractSpec CloneFeatureContract(ThemeFeatureContractSpec value)
+    {
+        return new ThemeFeatureContractSpec
+        {
+            RequiredLayouts = value.RequiredLayouts?.ToArray() ?? Array.Empty<string>(),
+            RequiredPartials = value.RequiredPartials?.ToArray() ?? Array.Empty<string>(),
+            RequiredSlots = value.RequiredSlots?.ToArray() ?? Array.Empty<string>(),
+            RequiredSurfaces = value.RequiredSurfaces?.ToArray() ?? Array.Empty<string>(),
+            CssHrefs = value.CssHrefs?.ToArray() ?? Array.Empty<string>(),
+            RequiredCssSelectors = value.RequiredCssSelectors?.ToArray() ?? Array.Empty<string>()
+        };
+    }
+
+    private static ThemeFeatureContractSpec MergeFeatureContract(ThemeFeatureContractSpec parent, ThemeFeatureContractSpec child)
+    {
+        return new ThemeFeatureContractSpec
+        {
+            RequiredLayouts = MergeStringArray(parent.RequiredLayouts, child.RequiredLayouts),
+            RequiredPartials = MergeStringArray(parent.RequiredPartials, child.RequiredPartials),
+            RequiredSlots = MergeStringArray(parent.RequiredSlots, child.RequiredSlots),
+            RequiredSurfaces = MergeStringArray(parent.RequiredSurfaces, child.RequiredSurfaces),
+            CssHrefs = MergeStringArray(parent.CssHrefs, child.CssHrefs),
+            RequiredCssSelectors = MergeStringArray(parent.RequiredCssSelectors, child.RequiredCssSelectors)
+        };
     }
 
 
@@ -258,5 +364,18 @@ public sealed class ThemeLoader
             default:
                 return null;
         }
+    }
+
+    private static string? ResolveThemeManifestPath(string themeRoot)
+    {
+        if (string.IsNullOrWhiteSpace(themeRoot))
+            return null;
+
+        var manifestPath = Path.Combine(themeRoot, "theme.manifest.json");
+        if (File.Exists(manifestPath))
+            return manifestPath;
+
+        var legacyPath = Path.Combine(themeRoot, "theme.json");
+        return File.Exists(legacyPath) ? legacyPath : null;
     }
 }

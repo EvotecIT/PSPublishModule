@@ -3,7 +3,7 @@
 **Goals**
 - Move PSPublishModule behavior into a reusable C# library and thin PowerShell wrappers.
 - Make functionality reusable by GitHub Actions and other repos without scripts.
-- Replace PlatyPS/HelpOut with a C# help/doc generator.
+- Keep documentation generation inside the built-in PowerForge help/doc engine.
 - Fix reliability: versioned installs, safe formatting, deterministic encodings, no “in use” self-build pain.
 - Keep today’s UX (messages, defaults) while improving robustness/performance.
 - Enable future tooling (VSCode extension) via stable machine-readable outputs and JSON configuration.
@@ -24,7 +24,7 @@
 - `PowerForge` build/export detection supports explicit binary assembly names (`ExportAssemblies`) and will not clobber existing manifest exports when binaries are missing (`DisableBinaryCmdletScan` + safe fallback).
 - `New-Configuration*` cmdlets now emit typed `PowerForge` configuration segment objects (no `OrderedDictionary`/`Hashtable` outputs); the legacy DSL parser accepts both typed segments and legacy dictionaries.
 - `PowerForge.Cli` supports `build`/`install` via `--config <json>` and machine output via `--output json` (stable envelope with `schemaVersion` + `command` + `success` + `exitCode` + payload; source-generated System.Text.Json for AOT/trim), plus `pipeline`/`run` to execute a full typed pipeline spec from JSON (segment array + build/install options), and `plan` to preview the pipeline without running it.
-- `ModulePipelineRunner` now executes `ConfigurationDocumentationSegment`/`ConfigurationBuildDocumentationSegment` (PowerForge docs generator; no PlatyPS/HelpOut), `ConfigurationArtefactSegment` (Packed/Unpacked) including optional required-module bundling via PSResourceGet `Save-PSResource` (out-of-proc) with PowerShellGet `Save-Module` fallback, and `ConfigurationPublishSegment` (PSResourceGet `Publish-PSResource` + GitHub releases), producing typed results.
+- `ModulePipelineRunner` now executes `ConfigurationDocumentationSegment`/`ConfigurationBuildDocumentationSegment` (built-in PowerForge docs generator), `ConfigurationArtefactSegment` (Packed/Unpacked) including optional required-module bundling via PSResourceGet `Save-PSResource` (out-of-proc) with PowerShellGet `Save-Module` fallback, and `ConfigurationPublishSegment` (PSResourceGet `Publish-PSResource` + GitHub releases), producing typed results.
 - `Invoke-ModuleBuild` routes both the simple build path and the legacy DSL (`-Settings {}` / `Build-Module {}`) through the PowerForge pipeline (C#); the legacy PowerShell `Start-*` build scripts were removed.
 - `Module/Build/Build-ModuleSelf.ps1` self-builds by building `PowerForge.Cli` and running the JSON pipeline (`powerforge.json`) so PSPublishModule can self-build without file locking.
 - PowerShell compatibility analysis no longer depends on PowerShell helper functions (moved to C# analyzer).
@@ -98,12 +98,12 @@
 - Exact installs sync the target directory to staging (remove stale files that are not present in the new build).
 - PowerShell wrappers call C# installer; messages preserved.
 
-**Phase 3 — Docs Engine (replace PlatyPS/HelpOut)**
+**Phase 3 — Docs Engine**
 - `DocumentationEngine` service:
-  - Source (MVP): out-of-proc `Get-Command` + `Get-Help` (no PlatyPS/HelpOut) for script + cmdlet parity.
-  - Emit (MVP): PlatyPS-style Markdown help files + module page (Readme.md) + external help MAML (`<culture>\<ModuleName>-help.xml`).
-  - Keep legacy knobs (`Tool`, `UpdateWhenNew`) as no-ops for compatibility.
-- PlatyPS/HelpOut usage removed (legacy enum values remain for compatibility).
+  - Source (MVP): out-of-proc `Get-Command` + `Get-Help` for script + cmdlet parity.
+  - Emit (MVP): Markdown help files + module page (Readme.md) + external help MAML (`<culture>\<ModuleName>-help.xml`).
+  - Project-root sync is automatic when documentation generation is enabled.
+- Documentation generation uses the built-in PowerForge engine only.
 
 **Phase 4 — CLI + GitHub Actions + VSCode**
 - `PowerForge.Cli` tool commands (all backed by `PowerForge` services):
@@ -138,7 +138,7 @@
 - Keep PowerShell module multi-targeting (`net472` + modern) without blocking CLI AOT.
 
 **Deprecations To Remove (when parity reached)**
-- PlatyPS and HelpOut usage (done: replaced by PowerForge docs generator; legacy enum values remain for compatibility).
+- External documentation providers (done: documentation generation uses the built-in PowerForge engine only).
 - In-proc PSScriptAnalyzer formatting.
 - Unversioned installs to `...\\Modules\\Name\\`.
 - Scripted `Publish-Module` flow; prefer `PowerForge` publishers or out-of-proc PSResourceGet wrapper only when requested.
@@ -204,7 +204,7 @@
   - [x] Add `--view auto|standard|ansi` (auto disables live UI in CI).
   - [x] Add interactive Spectre.Console progress for `docs`/`pack`/`pipeline` in Standard view (auto disables in CI and when `--output json`/`--no-color`/`--quiet`).
   - [x] Document the JSON schema (VSCode extension baseline): `JSON_SCHEMA.md` + `Schemas/`.
-- [x] Finish docs engine MVP and remove PlatyPS/HelpOut.
+- [x] Finish docs engine MVP and keep documentation generation in PowerForge.
 - [x] Add GitHub composite actions calling the CLI.
 - [ ] Validate AOT publish for CLI (code is AOT/trim-friendly; verify end-to-end publish in CI with a native toolchain on Windows runners).
   - [ ] Current blocker: `dotnet publish -p:PublishAot=true` fails due to AOT analysis errors in `Microsoft.PowerShell.SDK` (System.Management.Automation), `Newtonsoft.Json`, and related dependencies (single-file + reflection-heavy APIs).

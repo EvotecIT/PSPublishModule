@@ -28,5 +28,9 @@ public sealed class ModulePipelineSpec
     /// Configuration segments (as emitted by <c>New-Configuration*</c> cmdlets).
     /// </summary>
     public IConfigurationSegment[] Segments { get; set; } = Array.Empty<IConfigurationSegment>();
-}
 
+    /// <summary>
+    /// Runtime diagnostics/baseline options for the pipeline.
+    /// </summary>
+    public ModulePipelineDiagnosticsOptions Diagnostics { get; set; } = new();
+}

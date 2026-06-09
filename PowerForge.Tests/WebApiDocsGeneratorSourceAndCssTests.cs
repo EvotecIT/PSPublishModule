@@ -1,0 +1,588 @@
+using System;
+using System.IO;
+using System.Linq;
+using Xunit;
+using PowerForge.Web;
+
+public class WebApiDocsGeneratorSourceAndCssTests
+{
+    [Fact]
+    public void GenerateDocsHtml_AppliesSourceUrlMappings_WithPathTokens()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source link test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source link test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "PowerForge.Web",
+            UrlPattern = "https://example.invalid/{root}/blob/main/{pathNoPrefix}#L{line}"
+        });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var htmlFiles = Directory.GetFiles(outputPath, "*.html", SearchOption.AllDirectories);
+            Assert.True(htmlFiles.Length > 0, "Expected generated HTML pages.");
+
+            var hasMappedSourceLink = htmlFiles.Any(path =>
+                File.ReadAllText(path).Contains("https://example.invalid/PowerForge.Web/blob/main/", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(hasMappedSourceLink, "Expected at least one source/edit link rendered using sourceUrlMappings tokens.");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_SourceUrlMappings_MatchWhenSourceRootUsesParentDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-parent-root-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source link test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source link test.");
+
+        var sourceRoot = Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "PowerForge.Web",
+            UrlPattern = "https://example.invalid/PowerForge.Web/blob/main/{pathNoPrefix}#L{line}",
+            StripPathPrefix = true
+        });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            Assert.DoesNotContain(result.Warnings, w =>
+                w.Contains("sourceurlmappings entry for 'PowerForge.Web'", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("did not match any discovered source paths", StringComparison.OrdinalIgnoreCase));
+
+            var htmlFiles = Directory.GetFiles(outputPath, "*.html", SearchOption.AllDirectories);
+            Assert.True(htmlFiles.Length > 0, "Expected generated HTML pages.");
+            var html = string.Join(Environment.NewLine, htmlFiles.Select(File.ReadAllText));
+            Assert.Contains("https://example.invalid/PowerForge.Web/blob/main/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.invalid/PowerForge.Web/blob/main/../", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_UsesThemeCssLinksWithoutInliningFallback_WhenCustomCssIsConfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-fallback-css-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var cssPath = Path.Combine(root, "css", "api.css");
+        Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
+        File.WriteAllText(cssPath, ".api-layout { outline: 0; }");
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CssHref = "/css/api.css"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.Contains("href=\"/css/api.css\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("id=\"api-namespace\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("initNamespaceCombobox", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("initNavDropdowns", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PowerForge API docs first-paint control stability", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("body.pf-api-docs .namespace-select", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<style>body.pf-api-docs", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(".pf-combobox-list::-webkit-scrollbar", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(".member-header pre.member-signature", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_OmitsOverviewWorkspaceRail_WhenUsingDocsTemplate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-overview-layout-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var cssPath = Path.Combine(root, "css", "api.css");
+        Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
+        File.WriteAllText(cssPath, ".api-layout { outline: 0; }");
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CssHref = "/css/api.css"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.DoesNotContain("Workspace Stats", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Browse smarter", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Jump To", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_SourceUrlMappings_UseMostSpecificPrefix_AndHonorStripPathPrefix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-specific-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source link test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source link test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "PowerForge.Web",
+            UrlPattern = "https://example.invalid/root/{path}#L{line}"
+        });
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "PowerForge.Web/Services",
+            UrlPattern = "https://example.invalid/services/{path}#L{line}",
+            StripPathPrefix = true
+        });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var htmlFiles = Directory.GetFiles(outputPath, "*.html", SearchOption.AllDirectories);
+            Assert.True(htmlFiles.Length > 0, "Expected generated HTML pages.");
+            var html = string.Join(Environment.NewLine, htmlFiles.Select(File.ReadAllText));
+
+            Assert.Contains("https://example.invalid/services/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.invalid/services/PowerForge.Web/Services/", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_SourcePathPrefix_PrependsPathBeforeUrlTokenExpansion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-source-prefix-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source link test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source link test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            SourcePathPrefix = "RepoRoot",
+            SourceUrlPattern = "https://example.invalid/blob/main/{path}#L{line}",
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var htmlFiles = Directory.GetFiles(outputPath, "*.html", SearchOption.AllDirectories);
+            Assert.True(htmlFiles.Length > 0, "Expected generated HTML pages.");
+            var html = string.Join(Environment.NewLine, htmlFiles.Select(File.ReadAllText));
+
+            Assert.Contains("https://example.invalid/blob/main/RepoRoot/", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenSourceUrlMappingPrefixDoesNotMatchDiscoveredPaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-unmatched-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source mapping warning test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source mapping warning test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "DefinitelyMissingPrefix",
+            UrlPattern = "https://example.invalid/blob/main/{path}#L{line}"
+        });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("sourceurlmappings entry for 'DefinitelyMissingPrefix'", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("did not match any discovered source paths", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenSourceUrlPatternLikelyDuplicatesPathPrefix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-source-duplication-hint-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source duplication warning test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source duplication warning test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            SourceUrlPattern = "https://github.com/example/PowerForge.Web/blob/main/PowerForge.Web/{path}#L{line}",
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("detected likely duplicated path prefixes in GitHub source URLs", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("Example URLs:", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("https://github.com/example/PowerForge.Web/blob/main/PowerForge.Web/", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenSourceUrlPatternHasNoPathToken()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-source-pattern-no-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source token warning test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source token warning test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            SourceUrlPattern = "https://github.com/example/PowerForge.Web/blob/main/README.md#L{line}",
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("[PFWEB.APIDOCS.SOURCE]", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("sourceUrl does not contain a path token", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenSourceUrlMappingUsesUnsupportedToken()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-source-mapping-token-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source mapping token warning test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source mapping token warning test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "PowerForge.Web",
+            UrlPattern = "https://example.invalid/blob/main/{path}/{branch}#L{line}"
+        });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("[PFWEB.APIDOCS.SOURCE]", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("unsupported token(s): {branch}", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("[PFWEB.APIDOCS.SOURCE]", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("generated source URLs still contain unresolved template tokens", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("{branch}", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_RendersXmlExampleMedia_InJsonAndHtml()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-example-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                  <example>
+                    <code>Sample.Run();</code>
+                    <media kind="terminal" src="/casts/sample.cast" title="Terminal playback" caption="Recorded terminal output." poster="/images/sample-terminal.png" mimeType="application/x-asciicast" />
+                    <media kind="video" src="/videos/sample" title="Video playback" caption="Recorded video output." mimeType="video/mp4" />
+                    <image src="/images/sample-output.png" alt="Rendered sample output" caption="Example screenshot." width="1280" height="720" />
+                  </example>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "both",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var typeJsonFiles = Directory.GetFiles(Path.Combine(outputPath, "types"), "*.json", SearchOption.TopDirectoryOnly);
+            Assert.Single(typeJsonFiles);
+            var jsonPath = typeJsonFiles[0];
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"kind\": \"media\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"type\": \"terminal\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"url\": \"/casts/sample.cast\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"posterUrl\": \"/images/sample-terminal.png\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"capturedAtUtc\":", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"type\": \"image\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"width\": 1280", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"height\": 720", json, StringComparison.OrdinalIgnoreCase);
+
+            var htmlPath = Path.Combine(outputPath, Path.GetFileNameWithoutExtension(jsonPath), "index.html");
+            Assert.True(File.Exists(htmlPath));
+            var html = File.ReadAllText(htmlPath);
+            Assert.Contains("class=\"example-media example-media-terminal\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/casts/sample.cast\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Recorded terminal output.", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("class=\"example-media-meta\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"example-media example-media-video\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<source src=\"/videos/sample\" type=\"video/mp4\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"example-media example-media-image\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/images/sample-output.png\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("alt=\"Rendered sample output\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("width=\"1280\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("height=\"720\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    private static string? ResolveGitRoot(string path)
+    {
+        var current = Path.GetDirectoryName(path);
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if (Directory.Exists(Path.Combine(current, ".git")) || File.Exists(Path.Combine(current, ".git")))
+                return current;
+
+            var parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, StringComparison.OrdinalIgnoreCase))
+                break;
+            current = parent;
+        }
+
+        return null;
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, true);
+        }
+        catch
+        {
+            // ignore cleanup failures in tests
+        }
+    }
+}

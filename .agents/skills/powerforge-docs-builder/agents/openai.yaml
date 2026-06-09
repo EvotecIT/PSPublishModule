@@ -1,0 +1,8 @@
+display_name: PowerForge Docs Builder
+short_description: Maintain deterministic module docs/help pipelines, authored sources, and about-topic workflows.
+default_prompt: >-
+  Improve or troubleshoot PSPublishModule/PowerForge documentation workflows.
+  Distinguish generated outputs (`Module/Docs`, `Module/en-US/*-help.xml`) from authored
+  sources (`Docs/*.md`, XML comments, `Help/About/about_*`). Update source first, regenerate
+  via `Build-Module.ps1`, verify docs validation in summary output, and keep command naming
+  conventions consistent (`New-*` scaffold, `New-Configuration*` DSL, `Invoke-*` execute).

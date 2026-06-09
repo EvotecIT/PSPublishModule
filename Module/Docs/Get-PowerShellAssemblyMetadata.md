@@ -18,22 +18,21 @@ Get-PowerShellAssemblyMetadata -Path <string> [<CommonParameters>]
 This is typically used by module build tooling to determine which cmdlets and aliases should be exported
 for binary modules (compiled cmdlets).
 
-Under the hood it uses System.Reflection.MetadataLoadContext to inspect the assembly in isolation.
-Make sure all dependencies of the target assembly are available next to it (or otherwise resolvable),
-especially when running under Windows PowerShell 5.1.
+The cmdlet delegates scanning to a typed PowerForge service so the metadata logic can be reused outside
+the PowerShell surface.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'
+PS> Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'
 ```
 
 Returns discovered cmdlet and alias names based on PowerShell attributes.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'
+PS> Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'
 ```
 
 Useful when validating what will be exported before publishing.
@@ -47,6 +46,7 @@ The assembly to inspect.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -69,4 +69,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

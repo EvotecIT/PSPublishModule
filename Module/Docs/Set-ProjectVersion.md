@@ -24,14 +24,14 @@ Use -VersionType to increment one component, or -NewVersion to set an explicit v
 
 ### EXAMPLE 1
 ```powershell
-PS>Set-ProjectVersion -VersionType Minor -WhatIf
+PS> Set-ProjectVersion -VersionType Minor -WhatIf
 ```
 
 Previews the version update for all discovered project files.
 
 ### EXAMPLE 2
 ```powershell
-PS>Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'
+PS> Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'
 ```
 
 Updates only files related to the selected module name.
@@ -45,6 +45,7 @@ Path fragments (or folder names) to exclude from the search (in addition to defa
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -60,6 +61,7 @@ Optional module name to filter updates to specific projects/modules.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -75,6 +77,7 @@ Specific version number to set (format: x.x.x or x.x.x.x).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -90,6 +93,7 @@ Returns per-file update results when specified.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -105,6 +109,7 @@ The root path to search for project files. Defaults to current directory.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -120,6 +125,7 @@ The type of version increment: Major, Minor, Build, or Revision.
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -137,9 +143,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PSPublishModule.ProjectVersionUpdateResult`
+- `PowerForge.ProjectVersionUpdateResult`
 
 ## RELATED LINKS
 
 - None
-

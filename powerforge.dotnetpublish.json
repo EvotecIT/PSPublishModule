@@ -40,7 +40,8 @@
   ],
   "Outputs": {
     "ManifestJsonPath": "Artifacts/PowerForge/manifest.json",
-    "ManifestTextPath": "Artifacts/PowerForge/manifest.txt"
+    "ManifestTextPath": "Artifacts/PowerForge/manifest.txt",
+    "ChecksumsPath": "Artifacts/PowerForge/SHA256SUMS.txt",
+    "RunReportPath": "Artifacts/PowerForge/run-report.json"
   }
 }
-

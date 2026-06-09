@@ -11,7 +11,7 @@ public sealed class ModulePipelineResult
     public ModulePipelinePlan Plan { get; }
 
     /// <summary>
-    /// Build result produced by <see cref="ModuleBuildPipeline.BuildToStaging"/>.
+    /// Build result produced by the module build pipeline staging step.
     /// </summary>
     public ModuleBuildResult BuildResult { get; }
 
@@ -76,6 +76,21 @@ public sealed class ModulePipelineResult
     public ModuleValidationReport? ValidationReport { get; }
 
     /// <summary>
+    /// Unified structured diagnostics produced by the pipeline.
+    /// </summary>
+    public BuildDiagnostic[] Diagnostics { get; }
+
+    /// <summary>
+    /// Baseline comparison details for diagnostics when baseline options were used.
+    /// </summary>
+    public BuildDiagnosticsBaselineComparison? DiagnosticsBaseline { get; }
+
+    /// <summary>
+    /// Diagnostics policy evaluation for the run when policy options were used.
+    /// </summary>
+    public BuildDiagnosticsPolicyEvaluation? DiagnosticsPolicy { get; }
+
+    /// <summary>
     /// Formatting results for the staging output (empty when formatting was disabled).
     /// </summary>
     public FormatterResult[] FormattingStagingResults { get; }
@@ -111,6 +126,11 @@ public sealed class ModulePipelineResult
     public ArtefactBuildResult[] ArtefactResults { get; }
 
     /// <summary>
+    /// Owner-facing notes captured during the run for the final summary.
+    /// </summary>
+    public ModuleOwnerNote[] OwnerNotes { get; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
     public ModulePipelineResult(
@@ -124,6 +144,9 @@ public sealed class ModulePipelineResult
         ProjectConversionResult? fileConsistencyLineEndingFix,
         PowerShellCompatibilityReport? compatibilityReport,
         ModuleValidationReport? validationReport,
+        BuildDiagnostic[]? diagnostics,
+        BuildDiagnosticsBaselineComparison? diagnosticsBaseline,
+        BuildDiagnosticsPolicyEvaluation? diagnosticsPolicy,
         ModulePublishResult[] publishResults,
         ArtefactBuildResult[] artefactResults,
         FormatterResult[]? formattingStagingResults = null,
@@ -134,7 +157,8 @@ public sealed class ModulePipelineResult
         ProjectConversionResult? projectRootFileConsistencyLineEndingFix = null,
         ModuleSigningResult? signingResult = null,
         XcodeProjectVersionUpdateResult[]? xcodeProjectVersionResults = null,
-        AppleAppReleasePreparationResult[]? appleAppResults = null)
+        AppleAppReleasePreparationResult[]? appleAppResults = null,
+        ModuleOwnerNote[]? ownerNotes = null)
     {
         Plan = plan;
         BuildResult = buildResult;
@@ -150,6 +174,9 @@ public sealed class ModulePipelineResult
         ProjectRootFileConsistencyLineEndingFix = projectRootFileConsistencyLineEndingFix;
         CompatibilityReport = compatibilityReport;
         ValidationReport = validationReport;
+        Diagnostics = diagnostics ?? Array.Empty<BuildDiagnostic>();
+        DiagnosticsBaseline = diagnosticsBaseline;
+        DiagnosticsPolicy = diagnosticsPolicy;
         FormattingStagingResults = formattingStagingResults ?? Array.Empty<FormatterResult>();
         FormattingProjectResults = formattingProjectResults ?? Array.Empty<FormatterResult>();
         XcodeProjectVersionResults = xcodeProjectVersionResults ?? Array.Empty<XcodeProjectVersionUpdateResult>();
@@ -157,5 +184,6 @@ public sealed class ModulePipelineResult
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
         SigningResult = signingResult;
+        OwnerNotes = ownerNotes ?? Array.Empty<ModuleOwnerNote>();
     }
 }

@@ -1,0 +1,1194 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Text.Json;
+using Xunit;
+
+namespace PowerForge.Tests;
+
+public sealed class DotNetPublishPipelineRunnerHardeningTests
+{
+    [Fact]
+    public void Plan_DeniesOutputPathOutsideProjectRoot_ByDefault()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var csproj = CreateProjectFile(root, "App.csproj");
+            var spec = CreateBaseSpec(root, csproj);
+            spec.Targets[0].Publish.OutputPath = "..\\outside\\{target}";
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec, null));
+            Assert.Contains("outside ProjectRoot", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_AllowsOutputPathOutsideProjectRoot_WhenEnabled()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var csproj = CreateProjectFile(root, "App.csproj");
+            var spec = CreateBaseSpec(root, csproj);
+            spec.DotNet.AllowOutputOutsideProjectRoot = true;
+            spec.Targets[0].Publish.OutputPath = "..\\outside\\{target}";
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec, null);
+            Assert.NotNull(plan);
+            Assert.True(plan.AllowOutputOutsideProjectRoot);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_DeniesManifestPathOutsideProjectRoot_ByDefault()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var csproj = CreateProjectFile(root, "App.csproj");
+            var spec = CreateBaseSpec(root, csproj);
+            spec.Outputs.ManifestJsonPath = "..\\outside\\manifest.json";
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec, null));
+            Assert.Contains("outside ProjectRoot", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Run_ManifestStep_WritesChecksumsWhenConfigured()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var manifestJson = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.json");
+            var manifestTxt = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.txt");
+            var checksums = Path.Combine(root, "Artifacts", "DotNetPublish", "SHA256SUMS.txt");
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs
+                {
+                    ManifestJsonPath = manifestJson,
+                    ManifestTextPath = manifestTxt,
+                    ChecksumsPath = checksums
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "manifest",
+                        Kind = DotNetPublishStepKind.Manifest,
+                        Title = "Write manifest"
+                    }
+                }
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var result = runner.Run(plan, progress: null);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            Assert.Equal(checksums, result.ChecksumsPath);
+            Assert.True(File.Exists(checksums));
+            Assert.True(File.Exists(manifestJson));
+            Assert.True(File.Exists(manifestTxt));
+
+            var lines = File.ReadAllLines(checksums);
+            Assert.True(lines.Length >= 2);
+            Assert.Contains(lines, l => l.Contains("manifest.json", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(lines, l => l.Contains("manifest.txt", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void WriteManifests_IncludesInstallerAndStorePackageOutputs()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var manifestJson = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.json");
+            var manifestTxt = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.txt");
+            var checksums = Path.Combine(root, "Artifacts", "DotNetPublish", "SHA256SUMS.txt");
+            var msiPath = Path.Combine(root, "Artifacts", "Msi", "app", "output", "App.msi");
+            var msiSidecarPath = Path.Combine(root, "Artifacts", "Msi", "app", "symbols", "App-symbols.msi");
+            var msixPath = Path.Combine(root, "Artifacts", "Store", "app", "App.msixbundle");
+            var uploadPath = Path.Combine(root, "Artifacts", "Store", "app", "App.msixupload");
+            Directory.CreateDirectory(Path.GetDirectoryName(msiPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(msiSidecarPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(msixPath)!);
+            File.WriteAllText(msiPath, "msi");
+            File.WriteAllText(msiSidecarPath, "symbols");
+            File.WriteAllText(msixPath, "msix");
+            File.WriteAllText(uploadPath, "upload");
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs
+                {
+                    ManifestJsonPath = manifestJson,
+                    ManifestTextPath = manifestTxt,
+                    ChecksumsPath = checksums
+                }
+            };
+            var msiBuilds = new List<DotNetPublishMsiBuildResult>
+            {
+                new()
+                {
+                    InstallerId = "app.msi",
+                    Target = "app",
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.Portable,
+                    OutputFiles = new[] { msiPath, msiSidecarPath },
+                    SignedFiles = new[] { msiPath },
+                    Version = "1.2.3"
+                }
+            };
+            var storePackages = new List<DotNetPublishStorePackageResult>
+            {
+                new()
+                {
+                    StorePackageId = "app.store",
+                    Target = "app",
+                    Framework = "net8.0-windows10.0.19041.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.FrameworkDependent,
+                    OutputDir = Path.GetDirectoryName(msixPath)!,
+                    OutputFiles = new[] { msixPath },
+                    UploadFiles = new[] { uploadPath }
+                }
+            };
+
+            InvokeWriteManifests(plan, new List<DotNetPublishArtefactResult>(), storePackages, msiBuilds);
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(manifestJson));
+            Assert.Equal(2, doc.RootElement.GetArrayLength());
+            var json = File.ReadAllText(manifestJson);
+            Assert.Contains("\"Category\": \"Installer\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Category\": \"StorePackage\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Category\": 2", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Category\": 3", json, StringComparison.Ordinal);
+            Assert.Contains("\"InstallerId\": \"app.msi\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"StorePackageId\": \"app.store\"", json, StringComparison.Ordinal);
+            Assert.Contains("App.msi", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App-symbols.msi", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App.msixupload", json, StringComparison.OrdinalIgnoreCase);
+
+            var installer = FindManifestEntry(doc, "Category", "Installer");
+            Assert.Equal("app.msi", installer.GetProperty("InstallerId").GetString());
+            Assert.Equal("Portable", installer.GetProperty("Style").GetString());
+            Assert.Equal(1, installer.GetProperty("SignedFiles").GetInt32());
+            Assert.False(installer.TryGetProperty("Cleanup", out _));
+
+            var store = FindManifestEntry(doc, "Category", "StorePackage");
+            Assert.Equal("app.store", store.GetProperty("StorePackageId").GetString());
+            Assert.Equal("FrameworkDependent", store.GetProperty("Style").GetString());
+            Assert.False(store.TryGetProperty("SignedFiles", out _));
+            Assert.False(store.TryGetProperty("Cleanup", out _));
+
+            foreach (var entry in doc.RootElement.EnumerateArray())
+            {
+                if (!entry.TryGetProperty("OutputFiles", out var outputFiles))
+                    continue;
+
+                foreach (var file in outputFiles.EnumerateArray())
+                {
+                    var value = file.GetString();
+                    Assert.False(
+                        !string.IsNullOrWhiteSpace(value) && Path.IsPathRooted(value),
+                        $"Manifest OutputFiles should be project-relative, but found '{value}'.");
+                }
+            }
+
+            var text = File.ReadAllText(manifestTxt);
+            Assert.Contains("MSI app.msi", text, StringComparison.Ordinal);
+            Assert.Contains(msiPath, text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(msiSidecarPath, text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("->  (", text, StringComparison.Ordinal);
+            Assert.Contains("(2 files version=1.2.3)", text, StringComparison.Ordinal);
+            Assert.Contains("Store app.store", text, StringComparison.Ordinal);
+
+            var checksumText = File.ReadAllText(checksums);
+            Assert.Contains("App.msi", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App-symbols.msi", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App.msixbundle", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App.msixupload", checksumText, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void WriteManifests_UsesReadablePublishEntryContract()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var manifestJson = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.json");
+            var manifestTxt = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.txt");
+            var publishDir = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Publish", "app")).FullName;
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs
+                {
+                    ManifestJsonPath = manifestJson,
+                    ManifestTextPath = manifestTxt
+                }
+            };
+            var artefacts = new List<DotNetPublishArtefactResult>
+            {
+                new()
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "app",
+                    Kind = DotNetPublishTargetKind.Service,
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    PublishDir = publishDir,
+                    OutputDir = publishDir,
+                    Files = 1,
+                    TotalBytes = 12
+                },
+                new()
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "lib",
+                    Kind = DotNetPublishTargetKind.Unknown,
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.FrameworkDependent,
+                    PublishDir = publishDir,
+                    OutputDir = publishDir,
+                    Files = 1,
+                    TotalBytes = 12
+                }
+            };
+
+            InvokeWriteManifests(plan, artefacts, new List<DotNetPublishStorePackageResult>(), new List<DotNetPublishMsiBuildResult>());
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(manifestJson));
+            Assert.Equal(2, doc.RootElement.GetArrayLength());
+            var entry = FindManifestEntry(doc, "Target", "app");
+            Assert.Equal("Publish", entry.GetProperty("Category").GetString());
+            Assert.Equal("Service", entry.GetProperty("Kind").GetString());
+            Assert.Equal("PortableCompat", entry.GetProperty("Style").GetString());
+            Assert.False(entry.TryGetProperty("Cleanup", out _));
+            Assert.False(entry.TryGetProperty("OutputFiles", out _));
+
+            var unknownKindEntry = FindManifestEntry(doc, "Target", "lib");
+            Assert.Equal("Publish", unknownKindEntry.GetProperty("Category").GetString());
+            Assert.False(unknownKindEntry.TryGetProperty("Kind", out _));
+
+            var json = File.ReadAllText(manifestJson);
+            Assert.DoesNotContain("\"Kind\": 2", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Style\": 1", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_WhenMissingToolAndPolicyFail_Throws()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
+
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                ToolPath = "definitely-not-a-real-signtool.exe",
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Fail
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var method = GetTrySignOutputMethod();
+
+            var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(runner, new object[] { outputDir, sign }));
+            Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.True(
+                ex.InnerException!.Message.Contains("Signing requested", StringComparison.OrdinalIgnoreCase)
+                || ex.InnerException!.Message.Contains("Signing failed", StringComparison.OrdinalIgnoreCase),
+                $"Unexpected message: {ex.InnerException!.Message}");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_DefaultsToExecutablesOnly()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var logger = new CollectingLogger();
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Skip
+            };
+
+            var runner = new DotNetPublishPipelineRunner(logger);
+            var method = GetTrySignOutputMethod();
+
+            _ = method!.Invoke(runner, new object[] { outputDir, sign });
+            Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 1 file(s)", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_IncludeDllsSignsExecutablesAndLibraries()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var logger = new CollectingLogger();
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                IncludeDlls = true,
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Skip
+            };
+
+            var runner = new DotNetPublishPipelineRunner(logger);
+            var method = GetTrySignOutputMethod();
+
+            _ = method!.Invoke(runner, new object[] { outputDir, sign });
+            Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 2 file(s)", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_WhenDllOnlyAndIncludeDllsDisabled_HonorsFailurePolicy()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Fail
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var method = GetTrySignOutputMethod();
+
+            var ex = Assert.Throws<TargetInvocationException>(() => method.Invoke(runner, new object[] { outputDir, sign }));
+            Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("no matching files were found", ex.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("IncludeDlls=true", ex.InnerException.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void RunProcessWithTimeout_KillsLongRunningProcess()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "RunProcessWithTimeout",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var raw = method!.Invoke(
+            null,
+            new object[]
+            {
+                Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                Environment.CurrentDirectory,
+                new[] { "/c", "ping", "127.0.0.1", "-n", "6" },
+                TimeSpan.FromSeconds(1)
+            });
+
+        Assert.NotNull(raw);
+        var resultType = raw!.GetType();
+        var exitCode = (int)resultType.GetField("Item1")!.GetValue(raw)!;
+        var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
+        var timedOut = (bool)resultType.GetField("Item4")!.GetValue(raw)!;
+
+        Assert.True(timedOut);
+        Assert.Equal(-1, exitCode);
+        Assert.Contains("timed out", stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildPublishMsBuildProperties_MergesGlobalTargetAndStyleOverrides()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PublishSingleFile"] = "true",
+                ["WarningsNotAsErrors"] = "IL3000"
+            }
+        };
+
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions
+            {
+                MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PublishSingleFile"] = "false",
+                    ["SkipChatServiceSidecarBuild"] = "true"
+                },
+                StyleOverrides = new Dictionary<string, DotNetPublishStyleOverride>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PortableCompat"] = new DotNetPublishStyleOverride
+                    {
+                        MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["WarningsNotAsErrors"] = "NU1510",
+                            ["WindowsAppSDKSelfContained"] = "true"
+                        }
+                    }
+                }
+            }
+        };
+
+        var merged = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+            plan,
+            target,
+            DotNetPublishStyle.PortableCompat);
+
+        Assert.Equal("false", merged["PublishSingleFile"]);
+        Assert.Equal("true", merged["SkipChatServiceSidecarBuild"]);
+        Assert.Equal("NU1510", merged["WarningsNotAsErrors"]);
+        Assert.Equal("true", merged["WindowsAppSDKSelfContained"]);
+    }
+
+    [Fact]
+    public void BuildPublishArguments_AppendsMergedOverridesAfterStyleDefaults()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Configuration = "Release",
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PublishSingleFile"] = "false"
+            }
+        };
+
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan,
+            target,
+            "net8.0-windows10.0.26100.0",
+            "win-x64",
+            DotNetPublishStyle.PortableCompat,
+            "out");
+
+        var firstSingleFile = args.IndexOf("/p:PublishSingleFile=true");
+        var finalSingleFile = args.LastIndexOf("/p:PublishSingleFile=false");
+
+        Assert.True(firstSingleFile >= 0, "Expected style defaults to request single-file publish.");
+        Assert.True(finalSingleFile > firstSingleFile, "Expected merged overrides to win by appearing after style defaults.");
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_IncludesReadyToRunForRuntimeRestore()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SyncSELocalHtmlForgeXProject"] = string.Empty
+            },
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        ReadyToRun = true
+                    },
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var props = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "Service.csproj",
+            "win-x64");
+
+        Assert.Equal("true", props["PublishReadyToRun"]);
+        Assert.Equal("true", props["SelfContained"]);
+        Assert.Equal("true", props["PublishSingleFile"]);
+        Assert.Equal("true", props["IncludeNativeLibrariesForSelfExtract"]);
+        Assert.True(props.ContainsKey("SyncSELocalHtmlForgeXProject"));
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_HonorsPublishReadyToRunOverride()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        ReadyToRun = true,
+                        MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["PublishReadyToRun"] = "false"
+                        }
+                    },
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var props = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "Service.csproj",
+            "win-x64");
+
+        Assert.Equal("false", props["PublishReadyToRun"]);
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_UsesSdkNativeAotPropertyForAotStyles()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions(),
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.AotSpeed
+                        }
+                    }
+                }
+            }
+        };
+
+        var props = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "Service.csproj",
+            "win-x64",
+            "net10.0");
+
+        Assert.Equal("true", props["SelfContained"]);
+        Assert.Equal("true", props["PublishAot"]);
+        Assert.False(props.ContainsKey("NativeAotPublish"));
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_FiltersAotPropertiesByFramework()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions(),
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.AotSpeed
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net8.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var props = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "Service.csproj",
+            "win-x64",
+            "net8.0");
+
+        Assert.Equal("true", props["SelfContained"]);
+        Assert.Equal("true", props["PublishSingleFile"]);
+        Assert.False(props.ContainsKey("PublishAot"));
+    }
+
+    [Fact]
+    public void ExtractBestFailureLine_PrefersDiagnosticOverTimingFooter()
+    {
+        var output = string.Join(
+            Environment.NewLine,
+            "Build FAILED.",
+            @"C:\src\App.csproj(12,5): error NETSDK1047: Assets file is missing a runtime target.",
+            "    0 Warning(s)",
+            "    1 Error(s)",
+            "Time Elapsed 00:00:01.36");
+
+        var line = DotNetPublishPipelineRunner.ExtractBestFailureLine(output);
+
+        Assert.Contains("NETSDK1047", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("Time Elapsed", line, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ExtractBestFailureLine_PrefersFirstConcreteDiagnosticOverGenericFailureSummary()
+    {
+        var output = string.Join(
+            Environment.NewLine,
+            @"C:\src\App.csproj(12,5): error NETSDK1047: Assets file is missing a runtime target.",
+            "Build FAILED.",
+            "    0 Warning(s)",
+            "    1 Error(s)");
+
+        var line = DotNetPublishPipelineRunner.ExtractBestFailureLine(output);
+
+        Assert.Contains("NETSDK1047", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("Build FAILED", line, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RedactCommandLineSecrets_RedactsSensitiveMsBuildAndSwitchValues()
+    {
+        var commandLine = "dotnet publish /p:ApiKey=super-secret --password \"correct horse\" -ClientSecret 'abc123' --Token=token-value -NuGetApiKey nuget-secret /p:GitHubToken=github-secret /p:Configuration=Release";
+
+        var redacted = DotNetPublishPipelineRunner.RedactCommandLineSecrets(commandLine);
+
+        Assert.Contains("/p:ApiKey=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--password \"<redacted>\"", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("-ClientSecret '<redacted>'", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--Token=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("-NuGetApiKey <redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/p:GitHubToken=<redacted>", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/p:Configuration=Release", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("super-secret", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("correct horse", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc123", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("token-value", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("nuget-secret", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("github-secret", redacted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildRestoreRuntimeIdentifiers_IncludesAllProjectFrameworkRuntimes()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-arm64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net8.0",
+                            Runtime = "linux-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var runtimes = DotNetPublishPipelineRunner.BuildRestoreRuntimeIdentifiers(
+            plan,
+            "Service.csproj",
+            "win-arm64",
+            "net10.0-windows");
+
+        Assert.Equal(new[] { "win-arm64", "win-x64" }, runtimes);
+        Assert.Equal("win-arm64;win-x64", DotNetPublishPipelineRunner.BuildMsBuildListPropertyValue(runtimes));
+    }
+
+    [Fact]
+    public void BuildRestoreRuntimeIdentifiers_ExcludesRuntimesWithDifferentRestoreProperties()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "linux-x64",
+                            Style = DotNetPublishStyle.AotSpeed
+                        }
+                    }
+                }
+            }
+        };
+
+        var runtimes = DotNetPublishPipelineRunner.BuildRestoreRuntimeIdentifiers(
+            plan,
+            "Service.csproj",
+            "win-x64",
+            "net10.0");
+
+        Assert.Equal(new[] { "win-x64" }, runtimes);
+    }
+
+    [Fact]
+    public void BuildRestoreArguments_DoesNotForceTopLevelFrameworkAcrossProjectReferences()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["UseLocalHtmlForgeX"] = "false"
+            },
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        ReadyToRun = true
+                    },
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-arm64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0-windows",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildRestoreArguments(
+            plan,
+            "Service.csproj",
+            "win-arm64",
+            "net10.0-windows");
+
+        Assert.Contains("/p:RuntimeIdentifiers=win-arm64;win-x64", args);
+        Assert.Contains("/p:PublishReadyToRun=true", args);
+        Assert.DoesNotContain("/p:TargetFramework=net10.0-windows", args);
+    }
+
+    [Fact]
+    public void Run_CommandFailure_ReturnsTroubleshootingDetails()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "hook:test",
+                        Kind = DotNetPublishStepKind.CommandHook,
+                        Title = "Hook",
+                        HookId = "test",
+                        HookCommand = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                        HookArguments = new[] { "/c", "echo useful failure from hook 1>&2 & exit /b 7" },
+                        HookTimeoutSeconds = 10,
+                        HookRequired = true
+                    }
+                }
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var result = runner.Run(plan, progress: null);
+
+            Assert.False(result.Succeeded);
+            Assert.NotNull(result.Failure);
+            Assert.Equal(7, result.Failure!.ExitCode);
+            Assert.Contains("Step 'hook:test' (CommandHook) failed", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("Command:", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("WorkingDirectory:", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("Log:", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("useful failure from hook", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(result.Failure.LogPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void BuildPublishArguments_UsesSdkNativeAotPropertyForAotStyles()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Configuration = "Release",
+            NoRestoreInPublish = true,
+            Targets = Array.Empty<DotNetPublishTargetPlan>()
+        };
+        var target = new DotNetPublishTargetPlan
+        {
+            ProjectPath = "Service.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan,
+            target,
+            "net10.0",
+            "win-x64",
+            DotNetPublishStyle.AotSpeed,
+            "out");
+
+        Assert.Contains("/p:PublishAot=true", args);
+        Assert.Contains("/p:IlcOptimizationPreference=Speed", args);
+        Assert.DoesNotContain("/p:NativeAotPublish=true", args);
+    }
+
+    [Fact]
+    public void BuildWixHarvestFragment_PreservesSubdirectoriesForNestedFiles()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var stagingDir = Directory.CreateDirectory(Path.Combine(root, "payload")).FullName;
+            Directory.CreateDirectory(Path.Combine(stagingDir, "af-ZA"));
+            Directory.CreateDirectory(Path.Combine(stagingDir, "am-ET"));
+            File.WriteAllText(Path.Combine(stagingDir, "af-ZA", "Microsoft.ui.xaml.dll.mui"), "a");
+            File.WriteAllText(Path.Combine(stagingDir, "am-ET", "Microsoft.ui.xaml.dll.mui"), "b");
+            File.WriteAllText(Path.Combine(stagingDir, "root.txt"), "root");
+
+            var fragment = DotNetPublishPipelineRunner.BuildWixHarvestFragment(
+                stagingDir,
+                "INSTALLFOLDER",
+                "ProductFiles");
+            var normalizedFragment = fragment.Replace('\\', '/');
+            var expectedAfZaPath = Path.Combine(stagingDir, "af-ZA", "Microsoft.ui.xaml.dll.mui").Replace('\\', '/');
+            var expectedAmEtPath = Path.Combine(stagingDir, "am-ET", "Microsoft.ui.xaml.dll.mui").Replace('\\', '/');
+            var expectedRootPath = Path.Combine(stagingDir, "root.txt").Replace('\\', '/');
+
+            Assert.Contains("<DirectoryRef Id=\"INSTALLFOLDER\">", fragment, StringComparison.Ordinal);
+            Assert.Contains("Name=\"af-ZA\"", fragment, StringComparison.Ordinal);
+            Assert.Contains("Name=\"am-ET\"", fragment, StringComparison.Ordinal);
+            Assert.Contains(expectedAfZaPath, normalizedFragment, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(expectedAmEtPath, normalizedFragment, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(expectedRootPath, normalizedFragment, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void EnsureOutputDirectoryUnlocked_WhenLockedAndPolicyFail_Throws()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            var filePath = Path.Combine(outputDir, "app.dll");
+            File.WriteAllText(filePath, "dummy");
+
+            using var lockStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                LockedOutputGuard = true,
+                OnLockedOutput = DotNetPublishPolicyMode.Fail,
+                LockedOutputSampleLimit = 5
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var method = typeof(DotNetPublishPipelineRunner).GetMethod("EnsureOutputDirectoryUnlocked", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            var ex = Assert.Throws<TargetInvocationException>(() =>
+                method!.Invoke(runner, new object?[] { plan, outputDir, "test-context", "Test.Service" }));
+            Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("locked", ex.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void EnsureOutputDirectoryUnlocked_WhenLockedAndPolicyWarn_DoesNotThrow()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            var filePath = Path.Combine(outputDir, "app.dll");
+            File.WriteAllText(filePath, "dummy");
+
+            using var lockStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                LockedOutputGuard = true,
+                OnLockedOutput = DotNetPublishPolicyMode.Warn,
+                LockedOutputSampleLimit = 5
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var method = typeof(DotNetPublishPipelineRunner).GetMethod("EnsureOutputDirectoryUnlocked", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            method!.Invoke(runner, new object?[] { plan, outputDir, "test-context", "Test.Service" });
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static DotNetPublishSpec CreateBaseSpec(string root, string csprojPath)
+    {
+        return new DotNetPublishSpec
+        {
+            DotNet = new DotNetPublishDotNetOptions
+            {
+                ProjectRoot = root,
+                Restore = false,
+                Build = false,
+                Runtimes = new[] { "win-x64" }
+            },
+            Targets = new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "app",
+                    ProjectPath = csprojPath,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net10.0",
+                        Runtimes = new[] { "win-x64" },
+                        UseStaging = false,
+                        Zip = false
+                    }
+                }
+            }
+        };
+    }
+
+    private static string CreateProjectFile(string root, string fileName)
+    {
+        Directory.CreateDirectory(root);
+        var projectPath = Path.Combine(root, fileName);
+        File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+        return projectPath;
+    }
+
+    private static MethodInfo GetTrySignOutputMethod()
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "TrySignOutput",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(method is not null, "TrySignOutput private method not found. Was it renamed or made public?");
+        return method!;
+    }
+
+    private static (string? ManifestJson, string? ManifestText, string? ChecksumsPath) InvokeWriteManifests(
+        DotNetPublishPlan plan,
+        List<DotNetPublishArtefactResult> artefacts,
+        List<DotNetPublishStorePackageResult> storePackages,
+        List<DotNetPublishMsiBuildResult> msiBuilds)
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "WriteManifests",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var raw = method!.Invoke(null, new object?[] { plan, artefacts, storePackages, msiBuilds });
+        Assert.NotNull(raw);
+        return Assert.IsType<(string? ManifestJson, string? ManifestText, string? ChecksumsPath)>(raw);
+    }
+
+    private static JsonElement FindManifestEntry(JsonDocument doc, string propertyName, string value)
+    {
+        foreach (var entry in doc.RootElement.EnumerateArray())
+        {
+            if (entry.TryGetProperty(propertyName, out var property)
+                && string.Equals(property.GetString(), value, StringComparison.Ordinal))
+            {
+                return entry;
+            }
+        }
+
+        throw new InvalidOperationException($"Manifest entry with {propertyName}={value} was not found.");
+    }
+
+    private static string CreateTempRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // best effort
+        }
+    }
+
+    private sealed class CollectingLogger : ILogger
+    {
+        public List<string> InfoMessages { get; } = new();
+        public bool IsVerbose => false;
+        public void Info(string message) => InfoMessages.Add(message);
+        public void Success(string message) { }
+        public void Warn(string message) { }
+        public void Error(string message) { }
+        public void Verbose(string message) { }
+    }
+}

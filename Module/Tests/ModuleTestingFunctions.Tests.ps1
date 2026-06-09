@@ -1,10 +1,10 @@
-Describe "Module Testing Functions" {
+﻿Describe "Module Testing Functions" {
     BeforeAll {
         # Clean up any existing module instances first
         Get-Module PSPublishModule | Remove-Module -Force -ErrorAction SilentlyContinue
 
         # Import the module fresh
-        $moduleManifest = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1'
+        $moduleManifest = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
         Import-Module $moduleManifest -Force
     }
 
@@ -21,7 +21,8 @@ Describe "Module Testing Functions" {
             $result.ModuleName | Should -Be 'PSPublishModule'
             $result.ModuleVersion | Should -Not -BeNullOrEmpty
             $result.ManifestPath | Should -Match '\.psd1$'
-            $result.RequiredModules | Should -Not -BeNullOrEmpty
+            $result.PSObject.Properties.Name | Should -Contain 'RequiredModules'
+            @($result.RequiredModules).Count | Should -Be 0
         }
 
         It "Should throw error for invalid path" {

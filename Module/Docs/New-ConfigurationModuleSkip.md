@@ -22,15 +22,16 @@ Useful for optional dependencies where you want builds to succeed even if a tool
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force
+PS> New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force
 ```
 
 Prevents build failure when the module is not installed in the environment.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force
+PS> New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force
 ```
+
 
 ## PARAMETERS
 
@@ -41,6 +42,7 @@ Fail build when unresolved commands are detected during merge.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -56,6 +58,7 @@ Force build process to continue even if the module or command is not available.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -71,6 +74,7 @@ Ignore function name(s). If the function is not available it will be ignored.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -86,6 +90,7 @@ Ignore module name(s). If the module is not available it will be ignored.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -108,4 +113,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

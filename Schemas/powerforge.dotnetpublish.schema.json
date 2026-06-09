@@ -1,0 +1,1109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.dotnetpublish.schema.json",
+  "title": "PowerForge DotNetPublishSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Profile": { "type": ["string", "null"] },
+    "Profiles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishProfile" }
+    },
+    "Projects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishProject" }
+    },
+    "Matrix": { "$ref": "#/$defs/DotNetPublishMatrix" },
+    "DotNet": { "$ref": "#/$defs/DotNetPublishDotNetOptions" },
+    "SigningProfiles": {
+      "type": ["object", "null"],
+      "additionalProperties": { "$ref": "#/$defs/DotNetPublishSignOptions" }
+    },
+    "Targets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishTarget" }
+    },
+    "Bundles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishBundle" }
+    },
+    "Installers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishInstaller" }
+    },
+    "StorePackages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishStorePackage" }
+    },
+    "BenchmarkGates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishBenchmarkGate" }
+    },
+    "Hooks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishCommandHook" }
+    },
+    "Outputs": { "$ref": "#/$defs/DotNetPublishOutputs" }
+  },
+  "required": ["Targets"],
+  "$defs": {
+    "DotNetPublishStyle": {
+      "type": "string",
+      "enum": ["Portable", "PortableCompat", "PortableSize", "FrameworkDependent", "AotSpeed", "AotSize"]
+    },
+    "DotNetPublishTargetKind": {
+      "type": "string",
+      "enum": ["Unknown", "Cli", "Service", "Library"]
+    },
+    "DotNetPublishPolicyMode": {
+      "type": "string",
+      "enum": ["Warn", "Fail", "Skip"]
+    },
+    "DotNetPublishServiceLifecycleMode": {
+      "type": "string",
+      "enum": ["Step", "InlineRebuild"]
+    },
+    "DotNetPublishMsiHarvestMode": {
+      "type": "string",
+      "enum": ["None", "Auto"]
+    },
+    "DotNetPublishStoreBuildMode": {
+      "type": "string",
+      "enum": ["StoreUpload", "SideloadOnly"]
+    },
+    "DotNetPublishStoreBundleMode": {
+      "type": "string",
+      "enum": ["Auto", "Always", "Never"]
+    },
+    "DotNetPublishBundleArchiveMode": {
+      "type": "string",
+      "enum": ["Self", "ChildDirectories"]
+    },
+    "DotNetPublishBenchmarkMetricSource": {
+      "type": "string",
+      "enum": ["JsonPath", "Regex"]
+    },
+    "DotNetPublishBenchmarkMetricAggregation": {
+      "type": "string",
+      "enum": ["First", "Last", "Min", "Max", "Average"]
+    },
+    "DotNetPublishCommandHookPhase": {
+      "type": "string",
+      "enum": ["BeforeRestore", "BeforeBuild", "BeforeTargetPublish", "AfterTargetPublish", "BeforeBundle", "AfterBundle"]
+    },
+    "DotNetPublishBaselineMode": {
+      "type": "string",
+      "enum": ["Verify", "Update"]
+    },
+    "DotNetPublishMsiVersionPattern": {
+      "type": "string",
+      "enum": ["FixedMajorMinorDatePatch", "UtcShortYearMonthDayMinute"]
+    },
+    "DotNetPublishMsiVersionOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Pattern": { "$ref": "#/$defs/DotNetPublishMsiVersionPattern" },
+        "Major": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "Minor": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "FloorDateUtc": { "type": ["string", "null"] },
+        "Monotonic": { "type": "boolean" },
+        "StatePath": { "type": ["string", "null"] },
+        "PropertyName": { "type": ["string", "null"] },
+        "PatchCap": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "DotNetPublishMsiClientLicenseOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "ClientId": { "type": ["string", "null"] },
+        "Path": { "type": ["string", "null"] },
+        "PathTemplate": { "type": ["string", "null"] },
+        "PropertyName": { "type": ["string", "null"] },
+        "OnMissingFile": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
+      }
+    },
+    "PowerForgeInstallerScope": {
+      "type": "string",
+      "enum": ["PerMachine", "PerUser"]
+    },
+    "PowerForgeInstallerInputKind": {
+      "type": "string",
+      "enum": ["Text", "Password", "FilePath", "FolderPath", "Checkbox", "RadioGroup", "ComboBox", "LicenseKey"]
+    },
+    "PowerForgeInstallerProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "Manufacturer": { "type": "string", "minLength": 1 },
+        "Version": { "type": "string", "minLength": 1 },
+        "UpgradeCode": { "type": "string", "minLength": 1 },
+        "Scope": { "$ref": "#/$defs/PowerForgeInstallerScope" },
+        "DowngradeErrorMessage": { "type": "string" }
+      },
+      "required": ["Name", "UpgradeCode"]
+    },
+    "PowerForgeInstallerInputChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Value": { "type": "string" },
+        "Text": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Value", "Text"]
+    },
+    "PowerForgeInstallerExitLaunch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Text": { "type": "string", "minLength": 1 },
+        "Target": { "type": "string", "minLength": 1 },
+        "Condition": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Target"]
+    },
+    "PowerForgeInstallerLicenseAgreement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Path": { "type": "string", "minLength": 1 },
+        "VariableId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Path"]
+    },
+    "PowerForgeInstallerRegistrySearch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Root": { "type": "string", "minLength": 1 },
+        "Key": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string", "minLength": 1 },
+        "Type": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Id", "Root", "Key", "Name"]
+    },
+    "PowerForgeInstallerInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "PropertyName": { "type": "string", "minLength": 1 },
+        "Label": { "type": "string", "minLength": 1 },
+        "Description": { "type": ["string", "null"] },
+        "Kind": { "$ref": "#/$defs/PowerForgeInstallerInputKind" },
+        "DefaultValue": { "type": ["string", "null"] },
+        "Secure": { "type": "boolean" },
+        "Hidden": { "type": "boolean" },
+        "Required": { "type": "boolean" },
+        "RequiredMessage": { "type": ["string", "null"] },
+        "MinLength": { "type": ["integer", "null"], "minimum": 0 },
+        "MaxLength": { "type": ["integer", "null"], "minimum": 0 },
+        "ValidationPattern": { "type": ["string", "null"] },
+        "ValidationMessage": { "type": ["string", "null"] },
+        "RegistrySearch": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerRegistrySearch" }, { "type": "null" }] },
+        "Choices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerInputChoice" }
+        }
+      },
+      "required": ["Id", "PropertyName", "Label"],
+      "allOf": [
+        {
+          "if": {
+            "required": ["RequiredMessage"],
+            "properties": {
+              "RequiredMessage": { "type": "string", "pattern": "\\S" }
+            }
+          },
+          "then": {
+            "required": ["Required"],
+            "properties": {
+              "Required": { "const": true }
+            }
+          }
+        }
+      ]
+    },
+    "PowerForgeInstallerDialog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Title": { "type": "string", "minLength": 1 },
+        "Description": { "type": ["string", "null"] },
+        "InputIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Actions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerDialogAction" }
+        }
+      },
+      "required": ["Id", "Title"]
+    },
+    "PowerForgeInstallerDialogAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Text": { "type": "string", "minLength": 1 },
+        "Target": { "type": "string", "minLength": 1 },
+        "Condition": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Id", "Text", "Target"]
+    },
+    "PowerForgeInstallerExecutableAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "FileRef": { "type": "string", "minLength": 1 },
+        "Arguments": { "type": "string", "minLength": 1 },
+        "Condition": { "type": "string", "minLength": 1 },
+        "Before": { "type": ["string", "null"] },
+        "After": { "type": ["string", "null"] },
+        "ImpersonateNo": { "type": "boolean" },
+        "HideTarget": { "type": "boolean" },
+        "Return": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Id", "FileRef", "Arguments"]
+    },
+    "PowerForgeInstallerDirectorySegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Id", "Name"]
+    },
+    "PowerForgeInstallerDirectoryTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "StandardDirectoryId": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerDirectorySegment" }
+        }
+      },
+      "required": ["Segments"],
+      "oneOf": [
+        { "required": ["StandardDirectoryId"] },
+        { "required": ["DirectoryRefId"] }
+      ]
+    },
+    "PowerForgeInstallerFileComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "File" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "FileId": { "type": "string", "minLength": 1 },
+        "Source": { "type": "string", "minLength": 1 },
+        "Name": { "type": ["string", "null"] },
+        "KeyPath": { "type": "boolean" },
+        "Permanent": { "type": "boolean" },
+        "NeverOverwrite": { "type": "boolean" }
+      },
+      "required": ["Type", "Id", "FileId", "Source"]
+    },
+    "PowerForgeInstallerFolderComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Folder" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "Permanent": { "type": "boolean" }
+      },
+      "required": ["Type", "Id"]
+    },
+    "PowerForgeInstallerRemoveFolderComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "RemoveFolder" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "Condition": { "type": "string" },
+        "PropertyName": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Type", "Id", "PropertyName"]
+    },
+    "PowerForgeInstallerServiceComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Service" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "FileId": { "type": "string", "minLength": 1 },
+        "Source": { "type": "string", "minLength": 1 },
+        "ServiceName": { "type": "string", "minLength": 1 },
+        "DisplayName": { "type": "string", "minLength": 1 },
+        "Description": { "type": ["string", "null"] },
+        "Arguments": { "type": ["string", "null"] },
+        "Account": { "type": "string" },
+        "Start": { "type": "string" },
+        "DelayedAutoStart": { "type": "boolean" },
+        "ControlStart": { "type": "string" },
+        "ControlStop": { "type": "string" },
+        "ControlRemove": { "type": "string" },
+        "ScriptInstall": {
+          "anyOf": [
+            { "$ref": "#/$defs/PowerForgeInstallerServiceScriptInstall" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": ["Type", "Id", "FileId", "Source", "ServiceName", "DisplayName"]
+    },
+    "PowerForgeInstallerServiceScriptInstall": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Command": { "type": "string", "minLength": 1 },
+        "UpgradeCommand": { "type": ["string", "null"], "minLength": 1 },
+        "Condition": { "type": "string", "minLength": 1 },
+        "BackupExistingImagePath": { "type": "boolean" },
+        "BackupPath": { "type": "string", "minLength": 1 },
+        "StopServiceForUpgrade": { "type": "boolean" },
+        "StopDelaySeconds": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["Command"]
+    },
+    "PowerForgeInstallerShortcutComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Shortcut" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "ShortcutId": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string", "minLength": 1 },
+        "TargetFileId": { "type": ["string", "null"], "minLength": 1 },
+        "Target": { "type": ["string", "null"], "minLength": 1 },
+        "Arguments": { "type": ["string", "null"], "minLength": 1 },
+        "WorkingDirectoryId": { "type": "string", "minLength": 1 },
+        "RegistryKey": { "type": "string", "minLength": 1 },
+        "RegistryValueName": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Type", "Id", "ShortcutId", "Name"],
+      "anyOf": [
+        {
+          "required": ["TargetFileId"],
+          "properties": {
+            "TargetFileId": { "type": "string", "minLength": 1, "pattern": "\\S" }
+          }
+        },
+        {
+          "required": ["Target"],
+          "properties": {
+            "Target": { "type": "string", "minLength": 1, "pattern": "\\S" }
+          }
+        }
+      ]
+    },
+    "PowerForgeInstallerRegistryValueComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "RegistryValue" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "Root": { "type": "string", "minLength": 1 },
+        "Key": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string", "minLength": 1 },
+        "Value": { "type": ["string", "null"] },
+        "ValueProperty": { "type": ["string", "null"], "minLength": 1 },
+        "ValueType": { "type": "string", "minLength": 1 },
+        "KeyPath": { "type": "boolean" }
+      },
+      "required": ["Type", "Id", "Key", "Name"],
+      "anyOf": [
+        {
+          "required": ["Value"],
+          "properties": {
+            "Value": { "type": "string", "pattern": "\\S" }
+          }
+        },
+        {
+          "required": ["ValueProperty"],
+          "properties": {
+            "ValueProperty": { "type": "string", "minLength": 1, "pattern": "\\S" }
+          }
+        }
+      ]
+    },
+    "PowerForgeInstallerComponent": {
+      "oneOf": [
+        { "$ref": "#/$defs/PowerForgeInstallerFileComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerFolderComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerRemoveFolderComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerServiceComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerRegistryValueComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerShortcutComponent" }
+      ]
+    },
+    "PowerForgeInstallerDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Product": { "$ref": "#/$defs/PowerForgeInstallerProduct" },
+        "InstallDirectoryId": { "type": "string", "minLength": 1 },
+        "CompanyFolderName": { "type": "string", "minLength": 1 },
+        "UseCompanyFolder": { "type": "boolean" },
+        "InstallDirectoryName": { "type": "string", "minLength": 1 },
+        "PayloadComponentGroupId": { "type": ["string", "null"] },
+        "ExitLaunch": {
+          "anyOf": [
+            { "$ref": "#/$defs/PowerForgeInstallerExitLaunch" },
+            { "type": "null" }
+          ]
+        },
+        "LicenseAgreement": {
+          "anyOf": [
+            { "$ref": "#/$defs/PowerForgeInstallerLicenseAgreement" },
+            { "type": "null" }
+          ]
+        },
+        "Inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerInput" }
+        },
+        "Dialogs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerDialog" }
+        },
+        "Directories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerDirectoryTree" }
+        },
+        "Components": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerComponent" }
+        },
+        "ExecutableActions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerExecutableAction" }
+        }
+      },
+      "required": ["Product"]
+    },
+    "DotNetPublishBenchmarkMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "Source": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBenchmarkMetricSource" }, { "type": "null" }] },
+        "Path": { "type": ["string", "null"] },
+        "Pattern": { "type": ["string", "null"] },
+        "Group": { "type": "integer", "minimum": 0 },
+        "Aggregation": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBenchmarkMetricAggregation" }, { "type": "null" }] },
+        "Required": { "type": "boolean" }
+      },
+      "required": ["Name"]
+    },
+    "DotNetPublishBenchmarkGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Enabled": { "type": "boolean" },
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "BaselinePath": { "type": "string", "minLength": 1 },
+        "BaselineMode": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBaselineMode" }, { "type": "null" }] },
+        "FailOnNew": { "type": "boolean" },
+        "RelativeTolerance": { "type": "number", "minimum": 0 },
+        "AbsoluteToleranceMs": { "type": "number", "minimum": 0 },
+        "OnRegression": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "OnMissingMetric": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "Metrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBenchmarkMetric" }
+        }
+      },
+      "required": ["Id", "SourcePath", "BaselinePath", "Metrics"]
+    },
+    "DotNetPublishSignOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "IncludeDlls": { "type": "boolean" },
+        "ToolPath": { "type": ["string", "null"] },
+        "OnMissingTool": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "OnSignFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "Thumbprint": { "type": ["string", "null"] },
+        "SubjectName": { "type": ["string", "null"] },
+        "TimestampUrl": { "type": ["string", "null"] },
+        "Description": { "type": ["string", "null"] },
+        "Url": { "type": ["string", "null"] },
+        "Csp": { "type": ["string", "null"] },
+        "KeyContainer": { "type": ["string", "null"] }
+      }
+    },
+    "DotNetPublishSignPatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": ["boolean", "null"] },
+        "IncludeDlls": { "type": ["boolean", "null"] },
+        "ToolPath": { "type": ["string", "null"] },
+        "OnMissingTool": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishPolicyMode" }, { "type": "null" }] },
+        "OnSignFailure": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishPolicyMode" }, { "type": "null" }] },
+        "TimeoutSeconds": { "type": ["integer", "null"], "minimum": 1 },
+        "Thumbprint": { "type": ["string", "null"] },
+        "SubjectName": { "type": ["string", "null"] },
+        "TimestampUrl": { "type": ["string", "null"] },
+        "Description": { "type": ["string", "null"] },
+        "Url": { "type": ["string", "null"] },
+        "Csp": { "type": ["string", "null"] },
+        "KeyContainer": { "type": ["string", "null"] }
+      }
+    },
+    "DotNetPublishStateRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "DestinationPath": { "type": ["string", "null"] },
+        "Overwrite": { "type": "boolean" }
+      },
+      "required": ["SourcePath"]
+    },
+    "DotNetPublishStatePreservationOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "StoragePath": { "type": ["string", "null"] },
+        "ClearStorage": { "type": "boolean" },
+        "OnMissingSource": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "OnRestoreFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "Rules": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStateRule" } }
+      }
+    },
+    "DotNetPublishPublishOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Style": { "$ref": "#/$defs/DotNetPublishStyle" },
+        "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
+        "Framework": { "type": "string", "minLength": 1 },
+        "Frameworks": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "Runtimes": { "type": ["array", "null"], "items": { "type": "string" } },
+        "OutputPath": { "type": ["string", "null"] },
+        "UseStaging": { "type": "boolean" },
+        "ClearOutput": { "type": "boolean" },
+        "Slim": { "type": "boolean" },
+        "KeepSymbols": { "type": "boolean" },
+        "KeepDocs": { "type": "boolean" },
+        "PruneReferences": { "type": "boolean" },
+        "Zip": { "type": "boolean" },
+        "ZipPath": { "type": ["string", "null"] },
+        "ZipNameTemplate": { "type": ["string", "null"] },
+        "RenameTo": { "type": ["string", "null"] },
+        "ReadyToRun": { "type": ["boolean", "null"] },
+        "MsBuildProperties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        },
+        "StyleOverrides": {
+          "type": ["object", "null"],
+          "additionalProperties": { "$ref": "#/$defs/DotNetPublishStyleOverride" }
+        },
+        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
+        "SignProfile": { "type": ["string", "null"] },
+        "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] },
+        "Service": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishServicePackageOptions" }, { "type": "null" }] },
+        "State": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStatePreservationOptions" }, { "type": "null" }] }
+      }
+    },
+    "DotNetPublishStyleOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "MsBuildProperties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "DotNetPublishServicePackageOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ServiceName": { "type": ["string", "null"] },
+        "DisplayName": { "type": ["string", "null"] },
+        "Description": { "type": ["string", "null"] },
+        "ExecutablePath": { "type": ["string", "null"] },
+        "Arguments": { "type": ["string", "null"] },
+        "GenerateInstallScript": { "type": "boolean" },
+        "GenerateUninstallScript": { "type": "boolean" },
+        "GenerateRunOnceScript": { "type": "boolean" },
+        "Lifecycle": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishServiceLifecycleOptions" }, { "type": "null" }] },
+        "Recovery": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishServiceRecoveryOptions" }, { "type": "null" }] },
+        "ConfigBootstrap": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishConfigBootstrapRule" }
+        }
+      }
+    },
+    "DotNetPublishServiceLifecycleOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Mode": { "$ref": "#/$defs/DotNetPublishServiceLifecycleMode" },
+        "StopIfExists": { "type": "boolean" },
+        "DeleteIfExists": { "type": "boolean" },
+        "Install": { "type": "boolean" },
+        "Start": { "type": "boolean" },
+        "Verify": { "type": "boolean" },
+        "StopTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "WhatIf": { "type": "boolean" },
+        "OnUnsupportedPlatform": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "OnExecutionFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
+      }
+    },
+    "DotNetPublishServiceRecoveryOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "ResetPeriodSeconds": { "type": "integer", "minimum": 1 },
+        "RestartDelaySeconds": { "type": "integer", "minimum": 1 },
+        "ApplyToNonCrashFailures": { "type": "boolean" },
+        "OnFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
+      }
+    },
+    "DotNetPublishConfigBootstrapRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "DestinationPath": { "type": "string", "minLength": 1 },
+        "Overwrite": { "type": "boolean" },
+        "OnMissingSource": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
+      },
+      "required": ["SourcePath", "DestinationPath"]
+    },
+    "DotNetPublishTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "ProjectId": { "type": ["string", "null"], "minLength": 1 },
+        "ProjectPath": { "type": "string", "minLength": 1 },
+        "Kind": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishTargetKind" }, { "type": "null" }] },
+        "Publish": { "$ref": "#/$defs/DotNetPublishPublishOptions" }
+      },
+      "required": ["Name", "Publish"],
+      "anyOf": [
+        { "required": ["ProjectPath"] },
+        { "required": ["ProjectId"] }
+      ]
+    },
+    "DotNetPublishProject": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Path": { "type": "string", "minLength": 1 },
+        "Group": { "type": ["string", "null"] }
+      },
+      "required": ["Id", "Path"]
+    },
+    "DotNetPublishInstaller": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "PrepareFromTarget": { "type": "string", "minLength": 1 },
+        "PrepareFromBundleId": { "type": ["string", "null"] },
+        "Runtimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Frameworks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
+        "StagingPath": { "type": ["string", "null"] },
+        "ManifestPath": { "type": ["string", "null"] },
+        "OutputPath": { "type": ["string", "null"] },
+        "OutputName": { "type": ["string", "null"] },
+        "InstallerProjectId": { "type": ["string", "null"] },
+        "InstallerProjectPath": { "type": ["string", "null"] },
+        "Authoring": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerDefinition" }, { "type": "null" }] },
+        "Harvest": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiHarvestMode" }, { "type": "null" }] },
+        "HarvestPath": { "type": ["string", "null"] },
+        "HarvestDirectoryRefId": { "type": ["string", "null"] },
+        "HarvestComponentGroupId": { "type": ["string", "null"] },
+        "HarvestExcludePatterns": {
+          "type": "array",
+          "description": "Relative wildcard or basename patterns excluded from WiX harvest. Bare basenames match anywhere under the staged payload.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Versioning": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiVersionOptions" }, { "type": "null" }] },
+        "MsBuildProperties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        },
+        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
+        "SignProfile": { "type": ["string", "null"] },
+        "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] },
+        "ClientLicense": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiClientLicenseOptions" }, { "type": "null" }] }
+      },
+      "required": ["Id", "PrepareFromTarget"]
+    },
+    "DotNetPublishStorePackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "PrepareFromTarget": { "type": "string", "minLength": 1 },
+        "Runtimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Frameworks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
+        "PackagingProjectId": { "type": ["string", "null"] },
+        "PackagingProjectPath": { "type": ["string", "null"] },
+        "OutputPath": { "type": ["string", "null"] },
+        "ClearOutput": { "type": "boolean" },
+        "BuildMode": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStoreBuildMode" }, { "type": "null" }] },
+        "Bundle": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStoreBundleMode" }, { "type": "null" }] },
+        "GenerateAppInstaller": { "type": "boolean" },
+        "AppInstaller": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishAppInstallerOptions" }, { "type": "null" }] },
+        "MsBuildProperties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["Id", "PrepareFromTarget"],
+      "anyOf": [
+        { "required": ["PackagingProjectPath"] },
+        { "required": ["PackagingProjectId"] }
+      ]
+    },
+    "DotNetPublishAppInstallerOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Uri": { "type": ["string", "null"] },
+        "HoursBetweenUpdateChecks": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+        "ShowPrompt": { "type": ["boolean", "null"] },
+        "UpdateBlocksActivation": { "type": ["boolean", "null"] },
+        "AutomaticBackgroundTask": { "type": "boolean" },
+        "ForceUpdateFromAnyVersion": { "type": ["boolean", "null"] },
+        "UpdateUris": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "SchemaVersion": {
+          "type": "string",
+          "enum": ["2017/2", "2021"]
+        }
+      }
+    },
+    "DotNetPublishBundleInclude": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Target": { "type": "string", "minLength": 1 },
+        "Subdirectory": { "type": ["string", "null"] },
+        "Framework": { "type": ["string", "null"] },
+        "Runtime": { "type": ["string", "null"] },
+        "Style": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStyle" }, { "type": "null" }] },
+        "Required": { "type": "boolean" }
+      },
+      "required": ["Target"]
+    },
+    "DotNetPublishBundleCopyItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "DestinationPath": { "type": "string", "minLength": 1 },
+        "Required": { "type": "boolean" },
+        "ClearDestination": {
+          "type": "boolean",
+          "description": "When false, an existing destination is preserved by failing the copy instead of replacing it."
+        }
+      },
+      "required": ["SourcePath", "DestinationPath"]
+    },
+    "DotNetPublishBundleModuleInclude": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ModuleName": { "type": "string", "minLength": 1 },
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "DestinationPath": { "type": ["string", "null"] },
+        "Required": { "type": "boolean" },
+        "ClearDestination": {
+          "type": "boolean",
+          "description": "When false, an existing module destination is preserved by failing the copy instead of replacing it."
+        }
+      },
+      "required": ["ModuleName", "SourcePath"]
+    },
+    "DotNetPublishBundleGeneratedScript": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "TemplatePath": {
+          "type": ["string", "null"],
+          "description": "Template file path resolved under ProjectRoot. Path tokens use single braces, for example {output}."
+        },
+        "Template": { "type": ["string", "null"] },
+        "OutputPath": { "type": "string", "minLength": 1 },
+        "Tokens": {
+          "type": ["object", "null"],
+          "description": "Template token values. Values are expanded with single-brace bundle tokens before being exposed to double-brace placeholders in the generated script body. Inserted values are literal and are not rendered recursively.",
+          "additionalProperties": { "type": "string" }
+        },
+        "Overwrite": {
+          "type": "boolean",
+          "description": "When false, an existing generated script is an error rather than a silent skip."
+        },
+        "SignProfile": { "type": ["string", "null"] },
+        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
+        "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] }
+      },
+      "required": ["OutputPath"],
+      "anyOf": [
+        { "required": ["TemplatePath"] },
+        { "required": ["Template"] }
+      ]
+    },
+    "DotNetPublishBundleScript": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Path": { "type": "string", "minLength": 1 },
+        "Arguments": { "type": "array", "items": { "type": "string" } },
+        "WorkingDirectory": { "type": ["string", "null"] },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum bundle script runtime in seconds. Defaults to 600 when omitted."
+        },
+        "PreferPwsh": { "type": "boolean" },
+        "Required": { "type": "boolean" }
+      },
+      "required": ["Path"]
+    },
+    "DotNetPublishBundleArchiveRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Path": { "type": "string", "minLength": 1 },
+        "Mode": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBundleArchiveMode" }, { "type": "null" }] },
+        "ArchiveNameTemplate": { "type": ["string", "null"] },
+        "DeleteSource": { "type": "boolean" }
+      },
+      "required": ["Path"]
+    },
+    "DotNetPublishBundleMetadataOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Path": { "type": "string", "minLength": 1 },
+        "IncludeStandardProperties": { "type": "boolean" },
+        "Properties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["Path"]
+    },
+    "DotNetPublishBundlePostProcessOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ArchiveDirectories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleArchiveRule" }
+        },
+        "DeletePatterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "SignPatterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "SignProfile": { "type": ["string", "null"] },
+        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
+        "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] },
+        "Metadata": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBundleMetadataOptions" }, { "type": "null" }] }
+      }
+    },
+    "DotNetPublishBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "PrepareFromTarget": { "type": "string", "minLength": 1 },
+        "Runtimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Frameworks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
+        "OutputPath": { "type": ["string", "null"] },
+        "PrimarySubdirectory": { "type": ["string", "null"] },
+        "ClearOutput": { "type": "boolean" },
+        "Zip": { "type": "boolean" },
+        "ZipPath": { "type": ["string", "null"] },
+        "ZipNameTemplate": { "type": ["string", "null"] },
+        "Includes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleInclude" }
+        },
+        "CopyItems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleCopyItem" }
+        },
+        "ModuleIncludes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleModuleInclude" }
+        },
+        "GeneratedScripts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleGeneratedScript" }
+        },
+        "Scripts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleScript" }
+        },
+        "PostProcess": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBundlePostProcessOptions" }, { "type": "null" }] }
+      },
+      "required": ["Id", "PrepareFromTarget"]
+    },
+    "DotNetPublishCommandHook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Phase": { "$ref": "#/$defs/DotNetPublishCommandHookPhase" },
+        "Command": { "type": "string", "minLength": 1 },
+        "Arguments": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "WorkingDirectory": { "type": ["string", "null"] },
+        "Environment": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum hook runtime in seconds. Defaults to 600 when omitted or set to 0."
+        },
+        "Required": { "type": "boolean" },
+        "Targets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Runtimes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Frameworks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Styles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishStyle" }
+        }
+      },
+      "required": ["Id", "Phase", "Command"]
+    },
+    "DotNetPublishProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "Default": { "type": "boolean" },
+        "Targets": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Runtimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Frameworks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Style": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStyle" }, { "type": "null" }] }
+      },
+      "required": ["Name"]
+    },
+    "DotNetPublishMatrixRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Targets": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Runtime": { "type": ["string", "null"] },
+        "Framework": { "type": ["string", "null"] },
+        "Style": { "type": ["string", "null"] }
+      }
+    },
+    "DotNetPublishMatrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Runtimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Frameworks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
+        "Include": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishMatrixRule" } },
+        "Exclude": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishMatrixRule" } }
+      }
+    },
+    "DotNetPublishDotNetOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ProjectRoot": { "type": ["string", "null"] },
+        "AllowOutputOutsideProjectRoot": { "type": "boolean" },
+        "AllowManifestOutsideProjectRoot": { "type": "boolean" },
+        "LockedOutputGuard": { "type": "boolean" },
+        "OnLockedOutput": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "LockedOutputSampleLimit": { "type": "integer", "minimum": 1 },
+        "SolutionPath": { "type": ["string", "null"] },
+        "Configuration": { "type": "string" },
+        "Restore": { "type": "boolean" },
+        "Clean": { "type": "boolean" },
+        "Build": { "type": "boolean" },
+        "NoRestoreInPublish": { "type": "boolean" },
+        "NoBuildInPublish": { "type": "boolean" },
+        "Runtimes": { "type": ["array", "null"], "items": { "type": "string" } },
+        "MsBuildProperties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "DotNetPublishOutputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ManifestJsonPath": { "type": ["string", "null"] },
+        "ManifestTextPath": { "type": ["string", "null"] },
+        "ChecksumsPath": { "type": ["string", "null"] },
+        "RunReportPath": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

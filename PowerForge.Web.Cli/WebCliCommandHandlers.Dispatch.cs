@@ -1,0 +1,71 @@
+using static PowerForge.Web.Cli.WebCliHelpers;
+
+namespace PowerForge.Web.Cli;
+
+internal static partial class WebCliCommandHandlers
+{
+    private const string DefaultArchetypeTemplate = """
+---
+title: {{title}}
+slug: {{slug}}
+date: {{date}}
+collection: {{collection}}
+---
+
+# {{title}}
+""";
+
+    internal static int HandleSubCommand(string subCommand, string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        return subCommand switch
+        {
+            "plan" => HandlePlan(subArgs, outputJson, logger, outputSchemaVersion),
+            "build" => HandleBuild(subArgs, outputJson, logger, outputSchemaVersion),
+            "nav-export" => HandleNavExport(subArgs, outputJson, logger, outputSchemaVersion),
+            "git-sync" => HandleGitSync(subArgs, outputJson, logger, outputSchemaVersion),
+            "sources-sync" => HandleSourcesSync(subArgs, outputJson, logger, outputSchemaVersion),
+            "publish" => HandlePublish(subArgs, outputJson, logger, outputSchemaVersion),
+            "verify" => HandleVerify(subArgs, outputJson, logger, outputSchemaVersion),
+            "doctor" => HandleDoctor(subArgs, outputJson, logger, outputSchemaVersion),
+            "markdown-fix" => HandleMarkdownFix(subArgs, outputJson, logger, outputSchemaVersion),
+            "contributions" => HandleContributions(subArgs, outputJson, logger, outputSchemaVersion),
+            "contribution" => HandleContributions(subArgs, outputJson, logger, outputSchemaVersion),
+            "audit" => HandleAudit(subArgs, outputJson, logger, outputSchemaVersion),
+            "scaffold" => HandleScaffold(subArgs, outputJson, logger, outputSchemaVersion),
+            "new" => HandleNew(subArgs, outputJson, logger, outputSchemaVersion),
+            "serve" => HandleServe(subArgs, outputJson, logger),
+            "apidocs" => HandleApiDocs(subArgs, outputJson, logger, outputSchemaVersion),
+            "changelog" => HandleChangelog(subArgs, outputJson, logger, outputSchemaVersion),
+            "release-hub" => HandleReleaseHub(subArgs, outputJson, logger, outputSchemaVersion),
+            "ecosystem-stats" => HandleEcosystemStats(subArgs, outputJson, logger, outputSchemaVersion),
+            "optimize" => HandleOptimize(subArgs, outputJson, logger, outputSchemaVersion),
+            "pipeline" => HandlePipeline(subArgs, outputJson, logger, outputSchemaVersion),
+            "links" => HandleLinks(subArgs, outputJson, logger, outputSchemaVersion),
+            "link" => HandleLinks(subArgs, outputJson, logger, outputSchemaVersion),
+            "website-runner" => HandleWebsiteRunner(subArgs, outputJson, logger, outputSchemaVersion),
+            "website_runner" => HandleWebsiteRunner(subArgs, outputJson, logger, outputSchemaVersion),
+            "websiterunner" => HandleWebsiteRunner(subArgs, outputJson, logger, outputSchemaVersion),
+            "engine-lock" => HandleEngineLock(subArgs, outputJson, logger, outputSchemaVersion),
+            "enginelock" => HandleEngineLock(subArgs, outputJson, logger, outputSchemaVersion),
+            "dotnet-build" => HandleDotNetBuild(subArgs, outputJson, outputSchemaVersion, logger),
+            "dotnet-publish" => HandleDotNetPublish(subArgs, outputJson, outputSchemaVersion, logger),
+            "overlay" => HandleOverlay(subArgs, outputJson, logger, outputSchemaVersion),
+            "llms" => HandleLlms(subArgs, outputJson, logger, outputSchemaVersion),
+            "sitemap" => HandleSitemap(subArgs, outputJson, logger, outputSchemaVersion),
+            "sitemap-schemas" => HandleSitemapSchemas(subArgs, outputJson, logger, outputSchemaVersion),
+            "sitemap-schema" => HandleSitemapSchemas(subArgs, outputJson, logger, outputSchemaVersion),
+            "agent-ready" => HandleAgentReady(subArgs, outputJson, logger, outputSchemaVersion),
+            "agentready" => HandleAgentReady(subArgs, outputJson, logger, outputSchemaVersion),
+            "xref-merge" => HandleXrefMerge(subArgs, outputJson, logger, outputSchemaVersion),
+            "server" => HandleServer(subArgs, outputJson, logger, outputSchemaVersion),
+            "cloudflare" => HandleCloudflare(subArgs, outputJson, logger, outputSchemaVersion),
+            _ => HandleUnknownCommand()
+        };
+    }
+
+    private static int HandleUnknownCommand()
+    {
+        PrintUsage();
+        return 2;
+    }
+}

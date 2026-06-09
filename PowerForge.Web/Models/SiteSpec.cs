@@ -17,8 +17,17 @@ public sealed class SiteSpec
     public TrailingSlashMode TrailingSlash { get; set; } = TrailingSlashMode.Ignore;
     /// <summary>Optional content root for shared pages.</summary>
     public string? ContentRoot { get; set; }
+    /// <summary>Optional additional content roots used as source-of-truth folders.</summary>
+    public string[] ContentRoots { get; set; } = Array.Empty<string>();
     /// <summary>Optional projects root.</summary>
     public string? ProjectsRoot { get; set; }
+
+    /// <summary>
+    /// Optional repository sources that can be synchronized into ProjectsRoot via `powerforge-web sources-sync`
+    /// (or `powerforge-web build --sync-sources`). This keeps `build` deterministic by default while allowing
+    /// one-command bootstrap when explicitly requested.
+    /// </summary>
+    public SourceRepoSpec[] Sources { get; set; } = Array.Empty<SourceRepoSpec>();
     /// <summary>Optional themes root.</summary>
     public string? ThemesRoot { get; set; }
     /// <summary>Optional shared content root.</summary>
@@ -35,11 +44,19 @@ public sealed class SiteSpec
 
     /// <summary>Output format configuration.</summary>
     public OutputsSpec? Outputs { get; set; }
+    /// <summary>Pagination defaults for section/taxonomy pages.</summary>
+    public PaginationSpec? Pagination { get; set; }
+    /// <summary>Feed generation settings for RSS outputs.</summary>
+    public FeedSpec? Feed { get; set; }
     /// <summary>Taxonomy definitions (tags, categories).</summary>
     public TaxonomySpec[] Taxonomies { get; set; } = Array.Empty<TaxonomySpec>();
+    /// <summary>Markdown rendering options.</summary>
+    public MarkdownSpec? Markdown { get; set; }
 
     /// <summary>Head configuration applied to all pages.</summary>
     public HeadSpec? Head { get; set; }
+    /// <summary>SEO configuration (templates and page metadata defaults).</summary>
+    public SeoSpec? Seo { get; set; }
     /// <summary>OpenGraph/Twitter card configuration.</summary>
     public SocialSpec? Social { get; set; }
     /// <summary>Structured data configuration.</summary>
@@ -51,6 +68,10 @@ public sealed class SiteSpec
     public RedirectSpec[] RouteOverrides { get; set; } = Array.Empty<RedirectSpec>();
     /// <summary>Redirect rules for legacy URLs.</summary>
     public RedirectSpec[] Redirects { get; set; } = Array.Empty<RedirectSpec>();
+    /// <summary>Reusable redirect, shortlink, and 404 workflow configuration.</summary>
+    public LinkServiceSpec? Links { get; set; }
+    /// <summary>When enabled, emit legacy /amp redirects to canonical routes for generated pages.</summary>
+    public bool EnableLegacyAmpRedirects { get; set; }
 
     /// <summary>Asset registry configuration for bundling/preloading.</summary>
     public AssetRegistrySpec? AssetRegistry { get; set; }
@@ -66,11 +87,25 @@ public sealed class SiteSpec
     public AnalyticsSpec? Analytics { get; set; }
     /// <summary>Navigation menus.</summary>
     public NavigationSpec? Navigation { get; set; }
+    /// <summary>Localization and multi-language routing.</summary>
+    public LocalizationSpec? Localization { get; set; }
+
+    /// <summary>
+    /// Explicit feature flags for engine and theme contract verification (for example: docs, apiDocs, blog, news, search).
+    /// Prefer declaring these to avoid implicit inference and cross-site regressions.
+    /// </summary>
+    public string[] Features { get; set; } = Array.Empty<string>();
 
     /// <summary>Documentation versioning configuration.</summary>
     public VersioningSpec? Versioning { get; set; }
     /// <summary>Link checking configuration.</summary>
     public LinkCheckSpec? LinkCheck { get; set; }
+    /// <summary>Cross-reference link configuration (docs/API xref map).</summary>
+    public XrefSpec? Xref { get; set; }
+    /// <summary>Verification policy defaults for verify/doctor commands.</summary>
+    public VerifyPolicySpec? Verify { get; set; }
+    /// <summary>Agent-readiness discovery and policy output settings.</summary>
+    public AgentReadinessSpec? AgentReadiness { get; set; }
     /// <summary>Build cache configuration.</summary>
     public BuildCacheSpec? Cache { get; set; }
 }

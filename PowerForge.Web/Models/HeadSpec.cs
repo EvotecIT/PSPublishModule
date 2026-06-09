@@ -28,11 +28,20 @@ public sealed class HeadLinkSpec
     /// <summary>Optional MIME type.</summary>
     public string? Type { get; set; }
 
+    /// <summary>Optional as attribute for preload/prefetch style links.</summary>
+    public string? As { get; set; }
+
     /// <summary>Optional sizes attribute.</summary>
     public string? Sizes { get; set; }
 
     /// <summary>Optional crossorigin attribute value.</summary>
     public string? Crossorigin { get; set; }
+
+    /// <summary>Optional additional attributes rendered on the link element.</summary>
+    public Dictionary<string, string>? Attributes { get; set; }
+
+    /// <summary>Optional boolean attributes rendered without a value.</summary>
+    public string[] BooleanAttributes { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Represents a structured &lt;meta&gt; element.</summary>

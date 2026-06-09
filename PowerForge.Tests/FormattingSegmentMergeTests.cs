@@ -78,6 +78,96 @@ public sealed class FormattingSegmentMergeTests
         }
     }
 
+    [Fact]
+    public void Plan_AutoEnablesUpdateProjectRoot_WhenStandardFormattingIsConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationFormattingSegment
+                    {
+                        Options = new FormattingOptions
+                        {
+                            Standard = new FormattingTargetOptions
+                            {
+                                FormatCodePSD1 = new FormatCodeOptions { Enabled = true }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.NotNull(plan.Formatting);
+            Assert.True(plan.Formatting!.Options.UpdateProjectRoot);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_DoesNotAutoEnableUpdateProjectRoot_WhenOnlyMergeFormattingIsConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationFormattingSegment
+                    {
+                        Options = new FormattingOptions
+                        {
+                            Merge = new FormattingTargetOptions
+                            {
+                                FormatCodePSD1 = new FormatCodeOptions { Enabled = true }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.NotNull(plan.Formatting);
+            Assert.False(plan.Formatting!.Options.UpdateProjectRoot);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -97,4 +187,3 @@ public sealed class FormattingSegmentMergeTests
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
     }
 }
-

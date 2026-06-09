@@ -4,9 +4,19 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <PackageId>PowerForge.Web</PackageId>
     <RootNamespace>PowerForge.Web</RootNamespace>
+    <Description>PowerForge.Web static-site engine and reusable website build components.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Authors>Przemyslaw Klys</Authors>
+    <Company>Evotec Services sp. z o.o.</Company>
+    <Copyright>Copyright (c) 2024-2026 Evotec Services sp. z o.o.</Copyright>
+    <PackageTags>website;static-site;docs;automation;powerforge</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/EvotecIT/PSPublishModule</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,8 +27,9 @@
 
   <ItemGroup>
     <PackageReference Include="HtmlTinkerX" Version="2.0.6" />
-    <PackageReference Include="OfficeIMO.Markdown" Version="0.5.2" />
-    <PackageReference Include="Scriban" Version="5.11.0" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.13.1" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="0.6.7" />
+    <PackageReference Include="Scriban" Version="7.2.0" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
 
@@ -29,7 +40,12 @@
     <EmbeddedResource Include="Assets\ApiDocs\type.html" />
     <EmbeddedResource Include="Assets\ApiDocs\docs-index.html" />
     <EmbeddedResource Include="Assets\ApiDocs\docs-type.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\suite-portal.html" />
     <EmbeddedResource Include="Assets\ApiDocs\docs.js" />
+    <EmbeddedResource Include="Assets\ApiDocs\api-header.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\api-footer.html" />
+    <EmbeddedResource Include="Assets\SitemapProtocol\sitemap.xsd" />
+    <EmbeddedResource Include="Assets\SitemapProtocol\siteindex.xsd" />
   </ItemGroup>
 
 </Project>

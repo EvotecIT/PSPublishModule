@@ -13,6 +13,8 @@ internal static class CliJson
         Options = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            // Keep checked-in housekeeping configs backward compatible when examples move
+            // between camelCase JSON and public-model PascalCase.
             PropertyNameCaseInsensitive = true,
             ReadCommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true,

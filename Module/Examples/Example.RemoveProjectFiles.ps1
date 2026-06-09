@@ -1,4 +1,4 @@
-Import-Module .\PSPublishModule.psd1 -Force
+﻿Import-Module .\PSPublishModule.psd1 -Force
 
 # Example 1: Preview build cleanup with WhatIf
 Write-Host "=== Example 1: Preview build cleanup ===" -ForegroundColor Cyan

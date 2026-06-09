@@ -1,0 +1,26 @@
+[
+  {
+    "match": "api/**",
+    "ignore": true
+  },
+  {
+    "match": "docs/**",
+    "requireIframeLazy": true,
+    "requireIframeTitle": true,
+    "requireIframeReferrerPolicy": true,
+    "requireImageLoadingHint": true,
+    "requireImageDecodingHint": true,
+    "requireImageDimensions": true,
+    "requireImageSrcSetSizes": true,
+    "maxEagerImages": 1
+  },
+  {
+    "match": "showcase/**",
+    "allowYoutubeStandardHost": true,
+    "requireImageLoadingHint": true,
+    "requireImageDecodingHint": true,
+    "requireImageDimensions": true,
+    "requireImageSrcSetSizes": true,
+    "maxEagerImages": 3
+  }
+]

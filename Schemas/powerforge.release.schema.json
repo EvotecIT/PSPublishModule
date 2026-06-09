@@ -1,0 +1,240 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PowerForge Unified Release Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Module": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "RepositoryRoot": { "type": [ "string", "null" ] },
+        "ScriptPath": { "type": [ "string", "null" ] },
+        "ModulePath": { "type": [ "string", "null" ] },
+        "NoDotnetBuild": { "type": [ "boolean", "null" ] },
+        "ModuleVersion": { "type": [ "string", "null" ] },
+        "PreReleaseTag": { "type": [ "string", "null" ] },
+        "NoSign": { "type": [ "boolean", "null" ] },
+        "SignModule": { "type": [ "boolean", "null" ] },
+        "ArtifactPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "Packages": { "$ref": "project.build.schema.json" },
+    "WorkspaceValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ConfigPath": { "type": [ "string", "null" ] },
+        "Profile": { "type": [ "string", "null" ] },
+        "EnableFeatures": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "DisableFeatures": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "GitHub": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Publish": { "type": "boolean" },
+        "Owner": { "type": [ "string", "null" ] },
+        "Repository": { "type": [ "string", "null" ] },
+        "Token": { "type": [ "string", "null" ] },
+        "TokenFilePath": { "type": [ "string", "null" ] },
+        "TokenEnvName": { "type": [ "string", "null" ] },
+        "GenerateReleaseNotes": { "type": "boolean" },
+        "IsPreRelease": { "type": "boolean" },
+        "TagTemplate": { "type": [ "string", "null" ] },
+        "ReleaseNameTemplate": { "type": [ "string", "null" ] }
+      }
+    },
+    "Winget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "OutputPath": { "type": [ "string", "null" ] },
+        "InstallerUrlTemplate": {
+          "type": [ "string", "null" ],
+          "description": "URL template for generated installer links. Tokens are URL-encoded and {FileName} uses the staged filename after any name-template rewrite."
+        },
+        "ManifestVersion": { "type": [ "string", "null" ] },
+        "PackageLocale": { "type": [ "string", "null" ] },
+        "Submit": {
+          "type": "boolean",
+          "description": "When true, submit generated Winget manifests with wingetcreate after release assets are available."
+        },
+        "Submission": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Enabled": { "type": [ "boolean", "null" ] },
+            "Mode": { "type": "string", "enum": [ "Manifest", "Update" ] },
+            "ToolPath": { "type": [ "string", "null" ] },
+            "Token": {
+              "type": [ "string", "null" ],
+              "description": "GitHub token passed to wingetcreate. Prefer TokenEnvName or TokenFilePath to avoid logging secrets."
+            },
+            "TokenFilePath": { "type": [ "string", "null" ] },
+            "TokenEnvName": { "type": [ "string", "null" ] },
+            "PullRequestTitle": { "type": [ "string", "null" ] },
+            "NoOpen": { "type": "boolean" },
+            "Replace": { "type": "boolean" },
+            "ReplaceVersion": { "type": [ "string", "null" ] },
+            "AllowInteractiveAuthentication": { "type": "boolean" },
+            "TimeoutSeconds": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "Packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [ "PackageIdentifier", "Publisher", "PackageName", "License", "ShortDescription", "Installers" ],
+            "properties": {
+              "PackageIdentifier": { "type": "string" },
+              "PackageVersion": { "type": [ "string", "null" ] },
+              "PackageLocale": { "type": [ "string", "null" ] },
+              "Publisher": { "type": "string" },
+              "PublisherUrl": { "type": [ "string", "null" ] },
+              "PackageName": { "type": "string" },
+              "PackageUrl": { "type": [ "string", "null" ] },
+              "License": { "type": "string" },
+              "LicenseUrl": { "type": [ "string", "null" ] },
+              "ShortDescription": { "type": "string" },
+              "Moniker": { "type": [ "string", "null" ] },
+              "Tags": { "type": "array", "items": { "type": "string" } },
+              "Platform": { "type": "array", "items": { "type": "string" } },
+              "MinimumOSVersion": { "type": [ "string", "null" ] },
+              "ManifestVersion": { "type": [ "string", "null" ] },
+              "Installers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [ "Category" ],
+                  "properties": {
+                    "Category": { "type": "string", "enum": [ "Module", "Package", "Portable", "Installer", "Store", "Tool", "Metadata", "Other" ] },
+                    "Target": { "type": [ "string", "null" ] },
+                    "Runtime": { "type": [ "string", "null" ] },
+                    "Framework": { "type": [ "string", "null" ] },
+                    "Architecture": { "type": [ "string", "null" ] },
+                    "InstallerType": { "type": [ "string", "null" ] },
+                    "NestedInstallerType": {
+                      "type": [ "string", "null" ],
+                      "description": "Optional nested installer type for archive-based installers. Set this explicitly for reusable configs instead of relying on portable-only assumptions."
+                    },
+                    "RelativeFilePath": { "type": [ "string", "null" ] },
+                    "UrlTemplate": { "type": [ "string", "null" ] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ManifestJsonPath": { "type": [ "string", "null" ] },
+        "ChecksumsPath": { "type": [ "string", "null" ] },
+        "Staging": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "RootPath": { "type": [ "string", "null" ] },
+            "ModulesPath": { "type": [ "string", "null" ] },
+            "PackagesPath": { "type": [ "string", "null" ] },
+            "PortablePath": { "type": [ "string", "null" ] },
+            "InstallerPath": { "type": [ "string", "null" ] },
+            "StorePath": { "type": [ "string", "null" ] },
+            "ToolsPath": { "type": [ "string", "null" ] },
+            "MetadataPath": { "type": [ "string", "null" ] },
+            "OtherPath": { "type": [ "string", "null" ] },
+            "ModulesNameTemplate": { "type": [ "string", "null" ] },
+            "PackagesNameTemplate": { "type": [ "string", "null" ] },
+            "PortableNameTemplate": { "type": [ "string", "null" ] },
+            "InstallerNameTemplate": { "type": [ "string", "null" ] },
+            "StoreNameTemplate": { "type": [ "string", "null" ] },
+            "ToolsNameTemplate": { "type": [ "string", "null" ] },
+            "MetadataNameTemplate": { "type": [ "string", "null" ] },
+            "OtherNameTemplate": { "type": [ "string", "null" ] }
+          }
+        }
+      }
+    },
+    "Tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ProjectRoot": { "type": [ "string", "null" ] },
+        "Configuration": { "type": "string", "enum": [ "Release", "Debug" ] },
+        "DotNetPublishConfigPath": { "type": [ "string", "null" ] },
+        "DotNetPublishProfile": { "type": [ "string", "null" ] },
+        "DotNetPublish": { "$ref": "powerforge.dotnetpublish.schema.json" },
+        "Targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [ "Name", "ProjectPath", "OutputName", "Runtimes", "Frameworks" ],
+            "properties": {
+              "Name": { "type": "string" },
+              "ProjectPath": { "type": "string" },
+              "OutputName": { "type": "string" },
+              "CommandAlias": { "type": [ "string", "null" ] },
+              "Runtimes": { "type": "array", "items": { "type": "string" } },
+              "Frameworks": { "type": "array", "items": { "type": "string" } },
+              "Flavor": { "type": "string", "enum": [ "SingleContained", "SingleFx", "Portable", "Fx" ] },
+              "Flavors": {
+                "type": "array",
+                "items": { "type": "string", "enum": [ "SingleContained", "SingleFx", "Portable", "Fx" ] }
+              },
+              "ArtifactRootPath": { "type": [ "string", "null" ] },
+              "OutputPath": { "type": [ "string", "null" ] },
+              "UseStaging": { "type": "boolean" },
+              "ClearOutput": { "type": "boolean" },
+              "Zip": { "type": "boolean" },
+              "ZipPath": { "type": [ "string", "null" ] },
+              "ZipNameTemplate": { "type": [ "string", "null" ] },
+              "KeepSymbols": { "type": "boolean" },
+              "KeepDocs": { "type": "boolean" },
+              "CreateCommandAliasOnUnix": { "type": "boolean" },
+              "MsBuildProperties": {
+                "type": [ "object", "null" ],
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          }
+        },
+        "GitHub": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Publish": { "type": "boolean" },
+            "Owner": { "type": [ "string", "null" ] },
+            "Repository": { "type": [ "string", "null" ] },
+            "Token": { "type": [ "string", "null" ] },
+            "TokenFilePath": { "type": [ "string", "null" ] },
+            "TokenEnvName": { "type": [ "string", "null" ] },
+            "GenerateReleaseNotes": { "type": "boolean" },
+            "IsPreRelease": { "type": "boolean" },
+            "TagTemplate": { "type": [ "string", "null" ] },
+            "ReleaseNameTemplate": { "type": [ "string", "null" ] }
+          }
+        }
+      }
+    }
+  }
+}

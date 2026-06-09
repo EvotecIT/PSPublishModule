@@ -80,6 +80,12 @@ public sealed class NewConfigurationValidationCommand : PSCmdlet
     /// <summary>Minimum examples per command (default 1).</summary>
     [Parameter] public int MinExamplesPerCommand { get; set; } = 1;
 
+    /// <summary>Minimum percentage of parameters that must have descriptions (default 0 = disabled).</summary>
+    [Parameter] public int MinParameterDescriptionPercent { get; set; }
+
+    /// <summary>Minimum percentage of unique input/output types that must have descriptions (default 0 = disabled).</summary>
+    [Parameter] public int MinTypeDescriptionPercent { get; set; }
+
     /// <summary>Command names to exclude from documentation checks.</summary>
     [Parameter] public string[] ExcludeCommands { get; set; } = Array.Empty<string>();
 
@@ -94,6 +100,9 @@ public sealed class NewConfigurationValidationCommand : PSCmdlet
 
     /// <summary>Skip PSScriptAnalyzer checks if the module is not installed.</summary>
     [Parameter] public bool ScriptAnalyzerSkipIfUnavailable { get; set; } = true;
+
+    /// <summary>Install PSScriptAnalyzer on demand before validation when it is missing.</summary>
+    [Parameter] public bool ScriptAnalyzerInstallIfUnavailable { get; set; }
 
     /// <summary>ScriptAnalyzer timeout, in seconds (default 300).</summary>
     [Parameter] public int ScriptAnalyzerTimeoutSeconds { get; set; } = 300;
@@ -155,77 +164,55 @@ public sealed class NewConfigurationValidationCommand : PSCmdlet
     /// <summary>Emits validation configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var settings = new ModuleValidationSettings
+        var factory = new ValidationConfigurationFactory();
+        var configuration = factory.Create(new ValidationConfigurationRequest
         {
             Enable = Enable.IsPresent,
-            Structure = new ModuleStructureValidationSettings
-            {
-                Severity = StructureSeverity,
-                PublicFunctionPaths = PublicFunctionPaths ?? Array.Empty<string>(),
-                InternalFunctionPaths = InternalFunctionPaths ?? Array.Empty<string>(),
-                ValidateManifestFiles = ValidateManifestFiles,
-                ValidateExports = ValidateExports,
-                ValidateInternalNotExported = ValidateInternalNotExported,
-                AllowWildcardExports = AllowWildcardExports
-            },
-            Documentation = new DocumentationValidationSettings
-            {
-                Severity = DocumentationSeverity,
-                MinSynopsisPercent = MinSynopsisPercent,
-                MinDescriptionPercent = MinDescriptionPercent,
-                MinExampleCountPerCommand = MinExamplesPerCommand,
-                ExcludeCommands = ExcludeCommands ?? Array.Empty<string>()
-            },
-            ScriptAnalyzer = new ScriptAnalyzerValidationSettings
-            {
-                Severity = ScriptAnalyzerSeverity,
-                Enable = EnableScriptAnalyzer.IsPresent,
-                ExcludeDirectories = ScriptAnalyzerExcludeDirectories ?? Array.Empty<string>(),
-                ExcludeRules = ScriptAnalyzerExcludeRules ?? Array.Empty<string>(),
-                SkipIfUnavailable = ScriptAnalyzerSkipIfUnavailable,
-                TimeoutSeconds = Math.Max(1, ScriptAnalyzerTimeoutSeconds)
-            },
-            FileIntegrity = new FileIntegrityValidationSettings
-            {
-                Severity = FileIntegritySeverity,
-                ExcludeDirectories = FileIntegrityExcludeDirectories ?? Array.Empty<string>(),
-                CheckTrailingWhitespace = FileIntegrityCheckTrailingWhitespace,
-                CheckSyntax = FileIntegrityCheckSyntax,
-                BannedCommands = BannedCommands ?? Array.Empty<string>(),
-                AllowBannedCommandsIn = AllowBannedCommandsIn ?? Array.Empty<string>()
-            },
-            Tests = new TestSuiteValidationSettings
-            {
-                Severity = TestsSeverity,
-                Enable = EnableTests.IsPresent,
-                TestPath = TestsPath,
-                AdditionalModules = TestAdditionalModules ?? Array.Empty<string>(),
-                SkipModules = TestSkipModules ?? Array.Empty<string>(),
-                SkipDependencies = TestSkipDependencies.IsPresent,
-                SkipImport = TestSkipImport.IsPresent,
-                Force = TestForce.IsPresent,
-                TimeoutSeconds = Math.Max(1, TestTimeoutSeconds)
-            },
-            Binary = new BinaryModuleValidationSettings
-            {
-                Severity = BinarySeverity,
-                ValidateAssembliesExist = ValidateBinaryAssemblies,
-                ValidateManifestExports = ValidateBinaryExports,
-                AllowWildcardExports = AllowBinaryWildcardExports
-            },
-            Csproj = new CsprojValidationSettings
-            {
-                Severity = CsprojSeverity,
-                RequireTargetFramework = RequireTargetFramework,
-                RequireLibraryOutput = RequireLibraryOutput
-            }
-        };
+            StructureSeverity = StructureSeverity,
+            DocumentationSeverity = DocumentationSeverity,
+            ScriptAnalyzerSeverity = ScriptAnalyzerSeverity,
+            FileIntegritySeverity = FileIntegritySeverity,
+            TestsSeverity = TestsSeverity,
+            BinarySeverity = BinarySeverity,
+            CsprojSeverity = CsprojSeverity,
+            PublicFunctionPaths = PublicFunctionPaths,
+            InternalFunctionPaths = InternalFunctionPaths,
+            ValidateManifestFiles = ValidateManifestFiles,
+            ValidateExports = ValidateExports,
+            ValidateInternalNotExported = ValidateInternalNotExported,
+            AllowWildcardExports = AllowWildcardExports,
+            MinSynopsisPercent = MinSynopsisPercent,
+            MinDescriptionPercent = MinDescriptionPercent,
+            MinExamplesPerCommand = MinExamplesPerCommand,
+            MinParameterDescriptionPercent = MinParameterDescriptionPercent,
+            MinTypeDescriptionPercent = MinTypeDescriptionPercent,
+            ExcludeCommands = ExcludeCommands,
+            EnableScriptAnalyzer = EnableScriptAnalyzer.IsPresent,
+            ScriptAnalyzerExcludeDirectories = ScriptAnalyzerExcludeDirectories,
+            ScriptAnalyzerExcludeRules = ScriptAnalyzerExcludeRules,
+            ScriptAnalyzerSkipIfUnavailable = ScriptAnalyzerSkipIfUnavailable,
+            ScriptAnalyzerInstallIfUnavailable = ScriptAnalyzerInstallIfUnavailable,
+            ScriptAnalyzerTimeoutSeconds = ScriptAnalyzerTimeoutSeconds,
+            FileIntegrityExcludeDirectories = FileIntegrityExcludeDirectories,
+            FileIntegrityCheckTrailingWhitespace = FileIntegrityCheckTrailingWhitespace,
+            FileIntegrityCheckSyntax = FileIntegrityCheckSyntax,
+            BannedCommands = BannedCommands,
+            AllowBannedCommandsIn = AllowBannedCommandsIn,
+            EnableTests = EnableTests.IsPresent,
+            TestsPath = TestsPath,
+            TestAdditionalModules = TestAdditionalModules,
+            TestSkipModules = TestSkipModules,
+            TestSkipDependencies = TestSkipDependencies.IsPresent,
+            TestSkipImport = TestSkipImport.IsPresent,
+            TestForce = TestForce.IsPresent,
+            TestTimeoutSeconds = TestTimeoutSeconds,
+            ValidateBinaryAssemblies = ValidateBinaryAssemblies,
+            ValidateBinaryExports = ValidateBinaryExports,
+            AllowBinaryWildcardExports = AllowBinaryWildcardExports,
+            RequireTargetFramework = RequireTargetFramework,
+            RequireLibraryOutput = RequireLibraryOutput
+        });
 
-        var cfg = new ConfigurationValidationSegment
-        {
-            Settings = settings
-        };
-
-        WriteObject(cfg);
+        WriteObject(configuration);
     }
 }

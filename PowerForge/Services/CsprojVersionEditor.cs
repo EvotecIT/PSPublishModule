@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Security;
 using System.Text.RegularExpressions;
 
 namespace PowerForge;
@@ -9,6 +10,8 @@ namespace PowerForge;
 /// </summary>
 internal static class CsprojVersionEditor
 {
+    private const string VersionValuePattern = @"\s*(?<value>[^<]+?)\s*";
+
     private static readonly string[] VersionTags =
     {
         "Version",
@@ -37,7 +40,8 @@ internal static class CsprojVersionEditor
                 }
             }
         }
-        catch { }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
 
         return false;
     }
@@ -46,10 +50,11 @@ internal static class CsprojVersionEditor
     {
         if (content is null) throw new ArgumentNullException(nameof(content));
         hadVersionTag = false;
+        var escapedVersion = SecurityElement.Escape(version) ?? string.Empty;
 
         foreach (var tag in VersionTags)
         {
-            if (Regex.IsMatch(content, $"<{Regex.Escape(tag)}>[\\d\\.]+</{Regex.Escape(tag)}>", RegexOptions.IgnoreCase))
+            if (Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase))
                 hadVersionTag = true;
         }
 
@@ -58,8 +63,8 @@ internal static class CsprojVersionEditor
         {
             updated = Regex.Replace(
                 updated,
-                $"<{Regex.Escape(tag)}>[\\d\\.]+</{Regex.Escape(tag)}>",
-                $"<{tag}>{version}</{tag}>",
+                BuildVersionTagPattern(tag),
+                $"<{tag}>{escapedVersion}</{tag}>",
                 RegexOptions.IgnoreCase);
         }
 
@@ -73,25 +78,29 @@ internal static class CsprojVersionEditor
     {
         version = string.Empty;
         if (string.IsNullOrEmpty(content)) return false;
-        var re = new Regex("<" + Regex.Escape(tag) + ">([\\d\\.]+)</" + Regex.Escape(tag) + ">", RegexOptions.IgnoreCase);
+        var re = new Regex(BuildVersionTagPattern(tag), RegexOptions.IgnoreCase);
         var m = re.Match(content);
         if (!m.Success) return false;
-        version = m.Groups[1].Value;
+        version = m.Groups["value"].Value.Trim();
         return !string.IsNullOrWhiteSpace(version);
     }
 
+    private static string BuildVersionTagPattern(string tag)
+        => $"<{Regex.Escape(tag)}>{VersionValuePattern}</{Regex.Escape(tag)}>";
+
     private static string InsertVersionPrefix(string content, string version)
     {
+        var escapedVersion = SecurityElement.Escape(version) ?? string.Empty;
         var match = Regex.Match(content, "<PropertyGroup[^>]*>", RegexOptions.IgnoreCase);
         if (!match.Success)
         {
-            return content + Environment.NewLine + $"  <PropertyGroup>{Environment.NewLine}    <VersionPrefix>{version}</VersionPrefix>{Environment.NewLine}  </PropertyGroup>{Environment.NewLine}";
+            return content + Environment.NewLine + $"  <PropertyGroup>{Environment.NewLine}    <VersionPrefix>{escapedVersion}</VersionPrefix>{Environment.NewLine}  </PropertyGroup>{Environment.NewLine}";
         }
 
         var insertAt = match.Index + match.Length;
         var lineBreak = DetectLineBreak(content);
         var indent = DetectIndentation(content, match.Index);
-        var insert = $"{lineBreak}{indent}  <VersionPrefix>{version}</VersionPrefix>";
+        var insert = $"{lineBreak}{indent}  <VersionPrefix>{escapedVersion}</VersionPrefix>";
         return content.Insert(insertAt, insert);
     }
 

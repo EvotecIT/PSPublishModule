@@ -40,26 +40,29 @@ internal sealed class MamlHelpWriter
             Indent = true,
             Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             OmitXmlDeclaration = false,
+            NewLineChars = "\r\n",
             NewLineHandling = NewLineHandling.Entitize
         };
 
-        using var stream = File.Create(path);
-        using var writer = XmlWriter.Create(stream, settings);
-
-        writer.WriteStartDocument();
-        writer.WriteStartElement("helpItems", MshNs);
-        writer.WriteAttributeString("schema", "maml");
-
-        foreach (var cmd in (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
-                     .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
-                     .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+        using (var stream = File.Create(path))
+        using (var writer = XmlWriter.Create(stream, settings))
         {
-            WriteCommand(writer, cmd);
+            writer.WriteStartDocument();
+            writer.WriteStartElement("helpItems", MshNs);
+            writer.WriteAttributeString("schema", "maml");
+
+            foreach (var cmd in (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
+                         .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
+                         .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                WriteCommand(writer, cmd);
+            }
+
+            writer.WriteEndElement(); // helpItems
+            writer.WriteEndDocument();
         }
 
-        writer.WriteEndElement(); // helpItems
-        writer.WriteEndDocument();
-
+        NormalizeGeneratedTextFile(path);
         return path;
     }
 
@@ -91,13 +94,7 @@ internal sealed class MamlHelpWriter
         WriteInputs(writer, cmd);
         WriteOutputs(writer, cmd);
 
-        writer.WriteStartElement("maml", "alertSet", MamlNs);
-        writer.WriteStartElement("maml", "alert", MamlNs);
-        writer.WriteStartElement("maml", "para", MamlNs);
-        writer.WriteString(string.Empty);
-        writer.WriteEndElement(); // para
-        writer.WriteEndElement(); // alert
-        writer.WriteEndElement(); // alertSet
+        WriteNotes(writer, cmd);
 
         WriteExamples(writer, cmd);
         WriteRelatedLinks(writer, cmd);
@@ -139,6 +136,12 @@ internal sealed class MamlHelpWriter
         IEnumerable<DocumentationParameterHelp>? parameters)
     {
         writer.WriteStartElement("command", "syntaxItem", CommandNs);
+        if (setName is not null)
+        {
+            var normalizedSetName = setName.Trim();
+            if (normalizedSetName.Length > 0)
+                writer.WriteAttributeString("parameterSetName", normalizedSetName);
+        }
         writer.WriteElementString("maml", "name", MamlNs, commandName);
 
         foreach (var p in (parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
@@ -212,7 +215,7 @@ internal sealed class MamlHelpWriter
     private static void WriteExamples(XmlWriter writer, DocumentationCommandHelp cmd)
     {
         var examples = (cmd.Examples ?? Enumerable.Empty<DocumentationExampleHelp>())
-            .Where(e => e is not null && (!string.IsNullOrWhiteSpace(e.Code) || !string.IsNullOrWhiteSpace(e.Title) || !string.IsNullOrWhiteSpace(e.Remarks)))
+            .Where(e => e is not null && (!string.IsNullOrWhiteSpace(e.Code) || !string.IsNullOrWhiteSpace(e.Title) || !string.IsNullOrWhiteSpace(e.Introduction) || !string.IsNullOrWhiteSpace(e.Remarks)))
             .ToArray();
 
         if (examples.Length == 0)
@@ -229,6 +232,12 @@ internal sealed class MamlHelpWriter
             writer.WriteStartElement("command", "example", CommandNs);
             var title = string.IsNullOrWhiteSpace(ex.Title) ? $"EXAMPLE {i + 1}" : ex.Title.Trim();
             writer.WriteElementString("maml", "title", MamlNs, title);
+            if (!string.IsNullOrWhiteSpace(ex.Introduction))
+            {
+                writer.WriteStartElement("maml", "introduction", MamlNs);
+                WriteIntroductionParas(writer, ex.Introduction);
+                writer.WriteEndElement(); // maml:introduction
+            }
             writer.WriteElementString("dev", "code", DevNs, ex.Code?.TrimEnd() ?? string.Empty);
             writer.WriteStartElement("dev", "remarks", DevNs);
             WriteParas(writer, ex.Remarks ?? string.Empty);
@@ -253,6 +262,34 @@ internal sealed class MamlHelpWriter
             writer.WriteEndElement(); // navigationLink
         }
         writer.WriteEndElement(); // relatedLinks
+    }
+
+    private static void WriteNotes(XmlWriter writer, DocumentationCommandHelp cmd)
+    {
+        var notes = (cmd.Notes ?? Enumerable.Empty<DocumentationNoteHelp>())
+            .Where(note => note is not null && (!string.IsNullOrWhiteSpace(note.Title) || !string.IsNullOrWhiteSpace(note.Text)))
+            .ToArray();
+
+        writer.WriteStartElement("maml", "alertSet", MamlNs);
+        if (notes.Length == 0)
+        {
+            writer.WriteStartElement("maml", "alert", MamlNs);
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(string.Empty);
+            writer.WriteEndElement(); // para
+            writer.WriteEndElement(); // alert
+            writer.WriteEndElement(); // alertSet
+            return;
+        }
+
+        foreach (var note in notes)
+        {
+            writer.WriteStartElement("maml", "alert", MamlNs);
+            WriteNoteAlert(writer, note);
+            writer.WriteEndElement(); // alert
+        }
+
+        writer.WriteEndElement(); // alertSet
     }
 
     private static void WriteParameter(XmlWriter writer, DocumentationParameterHelp p, bool includeParameterValue)
@@ -288,6 +325,25 @@ internal sealed class MamlHelpWriter
             writer.WriteAttributeString("variableLength", "false");
             writer.WriteString(typeName);
             writer.WriteEndElement(); // parameterValue
+        }
+
+        var possibleValues = (p.PossibleValues ?? Enumerable.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (possibleValues.Length > 0)
+        {
+            writer.WriteStartElement("command", "parameterValueGroup", CommandNs);
+            foreach (var value in possibleValues)
+            {
+                writer.WriteStartElement("command", "parameterValue", CommandNs);
+                writer.WriteAttributeString("required", "false");
+                writer.WriteAttributeString("variableLength", "false");
+                writer.WriteString(value);
+                writer.WriteEndElement(); // parameterValue
+            }
+            writer.WriteEndElement(); // parameterValueGroup
         }
 
         writer.WriteStartElement("dev", "type", DevNs);
@@ -326,6 +382,56 @@ internal sealed class MamlHelpWriter
         }
 
         if (paras.Length == 0)
+        {
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(string.Empty);
+            writer.WriteEndElement();
+        }
+    }
+
+    private static void WriteIntroductionParas(XmlWriter writer, string? text)
+    {
+        if (text is null)
+        {
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(string.Empty);
+            writer.WriteEndElement();
+            return;
+        }
+
+        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        var paras = normalized
+            .Split(new[] { "\n\n" }, StringSplitOptions.None)
+            .Select(para => para.Replace("\n", Environment.NewLine))
+            .ToArray();
+
+        if (paras.Length == 0)
+        {
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(string.Empty);
+            writer.WriteEndElement();
+            return;
+        }
+
+        foreach (var para in paras)
+        {
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(para);
+            writer.WriteEndElement();
+        }
+    }
+
+    private static void WriteNoteAlert(XmlWriter writer, DocumentationNoteHelp note)
+    {
+        var title = note.Title?.Trim();
+        if (!string.IsNullOrWhiteSpace(title))
+            writer.WriteElementString("maml", "para", MamlNs, title);
+
+        var textParas = SplitParas(note.Text);
+        foreach (var para in textParas)
+            writer.WriteElementString("maml", "para", MamlNs, para);
+
+        if (string.IsNullOrWhiteSpace(title) && textParas.Length == 0)
         {
             writer.WriteStartElement("maml", "para", MamlNs);
             writer.WriteString(string.Empty);
@@ -376,9 +482,22 @@ internal sealed class MamlHelpWriter
         return (commandName.Substring(0, idx), commandName.Substring(idx + 1));
     }
 
-    private static string Coalesce(string? primary, string? secondary)    
+    private static string Coalesce(string? primary, string? secondary)
     {
         if (primary is not null && !string.IsNullOrWhiteSpace(primary)) return primary.Trim();
         return secondary?.Trim() ?? string.Empty;
+    }
+
+    private static void NormalizeGeneratedTextFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return;
+
+        var text = File.ReadAllText(path, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        var normalized = GeneratedTextNormalizer.Normalize(text);
+        if (string.Equals(text, normalized, StringComparison.Ordinal))
+            return;
+
+        File.WriteAllText(path, normalized, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 }

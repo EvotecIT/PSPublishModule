@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems schema="maml" xmlns="http://msh">
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-BinaryDocSample</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>BinaryDocSample</command:noun>
+      <maml:description>
+        <maml:para>Returns a sample binary help object.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>First legacy paragraph for the long command description.</maml:para>
+      <maml:para>Second legacy paragraph for the long command description.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Get-BinaryDocSample</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Mode</maml:name>
+          <maml:description>
+            <maml:para>Selects the sample rendering mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">BinaryDocMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Basic</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Advanced</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>BinaryDocMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="SampleName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Name of the requested sample object.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Mode</maml:name>
+        <maml:description>
+          <maml:para>Selects the sample rendering mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">BinaryDocMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Basic</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Advanced</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>BinaryDocMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="SampleName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Name of the requested sample object.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>BinaryDocFixture.BinaryDocOutput</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>Represents the output returned by the binary documentation fixture command.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Important</maml:para>
+        <maml:para>Only use this command with fixture input.</maml:para>
+        <maml:para>It exists to validate generated help fidelity.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Render a sample object</maml:title>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-BinaryDocSample `&#xD;
+  -Name 'Alpha' `&#xD;
+  -Mode Advanced</dev:code>
+        <dev:remarks>
+          <maml:para>Returns a sample output object for documentation tests.</maml:para>
+          <maml:para>Preserves example formatting and prompt handling.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Binary fixture reference</maml:linkText>
+        <maml:uri>https://example.invalid/binary-doc-sample</maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+</helpItems>

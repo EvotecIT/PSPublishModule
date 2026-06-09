@@ -1,0 +1,91 @@
+name: PowerForge GitHub Housekeeping
+description: Run config-driven GitHub housekeeping using PowerForge.Cli.
+
+inputs:
+  config-path:
+    description: Path to the housekeeping config file inside the checked-out repository.
+    required: false
+    default: ".powerforge/github-housekeeping.json"
+  apply:
+    description: When true, apply deletions. When false, run in dry-run mode.
+    required: false
+    default: "true"
+  github-token:
+    description: Optional token override for remote GitHub cleanup.
+    required: false
+    default: ""
+  runner-min-free-gb:
+    description: Optional runner free-disk threshold override in GiB.
+    required: false
+    default: ""
+  report-path:
+    description: Optional JSON report output path relative to the workspace.
+    required: false
+    default: ".powerforge/_reports/github-housekeeping.json"
+  summary-path:
+    description: Optional Markdown summary output path relative to the workspace.
+    required: false
+    default: ".powerforge/_reports/github-housekeeping.md"
+
+outputs:
+  report-path:
+    description: Resolved JSON report output path.
+    value: ${{ steps.housekeeping.outputs.report-path }}
+  summary-path:
+    description: Resolved Markdown summary output path.
+    value: ${{ steps.housekeeping.outputs.summary-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+      with:
+        global-json-file: ${{ github.action_path }}/../../../global.json
+
+    - name: Build PowerForge CLI
+      shell: pwsh
+      run: |
+        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../../..")).Path
+        $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
+        dotnet build $project -c Release
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+    - name: Run GitHub housekeeping
+      id: housekeeping
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../../..")).Path
+        $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
+        $configPath = $env:INPUT_CONFIG_PATH
+        if ([string]::IsNullOrWhiteSpace($configPath)) {
+          throw "Housekeeping config path is required."
+        }
+
+        if (-not (Test-Path -LiteralPath $configPath)) {
+          throw "Housekeeping config not found: $configPath"
+        }
+
+        # Keep this framework in sync with the runnable TFM in PowerForge.Cli.csproj.
+        $dotnetArgs = @('run', '--project', $project, '-c', 'Release', '--no-build', '--framework', 'net10.0', '--', 'github', 'housekeeping', '--config', $configPath)
+        if (-not [string]::IsNullOrWhiteSpace($env:INPUT_RUNNER_MIN_FREE_GB)) {
+          $dotnetArgs += '--runner-min-free-gb'
+          $dotnetArgs += $env:INPUT_RUNNER_MIN_FREE_GB
+        }
+        if ($env:INPUT_APPLY -eq 'true') { $dotnetArgs += '--apply' } else { $dotnetArgs += '--dry-run' }
+        & dotnet @dotnetArgs
+        if ($LASTEXITCODE -ne 0) {
+          exit $LASTEXITCODE
+        }
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+        INPUT_CONFIG_PATH: ${{ inputs['config-path'] }}
+        INPUT_APPLY: ${{ inputs.apply }}
+        INPUT_RUNNER_MIN_FREE_GB: ${{ inputs['runner-min-free-gb'] }}
+        GITHUB_TOKEN: ${{ inputs['github-token'] != '' && inputs['github-token'] || github.token }}
+        POWERFORGE_GITHUB_HOUSEKEEPING_REPORT_PATH: ${{ inputs['report-path'] }}
+        POWERFORGE_GITHUB_HOUSEKEEPING_SUMMARY_PATH: ${{ inputs['summary-path'] }}

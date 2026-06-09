@@ -1,0 +1,6 @@
+namespace PowerForgeStudio.Domain.Portfolio;
+
+public sealed record RepositoryReadiness(
+    RepositoryReadinessKind Kind,
+    string Reason);
+

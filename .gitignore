@@ -6,6 +6,7 @@ Releases/*
 Artefacts/*
 Artifacts/*
 ReleasedUnpacked/*
+powerforge.pipeline.self.*.json
 Sources/.vs
 Sources/*/.vs
 Sources/*/obj
@@ -200,6 +201,8 @@ DocProject/Help/html
 
 # Click-Once directory
 publish/
+!PowerForgeStudio.Domain/Publish/
+!PowerForgeStudio.Domain/Publish/*.cs
 
 # Publish Web Output
 *.[Pp]ublish.xml
@@ -389,3 +392,5 @@ FodyWeavers.xsd
 /.idea/
 CLAUDE.md
 .claude/*
+_temp/
+WebsiteArtifacts/

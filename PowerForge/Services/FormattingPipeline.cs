@@ -31,6 +31,14 @@ public sealed class FormattingPipeline
         var list = files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (list.Length == 0) return Array.Empty<FormatterResult>();
 
+        // Step 0: normalize first so PSScriptAnalyzer can parse files that have mixed line endings.
+        var opts = new NormalizationOptions(options.LineEnding, options.Utf8Bom);
+        var preNormalize = new List<NormalizationResult>(list.Length);
+        foreach (var f in list)
+        {
+            preNormalize.Add(_norm.NormalizeFile(f, opts));
+        }
+
         // Step 1: Preprocess
         var pre = _pre.Process(list, options);
 
@@ -39,18 +47,19 @@ public sealed class FormattingPipeline
 
         // Step 3: Normalize
         var results = new List<FormatterResult>(list.Length);
-        var opts = new NormalizationOptions(options.LineEnding, options.Utf8Bom);
         foreach (var f in list)
         {
             var n = _norm.NormalizeFile(f, opts);
+            var preNormalizeResult = preNormalize.FirstOrDefault(x => string.Equals(x.Path, f, StringComparison.OrdinalIgnoreCase));
             var preResult = pre.FirstOrDefault(x => string.Equals(x.Path, f, StringComparison.OrdinalIgnoreCase));
             var pssaResult = pssa.FirstOrDefault(x => string.Equals(x.Path, f, StringComparison.OrdinalIgnoreCase));
 
+            bool preNormalizeChanged = preNormalizeResult?.Changed ?? false;
             bool preChanged = preResult?.Changed ?? false;
             bool pssaChanged = pssaResult?.Changed ?? false;
-            bool changed = preChanged || pssaChanged || n.Changed;
+            bool changed = preNormalizeChanged || preChanged || pssaChanged || n.Changed;
 
-            var details = $"pre={(preChanged ? '1' : '0')}; pssa={(pssaChanged ? '1' : '0')}; norm={(n.Changed ? '1' : '0')}";
+            var details = $"preNorm={(preNormalizeChanged ? '1' : '0')}; pre={(preChanged ? '1' : '0')}; pssa={(pssaChanged ? '1' : '0')}; norm={(n.Changed ? '1' : '0')}";
 
             var preMsg = preResult?.Message ?? string.Empty;
             var pssaMsg = pssaResult?.Message ?? string.Empty;
@@ -67,4 +76,3 @@ public sealed class FormattingPipeline
         return results;
     }
 }
-

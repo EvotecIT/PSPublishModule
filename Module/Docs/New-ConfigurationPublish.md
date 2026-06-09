@@ -6,24 +6,36 @@ schema: 2.0.0
 ---
 # New-ConfigurationPublish
 ## SYNOPSIS
-Provides a way to configure publishing to PowerShell Gallery or GitHub.
+Provides a way to configure publishing to PowerShell Gallery, GitHub, or private galleries such as Azure Artifacts.
 
 ## SYNTAX
 ### ApiFromFile (Default)
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> -FilePath <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> -FilePath <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [<CommonParameters>]
 ```
 
 ### ApiKey
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [<CommonParameters>]
+```
+
+### AzureArtifacts
+```powershell
+New-ConfigurationPublish -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [<CommonParameters>]
+```
+
+### Profile
+```powershell
+New-ConfigurationPublish -ProfileName <string> [-FilePath <string>] [-ApiKey <string>] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-Force] [-ID <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
 This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.
-Use -Type to choose a destination. For repository publishing, -Tool selects the provider (PowerShellGet/PSResourceGet/Auto).
+Use -Type to choose a destination. For repository publishing, -Tool selects the provider
+(PowerShellGet/PSResourceGet/Auto).
 
-For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs and (optionally) credentials.
+For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs
+and (optionally) credentials, or use the Azure Artifacts preset parameters to resolve those URIs automatically.
 To avoid secrets in source control, pass API keys/tokens via -FilePath or environment-specific tooling.
 
 ## EXAMPLES
@@ -33,10 +45,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
 New-ConfigurationPublish -Type PowerShellGallery -FilePath "$env:USERPROFILE\.secrets\psgallery.key" -Enabled
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-ConfigurationPublish -Type GitHub -FilePath "$env:USERPROFILE\.secrets\github.token" -UserName 'EvotecIT' -RepositoryName 'MyModule' -Enabled
 ```
+
+
+### EXAMPLE 3
+```powershell
+New-ConfigurationPublish -ProfileName 'Company' -Enabled
+```
+
 
 ## PARAMETERS
 
@@ -45,10 +65,59 @@ API key to be used for publishing in clear text.
 
 ```yaml
 Type: String
-Parameter Sets: ApiKey
+Parameter Sets: ApiKey, Profile
 Aliases: None
+Possible values:
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AzureArtifactsFeed
+Azure Artifacts feed name for the private gallery preset.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AzureDevOpsOrganization
+Azure DevOps organization name for the Azure Artifacts preset.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AzureDevOpsProject
+Optional Azure DevOps project name for project-scoped feeds.
+
+```yaml
+Type: String
+Parameter Sets: AzureArtifacts
+Aliases: None
+Possible values:
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -62,6 +131,7 @@ Publish GitHub release as a release even if module prerelease is set.
 Type: SwitchParameter
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -75,8 +145,9 @@ Enable publishing to the chosen destination.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -90,8 +161,9 @@ When true, registers/updates the repository before publishing. Default: true.
 
 ```yaml
 Type: Boolean
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -105,8 +177,9 @@ API key to be used for publishing in clear text in a file.
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile
+Parameter Sets: ApiFromFile, Profile
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -120,8 +193,9 @@ Allow publishing lower version of a module on a PowerShell repository.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -137,6 +211,7 @@ When set, asks GitHub to generate release notes automatically.
 Type: SwitchParameter
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -150,8 +225,9 @@ Optional ID of the artefact used for publishing.
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -167,8 +243,25 @@ Override tag name used for GitHub publishing.
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values:
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProfileName
+Saved private gallery profile name for Azure Artifacts publishing.
+
+```yaml
+Type: String
+Parameter Sets: Profile
+Aliases: Profile
+Possible values:
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -180,8 +273,9 @@ Repository API version for PSResourceGet registration (v2/v3).
 
 ```yaml
 Type: RepositoryApiVersion
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
 Aliases: None
+Possible values: Auto, V2, V3, ContainerRegistry
 
 Required: False
 Position: named
@@ -195,8 +289,9 @@ Repository credential secret (password/token) in clear text.
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -210,8 +305,9 @@ Repository credential secret (password/token) in a clear-text file.
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -225,8 +321,9 @@ Repository credential username (basic auth).
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -240,8 +337,9 @@ Repository name override (GitHub or PowerShell repository name).
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -255,8 +353,9 @@ Repository priority for PSResourceGet (lower is higher priority).
 
 ```yaml
 Type: Nullable`1
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -272,6 +371,7 @@ Repository publish URI (PowerShellGet PublishLocation).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -287,6 +387,7 @@ Repository source URI (PowerShellGet SourceLocation).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -300,8 +401,9 @@ Whether to mark the repository as trusted (avoids prompts). Default: true.
 
 ```yaml
 Type: Boolean
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -317,6 +419,7 @@ Repository base URI (used for both source and publish unless overridden).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -330,8 +433,9 @@ Publishing tool/provider used for repository publishing. Ignored for GitHub publ
 
 ```yaml
 Type: PublishTool
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
 Aliases: None
+Possible values: Auto, PSResourceGet, PowerShellGet
 
 Required: False
 Position: named
@@ -347,6 +451,7 @@ Choose between PowerShellGallery and GitHub.
 Type: PublishDestination
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: PowerShellGallery, GitHub
 
 Required: True
 Position: named
@@ -360,8 +465,25 @@ When set, unregisters the repository after publish if it was created by this run
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UseAsDependencyVersionSource
+Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -377,6 +499,7 @@ GitHub username (required for GitHub publishing).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -399,4 +522,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

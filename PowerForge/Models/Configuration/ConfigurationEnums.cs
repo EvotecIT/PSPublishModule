@@ -27,6 +27,93 @@ public enum PublishTool
 }
 
 /// <summary>
+/// Tool selection used when registering repositories for end users.
+/// </summary>
+public enum RepositoryRegistrationTool
+{
+    /// <summary>
+    /// Prefer PSResourceGet first, then fall back to PowerShellGet when one of the tools is unavailable.
+    /// </summary>
+    Auto,
+    /// <summary>Register the PSResourceGet repository only.</summary>
+    PSResourceGet,
+    /// <summary>Register the PowerShellGet repository only.</summary>
+    PowerShellGet,
+    /// <summary>Register both PowerShellGet and PSResourceGet repositories.</summary>
+    Both
+}
+
+/// <summary>
+/// Private gallery provider used by end-user repository bootstrap commands.
+/// </summary>
+public enum PrivateGalleryProvider
+{
+    /// <summary>Azure Artifacts / Azure DevOps private feed.</summary>
+    AzureArtifacts = 0,
+    /// <summary>Alias for Azure Artifacts / Azure DevOps private feed.</summary>
+    Azure = 0,
+    /// <summary>JFrog Artifactory NuGet/PowerShell repository.</summary>
+    JFrog = 1,
+    /// <summary>Generic NuGet-backed PowerShell repository.</summary>
+    NuGet = 2,
+    /// <summary>GitHub Packages NuGet registry scoped to a GitHub user or organization.</summary>
+    GitHubPackages = 3,
+    /// <summary>Alias for GitHub Packages NuGet registry.</summary>
+    GitHub = 3
+}
+
+/// <summary>
+/// Bootstrap/authentication mode used by private gallery onboarding commands.
+/// </summary>
+public enum PrivateGalleryBootstrapMode
+{
+    /// <summary>
+    /// Choose the best available path: use explicit/prompted credentials when requested, otherwise prefer ExistingSession when Azure Artifacts prerequisites are ready and fall back to CredentialPrompt when they are not.
+    /// </summary>
+    Auto,
+    /// <summary>
+    /// Rely on an existing session or credential-provider flow without collecting credentials in the cmdlet.
+    /// </summary>
+    ExistingSession,
+    /// <summary>
+    /// Use credentials supplied to the cmdlet or prompt interactively for them.
+    /// </summary>
+    CredentialPrompt,
+    /// <summary>
+    /// Use JFrog CLI browser login before probing a JFrog private gallery. This validates whether the local JFrog CLI session can bridge to NuGet/PSResourceGet.
+    /// </summary>
+    JFrogCli
+}
+
+/// <summary>
+/// Source of the credential used by a private gallery bootstrap command.
+/// </summary>
+public enum PrivateGalleryCredentialSource
+{
+    /// <summary>No credential was supplied to the cmdlet.</summary>
+    None,
+    /// <summary>A credential or token was supplied directly to the cmdlet.</summary>
+    Supplied,
+    /// <summary>A credential was collected by prompting the user.</summary>
+    Prompt,
+    /// <summary>An external JFrog CLI browser-login session was used.</summary>
+    JFrogCli
+}
+
+/// <summary>
+/// Profile store scope used by private gallery profile commands.
+/// </summary>
+public enum ModuleRepositoryProfileScope
+{
+    /// <summary>Use the current user's profile store.</summary>
+    User,
+    /// <summary>Use the machine-wide profile store shared by all users on the workstation.</summary>
+    Machine,
+    /// <summary>Read from user and machine-wide stores, preferring the user store when both define the same profile.</summary>
+    All
+}
+
+/// <summary>
 /// Tool/provider used when downloading PowerShell modules (Save-PSResource/Save-Module).
 /// </summary>
 public enum ModuleSaveTool
@@ -61,7 +148,7 @@ public enum RequiredModulesSource
 }
 
 /// <summary>
-/// API version for NuGet-compatible repository endpoints (v2/v3).
+/// API version for PSResourceGet repository endpoints.
 /// </summary>
 public enum RepositoryApiVersion
 {
@@ -70,7 +157,9 @@ public enum RepositoryApiVersion
     /// <summary>NuGet v2 API.</summary>
     V2,
     /// <summary>NuGet v3 API.</summary>
-    V3
+    V3,
+    /// <summary>OCI/container registry API (Azure Container Registry, Microsoft Artifact Registry).</summary>
+    ContainerRegistry
 }
 
 /// <summary>
@@ -84,6 +173,21 @@ public enum ModuleDependencyKind
     ExternalModule,
     /// <summary>Approved module dependency (selectively copied during merge).</summary>
     ApprovedModule
+}
+
+/// <summary>
+/// Source used when resolving Auto/Latest module dependency versions.
+/// </summary>
+public enum ModuleDependencyVersionSource
+{
+    /// <summary>Use the build default: installed metadata, with online lookup only when enabled or needed.</summary>
+    Auto,
+    /// <summary>Resolve from locally installed module metadata.</summary>
+    Installed,
+    /// <summary>Resolve from the PowerShell Gallery repository.</summary>
+    PSGallery,
+    /// <summary>Resolve from a publish configuration marked as the dependency version source.</summary>
+    PublishRepository
 }
 
 /// <summary>
@@ -144,19 +248,6 @@ public enum DeliveryBundleDestination
     Both,
     /// <summary>Do not place the files.</summary>
     None
-}
-
-/// <summary>
-/// Documentation tool used by documentation configuration.
-/// </summary>
-public enum DocumentationTool
-{
-    /// <summary>Legacy: Use PlatyPS to generate markdown help.</summary>
-    PlatyPS,
-    /// <summary>Legacy: Use HelpOut to generate markdown help.</summary>
-    HelpOut,
-    /// <summary>Use PowerForge built-in generator.</summary>
-    PowerForge
 }
 
 /// <summary>

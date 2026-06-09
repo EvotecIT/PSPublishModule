@@ -11,7 +11,7 @@ Creates a new release for the given GitHub repository and optionally uploads ass
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Send-GitHubRelease -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> -TagName <string> [-ReleaseName <string>] [-ReleaseNotes <string>] [-GenerateReleaseNotes] [-AssetFilePaths <string[]>] [-Commitish <string>] [-IsDraft <bool>] [-IsPreRelease <bool>] [<CommonParameters>]
+Send-GitHubRelease -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> -TagName <string> [-ReleaseName <string>] [-ReleaseNotes <string>] [-GenerateReleaseNotes] [-AssetFilePaths <string[]>] [-Commitish <string>] [-IsDraft <bool>] [-IsPreRelease <bool>] [-ReuseExistingReleaseOnConflict <bool>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -24,14 +24,14 @@ Provide the token via an environment variable to avoid leaking secrets into logs
 
 ### EXAMPLE 1
 ```powershell
-PS>Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3' -ReleaseNotes 'Bug fixes' -AssetFilePaths 'C:\Artifacts\MyProject.zip'
+PS> Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3' -ReleaseNotes 'Bug fixes' -AssetFilePaths 'C:\Artifacts\MyProject.zip'
 ```
 
 Creates the release and uploads the specified asset file.
 
 ### EXAMPLE 2
 ```powershell
-PS>Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3-preview.1' -IsDraft $true -IsPreRelease $true
+PS> Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3-preview.1' -IsDraft $true -IsPreRelease $true
 ```
 
 Creates a draft prerelease that can be reviewed before publishing.
@@ -45,6 +45,7 @@ The full paths of the files to include as release assets.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -60,6 +61,7 @@ Commitish value that determines where the Git tag is created from.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -75,6 +77,7 @@ When set, asks GitHub to generate release notes automatically (cannot be used wi
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -90,6 +93,7 @@ GitHub personal access token used for authentication.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -105,6 +109,7 @@ GitHub repository name.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -120,6 +125,7 @@ GitHub username owning the repository.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -135,6 +141,7 @@ True to create a draft (unpublished) release.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -150,6 +157,7 @@ True to identify the release as a prerelease.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -165,6 +173,7 @@ The name of the release. If omitted, TagName is used.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -180,6 +189,24 @@ The text describing the contents of the release.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ReuseExistingReleaseOnConflict
+When true (default), a 422 tag conflict reuses the existing release.
+When false, the cmdlet fails on existing tags.
+
+```yaml
+Type: Boolean
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -195,6 +222,7 @@ The tag name used for the release.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -217,4 +245,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

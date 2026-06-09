@@ -36,7 +36,27 @@ internal sealed class SimpleTemplateEngine : ITemplateEngine
             ["EXTRA_SCRIPTS"] = context.ExtraScriptsHtml,
             ["BODY_CLASS"] = string.IsNullOrWhiteSpace(context.BodyClass) ? string.Empty : $" class=\"{context.BodyClass}\"",
             ["SITE_NAME"] = context.Site.Name ?? string.Empty,
-            ["BASE_URL"] = context.Site.BaseUrl ?? string.Empty
+            ["BASE_URL"] = context.Site.BaseUrl ?? string.Empty,
+            ["LANG"] = context.Localization.Current.Code ?? string.Empty,
+            ["LANGUAGE"] = context.Localization.Current.Code ?? string.Empty,
+            ["VERSION_CURRENT"] = context.Versioning.Current?.Name ?? string.Empty,
+            ["VERSION_CURRENT_LABEL"] = context.Versioning.Current?.Label ?? string.Empty,
+            ["VERSION_CURRENT_URL"] = context.Versioning.Current?.Url ?? string.Empty,
+            ["VERSION_LATEST"] = context.Versioning.Latest?.Name ?? string.Empty,
+            ["VERSION_LATEST_LABEL"] = context.Versioning.Latest?.Label ?? string.Empty,
+            ["VERSION_LATEST_URL"] = context.Versioning.Latest?.Url ?? string.Empty,
+            ["VERSION_LTS"] = context.Versioning.Lts?.Name ?? string.Empty,
+            ["VERSION_LTS_LABEL"] = context.Versioning.Lts?.Label ?? string.Empty,
+            ["VERSION_LTS_URL"] = context.Versioning.Lts?.Url ?? string.Empty,
+            ["FEED_URL"] = context.FeedUrl ?? string.Empty,
+            ["PAGINATION_PAGE"] = context.Pagination.Page.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PAGINATION_TOTAL_PAGES"] = context.Pagination.TotalPages.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PAGINATION_PAGE_SIZE"] = context.Pagination.PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PAGINATION_TOTAL_ITEMS"] = context.Pagination.TotalItems.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PAGINATION_PREVIOUS_URL"] = context.Pagination.PreviousUrl,
+            ["PAGINATION_NEXT_URL"] = context.Pagination.NextUrl,
+            ["PAGINATION_FIRST_URL"] = context.Pagination.FirstUrl,
+            ["PAGINATION_LAST_URL"] = context.Pagination.LastUrl
         };
     }
 

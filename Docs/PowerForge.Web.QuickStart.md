@@ -5,13 +5,60 @@ Use it alongside `Samples/PowerForge.Web.Sample` for a working reference.
 
 ## 1) Create a site scaffold
 ```
-powerforge-web scaffold --out ./MySite --name "Evotec" --base-url "https://example.com" --engine scriban
+powerforge-web scaffold --out ./MySite --name "Evotec" --base-url "https://example.com" --engine scriban --maintenance-profile balanced
 ```
+Maintenance profiles:
+- `conservative` (`keep:14`, `maxAgeDays:30`, `maxDelete:50`)
+- `balanced` (`keep:7`, `maxAgeDays:14`, `maxDelete:100`) (default)
+- `aggressive` (`keep:3`, `maxAgeDays:7`, `maxDelete:250`)
+
+Starter profiles:
+- `standard` (default)
+- `multi-project-api-suite` (adds a safe `project-apidocs` starter, theme API fragments/CSS, `data/projects/` manifests, and a placeholder `/projects/api-suite/` route)
+
+Multi-project API suite starter example:
+```
+powerforge-web scaffold --out ./SuiteSite --name "Sample Suite" --base-url "https://example.com" --engine scriban --starter-profile multi-project-api-suite
+```
+
+Materialize a real first project while scaffolding:
+```
+powerforge-web scaffold --out ./SuiteSite --name "Sample Suite" --base-url "https://example.com" --engine scriban --starter-profile multi-project-api-suite --suite-project-slug samplemodule --suite-project-name "Sample Module" --suite-project-surface powershell
+```
+
+When you seed a first project, the scaffold also creates surface-specific source staging:
+- PowerShell: `projects-sources/<slug>/powershell/` plus `examples/`
+- .NET: `projects-sources/<slug>/dotnet/`
+
+Recommended examples authoring policy for project hubs:
+- prefer curated example pages inside the project repo under:
+  - `Website/content/examples`
+  - `content/examples`
+- keep raw `Examples/` as a project-owned source of scripts, not something a public site must automatically expose
+- only enable the website `examples` surface for projects that have intentional, website-ready example content
+
+It also adds safe starter templates under `templates/` that do not match discovery patterns yet:
+- PowerShell: `*.ps1.template`, `*-help.xml.template`, `*.psd1.template`, `command-metadata.json.template`
+- .NET: `*.xml.template`, `*.dll.placeholder.txt`
+
+Promotion helpers:
+- PowerShell: `projects-sources/<slug>/powershell/promote-from-templates.ps1`
+- .NET: `projects-sources/<slug>/dotnet/promote-from-build.ps1`
 
 Result (minimal structure):
 ```
 MySite/
   site.json
+  pipeline.json
+  pipeline.maintenance.json
+  .github/
+    workflows/
+      website-ci.yml
+      website-maintenance.yml
+  config/
+    presets/
+      pipeline.web-quality.json
+      pipeline.web-maintenance.json
   content/
     pages/
       index.md
@@ -21,6 +68,32 @@ MySite/
       layouts/
       partials/
       assets/
+```
+
+With `--starter-profile multi-project-api-suite`, the scaffold also includes:
+```
+data/
+  projects/
+    catalog.json
+    catalog.project-template.json
+    api-suite-narrative.json
+    sample-project-api-guides.json
+projects-sources/
+  README.md
+content/
+  docs/
+    projects/
+      api-guide-template.md
+  pages/
+    projects/
+      api-suite.md
+themes/
+  <theme>/
+    partials/
+      api-header.html
+      api-footer.html
+    assets/
+      api.css
 ```
 
 ## 2) Define collections in site.json
@@ -33,6 +106,7 @@ Collections map markdown input folders to output URLs.
   "Collections": [
     {
       "Name": "docs",
+      "Preset": "docs",
       "Input": "content/docs",
       "Output": "docs",
       "DefaultLayout": "docs",
@@ -42,6 +116,9 @@ Collections map markdown input folders to output URLs.
   ]
 }
 ```
+
+Presets are optional but useful for common streams (`blog`, `news`, `changelog`, `docs`, `kb`, `pages`).
+They apply layout/sort/landing-page defaults so custom collection names can still behave like editorial/docs collections.
 
 ## 3) Add front matter to markdown
 ```
@@ -107,6 +184,27 @@ For repeatable builds, use pipeline or publish specs:
 ```
 powerforge-web pipeline --config ./pipeline.json
 powerforge-web publish --config ./publish.json
+```
+
+Scaffolded CI workflow:
+- `./.github/workflows/website-ci.yml` is generated automatically.
+- It is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml`.
+- The public reusable workflow delegates to a shared PowerForge-owned runner workflow that resolves engine checkout from `./.powerforge/engine-lock.json` and runs `pipeline --mode ci`.
+- The generated quality preset includes an `engine-lock` verify step in CI mode with `requireImmutableRef:true`.
+- The generated quality preset also includes a `github-artifacts-prune` dry-run step (`optional:true`) so storage hygiene is visible without breaking forks/local runs.
+- Workflow lock resolution also validates that resolved `ref` is a full commit SHA (40/64 hex).
+- It includes workflow concurrency cancelation and NuGet cache reuse by default.
+- Optional canary override via GitHub variables `POWERFORGE_REPOSITORY` / `POWERFORGE_REF`.
+
+Scaffolded maintenance workflow:
+- `./.github/workflows/website-maintenance.yml` runs weekly (`cron`) and on manual dispatch.
+- It is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml`.
+- It runs `pipeline.maintenance.json` in CI mode.
+- Maintenance preset applies GitHub artifact cleanup with caps based on `--maintenance-profile` and `continueOnError:true`.
+
+Upgrade engine pin intentionally:
+```
+powerforge-web engine-lock --mode update --path ./.powerforge/engine-lock.json --ref <new-sha>
 ```
 
 Optional: run the built-in audit to validate links/assets/nav and (optionally) rendered checks:
@@ -234,7 +332,7 @@ content/
   blog/
   snippets/
 projects/
-  HtmlForgeX/
+  ExampleLibrary/
     project.json
     content/
       pages/
@@ -242,14 +340,14 @@ projects/
       blog/
     data/
     assets/
-  TestimoX/
+  SampleModule/
     project.json
     content/
     data/
     assets/
 themes/
   base/
-  codeglyphx/
+  exampledocs/
 shared/
   snippets/
   data/
@@ -311,5 +409,5 @@ Guidelines:
 - `Docs/PowerForge.Web.ContentSpec.md`
 - `Docs/PowerForge.Web.RFC.md`
 - `Docs/PowerForge.Web.Theme.md`
-- `Docs/PowerForge.Web.CodeGlyphX.Build.md`
+- `Docs/PowerForge.Web.WebsiteStarter.md`
 - `Samples/PowerForge.Web.Sample/README.md`

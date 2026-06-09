@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -46,5 +48,810 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
-}
 
+    [Fact]
+    public void Plan_NormalizesLegacyNetProjectPath_WithWindowsSeparators()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            var csprojDir = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "nested", "PSParseHTML.PowerShell"));
+            var csprojPath = Path.Combine(csprojDir.FullName, "PSParseHTML.PowerShell.csproj");
+            File.WriteAllText(csprojPath, "<Project />");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    ExportAssemblies = Array.Empty<string>()
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            ProjectName = "PSParseHTML.PowerShell",
+                            NETProjectPath = "nested\\PSParseHTML.PowerShell"
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.Equal(csprojPath, plan.BuildSpec.CsprojPath);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_CarriesLegacyLibraryCopySettings_IntoBuildSpec()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            ExcludeLibraryFilter = new[] { "Microsoft.CodeAnalysis*" },
+                            NETDoNotCopyLibrariesRecursively = true
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.Equal(new[] { "Microsoft.CodeAnalysis*" }, plan.BuildSpec.ExcludeLibraryFilter);
+            Assert.True(plan.BuildSpec.DoNotCopyLibrariesRecursively);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_CarriesHandleRuntimes_IntoBuildSpec()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            HandleRuntimes = true
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(plan.BuildSpec.HandleRuntimes);
+            Assert.Equal(new[] { "NETHandleRuntimes" }, plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_RecordsMissingCsprojReasons_WhenExplicitBinaryBuildSettingsAreConfigured()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            SyncNETProjectVersion = true,
+                            ResolveBinaryConflicts = new ResolveBinaryConflictsConfiguration
+                            {
+                                ProjectName = "PSParseHTML.PowerShell"
+                            }
+                        }
+                    },
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            Framework = new[] { "net8.0" },
+                            BinaryModule = new[] { "PSParseHTML.PowerShell.dll" },
+                            ExcludeLibraryFilter = new[] { "System.Management.*.dll" },
+                            NETDoNotCopyLibrariesRecursively = true,
+                            NETBinaryModuleDocumentation = true
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.Equal(
+                new[]
+                {
+                    "SyncNETProjectVersion",
+                    "NETFramework",
+                    "NETBinaryModule",
+                    "ResolveBinaryConflictsName",
+                    "NETExcludeLibraryFilter",
+                    "NETDoNotCopyLibrariesRecursively",
+                    "NETBinaryModuleDocumentation"
+                },
+                plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_DoesNotTreatNetFrameworkAlone_AsMissingCsprojBinaryIntent()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            Framework = new[] { "net8.0" }
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_IgnoresBlankBinaryModuleEntries_WhenDerivingMissingCsprojReasons()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            BinaryModule = new[] { "", "   " }
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_IgnoresBlankExcludeLibraryFilterEntries_WhenDerivingMissingCsprojReasons()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            ExcludeLibraryFilter = new[] { "", "   " }
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_RecordsNetFrameworkReason_WhenFrameworksPairWithExplicitBinaryIntent()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            Framework = new[] { "net8.0" },
+                            BinaryModule = new[] { "PSParseHTML.PowerShell.dll" }
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.Equal(new[] { "NETFramework", "NETBinaryModule" }, plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_DeserializesLegacyNetAssemblyLoadContextAlias_IntoBuildSpec()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            var json = $$"""
+            {
+              "Build": {
+                "Name": "PSParseHTML",
+                "SourcePath": "{{projectRoot.FullName.Replace("\\", "\\\\")}}",
+                "Version": "1.0.0"
+              },
+              "Segments": [
+                {
+                  "Type": "BuildLibraries",
+                  "BuildLibraries": {
+                    "NETAssemblyLoadContext": true
+                  }
+                }
+              ],
+              "Install": {
+                "Enabled": false
+              }
+            }
+            """;
+
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            options.Converters.Add(new JsonStringEnumConverter());
+            options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+            var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+            Assert.NotNull(spec);
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec!);
+
+            Assert.True(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(new[] { "UseAssemblyLoadContext" }, plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_TypeAccelerators_EnableAssemblyLoadContextAndRecordMissingCsprojReason()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            AssemblyTypeAccelerators = new[] { "HtmlAgilityPack.HtmlEntity" }
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(AssemblyTypeAcceleratorExportMode.AllowList, plan.BuildSpec.AssemblyTypeAcceleratorMode);
+            Assert.Equal(new[] { "HtmlAgilityPack.HtmlEntity" }, plan.BuildSpec.AssemblyTypeAccelerators);
+            Assert.Equal(new[] { "NETAssemblyTypeAccelerators" }, plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_TypeAcceleratorLists_InferAssemblyModeWhenBothListsAreConfigured()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            AssemblyTypeAccelerators = new[] { "HtmlAgilityPack.HtmlEntity" },
+                            AssemblyTypeAcceleratorAssemblies = new[] { "HtmlAgilityPack" }
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(AssemblyTypeAcceleratorExportMode.Assembly, plan.BuildSpec.AssemblyTypeAcceleratorMode);
+            Assert.Equal(new[] { "HtmlAgilityPack.HtmlEntity" }, plan.BuildSpec.AssemblyTypeAccelerators);
+            Assert.Equal(new[] { "HtmlAgilityPack" }, plan.BuildSpec.AssemblyTypeAcceleratorAssemblies);
+            Assert.Equal(new[] { "NETAssemblyTypeAccelerators" }, plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_ExplicitTypeAcceleratorModeNone_DoesNotInferAllowListFromConfiguredTypes()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.None,
+                            AssemblyTypeAccelerators = new[] { "HtmlAgilityPack.HtmlEntity" }
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.False(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(AssemblyTypeAcceleratorExportMode.None, plan.BuildSpec.AssemblyTypeAcceleratorMode);
+            Assert.Equal(new[] { "HtmlAgilityPack.HtmlEntity" }, plan.BuildSpec.AssemblyTypeAccelerators);
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_ExplicitBuildSpecTypeAcceleratorModeNone_DoesNotInferAllowListFromConfiguredTypes()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.None,
+                    AssemblyTypeAccelerators = new[] { "HtmlAgilityPack.HtmlEntity" }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.False(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(AssemblyTypeAcceleratorExportMode.None, plan.BuildSpec.AssemblyTypeAcceleratorMode);
+            Assert.Equal(new[] { "HtmlAgilityPack.HtmlEntity" }, plan.BuildSpec.AssemblyTypeAccelerators);
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_LaterBuildLibrariesSegmentCanClearTypeAcceleratorLists()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            AssemblyTypeAccelerators = new[] { "HtmlAgilityPack.HtmlEntity" }
+                        }
+                    },
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.None,
+                            AssemblyTypeAccelerators = Array.Empty<string>()
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.False(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(AssemblyTypeAcceleratorExportMode.None, plan.BuildSpec.AssemblyTypeAcceleratorMode);
+            Assert.Empty(plan.BuildSpec.AssemblyTypeAccelerators);
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildToStaging_DirectBuildSpecTypeAccelerators_EnableAssemblyLoadContextBootstrapper()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var source = Path.Combine(tempRoot.FullName, "src");
+            var staging = Path.Combine(tempRoot.FullName, "staging");
+            WriteMinimalBinaryModule(source, moduleName);
+
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
+            var result = pipeline.BuildToStaging(new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = source,
+                StagingPath = staging,
+                Version = "1.0.0",
+                Frameworks = new[] { "net8.0" },
+                ExportAssemblies = new[] { moduleName + ".dll" },
+                DisableBinaryCmdletScan = true,
+                AssemblyTypeAccelerators = new[] { "Dependency.Widget" }
+            });
+
+            var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
+            Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
+            Assert.Contains("$Mode = 'AllowList'", bootstrapper);
+            Assert.Contains("$RequestedTypes = @('Dependency.Widget')", bootstrapper);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildToStaging_DirectBuildSpecExplicitNone_DoesNotEmitTypeAcceleratorBootstrapper()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var source = Path.Combine(tempRoot.FullName, "src");
+            var staging = Path.Combine(tempRoot.FullName, "staging");
+            WriteMinimalBinaryModule(source, moduleName);
+
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
+            var result = pipeline.BuildToStaging(new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = source,
+                StagingPath = staging,
+                Version = "1.0.0",
+                Frameworks = new[] { "net8.0" },
+                ExportAssemblies = new[] { moduleName + ".dll" },
+                DisableBinaryCmdletScan = true,
+                AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.None,
+                AssemblyTypeAccelerators = new[] { "Dependency.Widget" }
+            });
+
+            var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
+            Assert.DoesNotContain("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
+            Assert.DoesNotContain("$RegisterPowerForgeAssemblyTypeAccelerators", bootstrapper);
+            Assert.DoesNotContain("Dependency.Widget", bootstrapper);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_UsesLastBuildLibrariesValue_ForDoNotCopyLibrariesRecursivelyReason()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    DoNotCopyLibrariesRecursively = true
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            NETDoNotCopyLibrariesRecursively = false
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_UsesLastBuildLibrariesValue_ForBinaryModuleDocumentationReason()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            NETBinaryModuleDocumentation = true
+                        }
+                    },
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            NETBinaryModuleDocumentation = false
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static void WriteMinimalBinaryModule(string moduleRoot, string moduleName)
+    {
+        Directory.CreateDirectory(moduleRoot);
+        Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core"));
+        File.WriteAllText(Path.Combine(moduleRoot, moduleName + ".psm1"), string.Empty);
+        File.WriteAllText(Path.Combine(moduleRoot, "Lib", "Core", moduleName + ".dll"), string.Empty);
+
+        var psd1 = string.Join(Environment.NewLine, new[]
+        {
+            "@{",
+            $"    RootModule = '{moduleName}.psm1'",
+            "    ModuleVersion = '1.0.0'",
+            "    FunctionsToExport = @()",
+            "    CmdletsToExport = @()",
+            "    AliasesToExport = @()",
+            "}"
+        }) + Environment.NewLine;
+
+        File.WriteAllText(Path.Combine(moduleRoot, moduleName + ".psd1"), psd1);
+    }
+}

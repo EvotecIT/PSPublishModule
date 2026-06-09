@@ -1,0 +1,1018 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Xml.Linq;
+
+namespace PowerForge.Web;
+
+/// <summary>HTML/JSON/RSS/Atom/JSON Feed output rendering helpers.</summary>
+public static partial class WebSiteBuilder
+{
+    private static void WriteContentItem(
+        string outputRoot,
+        SiteSpec spec,
+        string rootPath,
+        ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
+        IReadOnlyDictionary<string, object?> data,
+        IReadOnlyDictionary<string, ProjectSpec> projectMap,
+        MenuSpec[] menuSpecs)
+    {
+        if (item.Draft) return;
+
+        var targetDir = ResolveOutputDirectory(outputRoot, item.OutputPath);
+        var isNotFoundRoute = string.Equals(NormalizePath(item.OutputPath), "404", StringComparison.OrdinalIgnoreCase);
+
+        var effectiveData = ResolveDataForProject(data, item.ProjectSlug);
+        var formats = ResolveOutputFormats(spec, item);
+        var outputs = ResolveOutputRuntime(spec, item, formats);
+        var alternateHeadLinksHtml = RenderAlternateOutputHeadLinks(outputs);
+        foreach (var format in formats)
+        {
+            var outputFileName = ResolveOutputFileName(format);
+            var outputFile = isNotFoundRoute && string.Equals(outputFileName, "index.html", StringComparison.OrdinalIgnoreCase)
+                ? Path.Combine(outputRoot, "404.html")
+                : Path.Combine(targetDir, outputFileName);
+            var outputDirectory = Path.GetDirectoryName(outputFile);
+            if (!string.IsNullOrWhiteSpace(outputDirectory))
+                Directory.CreateDirectory(outputDirectory);
+            var content = RenderOutput(outputRoot, spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format, outputs, alternateHeadLinksHtml);
+            WriteAllTextIfChanged(outputFile, content);
+        }
+        CopyPageResources(item, isNotFoundRoute ? outputRoot : targetDir);
+    }
+
+    private static string RenderHtmlPage(
+        string outputRoot,
+        SiteSpec spec,
+        string rootPath,
+        ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
+        IReadOnlyDictionary<string, object?> data,
+        IReadOnlyDictionary<string, ProjectSpec> projectMap,
+        MenuSpec[] menuSpecs,
+        IReadOnlyList<OutputRuntime> outputs,
+        string alternateHeadLinksHtml)
+    {
+        var pageTimer = Stopwatch.StartNew();
+        var renderCache = BuildRenderCacheScope.Value ?? CreateBuildRenderCache(spec, rootPath);
+        var themeRoot = renderCache.ThemeRoot;
+        var loader = renderCache.Loader;
+        var manifest = renderCache.Manifest;
+        var assetRegistry = renderCache.AssetRegistry;
+        var measure = Stopwatch.StartNew();
+
+        string? themeTemplate = null;
+        ITemplateEngine? themeEngine = null;
+        var assetSlotTemplateKind = AssetSlotTemplateKind.Simple;
+        Func<string, string?>? partialResolver = null;
+        if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
+        {
+            var layoutName = item.Template ?? item.Layout ?? manifest?.DefaultLayout ?? "base";
+            var layoutPath = loader.ResolveLayoutPath(themeRoot, manifest, layoutName);
+            if (!string.IsNullOrWhiteSpace(layoutPath))
+            {
+                themeTemplate = ReadCachedText(renderCache.LayoutTemplateCache, layoutPath);
+                themeEngine = ThemeEngineRegistry.Resolve(spec.ThemeEngine ?? manifest?.Engine);
+                if (themeEngine is ScribanTemplateEngine)
+                    assetSlotTemplateKind = AssetSlotTemplateKind.Scriban;
+            }
+        }
+
+        if (themeTemplate is not null && themeRoot is not null)
+        {
+            partialResolver = name =>
+            {
+                var partialPath = loader.ResolvePartialPath(themeRoot, manifest, name);
+                return partialPath is null ? null : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
+            };
+        }
+
+        var assetSlotUsage = ResolveAssetSlotUsage(themeTemplate, partialResolver, assetSlotTemplateKind);
+        var cssLinks = ResolveCssLinks(assetRegistry, item.OutputPath);
+        var jsLinks = ResolveJsLinks(assetRegistry, item.OutputPath);
+        var preloads = RenderPreloads(assetRegistry, assetSlotUsage.UsePreloadsSlot ? spec.Head : null);
+        var criticalCss = RenderCriticalCss(assetRegistry, rootPath, renderCache);
+        var assetMs = measure.ElapsedMilliseconds;
+        measure.Restart();
+        var localizationConfig = ResolveLocalizationConfig(spec);
+        var canonicalRoute = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+        var canonicalUrl = ResolveAbsolutePublicUrl(spec, localizationConfig, item.Language, canonicalRoute);
+        var canonical = string.IsNullOrWhiteSpace(canonicalUrl)
+            ? string.Empty
+            : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";
+
+        var assetBaseRoute = ResolveHtmlAssetBaseRoute(item.OutputPath);
+        var cssHtml = RenderCssLinks(cssLinks, assetRegistry, assetBaseRoute, assetSlotUsage.UseCssSlot ? spec.Head : null);
+        var jsHtml = RenderJsLinks(jsLinks, assetBaseRoute);
+        var pageTitle = ResolveSeoTitle(spec, item);
+        var pageDescription = ResolveMetaDescription(spec, item);
+        var descriptionMeta = string.IsNullOrWhiteSpace(pageDescription)
+            ? string.Empty
+            : $"<meta name=\"description\" content=\"{System.Web.HttpUtility.HtmlEncode(pageDescription)}\" />";
+        var crawlMeta = BuildCrawlMetaHtml(spec, item);
+        projectMap.TryGetValue(item.ProjectSlug ?? string.Empty, out var projectSpec);
+        var breadcrumbs = BuildBreadcrumbs(spec, item, menuSpecs);
+        var navMs = measure.ElapsedMilliseconds;
+        measure.Restart();
+        var fullListItems = ResolveListItems(spec, item, allItems);
+        var pagination = ResolvePaginationRuntime(spec, item, fullListItems);
+        var listItems = ApplyPagination(fullListItems, pagination);
+        var listMs = measure.ElapsedMilliseconds;
+        measure.Restart();
+        var headHtml = BuildHeadHtml(
+            spec,
+            item,
+            allItems,
+            rootPath,
+            includeEarlyHeadLinks: !assetSlotUsage.UsePreloadsSlot,
+            includeStylesheetHeadLinks: !assetSlotUsage.UseCssSlot);
+        var bodyClass = BuildBodyClass(spec, item);
+        var openGraph = BuildOpenGraphHtml(spec, item, outputRoot);
+        var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs);
+        var extraCss = GetMetaString(item.Meta, "extra_css");
+        var extraScripts = BuildExtraScriptsHtml(item, rootPath);
+        var headMs = measure.ElapsedMilliseconds;
+        measure.Restart();
+        var taxonomyTerms = BuildTaxonomyTermsRuntime(spec, item, allItems);
+        var taxonomyIndex = BuildTaxonomyIndexRuntime(spec, item, allItems);
+        var taxonomyTermSummary = BuildTaxonomyTermSummaryRuntime(spec, item, allItems);
+        var taxonomyMs = measure.ElapsedMilliseconds;
+        measure.Restart();
+        var localization = BuildLocalizationRuntime(spec, item, allItems);
+        var localizationMs = measure.ElapsedMilliseconds;
+
+        var renderContext = new ThemeRenderContext
+        {
+            Site = spec,
+            Page = item,
+            Items = listItems,
+            AllItems = allItems,
+            Data = data,
+            Project = projectSpec,
+            Navigation = BuildNavigation(spec, item, menuSpecs),
+            Localization = localization,
+            Versioning = BuildVersioningRuntime(spec, item.OutputPath),
+            Outputs = outputs.ToArray(),
+            FeedUrl = ResolvePreferredFeedUrl(outputs),
+            Breadcrumbs = breadcrumbs,
+            RootPath = rootPath,
+            CurrentPath = item.OutputPath,
+            CssHtml = cssHtml,
+            JsHtml = jsHtml,
+            PreloadsHtml = preloads,
+            CriticalCssHtml = criticalCss,
+            CanonicalHtml = canonical,
+            DescriptionMetaHtml = descriptionMeta,
+            HeadHtml = string.Join(
+                Environment.NewLine,
+                new[] { crawlMeta, headHtml, alternateHeadLinksHtml }
+                    .Where(v => !string.IsNullOrWhiteSpace(v))),
+            OpenGraphHtml = openGraph,
+            StructuredDataHtml = structuredData,
+            ExtraCssHtml = extraCss,
+            ExtraScriptsHtml = extraScripts,
+            BodyClass = bodyClass,
+            Taxonomy = ResolveTaxonomy(spec, item),
+            Term = ResolveTerm(item),
+            TaxonomyIndex = taxonomyIndex,
+            TaxonomyTerms = taxonomyTerms,
+            TaxonomyTermSummary = taxonomyTermSummary,
+            Pagination = pagination
+        };
+
+        if (themeTemplate is not null && themeEngine is not null)
+        {
+            var html = themeEngine.Render(themeTemplate, renderContext, partialResolver ?? (_ => null));
+            html = RebaseSelectedLanguageRootHtml(spec, html);
+            ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
+            return html;
+        }
+
+        var htmlLang = System.Web.HttpUtility.HtmlEncode(renderContext.Localization.Current.Code ?? "en");
+        var fallbackHtml = $@"<!doctype html>
+<html lang=""{htmlLang}"">
+<head>
+  <meta charset=""utf-8"" />
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
+  <title>{System.Web.HttpUtility.HtmlEncode(pageTitle)}</title>
+  {descriptionMeta}
+  {crawlMeta}
+  {canonical}
+  {preloads}
+  {criticalCss}
+  {headHtml}
+  {openGraph}
+  {structuredData}
+  {extraCss}
+  {cssHtml}
+</head>
+<body{(string.IsNullOrWhiteSpace(bodyClass) ? string.Empty : $" class=\"{bodyClass}\"")}>
+  <main class=""pf-web-content"">
+{item.HtmlContent}
+  </main>
+  {jsHtml}
+  {extraScripts}
+</body>
+</html>";
+        fallbackHtml = RebaseSelectedLanguageRootHtml(spec, fallbackHtml);
+        ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
+        return fallbackHtml;
+    }
+
+    private static string RebaseSelectedLanguageRootHtml(SiteSpec spec, string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return html;
+
+        var buildContext = BuildLanguageContextScope.Value;
+        if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
+            return html;
+
+        return RewriteQuotedHtmlAttribute(
+            RewriteQuotedHtmlAttribute(
+                RewriteQuotedHtmlAttribute(
+                    RewriteQuotedHtmlAttribute(
+                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value));
+    }
+
+    private static string RewriteQuotedHtmlAttribute(string html, string attributeName, Func<string, string> rewrite)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
+            return html;
+
+        var pattern = $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?<quote>[""'])(?<value>[^""']*)(?<suffix>\k<quote>)";
+        return System.Text.RegularExpressions.Regex.Replace(
+            html,
+            pattern,
+            match =>
+            {
+                var value = match.Groups["value"].Value;
+                var rewritten = rewrite(value);
+                if (string.Equals(value, rewritten, StringComparison.Ordinal))
+                    return match.Value;
+
+                return match.Groups["prefix"].Value + match.Groups["quote"].Value + rewritten + match.Groups["suffix"].Value;
+            },
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+            RegexTimeout);
+    }
+
+    private static void ReportSlowRenderTiming(
+        ContentItem item,
+        long totalMs,
+        long assetMs,
+        long navMs,
+        long listMs,
+        long headMs,
+        long taxonomyMs,
+        long localizationMs)
+    {
+        if (totalMs < 2000)
+            return;
+
+        var route = string.IsNullOrWhiteSpace(item.OutputPath) ? "/" : item.OutputPath;
+        ReportBuildProgress(
+            $"render timing: route={route} total={totalMs}ms assets={assetMs}ms nav={navMs}ms list={listMs}ms head={headMs}ms taxonomy={taxonomyMs}ms localization={localizationMs}ms");
+    }
+
+    private static BuildRenderCache CreateBuildRenderCache(SiteSpec spec, string rootPath)
+    {
+        var cache = new BuildRenderCache();
+        var themeRoot = ResolveThemeRoot(spec, rootPath);
+        cache.ThemeRoot = themeRoot;
+
+        if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
+        {
+            cache.Manifest = cache.Loader.Load(themeRoot, ResolveThemesRoot(spec, rootPath));
+            cache.AssetRegistry = BuildAssetRegistry(spec, themeRoot, cache.Manifest);
+        }
+        else
+        {
+            cache.AssetRegistry = MergeAssetRegistry(null, spec.AssetRegistry);
+        }
+
+        return cache;
+    }
+
+    private static string ReadCachedText(ConcurrentDictionary<string, string> cache, string path)
+    {
+        if (cache.TryGetValue(path, out var existing))
+            return existing;
+
+        var text = File.ReadAllText(path);
+        cache[path] = text;
+        return text;
+    }
+
+    private sealed class BuildRenderCache
+    {
+        public string? ThemeRoot { get; set; }
+        public ThemeLoader Loader { get; } = new();
+        public ThemeManifest? Manifest { get; set; }
+        public AssetRegistrySpec? AssetRegistry { get; set; }
+        public ConcurrentDictionary<string, string> LayoutTemplateCache { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public ConcurrentDictionary<string, string> PartialTemplateCache { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public ConcurrentDictionary<string, string> CriticalCssCache { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static OutputFormatSpec[] ResolveOutputFormats(SiteSpec spec, ContentItem item)
+    {
+        var formatNames = item.Outputs.Length > 0 ? item.Outputs : ResolveOutputRule(spec, item);
+        if (formatNames.Length == 0)
+            formatNames = new[] { "html" };
+
+        var formats = new List<OutputFormatSpec>();
+        foreach (var name in formatNames)
+        {
+            var format = ResolveOutputFormatSpec(spec, name);
+            if (format is not null)
+                formats.Add(format);
+        }
+
+        if (formats.Count == 0)
+            formats.Add(new OutputFormatSpec { Name = "html", MediaType = "text/html", Suffix = "html" });
+
+        return formats.ToArray();
+    }
+
+    private static string[] ResolveOutputRule(SiteSpec spec, ContentItem item)
+    {
+        if (spec.Outputs?.Rules is null || spec.Outputs.Rules.Length == 0)
+            return ResolveImplicitOutputRule(spec, item);
+
+        var kind = item.Kind.ToString().ToLowerInvariant();
+        foreach (var rule in spec.Outputs.Rules)
+        {
+            if (rule is null || string.IsNullOrWhiteSpace(rule.Kind)) continue;
+            if (string.Equals(rule.Kind, kind, StringComparison.OrdinalIgnoreCase))
+                return rule.Formats ?? Array.Empty<string>();
+        }
+
+        return ResolveImplicitOutputRule(spec, item);
+    }
+
+    private static string[] ResolveImplicitOutputRule(SiteSpec spec, ContentItem item)
+    {
+        if (item is null)
+            return Array.Empty<string>();
+        if (spec.Feed?.Enabled == false)
+            return Array.Empty<string>();
+        var collection = ResolveCollectionSpec(spec, item.Collection);
+
+        if (item.Kind == PageKind.Section &&
+            CollectionPresetDefaults.IsEditorialCollection(collection, item.Collection))
+        {
+            return BuildImplicitFeedFormats(spec.Feed);
+        }
+
+        if ((item.Kind == PageKind.Taxonomy || item.Kind == PageKind.Term) &&
+            (string.Equals(item.Collection, "tags", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(item.Collection, "categories", StringComparison.OrdinalIgnoreCase)))
+        {
+            return BuildImplicitFeedFormats(spec.Feed);
+        }
+
+        return Array.Empty<string>();
+    }
+
+    private static CollectionSpec? ResolveCollectionSpec(SiteSpec spec, string? collectionName)
+    {
+        if (spec?.Collections is null || spec.Collections.Length == 0 || string.IsNullOrWhiteSpace(collectionName))
+            return null;
+        var match = spec.Collections.FirstOrDefault(collection =>
+            collection is not null &&
+            !string.IsNullOrWhiteSpace(collection.Name) &&
+            collection.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+            return null;
+        return CollectionPresetDefaults.Apply(match);
+    }
+
+    private static bool IsEditorialCollection(string? collection)
+    {
+        if (string.IsNullOrWhiteSpace(collection))
+            return false;
+
+        return collection.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
+               collection.Equals("news", StringComparison.OrdinalIgnoreCase) ||
+               collection.Equals("changelog", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string[] BuildImplicitFeedFormats(FeedSpec? feed)
+    {
+        var formats = new List<string> { "html", "rss" };
+        if (feed?.IncludeAtom == true)
+            formats.Add("atom");
+        if (feed?.IncludeJsonFeed == true)
+            formats.Add("jsonfeed");
+
+        return formats
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static OutputFormatSpec? ResolveOutputFormatSpec(SiteSpec spec, string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (spec.Outputs?.Formats is not null)
+        {
+            var match = spec.Outputs.Formats.FirstOrDefault(f =>
+                string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) return match;
+        }
+
+        return name.ToLowerInvariant() switch
+        {
+            "html" => new OutputFormatSpec { Name = "html", MediaType = "text/html", Suffix = "html" },
+            "rss" => new OutputFormatSpec { Name = "rss", MediaType = "application/rss+xml", Suffix = "xml", Rel = "alternate" },
+            "atom" => new OutputFormatSpec { Name = "atom", MediaType = "application/atom+xml", Suffix = "atom.xml", Rel = "alternate" },
+            "jsonfeed" => new OutputFormatSpec { Name = "jsonfeed", MediaType = "application/feed+json", Suffix = "feed.json", Rel = "alternate" },
+            "json" => new OutputFormatSpec { Name = "json", MediaType = "application/json", Suffix = "json" },
+            _ => new OutputFormatSpec { Name = name, MediaType = "text/plain", Suffix = name, IsPlainText = true }
+        };
+    }
+
+    private static string ResolveOutputFileName(OutputFormatSpec format)
+    {
+        if (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))
+            return "index.html";
+        return $"index.{format.Suffix}";
+    }
+
+    private static OutputRuntime[] ResolveOutputRuntime(SiteSpec spec, ContentItem item, IReadOnlyList<OutputFormatSpec> formats)
+    {
+        if (formats.Count == 0)
+            return Array.Empty<OutputRuntime>();
+
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
+        var outputs = formats
+            .Where(format => format is not null && !string.IsNullOrWhiteSpace(format.Name))
+            .Select(format =>
+            {
+                var name = format.Name.Trim();
+                var route = ResolveOutputRoute(item.OutputPath, format);
+                var url = string.IsNullOrWhiteSpace(route)
+                    ? string.Empty
+                    : (string.IsNullOrWhiteSpace(languageBaseUrl) ? route : CombineAbsoluteUrl(languageBaseUrl, route));
+                return new OutputRuntime
+                {
+                    Name = name.ToLowerInvariant(),
+                    Url = url,
+                    MediaType = string.IsNullOrWhiteSpace(format.MediaType) ? "text/html" : format.MediaType,
+                    Rel = format.Rel,
+                    IsCurrent = string.Equals(name, "html", StringComparison.OrdinalIgnoreCase)
+                };
+            })
+            .GroupBy(output => output.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
+
+        return outputs;
+    }
+
+    private static string RenderAlternateOutputHeadLinks(IReadOnlyList<OutputRuntime> outputs)
+    {
+        if (outputs is null || outputs.Count == 0)
+            return string.Empty;
+
+        var lines = outputs
+            .Where(output => !output.IsCurrent)
+            .Where(output => !string.IsNullOrWhiteSpace(output.Url))
+            .Select(output =>
+            {
+                var rel = string.IsNullOrWhiteSpace(output.Rel) ? "alternate" : output.Rel!;
+                var relEncoded = System.Web.HttpUtility.HtmlEncode(rel);
+                var typeEncoded = System.Web.HttpUtility.HtmlEncode(output.MediaType);
+                var hrefEncoded = System.Web.HttpUtility.HtmlEncode(output.Url);
+                var titleEncoded = System.Web.HttpUtility.HtmlEncode(output.Name.ToUpperInvariant());
+                return $"<link rel=\"{relEncoded}\" type=\"{typeEncoded}\" href=\"{hrefEncoded}\" title=\"{titleEncoded}\" />";
+            })
+            .ToArray();
+
+        return lines.Length == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, lines);
+    }
+
+    private static string ResolveOutputRoute(string outputPath, OutputFormatSpec format)
+    {
+        var baseRoute = NormalizeRouteForMatch(outputPath);
+        if (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))
+            return baseRoute;
+
+        var prefix = baseRoute.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(prefix))
+            prefix = "/";
+
+        if (prefix == "/")
+            return $"/index.{format.Suffix}";
+
+        return $"{prefix}/index.{format.Suffix}";
+    }
+
+    private static string CombineAbsoluteUrl(string baseUrl, string path)
+    {
+        var normalizedBase = (baseUrl ?? string.Empty).Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(normalizedBase))
+            return path;
+
+        var normalizedPath = string.IsNullOrWhiteSpace(path)
+            ? "/"
+            : (path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path.TrimStart('/'));
+        return normalizedBase + normalizedPath;
+    }
+
+    private static string RenderOutput(
+        string outputRoot,
+        SiteSpec spec,
+        string rootPath,
+        ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
+        IReadOnlyDictionary<string, object?> data,
+        IReadOnlyDictionary<string, ProjectSpec> projectMap,
+        MenuSpec[] menuSpecs,
+        OutputFormatSpec format,
+        IReadOnlyList<OutputRuntime> outputs,
+        string alternateHeadLinksHtml)
+    {
+        var name = format.Name.ToLowerInvariant();
+        return name switch
+        {
+            "json" => RenderJsonOutput(spec, item, allItems),
+            "rss" => RenderRssOutput(spec, item, allItems),
+            "atom" => RenderAtomOutput(spec, item, allItems),
+            "jsonfeed" => RenderJsonFeedOutput(spec, item, allItems),
+            _ => OptimizeNetworkHints(RenderHtmlPage(outputRoot, spec, rootPath, item, allItems, data, projectMap, menuSpecs, outputs, alternateHeadLinksHtml))
+        };
+    }
+
+    private static string RenderJsonOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var listItems = ResolveListItems(spec, item, items);
+        var payload = new Dictionary<string, object?>
+        {
+            ["title"] = item.Title,
+            ["description"] = item.Description,
+            ["url"] = item.OutputPath,
+            ["kind"] = item.Kind.ToString().ToLowerInvariant(),
+            ["collection"] = item.Collection,
+            ["tags"] = item.Tags,
+            ["categories"] = ResolveRssCategories(item).ToArray(),
+            ["date"] = item.Date?.ToString("O"),
+            ["content"] = item.HtmlContent,
+            ["items"] = listItems.Select(i => new Dictionary<string, object?>
+            {
+                ["title"] = i.Title,
+                ["url"] = i.OutputPath,
+                ["description"] = i.Description,
+                ["date"] = i.Date?.ToString("O"),
+                ["tags"] = i.Tags,
+                ["categories"] = ResolveRssCategories(i).ToArray()
+            }).ToList()
+        };
+
+        return JsonSerializer.Serialize(payload, WebJson.Options);
+    }
+
+    private static string RenderRssOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var feedSpec = spec.Feed;
+        var maxItems = feedSpec?.MaxItems ?? 0;
+        var includeContent = feedSpec?.IncludeContent == true;
+        var includeCategories = feedSpec?.IncludeCategories != false;
+        var localization = ResolveLocalizationConfig(spec);
+        var baseUrl = (ResolveLanguageBaseUrl(spec, localization, item.Language) ?? string.Empty).TrimEnd('/');
+        var channelTitle = ResolveFeedChannelTitle(spec, item);
+        var channelLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
+        var channelDescription = ResolveFeedChannelDescription(spec, item);
+        var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "rss", Suffix = "xml" });
+        var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
+
+        var orderedItems = ResolveFeedItems(spec, item, items, maxItems);
+
+        var contentNs = XNamespace.Get("http://purl.org/rss/1.0/modules/content/");
+        var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
+        var dcNs = XNamespace.Get("http://purl.org/dc/elements/1.1/");
+
+        var feedItems = orderedItems
+            .Select(i =>
+            {
+                var link = string.IsNullOrWhiteSpace(baseUrl) ? i.OutputPath : baseUrl + i.OutputPath;
+                var description = string.IsNullOrWhiteSpace(i.Description) ? BuildSnippet(i.HtmlContent, 200) : i.Description;
+                var pubDate = i.Date?.ToUniversalTime().ToString("r") ?? DateTime.UtcNow.ToString("r");
+                var element = new XElement("item",
+                    new XElement("title", i.Title),
+                    new XElement("link", link),
+                    new XElement("description", description),
+                    new XElement("pubDate", pubDate),
+                    new XElement("guid", link));
+                foreach (var authorName in ResolveContentAuthorNames(i))
+                    element.Add(new XElement(dcNs + "creator", authorName));
+                if (includeCategories)
+                {
+                    foreach (var category in ResolveRssCategories(i))
+                        element.Add(new XElement("category", category));
+                }
+                if (includeContent && !string.IsNullOrWhiteSpace(i.HtmlContent))
+                    element.Add(new XElement(contentNs + "encoded", new XCData(i.HtmlContent)));
+                return element;
+            })
+            .ToArray();
+
+        var root = new XElement("rss",
+            new XAttribute("version", "2.0"),
+            new XAttribute(XNamespace.Xmlns + "atom", atomNs),
+            new XAttribute(XNamespace.Xmlns + "dc", dcNs));
+        if (includeContent)
+            root.Add(new XAttribute(XNamespace.Xmlns + "content", contentNs));
+
+        root.Add(
+            new XElement("channel",
+                new XElement("title", channelTitle),
+                new XElement("link", channelLink),
+                new XElement("description", channelDescription),
+                new XElement(atomNs + "link",
+                    new XAttribute("href", feedSelfLink),
+                    new XAttribute("rel", "self"),
+                    new XAttribute("type", "application/rss+xml")),
+                feedItems));
+
+        var doc = new XDocument(root);
+        return doc.ToString(SaveOptions.DisableFormatting);
+    }
+
+    private static string RenderAtomOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var feedSpec = spec.Feed;
+        var maxItems = feedSpec?.MaxItems ?? 0;
+        var includeContent = feedSpec?.IncludeContent == true;
+        var includeCategories = feedSpec?.IncludeCategories != false;
+        var localization = ResolveLocalizationConfig(spec);
+        var baseUrl = (ResolveLanguageBaseUrl(spec, localization, item.Language) ?? string.Empty).TrimEnd('/');
+        var feedTitle = ResolveFeedChannelTitle(spec, item);
+        var feedDescription = ResolveFeedChannelDescription(spec, item);
+        var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "atom", Suffix = "atom.xml" });
+        var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
+        var siteLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
+        var orderedItems = ResolveFeedItems(spec, item, items, maxItems).ToArray();
+        var updated = orderedItems
+            .Select(entry => entry.Date?.ToUniversalTime())
+            .Where(static value => value.HasValue)
+            .Select(static value => value!.Value)
+            .DefaultIfEmpty(DateTime.UtcNow)
+            .Max();
+
+        var root = new XElement(XName.Get("feed", "http://www.w3.org/2005/Atom"),
+            new XElement(XName.Get("title", "http://www.w3.org/2005/Atom"), feedTitle),
+            new XElement(XName.Get("id", "http://www.w3.org/2005/Atom"), feedSelfLink),
+            new XElement(XName.Get("updated", "http://www.w3.org/2005/Atom"), updated.ToString("O")),
+            new XElement(XName.Get("subtitle", "http://www.w3.org/2005/Atom"), feedDescription),
+            new XElement(XName.Get("link", "http://www.w3.org/2005/Atom"),
+                new XAttribute("href", siteLink)),
+            new XElement(XName.Get("link", "http://www.w3.org/2005/Atom"),
+                new XAttribute("href", feedSelfLink),
+                new XAttribute("rel", "self"),
+                new XAttribute("type", "application/atom+xml")));
+
+        foreach (var entry in orderedItems)
+        {
+            var entryLink = string.IsNullOrWhiteSpace(baseUrl) ? entry.OutputPath : baseUrl + entry.OutputPath;
+            var entryUpdated = entry.Date?.ToUniversalTime() ?? DateTime.UtcNow;
+            var atomEntry = new XElement(XName.Get("entry", "http://www.w3.org/2005/Atom"),
+                new XElement(XName.Get("title", "http://www.w3.org/2005/Atom"), entry.Title),
+                new XElement(XName.Get("id", "http://www.w3.org/2005/Atom"), entryLink),
+                new XElement(XName.Get("link", "http://www.w3.org/2005/Atom"),
+                    new XAttribute("href", entryLink)),
+                new XElement(XName.Get("updated", "http://www.w3.org/2005/Atom"), entryUpdated.ToString("O")),
+                new XElement(XName.Get("summary", "http://www.w3.org/2005/Atom"),
+                    string.IsNullOrWhiteSpace(entry.Description) ? BuildSnippet(entry.HtmlContent, 200) : entry.Description));
+
+            foreach (var authorName in ResolveContentAuthorNames(entry))
+            {
+                atomEntry.Add(new XElement(XName.Get("author", "http://www.w3.org/2005/Atom"),
+                    new XElement(XName.Get("name", "http://www.w3.org/2005/Atom"), authorName)));
+            }
+
+            if (includeContent && !string.IsNullOrWhiteSpace(entry.HtmlContent))
+            {
+                atomEntry.Add(new XElement(XName.Get("content", "http://www.w3.org/2005/Atom"),
+                    new XAttribute("type", "html"),
+                    new XCData(entry.HtmlContent)));
+            }
+
+            if (includeCategories)
+            {
+                foreach (var category in ResolveRssCategories(entry))
+                {
+                    atomEntry.Add(new XElement(XName.Get("category", "http://www.w3.org/2005/Atom"),
+                        new XAttribute("term", category)));
+                }
+            }
+
+            root.Add(atomEntry);
+        }
+
+        var doc = new XDocument(root);
+        return doc.ToString(SaveOptions.DisableFormatting);
+    }
+
+    private static string RenderJsonFeedOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var feedSpec = spec.Feed;
+        var maxItems = feedSpec?.MaxItems ?? 0;
+        var includeContent = feedSpec?.IncludeContent == true;
+        var includeCategories = feedSpec?.IncludeCategories != false;
+        var localization = ResolveLocalizationConfig(spec);
+        var baseUrl = (ResolveLanguageBaseUrl(spec, localization, item.Language) ?? string.Empty).TrimEnd('/');
+        var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "jsonfeed", Suffix = "feed.json" });
+        var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
+        var homePageUrl = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
+        var orderedItems = ResolveFeedItems(spec, item, items, maxItems);
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["version"] = "https://jsonfeed.org/version/1.1",
+            ["title"] = ResolveFeedChannelTitle(spec, item),
+            ["home_page_url"] = homePageUrl,
+            ["feed_url"] = feedSelfLink,
+            ["description"] = ResolveFeedChannelDescription(spec, item),
+            ["items"] = orderedItems.Select(entry =>
+            {
+                var entryUrl = string.IsNullOrWhiteSpace(baseUrl) ? entry.OutputPath : baseUrl + entry.OutputPath;
+                var feedItem = new Dictionary<string, object?>
+                {
+                    ["id"] = entryUrl,
+                    ["url"] = entryUrl,
+                    ["title"] = entry.Title,
+                    ["summary"] = string.IsNullOrWhiteSpace(entry.Description) ? BuildSnippet(entry.HtmlContent, 200) : entry.Description,
+                    ["date_published"] = (entry.Date?.ToUniversalTime() ?? DateTime.UtcNow).ToString("O")
+                };
+
+                if (includeContent && !string.IsNullOrWhiteSpace(entry.HtmlContent))
+                    feedItem["content_html"] = entry.HtmlContent;
+                if (includeCategories)
+                    feedItem["tags"] = ResolveRssCategories(entry).ToArray();
+                var authorNames = ResolveContentAuthorNames(entry);
+                if (authorNames.Length > 0)
+                {
+                    var authorUrls = ResolveContentAuthorUrls(entry);
+                    feedItem["authors"] = authorNames.Select((name, index) =>
+                    {
+                        var author = new Dictionary<string, object?> { ["name"] = name };
+                        if (index < authorUrls.Length && !string.IsNullOrWhiteSpace(authorUrls[index]))
+                            author["url"] = authorUrls[index];
+                        return author;
+                    }).ToArray();
+                }
+
+                return feedItem;
+            }).ToArray()
+        };
+
+        return JsonSerializer.Serialize(payload, WebJson.Options);
+    }
+
+    private static string? ResolvePreferredFeedUrl(IReadOnlyList<OutputRuntime> outputs)
+    {
+        if (outputs is null || outputs.Count == 0)
+            return null;
+
+        return outputs.FirstOrDefault(output => string.Equals(output.Name, "rss", StringComparison.OrdinalIgnoreCase))?.Url
+               ?? outputs.FirstOrDefault(output => string.Equals(output.Name, "atom", StringComparison.OrdinalIgnoreCase))?.Url
+               ?? outputs.FirstOrDefault(output => string.Equals(output.Name, "jsonfeed", StringComparison.OrdinalIgnoreCase))?.Url
+               ?? outputs.FirstOrDefault(output => !output.IsCurrent)?.Url;
+    }
+
+    private static IEnumerable<ContentItem> ResolveFeedItems(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items, int maxItems)
+    {
+        IEnumerable<ContentItem> orderedItems = ResolveListItems(spec, item, items)
+            .OrderByDescending(entry => entry.Date ?? DateTime.MinValue)
+            .ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase);
+        if (maxItems > 0)
+            orderedItems = orderedItems.Take(maxItems);
+
+        return orderedItems;
+    }
+
+    private static void CopyPageResources(ContentItem item, string targetDir)
+    {
+        if (item.Resources is null || item.Resources.Length == 0)
+            return;
+
+        foreach (var resource in item.Resources)
+        {
+            if (string.IsNullOrWhiteSpace(resource.SourcePath) || !File.Exists(resource.SourcePath))
+                continue;
+
+            var relative = resource.RelativePath ?? string.Empty;
+            var target = string.IsNullOrWhiteSpace(relative)
+                ? Path.Combine(targetDir, resource.Name)
+                : Path.Combine(targetDir, relative.Replace('/', Path.DirectorySeparatorChar));
+            var targetFolder = Path.GetDirectoryName(target);
+            if (!string.IsNullOrWhiteSpace(targetFolder))
+                Directory.CreateDirectory(targetFolder);
+            CopyFileIfChanged(resource.SourcePath, target);
+        }
+    }
+
+    private static IReadOnlyList<ContentItem> ResolveListItems(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var localization = ResolveLocalizationConfig(spec);
+        var itemLanguage = ResolveEffectiveLanguageCode(localization, item.Language);
+
+        if (item.Kind == PageKind.Section)
+        {
+            var sectionRoot = item.OutputPath;
+            if (IsGeneratedPaginationItem(item))
+            {
+                var firstUrl = GetMetaString(item.Meta, PaginationFirstUrlMetaKey);
+                if (!string.IsNullOrWhiteSpace(firstUrl))
+                    sectionRoot = firstUrl;
+            }
+
+            var current = NormalizeRouteForMatch(sectionRoot);
+            var sectionItems = items
+                .Where(i => !i.Draft)
+                .Where(i => i.Collection == item.Collection)
+                .Where(i => i.OutputPath != item.OutputPath)
+                .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
+                .Where(i => NormalizeRouteForMatch(i.OutputPath).StartsWith(current, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var collection = (spec.Collections ?? Array.Empty<CollectionSpec>())
+                .FirstOrDefault(c => c is not null &&
+                                     c.Name.Equals(item.Collection, StringComparison.OrdinalIgnoreCase));
+            if (collection is not null)
+                collection = CollectionPresetDefaults.Apply(collection);
+            var editorialDefault = CollectionPresetDefaults.IsEditorialCollection(collection, item.Collection);
+            return SortListItems(sectionItems, collection?.SortBy, collection?.SortOrder, editorialDefault);
+        }
+
+        if (item.Kind == PageKind.Taxonomy)
+        {
+            var taxonomy = GetMetaString(item.Meta, "taxonomy");
+            return items
+                .Where(i => i.Kind == PageKind.Term)
+                .Where(i => string.Equals(GetMetaString(i.Meta, "taxonomy"), taxonomy, StringComparison.OrdinalIgnoreCase))
+                .Where(i => ResolveEffectiveLanguageCode(localization, i.Language)
+                    .Equals(itemLanguage, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        if (item.Kind == PageKind.Term)
+        {
+            var taxonomy = GetMetaString(item.Meta, "taxonomy");
+            var term = GetMetaString(item.Meta, "term");
+            if (string.IsNullOrWhiteSpace(term))
+                return Array.Empty<ContentItem>();
+
+            var termItems = items
+                .Where(i => !i.Draft)
+                .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
+                .Where(i => ResolveEffectiveLanguageCode(localization, i.Language)
+                    .Equals(itemLanguage, StringComparison.OrdinalIgnoreCase))
+                .Where(i => GetTaxonomyValues(i, new TaxonomySpec { Name = taxonomy }).Any(t =>
+                    string.Equals(t, term, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            return SortListItems(termItems, sortBy: null, sortOrder: null, editorialDefaultByDate: false);
+        }
+
+        return Array.Empty<ContentItem>();
+    }
+
+    private static IReadOnlyList<ContentItem> SortListItems(
+        IReadOnlyList<ContentItem> items,
+        string? sortBy,
+        SortOrder? sortOrder,
+        bool editorialDefaultByDate)
+    {
+        if (items is null || items.Count == 0)
+            return Array.Empty<ContentItem>();
+
+        var mode = string.IsNullOrWhiteSpace(sortBy)
+            ? (editorialDefaultByDate ? "date" : "order")
+            : sortBy.Trim().ToLowerInvariant();
+        var descending = sortOrder.HasValue
+            ? sortOrder.Value == SortOrder.Desc
+            : mode == "date";
+
+        return mode switch
+        {
+            "date" => descending
+                ? items.OrderByDescending(item => item.Date ?? DateTime.MinValue)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.Date ?? DateTime.MinValue)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+            "title" => descending
+                ? items.OrderByDescending(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.OutputPath, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.OutputPath, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+            "slug" => descending
+                ? items.OrderByDescending(item => item.Slug, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.Slug, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+            "route" or "path" or "url" => descending
+                ? items.OrderByDescending(item => item.OutputPath, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.OutputPath, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+            _ => descending
+                ? items.OrderByDescending(item => item.Order ?? int.MaxValue)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.Order ?? int.MaxValue)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+        };
+    }
+
+    private static TaxonomySpec? ResolveTaxonomy(SiteSpec spec, ContentItem item)
+    {
+        var key = GetMetaString(item.Meta, "taxonomy");
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        return spec.Taxonomies.FirstOrDefault(t => string.Equals(t.Name, key, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string? ResolveTerm(ContentItem item)
+    {
+        var term = GetMetaString(item.Meta, "term");
+        return string.IsNullOrWhiteSpace(term) ? null : term;
+    }
+
+    private static string ResolveFeedChannelTitle(SiteSpec spec, ContentItem item)
+    {
+        var taxonomy = ResolveTaxonomy(spec, item);
+        var term = ResolveTerm(item);
+
+        if (taxonomy is not null)
+        {
+            if (item.Kind == PageKind.Taxonomy && !string.IsNullOrWhiteSpace(taxonomy.FeedTitle))
+                return taxonomy.FeedTitle.Trim();
+
+            if (item.Kind == PageKind.Term)
+            {
+                var resolved = ExpandTaxonomyFeedTemplate(taxonomy.TermFeedTitleTemplate, spec, taxonomy, term);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    return resolved;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
+    }
+
+    private static string ResolveFeedChannelDescription(SiteSpec spec, ContentItem item)
+    {
+        var taxonomy = ResolveTaxonomy(spec, item);
+        var term = ResolveTerm(item);
+
+        if (taxonomy is not null)
+        {
+            if (item.Kind == PageKind.Taxonomy && !string.IsNullOrWhiteSpace(taxonomy.FeedDescription))
+                return taxonomy.FeedDescription.Trim();
+
+            if (item.Kind == PageKind.Term)
+            {
+                var resolved = ExpandTaxonomyFeedTemplate(taxonomy.TermFeedDescriptionTemplate, spec, taxonomy, term);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    return resolved;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
+    }
+
+    private static string? ExpandTaxonomyFeedTemplate(string? template, SiteSpec spec, TaxonomySpec taxonomy, string? term)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return null;
+
+        var taxonomyDisplay = string.IsNullOrWhiteSpace(taxonomy.Name) ? string.Empty : HumanizeSegment(taxonomy.Name);
+        return template
+            .Replace("{term}", term ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("{taxonomy}", taxonomyDisplay, StringComparison.OrdinalIgnoreCase)
+            .Replace("{site}", spec.Name ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Trim();
+    }
+}
+

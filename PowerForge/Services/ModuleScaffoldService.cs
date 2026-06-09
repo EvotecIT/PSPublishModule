@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -35,7 +36,10 @@ public sealed class ModuleScaffoldService
             return new ModuleScaffoldResult(projectRoot, created: false, moduleGuid: null);
         }
 
-        var templateRoot = ResolveTemplateRoot(spec.TemplateRootPath);
+        IReadOnlyDictionary<string, string>? embeddedTemplates = null;
+        var useEmbeddedTemplates = string.IsNullOrWhiteSpace(spec.TemplateRootPath) &&
+                                   ModuleScaffoldTemplateStore.TryLoadDefaults(out embeddedTemplates);
+        var templateRoot = useEmbeddedTemplates ? null : ResolveTemplateRoot(spec.TemplateRootPath);
         var basePath = Directory.GetParent(projectRoot)?.FullName;
         if (!string.IsNullOrWhiteSpace(basePath) && !Directory.Exists(basePath))
             throw new DirectoryNotFoundException($"Base path does not exist: {basePath}");
@@ -43,19 +47,19 @@ public sealed class ModuleScaffoldService
         _logger.Info($"Preparing module structure for {moduleName} in {basePath}");
 
         Directory.CreateDirectory(projectRoot);
-        foreach (var folder in new[] { "Private", "Public", "Examples", "Ignore", "Build" })
+        foreach (var folder in new[] { "Private", "Public", "Examples", "Ignore", "Build", Path.Combine("Help", "About") })
             Directory.CreateDirectory(Path.Combine(projectRoot, folder));
 
         var guid = Guid.NewGuid().ToString();
         var filesToCopy = new (string Source, string Dest, bool Patch)[]
         {
-            (Path.Combine(templateRoot, "Example-Gitignore.txt"), Path.Combine(projectRoot, ".gitignore"), false),
-            (Path.Combine(templateRoot, "Example-CHANGELOG.MD"), Path.Combine(projectRoot, "CHANGELOG.MD"), false),
-            (Path.Combine(templateRoot, "Example-README.MD"), Path.Combine(projectRoot, "README.MD"), false),
-            (Path.Combine(templateRoot, "Example-LicenseMIT.txt"), Path.Combine(projectRoot, "LICENSE"), false),
-            (Path.Combine(templateRoot, "Example-ModuleBuilder.txt"), Path.Combine(projectRoot, "Build", "Build-Module.ps1"), true),
-            (Path.Combine(templateRoot, "Example-ModulePSM1.txt"), Path.Combine(projectRoot, $"{moduleName}.psm1"), false),
-            (Path.Combine(templateRoot, "Example-ModulePSD1.txt"), Path.Combine(projectRoot, $"{moduleName}.psd1"), true),
+            (useEmbeddedTemplates ? "Example-Gitignore.txt" : Path.Combine(templateRoot!, "Example-Gitignore.txt"), Path.Combine(projectRoot, ".gitignore"), false),
+            (useEmbeddedTemplates ? "Example-CHANGELOG.MD" : Path.Combine(templateRoot!, "Example-CHANGELOG.MD"), Path.Combine(projectRoot, "CHANGELOG.MD"), false),
+            (useEmbeddedTemplates ? "Example-README.MD" : Path.Combine(templateRoot!, "Example-README.MD"), Path.Combine(projectRoot, "README.MD"), false),
+            (useEmbeddedTemplates ? "Example-LicenseMIT.txt" : Path.Combine(templateRoot!, "Example-LicenseMIT.txt"), Path.Combine(projectRoot, "LICENSE"), false),
+            (useEmbeddedTemplates ? "Example-ModuleBuilder.txt" : Path.Combine(templateRoot!, "Example-ModuleBuilder.txt"), Path.Combine(projectRoot, "Build", "Build-Module.ps1"), true),
+            (useEmbeddedTemplates ? "Example-ModulePSM1.txt" : Path.Combine(templateRoot!, "Example-ModulePSM1.txt"), Path.Combine(projectRoot, $"{moduleName}.psm1"), false),
+            (useEmbeddedTemplates ? "Example-ModulePSD1.txt" : Path.Combine(templateRoot!, "Example-ModulePSD1.txt"), Path.Combine(projectRoot, $"{moduleName}.psd1"), true),
         };
 
         foreach (var f in filesToCopy)
@@ -63,11 +67,20 @@ public sealed class ModuleScaffoldService
             if (File.Exists(f.Dest)) continue;
 
             _logger.Info($"   📄 Copying '{Path.GetFileName(f.Dest)}' ({f.Source})");
-            File.Copy(f.Source, f.Dest, overwrite: false);
+            if (useEmbeddedTemplates)
+            {
+                File.WriteAllText(f.Dest, embeddedTemplates![f.Source], new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            }
+            else
+            {
+                File.Copy(f.Source, f.Dest, overwrite: false);
+            }
 
             if (f.Patch)
                 PatchInitialModuleTemplate(f.Dest, moduleName, guid);
         }
+
+        EnsureAboutTopicSeed(projectRoot, moduleName);
 
         _logger.Success($"Preparing module structure for {moduleName} in {basePath}. Completed.");
         return new ModuleScaffoldResult(projectRoot, created: true, moduleGuid: guid);
@@ -76,8 +89,41 @@ public sealed class ModuleScaffoldService
     private static void PatchInitialModuleTemplate(string filePath, string moduleName, string guid)
     {
         var content = File.ReadAllText(filePath);
-        content = content.Replace("`$GUID", guid).Replace("`$ModuleName", moduleName);
+        content = ReplaceTemplateToken(content, "GUID", guid);
+        content = ReplaceTemplateToken(content, "ModuleName", moduleName);
         File.WriteAllText(filePath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    private static string ReplaceTemplateToken(string content, string tokenName, string value)
+    {
+        if (string.IsNullOrEmpty(content) || string.IsNullOrEmpty(tokenName))
+            return content;
+
+        var pattern = $@"`?\${Regex.Escape(tokenName)}(?![A-Za-z0-9_])";
+        return Regex.Replace(content, pattern, value, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private void EnsureAboutTopicSeed(string projectRoot, string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(projectRoot) || string.IsNullOrWhiteSpace(moduleName))
+            return;
+
+        var service = new AboutTopicTemplateService();
+        try
+        {
+            service.Generate(new AboutTopicTemplateRequest
+            {
+                TopicName = $"about_{moduleName}_Overview",
+                OutputPath = Path.Combine("Help", "About"),
+                Force = false,
+                ShortDescription = $"Overview for {moduleName} module.",
+                WorkingDirectory = projectRoot
+            });
+        }
+        catch (IOException)
+        {
+            // Existing seed file is fine.
+        }
     }
 
     private static string ResolveTemplateRoot(string? explicitRoot)
@@ -121,7 +167,7 @@ public sealed class ModuleScaffoldService
             }
         }
 
-        throw new DirectoryNotFoundException("Module Data directory not found (expected template files under 'Data' or 'Module\\Data').");
+        throw new DirectoryNotFoundException("Module scaffold templates not found (expected embedded defaults or template files under 'Data' or 'Module\\Data').");
     }
 
     private static bool IsTemplateRoot(string path)

@@ -1,4 +1,4 @@
-# Example: Simple Module Testing
+﻿# Example: Simple Module Testing
 # This example shows the simplest way to use the new testing functions
 
 # Basic usage - tests the current module with default settings

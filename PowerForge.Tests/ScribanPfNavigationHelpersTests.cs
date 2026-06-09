@@ -1,0 +1,1209 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Net;
+using ImageMagick;
+using Xunit;
+using PowerForge.Web;
+
+public class ScribanPfNavigationHelpersTests
+{
+    [Theory]
+    [InlineData("en", "", "Open article: Entry")]
+    [InlineData("en", "Product", "Open article: Product")]
+    [InlineData("pl", "Produkt", "Otwórz artykuł: Produkt")]
+    [InlineData("fr", "Produit", "Ouvrir l'article: Produit")]
+    [InlineData("de", "Produkt", "Artikel öffnen: Produkt")]
+    [InlineData("es", "Producto", "Abrir artículo: Producto")]
+    public void Build_EditorialCardAriaLabels_UseLocalizedText(string language, string title, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildEditorialCardAriaLabel(title);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("en", "   ", "Related post: Post")]
+    [InlineData("en", "Product", "Related post: Product")]
+    [InlineData("pl", "Produkt", "Powiązany artykuł: Produkt")]
+    [InlineData("fr", "Produit", "Article associé: Produit")]
+    [InlineData("de", "Produkt", "Zugehöriger Beitrag: Produkt")]
+    [InlineData("es", "Producto", "Artículo relacionado: Producto")]
+    public void Build_RelatedPostAriaLabels_UseLocalizedText(string language, string title, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildRelatedPostAriaLabel(title);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("pl", "Kategoria: Product Updates")]
+    [InlineData("fr", "Catégorie: Product Updates")]
+    [InlineData("de", "Kategorie: Product Updates")]
+    [InlineData("es", "Categoría: Product Updates")]
+    public void Build_LocalizedCategoryChipAriaLabels_UseNativeCharacters(string language, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildTaxonomyChipAriaLabel("categories", "Product Updates");
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("en", "Tag: release")]
+    [InlineData("es", "Etiqueta: release")]
+    public void Build_LocalizedTagChipAriaLabels_UseLocalizedText(string language, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildTaxonomyChipAriaLabel("tags", "release");
+
+        Assert.Equal(expected, actual);
+    }
+
+    private static ScribanThemeHelpers CreateHelpers(string language)
+    {
+        return new ScribanThemeHelpers(new ThemeRenderContext
+        {
+            Page = new ContentItem { Language = language }
+        });
+    }
+
+    [Fact]
+    public void Build_RendersPfNavHelpers_InScribanTheme()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-scriban-nav-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "content", "pages"));
+            File.WriteAllText(Path.Combine(root, "content", "pages", "index.md"),
+                """
+                ---
+                title: Home
+                ---
+
+                # Hello
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(themeRoot);
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "contractVersion": 2,
+                  "name": "t",
+                  "engine": "scriban",
+                  "layoutsPath": "layouts",
+                  "partialsPath": "partials",
+                  "defaultLayout": "base"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>
+                  {{ include "header" }}
+                  <main>{{ content }}</main>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "header.html"),
+                """
+                <header>
+                  <nav class="links">{{ pf.nav_links "main" }}</nav>
+                  <div class="actions">{{ pf.nav_actions }}</div>
+                </header>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Test",
+                BaseUrl = "https://example.com",
+                ContentRoot = "content",
+                ThemesRoot = "themes",
+                DefaultTheme = "t",
+                ThemeEngine = "scriban",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/",
+                        DefaultLayout = "base",
+                        Include = new[] { "*.md" }
+                    }
+                },
+                LinkRules = new LinkRulesSpec
+                {
+                    ExternalTarget = "_blank",
+                    ExternalRel = "noopener"
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Docs", Url = "/docs/" }
+                            }
+                        }
+                    },
+                    Actions = new[]
+                    {
+                        new MenuItemSpec
+                        {
+                            Title = "GitHub",
+                            Url = "https://github.com/example/repo",
+                            External = true,
+                            CssClass = "nav-icon"
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outDir = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outDir);
+
+            var indexHtml = File.ReadAllText(Path.Combine(outDir, "index.html"));
+            Assert.Contains("<nav class=\"links\">", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/\"", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/\"", indexHtml, StringComparison.OrdinalIgnoreCase);
+
+            // Current route is "/", so Home should be marked active.
+            Assert.Contains("is-active", indexHtml, StringComparison.OrdinalIgnoreCase);
+
+            // External action should pick up link rules.
+            Assert.Contains("href=\"https://github.com/example/repo\"", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("target=\"_blank\"", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("rel=\"noopener\"", indexHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_RendersPfEditorialCards_InScribanTheme()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-scriban-editorial-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogRoot = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogRoot);
+            File.WriteAllText(Path.Combine(blogRoot, "_index.md"),
+                """
+                ---
+                title: Blog
+                description: Latest updates
+                ---
+
+                # Blog
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "first-post.md"),
+                """
+                ---
+                title: First post
+                description: First description for helper output.
+                date: 2026-01-05
+                tags:
+                  - release
+                  - update
+                meta.social_image: /images/first-post.png
+                ---
+
+                # First
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "second-post.md"),
+                """
+                ---
+                title: Second post
+                description: Another update
+                date: 2026-01-04
+                tags:
+                  - notes
+                ---
+
+                # Second
+                """);
+
+            var staticImagesRoot = Path.Combine(root, "static", "images");
+            Directory.CreateDirectory(staticImagesRoot);
+            using (var firstImage = new MagickImage(MagickColors.SteelBlue, 640, 360))
+                firstImage.Write(Path.Combine(staticImagesRoot, "first-post.png"));
+            using (var fallbackImage = new MagickImage(MagickColors.DarkSlateBlue, 320, 200))
+                fallbackImage.Write(Path.Combine(staticImagesRoot, "fallback.png"));
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(themeRoot);
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "contractVersion": 2,
+                  "name": "t",
+                  "engine": "scriban",
+                  "layoutsPath": "layouts",
+                  "partialsPath": "partials",
+                  "defaultLayout": "base"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>
+                  {{ include "header" }}
+                  <main>
+                    {{ pf.editorial_cards 0 120 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" }}
+                    {{ pf.editorial_pager "Newer" "Older" }}
+                  </main>
+                  {{ include "footer" }}
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "header.html"), "<header>Header</header>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "footer.html"), "<footer>Footer</footer>");
+
+            var spec = new SiteSpec
+            {
+                Name = "Editorial",
+                BaseUrl = "https://example.com",
+                ContentRoot = "content",
+                ThemesRoot = "themes",
+                DefaultTheme = "t",
+                ThemeEngine = "scriban",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "base",
+                        PageSize = 1,
+                        Include = new[] { "*.md", "**/*.md" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outDir = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outDir);
+
+            var blogHtml = File.ReadAllText(Path.Combine(outDir, "blog", "index.html"));
+            Assert.Contains("pf-editorial-grid", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("pf-editorial-grid--hero", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("custom-grid", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/blog/first-post/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("pf-editorial-card--hero", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("custom-card", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("pf-editorial-card-image", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/images/first-post.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("width=\"640\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("height=\"360\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aspect-ratio: 4 / 3;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<time datetime=\"2026-01-05\">2026-01-05</time>", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<span class=\"pf-chip pf-chip--tag\">release</span>", blogHtml, StringComparison.OrdinalIgnoreCase);
+
+            var blogPage2Html = File.ReadAllText(Path.Combine(outDir, "blog", "page", "2", "index.html"));
+            Assert.Contains("/images/fallback.png", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("width=\"320\"", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("height=\"200\"", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">Newer<", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/blog/\"", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(">Older<", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_RendersPfEditorialCards_UsesCollectionDefaultsAndCardMeta()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-scriban-editorial-defaults-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogRoot = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogRoot);
+            File.WriteAllText(Path.Combine(blogRoot, "_index.md"),
+                """
+                ---
+                title: Blog
+                description: Latest updates
+                ---
+
+                # Blog
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "first-post.md"),
+                """
+                ---
+                title: First post
+                description: First description
+                date: 2026-01-05
+                image: /images/ignored-first-generic.png
+                tags:
+                  - release
+                  - updates
+                cardImage: /images/override-card.png
+                cardImageAlt: Card override alt
+                cardImageFit: none
+                cardImagePosition: left top
+                ---
+
+                # First
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "second-post.md"),
+                """
+                ---
+                title: Second post
+                description: Second description
+                date: 2026-01-04
+                image: /images/generic-second.png
+                tags:
+                  - updates
+                categories:
+                  - Product Updates
+                ---
+
+                # Second
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "third-post.md"),
+                """
+                ---
+                title: Third post
+                description: Third description
+                date: 2026-01-03
+                ---
+
+                # Third
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(themeRoot);
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "contractVersion": 2,
+                  "name": "t",
+                  "engine": "scriban",
+                  "layoutsPath": "layouts",
+                  "defaultLayout": "base"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>
+                  <main>{{ pf.editorial_cards }}</main>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Editorial",
+                BaseUrl = "https://example.com",
+                ContentRoot = "content",
+                ThemesRoot = "themes",
+                DefaultTheme = "t",
+                ThemeEngine = "scriban",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Preset = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "base",
+                        Include = new[] { "*.md", "**/*.md" },
+                        EditorialCards = new EditorialCardsSpec
+                        {
+                            Image = "/images/default-collection-card.png",
+                            ImageAspect = "3:2",
+                            ImageFit = "contain",
+                            ImagePosition = "top center",
+                            Variant = "featured",
+                            GridClass = "collection-grid",
+                            CardClass = "collection-card",
+                            ShowCategories = true,
+                            LinkTaxonomy = true
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outDir = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outDir);
+
+            var blogHtml = File.ReadAllText(Path.Combine(outDir, "blog", "index.html"));
+            Assert.Contains("pf-editorial-grid--featured", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("collection-grid", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("collection-card", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aspect-ratio: 3 / 2;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/images/override-card.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/images/ignored-first-generic.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("alt=\"Card override alt\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("object-fit: none;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("object-position: left top;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/images/generic-second.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/images/default-collection-card.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("object-fit: contain;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("object-position: top center;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("pf-chip--tag", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/categories/product-updates/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_RendersPfEditorialCards_WithTaxonomyLinks_WhenEnabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-scriban-editorial-taxonomy-links-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogRoot = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogRoot);
+            File.WriteAllText(Path.Combine(blogRoot, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                # Blog
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "release-notes.md"),
+                """
+                ---
+                title: Release Notes
+                description: Latest release highlights.
+                date: 2026-01-07
+                tags:
+                  - release
+                  - notes
+                categories:
+                  - Product Updates
+                ---
+
+                # Release
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(themeRoot);
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "contractVersion": 2,
+                  "name": "t",
+                  "engine": "scriban",
+                  "layoutsPath": "layouts",
+                  "defaultLayout": "base"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>
+                  <main>{{ pf.editorial_cards 0 120 true true true true "16/9" "" "default" "" "" true true }}</main>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Editorial",
+                BaseUrl = "https://example.com",
+                ContentRoot = "content",
+                ThemesRoot = "themes",
+                DefaultTheme = "t",
+                ThemeEngine = "scriban",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "base",
+                        Include = new[] { "*.md", "**/*.md" }
+                    }
+                },
+                Taxonomies = new[]
+                {
+                    new TaxonomySpec
+                    {
+                        Name = "tags",
+                        BasePath = "/topics"
+                    },
+                    new TaxonomySpec
+                    {
+                        Name = "categories",
+                        BasePath = "/sections"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outDir = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outDir);
+
+            var blogHtml = File.ReadAllText(Path.Combine(outDir, "blog", "index.html"));
+            Assert.Contains("href=\"/topics/release/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/topics/notes/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/sections/product-updates/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("pf-chip--tag", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("pf-chip--category", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Open article: Release Notes\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Category: Product Updates\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Tag: release\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_RendersPfEditorialPostNav_WithRelatedLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-scriban-editorial-post-nav-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogRoot = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogRoot);
+            File.WriteAllText(Path.Combine(blogRoot, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                # Blog
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "first-post.md"),
+                """
+                ---
+                title: First post
+                date: 2026-01-05
+                tags:
+                  - release
+                  - core
+                ---
+
+                # First
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "second-post.md"),
+                """
+                ---
+                title: Second post
+                date: 2026-01-04
+                tags:
+                  - release
+                  - ops
+                ---
+
+                # Second
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "third-post.md"),
+                """
+                ---
+                title: Third post
+                date: 2026-01-03
+                tags:
+                  - docs
+                ---
+
+                # Third
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(themeRoot);
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "contractVersion": 2,
+                  "name": "t",
+                  "engine": "scriban",
+                  "layoutsPath": "layouts",
+                  "defaultLayout": "base"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>
+                  {{ content }}
+                  {{ pf.editorial_post_nav }}
+                </body>
+                </html>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Editorial",
+                BaseUrl = "https://example.com",
+                ContentRoot = "content",
+                ThemesRoot = "themes",
+                DefaultTheme = "t",
+                ThemeEngine = "scriban",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Preset = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "base",
+                        Include = new[] { "*.md", "**/*.md" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outDir = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outDir);
+
+            var postHtml = File.ReadAllText(Path.Combine(outDir, "blog", "second-post", "index.html"));
+            Assert.Contains("pf-post-nav", postHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/blog/\"", postHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Newer post: First post", postHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Older post: Third post", postHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<h2>Related posts</h2>", postHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<a href=\"/blog/first-post/\" aria-label=\"Related post: First post\">First post</a>", postHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_RendersPfEditorialCards_WithLocalizedTaxonomyLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-scriban-editorial-taxonomy-links-localized-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogRoot = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogRoot);
+            Directory.CreateDirectory(Path.Combine(blogRoot, "pl"));
+
+            File.WriteAllText(Path.Combine(blogRoot, "_index.md"),
+                """
+                ---
+                title: Blog
+                language: en
+                ---
+
+                # Blog
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "pl", "_index.md"),
+                """
+                ---
+                title: Blog PL
+                language: pl
+                ---
+
+                # Blog PL
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "pl", "release-notes.md"),
+                """
+                ---
+                title: Notatki wydania
+                description: Najnowsze informacje.
+                date: 2026-02-07
+                language: pl
+                tags:
+                  - release
+                  - notes
+                categories:
+                  - Product Updates
+                ---
+
+                # Release
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(themeRoot);
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "contractVersion": 2,
+                  "name": "t",
+                  "engine": "scriban",
+                  "layoutsPath": "layouts",
+                  "defaultLayout": "base"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>
+                  <main>{{ pf.editorial_cards 0 120 true true true true "16/9" "" "default" "" "" true true }}</main>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Editorial",
+                BaseUrl = "https://example.com",
+                ContentRoot = "content",
+                ThemesRoot = "themes",
+                DefaultTheme = "t",
+                ThemeEngine = "scriban",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = false,
+                    FallbackToDefaultLanguage = true,
+                    MaterializeFallbackPages = true,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Label = "EN", Default = true, Prefix = "en" },
+                        new LanguageSpec { Code = "pl", Label = "PL", Prefix = "pl" }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "base",
+                        Include = new[] { "*.md", "**/*.md" }
+                    }
+                },
+                Taxonomies = new[]
+                {
+                    new TaxonomySpec
+                    {
+                        Name = "tags",
+                        BasePath = "/topics"
+                    },
+                    new TaxonomySpec
+                    {
+                        Name = "categories",
+                        BasePath = "/sections"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outDir = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outDir);
+
+            var polishBlogHtml = File.ReadAllText(Path.Combine(outDir, "pl", "blog", "index.html"));
+            var decodedPolishBlogHtml = WebUtility.HtmlDecode(polishBlogHtml);
+            Assert.Contains("href=\"/pl/topics/release/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/pl/topics/notes/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/pl/sections/product-updates/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/topics/release/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/sections/product-updates/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Otwórz artykuł: Notatki wydania\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Kategoria: Product Updates\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Tag: release\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_RendersPfEditorialPostNav_WithinCurrentLanguageOnly()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-scriban-editorial-post-nav-localized-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogRoot = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogRoot);
+            Directory.CreateDirectory(Path.Combine(blogRoot, "pl"));
+
+            File.WriteAllText(Path.Combine(blogRoot, "_index.md"),
+                """
+                ---
+                title: Blog
+                language: en
+                ---
+
+                # Blog
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "pl", "_index.md"),
+                """
+                ---
+                title: Blog PL
+                language: pl
+                ---
+
+                # Blog PL
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "first-post.md"),
+                """
+                ---
+                title: First post EN
+                date: 2026-01-05
+                language: en
+                tags:
+                  - release
+                ---
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "second-post.md"),
+                """
+                ---
+                title: Second post EN
+                date: 2026-01-04
+                language: en
+                tags:
+                  - release
+                ---
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "third-post.md"),
+                """
+                ---
+                title: Third post EN
+                date: 2026-01-03
+                language: en
+                tags:
+                  - docs
+                ---
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "pl", "first-post.md"),
+                """
+                ---
+                title: Pierwszy wpis
+                date: 2026-02-05
+                language: pl
+                tags:
+                  - release
+                  - core
+                ---
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "pl", "second-post.md"),
+                """
+                ---
+                title: Drugi wpis
+                date: 2026-02-04
+                language: pl
+                tags:
+                  - release
+                  - ops
+                ---
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "pl", "third-post.md"),
+                """
+                ---
+                title: Trzeci wpis
+                date: 2026-02-03
+                language: pl
+                tags:
+                  - docs
+                ---
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(themeRoot);
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "contractVersion": 2,
+                  "name": "t",
+                  "engine": "scriban",
+                  "layoutsPath": "layouts",
+                  "defaultLayout": "base"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>
+                  {{ content }}
+                  {{ pf.editorial_post_nav }}
+                </body>
+                </html>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Editorial",
+                BaseUrl = "https://example.com",
+                ContentRoot = "content",
+                ThemesRoot = "themes",
+                DefaultTheme = "t",
+                ThemeEngine = "scriban",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = false,
+                    FallbackToDefaultLanguage = true,
+                    MaterializeFallbackPages = true,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Label = "EN", Default = true, Prefix = "en" },
+                        new LanguageSpec { Code = "pl", Label = "PL", Prefix = "pl" }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Preset = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "base",
+                        Include = new[] { "*.md", "**/*.md" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outDir = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outDir);
+
+            var polishSecondPost = File.ReadAllText(Path.Combine(outDir, "pl", "blog", "second-post", "index.html"));
+            var decodedPolishSecondPost = WebUtility.HtmlDecode(polishSecondPost);
+            Assert.Contains("href=\"/pl/blog/\"", polishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Newer post: Pierwszy wpis", polishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Older post: Trzeci wpis", polishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<a href=\"/pl/blog/first-post/\" aria-label=\"Powiązany artykuł: Pierwszy wpis\">Pierwszy wpis</a>", decodedPolishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<a href=\"/pl/blog/third-post/\" aria-label=\"Powiązany artykuł: Trzeci wpis\">Trzeci wpis</a>", decodedPolishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/blog/first-post/\"", polishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("First post EN", polishSecondPost, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+}

@@ -1,0 +1,1687 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
+using PowerForge.Web;
+
+namespace PowerForge.Web;
+
+public static partial class WebSiteBuilder
+{
+    private static readonly HashSet<string> EarlyHeadLinkRels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "preload",
+        "modulepreload",
+        "preconnect",
+        "dns-prefetch",
+        "prefetch"
+    };
+    private static readonly Regex ScribanCommentRegex = new(@"\{\{[-~]?\s*#.*?#\s*[-~]?\}\}", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanEscapeBlockRegex = new(@"\{%\{.*?\}%\}", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanControlBlockRegex = new(@"\{\{[-~]?\s*(?<keyword>if|unless|case|for|while|capture|with|func|tablerow|wrap|end)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex SimplePartialReferenceRegex = new(@"\{\{>\s*(?<name>[^\s}]+)\s*\}\}", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanPartialReferenceRegex = new(@"\{\{[-~]?\s*include\s+[""'](?<name>[^""']+)[""'][^}]*[-~]?\}\}", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+    private const int MaxAssetSlotPartialDepth = 8;
+
+    private static string RenderPreloads(AssetRegistrySpec? assets, HeadSpec? head = null)
+    {
+        var parts = new List<string>();
+
+        var headHints = RenderHeadLinks(head, static link => IsEarlyHeadLink(link.Rel));
+        if (!string.IsNullOrWhiteSpace(headHints))
+            parts.Add(headHints);
+
+        if (assets?.Preloads is { Length: > 0 })
+        {
+            parts.Add(string.Join(Environment.NewLine, assets.Preloads.Select(p =>
+            {
+                var type = string.IsNullOrWhiteSpace(p.Type) ? string.Empty : $" type=\"{p.Type}\"";
+                var cross = string.IsNullOrWhiteSpace(p.Crossorigin) ? string.Empty : $" crossorigin=\"{p.Crossorigin}\"";
+                return $"<link rel=\"preload\" href=\"{p.Href}\" as=\"{p.As}\"{type}{cross} />";
+            })));
+        }
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string RenderCriticalCss(AssetRegistrySpec? assets, string rootPath, BuildRenderCache? renderCache = null)
+    {
+        if (assets?.CriticalCss is null || assets.CriticalCss.Length == 0)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var css in assets.CriticalCss)
+        {
+            if (string.IsNullOrWhiteSpace(css.Path)) continue;
+            var fullPath = Path.IsPathRooted(css.Path)
+                ? css.Path
+                : Path.Combine(rootPath, css.Path);
+            if (!File.Exists(fullPath)) continue;
+            var cssText = renderCache is null
+                ? File.ReadAllText(fullPath)
+                : renderCache.CriticalCssCache.GetOrAdd(fullPath, static path => File.ReadAllText(path));
+            sb.Append("<style>");
+            sb.Append(cssText);
+            sb.AppendLine("</style>");
+        }
+        return sb.ToString();
+    }
+
+    private static string RenderCssLinks(IEnumerable<string> cssLinks, AssetRegistrySpec? assets, string route, HeadSpec? head = null)
+    {
+        var parts = new List<string>();
+        var headStyles = RenderHeadLinks(head, static link => IsStylesheetHeadLink(link.Rel));
+        if (!string.IsNullOrWhiteSpace(headStyles))
+            parts.Add(headStyles);
+
+        var links = cssLinks.Select(link => ResolveRouteRelativeAssetHref(link, route)).ToArray();
+        if (links.Length == 0) return string.Join(Environment.NewLine, parts);
+
+        var strategy = WebAssetCssStrategy.Normalize(assets?.CssStrategy);
+        if (strategy.Equals("async", StringComparison.OrdinalIgnoreCase))
+            parts.Add(string.Join(Environment.NewLine, links.Select(RenderAsyncCssLink)));
+
+        else if (strategy.Equals("preload", StringComparison.OrdinalIgnoreCase))
+            parts.Add(string.Join(Environment.NewLine, links.Select(RenderPreloadCssLink)));
+
+        else
+            parts.Add(string.Join(Environment.NewLine, links.Select(c => $"<link rel=\"stylesheet\" href=\"{c}\" />")));
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string RenderJsLinks(IEnumerable<string> jsLinks, string route)
+    {
+        return string.Join(
+            Environment.NewLine,
+            jsLinks.Select(j => $"<script src=\"{ResolveRouteRelativeAssetHref(j, route)}\" defer data-cfasync=\"false\"></script>"));
+    }
+
+    private static string RenderAsyncCssLink(string href)
+    {
+        return $@"<link rel=""stylesheet"" href=""{href}"" media=""print"" onload=""this.media='all'"" />
+<noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
+    }
+
+    private static string RenderPreloadCssLink(string href)
+    {
+        return $@"<link rel=""preload"" href=""{href}"" as=""style"" onload=""this.onload=null;this.rel='stylesheet'"" />
+<noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
+    }
+
+    private static string ResolveRouteRelativeAssetHref(string href, string route)
+    {
+        if (string.IsNullOrWhiteSpace(href))
+            return href;
+
+        var trimmed = href.Trim();
+        if (IsExternalOrRootedAssetHref(trimmed))
+            return trimmed;
+
+        if (trimmed.StartsWith("./", StringComparison.Ordinal) ||
+            trimmed.StartsWith("../", StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        var prefix = BuildRelativePrefixForRoute(route);
+        return prefix + trimmed.TrimStart('/');
+    }
+
+    private static bool IsExternalOrRootedAssetHref(string href)
+    {
+        if (href.StartsWith("/", StringComparison.Ordinal) ||
+            href.StartsWith("#", StringComparison.Ordinal) ||
+            href.StartsWith("//", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return Uri.TryCreate(href, UriKind.Absolute, out _);
+    }
+
+    private static string BuildRelativePrefixForRoute(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route) || route == "/")
+            return string.Empty;
+
+        var normalized = route.Replace('\\', '/').Trim();
+        var isDirectoryRoute = normalized.EndsWith("/", StringComparison.Ordinal);
+        var segments = normalized.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var normalizedPath = NormalizePath(normalized);
+        var looksLikeFileRoute = normalizedPath.Equals("404.html", StringComparison.OrdinalIgnoreCase);
+        var depth = isDirectoryRoute || !looksLikeFileRoute ? segments.Length : Math.Max(0, segments.Length - 1);
+        if (depth <= 0)
+            return string.Empty;
+
+        return string.Concat(Enumerable.Repeat("../", depth));
+    }
+
+    private static string ResolveHtmlAssetBaseRoute(string route)
+    {
+        var normalized = NormalizePath(route);
+        if (normalized.Equals("404", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("404.html", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/404.html";
+        }
+
+        return route;
+    }
+
+    private readonly record struct AssetSlotUsage(bool UsePreloadsSlot, bool UseCssSlot);
+
+    private enum AssetSlotTemplateKind
+    {
+        Simple,
+        Scriban
+    }
+
+    private static AssetSlotUsage ResolveAssetSlotUsage(
+        string? template,
+        Func<string, string?>? partialResolver = null,
+        AssetSlotTemplateKind templateKind = AssetSlotTemplateKind.Simple)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            // The built-in no-theme renderer emits PreloadsHtml and CssHtml directly, so keep those slots active.
+            return new AssetSlotUsage(true, true);
+        }
+
+        var searchableTemplate = BuildAssetSlotSearchTemplate(template, partialResolver, templateKind);
+        var headIndex = FindFirstRenderedTokenIndex(searchableTemplate, "head_html", "HEAD_HTML");
+        var preloadsIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.preloads_html", "PRELOADS");
+        var cssIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.css_html", "ASSET_CSS");
+
+        return new AssetSlotUsage(
+            ShouldUseAssetSlot(preloadsIndex, headIndex),
+            ShouldUseAssetSlot(cssIndex, headIndex));
+    }
+
+    private static bool ShouldUseAssetSlot(int slotIndex, int headIndex) =>
+        slotIndex >= 0 && (headIndex < 0 || slotIndex < headIndex);
+
+    private static string BuildAssetSlotSearchTemplate(
+        string template,
+        Func<string, string?>? partialResolver,
+        AssetSlotTemplateKind templateKind)
+    {
+        var searchable = StripNonRenderedTemplateRegions(template);
+        return ExpandAssetSlotPartialReferences(searchable, partialResolver, templateKind, new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
+    }
+
+    private static string StripNonRenderedTemplateRegions(string template) =>
+        ScribanEscapeBlockRegex.Replace(
+            ScribanCommentRegex.Replace(
+                HtmlCommentRegex.Replace(template, string.Empty),
+                string.Empty),
+            string.Empty);
+
+    private static string ExpandAssetSlotPartialReferences(
+        string template,
+        Func<string, string?>? partialResolver,
+        AssetSlotTemplateKind templateKind,
+        HashSet<string> seen,
+        int depth)
+    {
+        if (partialResolver is null || depth >= MaxAssetSlotPartialDepth || string.IsNullOrEmpty(template))
+            return template;
+
+        string ReplacePartial(Match match)
+        {
+            var name = match.Groups["name"].Value;
+            if (string.IsNullOrWhiteSpace(name) || !seen.Add(name))
+                return string.Empty;
+
+            try
+            {
+                var partial = partialResolver(name);
+                if (string.IsNullOrWhiteSpace(partial))
+                    return string.Empty;
+
+                partial = StripNonRenderedTemplateRegions(partial);
+                if (templateKind == AssetSlotTemplateKind.Simple)
+                    return partial;
+
+                return ExpandAssetSlotPartialReferences(partial, partialResolver, templateKind, seen, depth + 1);
+            }
+            finally
+            {
+                seen.Remove(name);
+            }
+        }
+
+        return templateKind == AssetSlotTemplateKind.Simple
+            ? SimplePartialReferenceRegex.Replace(template, ReplacePartial)
+            : ScribanPartialReferenceRegex.Replace(template, ReplacePartial);
+    }
+
+    private static int FindFirstRenderedTokenIndex(string template, params string[] tokens)
+    {
+        var index = -1;
+        foreach (var token in tokens)
+        {
+            foreach (Match match in Regex.Matches(
+                template,
+                @"\{\{[-~]?\s*" + Regex.Escape(token) + @"\s*[-~]?\}\}",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                RegexTimeout))
+            {
+                if (IsInsideScribanControlBlock(template, match.Index))
+                    continue;
+
+                if (index < 0 || match.Index < index)
+                    index = match.Index;
+            }
+        }
+
+        return index;
+    }
+
+    private static bool IsInsideScribanControlBlock(string template, int index)
+    {
+        var depth = 0;
+        // Branch truth is runtime data, so any slot inside a Scriban block stays conservative.
+        foreach (Match match in ScribanControlBlockRegex.Matches(template))
+        {
+            if (match.Index >= index)
+                break;
+
+            var keyword = match.Groups["keyword"].Value;
+            if (keyword.Equals("end", StringComparison.OrdinalIgnoreCase))
+                depth = Math.Max(0, depth - 1);
+            else
+                depth++;
+        }
+
+        return depth > 0;
+    }
+
+    private static string BuildHeadHtml(
+        SiteSpec spec,
+        ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
+        string rootPath,
+        bool includeEarlyHeadLinks = false,
+        bool includeStylesheetHeadLinks = false)
+    {
+        var parts = new List<string>();
+        var head = spec.Head;
+        if (head is not null)
+        {
+            var links = RenderHeadLinks(
+                head,
+                link => ShouldRenderHeadLinkInHeadHtml(link.Rel, includeEarlyHeadLinks, includeStylesheetHeadLinks));
+            if (!string.IsNullOrWhiteSpace(links))
+                parts.Add(links);
+
+            var meta = RenderHeadMeta(head);
+            if (!string.IsNullOrWhiteSpace(meta))
+                parts.Add(meta);
+
+            if (!string.IsNullOrWhiteSpace(head.Html))
+                parts.Add(head.Html!);
+        }
+
+        var pageHead = GetMetaString(item.Meta, "head_html");
+        if (!string.IsNullOrWhiteSpace(pageHead))
+            parts.Add(pageHead);
+        var headFile = GetMetaString(item.Meta, "head_file");
+        if (!string.IsNullOrWhiteSpace(headFile))
+        {
+            var resolved = ResolveMetaFilePath(item, rootPath, headFile);
+            if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
+            {
+                parts.Add(File.ReadAllText(resolved));
+            }
+            else
+            {
+                Trace.TraceWarning(
+                    "PowerForge.Web: unable to resolve head_file '{0}' for '{1}' (source: {2}).",
+                    headFile,
+                    item.OutputPath,
+                    item.SourcePath);
+            }
+        }
+
+        var languageAlternates = BuildLanguageAlternateHeadLinks(spec, item, allItems);
+        if (!string.IsNullOrWhiteSpace(languageAlternates))
+            parts.Add(languageAlternates);
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string BuildLanguageAlternateHeadLinks(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems)
+    {
+        if (spec is null || item is null || allItems is null)
+            return string.Empty;
+
+        var localization = ResolveLocalizationConfig(spec);
+        if (!localization.Enabled || localization.Languages.Length <= 1)
+            return string.Empty;
+
+        var collection = ResolveCollectionSpec(spec, item.Collection);
+        var localizedLanguages = ResolveLocalizedLanguagesForCollection(localization, collection);
+        if (localizedLanguages.Length == 0)
+            return string.Empty;
+
+        var alternates = new List<(string HrefLang, string Url)>();
+        foreach (var languageCode in localizedLanguages)
+        {
+            if (!TryResolveLocalizedAlternateUrl(spec, localization, item, allItems, languageCode, out var absoluteUrl) ||
+                string.IsNullOrWhiteSpace(absoluteUrl))
+            {
+                continue;
+            }
+
+            alternates.Add((languageCode, absoluteUrl));
+        }
+
+        if (alternates.Count == 0)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var alternate in alternates
+                     .OrderBy(static value => value.HrefLang, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static value => value.Url, StringComparer.OrdinalIgnoreCase))
+        {
+            sb.AppendLine(
+                $"<link rel=\"alternate\" hreflang=\"{System.Web.HttpUtility.HtmlEncode(alternate.HrefLang)}\" href=\"{System.Web.HttpUtility.HtmlEncode(alternate.Url)}\" />");
+        }
+
+        var defaultLanguage = localization.Languages.FirstOrDefault(static language => language.IsDefault);
+        var xDefaultUrl = string.Empty;
+        if (defaultLanguage is not null)
+        {
+            var defaultAlternate = alternates.FirstOrDefault(value =>
+                value.HrefLang.Equals(defaultLanguage.Code, StringComparison.OrdinalIgnoreCase));
+            xDefaultUrl = defaultAlternate.Url ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(xDefaultUrl))
+        {
+            var currentLanguage = ResolveEffectiveLanguageCode(localization, item.Language);
+            var currentAlternate = alternates.FirstOrDefault(value =>
+                value.HrefLang.Equals(currentLanguage, StringComparison.OrdinalIgnoreCase));
+            xDefaultUrl = currentAlternate.Url ?? alternates[0].Url;
+        }
+
+        if (!string.IsNullOrWhiteSpace(xDefaultUrl))
+        {
+            sb.AppendLine(
+                $"<link rel=\"alternate\" hreflang=\"x-default\" href=\"{System.Web.HttpUtility.HtmlEncode(xDefaultUrl)}\" />");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private static bool TryResolveLocalizedAlternateUrl(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        ContentItem page,
+        IReadOnlyList<ContentItem> allItems,
+        string targetLanguage,
+        out string absoluteUrl)
+    {
+        absoluteUrl = string.Empty;
+        var resolvedTargetLanguage = ResolveEffectiveLanguageCode(localization, targetLanguage);
+        var supportsLocalizedLanguage = CollectionSupportsLocalizedLanguage(spec, localization, page.Collection, resolvedTargetLanguage);
+        var supportsFallbackLanguage = localization.FallbackToDefaultLanguage &&
+                                       CollectionSupportsFallbackLanguage(spec, localization, page.Collection, resolvedTargetLanguage);
+        if (!supportsLocalizedLanguage && !supportsFallbackLanguage)
+            return false;
+
+        var baseUrl = ResolveLanguageBaseUrl(spec, localization, resolvedTargetLanguage);
+        if (TryResolveExplicitLocalizedRoute(spec, localization, page, resolvedTargetLanguage, out var explicitRoute))
+        {
+            var publicRoute = explicitRoute;
+            if (!explicitRoute.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !explicitRoute.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                publicRoute = ResolvePublicRouteForLanguage(spec, localization, explicitRoute, resolvedTargetLanguage);
+            }
+
+            absoluteUrl = explicitRoute.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                          explicitRoute.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                ? explicitRoute
+                : ResolveAbsoluteUrl(baseUrl, publicRoute);
+            return !string.IsNullOrWhiteSpace(absoluteUrl);
+        }
+
+        var resolvedCurrentLanguage = ResolveEffectiveLanguageCode(localization, page.Language);
+        if (resolvedCurrentLanguage.Equals(resolvedTargetLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            var publicRoute = ResolvePublicRouteForLanguage(spec, localization, page.OutputPath, resolvedTargetLanguage);
+            absoluteUrl = ResolveAbsoluteUrl(baseUrl, publicRoute);
+            return !string.IsNullOrWhiteSpace(absoluteUrl);
+        }
+
+        var translated = ResolveConcreteLocalizedAlternateItem(localization, page, allItems, resolvedTargetLanguage);
+        if (translated is not null)
+        {
+            var publicRoute = ResolvePublicRouteForLanguage(spec, localization, translated.OutputPath, resolvedTargetLanguage);
+            absoluteUrl = ResolveAbsoluteUrl(baseUrl, publicRoute);
+            return !string.IsNullOrWhiteSpace(absoluteUrl);
+        }
+
+        if (!localization.FallbackToDefaultLanguage ||
+            resolvedTargetLanguage.Equals(localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var fallbackSource = ResolveConcreteLocalizedAlternateItem(localization, page, allItems, localization.DefaultLanguage);
+        if (fallbackSource is null)
+            return false;
+
+        if (!supportsFallbackLanguage)
+            return false;
+
+        var route = fallbackSource.OutputPath;
+        if (localization.MaterializeFallbackPages)
+        {
+            var fallbackBaseRoute = StripLanguagePrefix(localization, fallbackSource.OutputPath);
+            route = ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
+        }
+
+        var fallbackPublicRoute = ResolvePublicRouteForLanguage(spec, localization, route, resolvedTargetLanguage);
+        absoluteUrl = ResolveAbsoluteUrl(baseUrl, fallbackPublicRoute);
+        return !string.IsNullOrWhiteSpace(absoluteUrl);
+    }
+
+    private static ContentItem? ResolveConcreteLocalizedAlternateItem(
+        ResolvedLocalizationConfig localization,
+        ContentItem page,
+        IReadOnlyList<ContentItem> allItems,
+        string targetLanguage)
+    {
+        var resolvedTargetLanguage = ResolveEffectiveLanguageCode(localization, targetLanguage);
+        if (ResolveEffectiveLanguageCode(localization, page.Language).Equals(resolvedTargetLanguage, StringComparison.OrdinalIgnoreCase) &&
+            !IsLocalizedFallbackCopy(page))
+        {
+            return page;
+        }
+
+        if (string.IsNullOrWhiteSpace(page.TranslationKey))
+            return null;
+
+        return allItems
+            .Where(static item => item is not null && !item.Draft)
+            .Where(item => string.Equals(item.ProjectSlug ?? string.Empty, page.ProjectSlug ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            .Where(item => !string.IsNullOrWhiteSpace(item.TranslationKey))
+            .Where(item => item.TranslationKey!.Equals(page.TranslationKey, StringComparison.OrdinalIgnoreCase))
+            .Where(item => ResolveEffectiveLanguageCode(localization, item.Language).Equals(resolvedTargetLanguage, StringComparison.OrdinalIgnoreCase))
+            .Where(static item => !IsLocalizedFallbackCopy(item))
+            .FirstOrDefault();
+    }
+
+    private static bool IsEarlyHeadLink(string? rel)
+    {
+        if (string.IsNullOrWhiteSpace(rel))
+            return false;
+
+        return EarlyHeadLinkRels.Contains(rel.Trim());
+    }
+
+    private static bool IsStylesheetHeadLink(string? rel) =>
+        !string.IsNullOrWhiteSpace(rel) &&
+        rel.Trim().Equals("stylesheet", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldRenderHeadLinkInHeadHtml(string? rel, bool includeEarlyHeadLinks, bool includeStylesheetHeadLinks)
+    {
+        if (IsEarlyHeadLink(rel))
+            return includeEarlyHeadLinks;
+
+        if (IsStylesheetHeadLink(rel))
+            return includeStylesheetHeadLinks;
+
+        return true;
+    }
+
+    private static string RenderHeadLinks(HeadSpec? head, Func<HeadLinkSpec, bool>? predicate = null)
+    {
+        if (head?.Links is null || head.Links.Length == 0)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var link in head.Links)
+        {
+            if (string.IsNullOrWhiteSpace(link.Rel) || string.IsNullOrWhiteSpace(link.Href))
+                continue;
+            if (predicate is not null && !predicate(link))
+                continue;
+
+            sb.Append("<link");
+            AppendHtmlAttribute(sb, "rel", link.Rel);
+            AppendHtmlAttribute(sb, "href", link.Href);
+            AppendHtmlAttribute(sb, "type", link.Type);
+            AppendHtmlAttribute(sb, "as", link.As);
+            AppendHtmlAttribute(sb, "sizes", link.Sizes);
+            AppendHtmlAttribute(sb, "crossorigin", link.Crossorigin);
+
+            if (link.Attributes is { Count: > 0 })
+            {
+                foreach (var attribute in link.Attributes
+                             .OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrWhiteSpace(attribute.Key) ||
+                        string.IsNullOrWhiteSpace(attribute.Value) ||
+                        attribute.Key.Equals("rel", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("href", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("type", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("as", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("sizes", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("crossorigin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    AppendHtmlAttribute(sb, attribute.Key, attribute.Value);
+                }
+            }
+
+            if (link.BooleanAttributes is { Length: > 0 })
+            {
+                foreach (var attributeName in link.BooleanAttributes
+                             .Where(static value => !string.IsNullOrWhiteSpace(value))
+                             .Distinct(StringComparer.OrdinalIgnoreCase)
+                             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append(' ')
+                        .Append(System.Web.HttpUtility.HtmlEncode(attributeName));
+                }
+            }
+
+            sb.AppendLine(" />");
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    private static void AppendHtmlAttribute(System.Text.StringBuilder sb, string name, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(value))
+            return;
+
+        sb.Append(' ')
+            .Append(System.Web.HttpUtility.HtmlEncode(name))
+            .Append("=\"")
+            .Append(System.Web.HttpUtility.HtmlEncode(value))
+            .Append('"');
+    }
+
+    private static string RenderHeadMeta(HeadSpec head)
+    {
+        if (head.Meta.Length == 0)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var meta in head.Meta)
+        {
+            if (string.IsNullOrWhiteSpace(meta.Content))
+                continue;
+
+            var name = string.IsNullOrWhiteSpace(meta.Name) ? string.Empty : $" name=\"{System.Web.HttpUtility.HtmlEncode(meta.Name)}\"";
+            var property = string.IsNullOrWhiteSpace(meta.Property) ? string.Empty : $" property=\"{System.Web.HttpUtility.HtmlEncode(meta.Property)}\"";
+            if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(property))
+                continue;
+
+            var content = System.Web.HttpUtility.HtmlEncode(meta.Content);
+            sb.AppendLine($"<meta{name}{property} content=\"{content}\" />");
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string BuildExtraScriptsHtml(ContentItem item, string rootPath)
+    {
+        var parts = new List<string>();
+        var inline = GetMetaString(item.Meta, "extra_scripts");
+        if (!string.IsNullOrWhiteSpace(inline))
+            parts.Add(inline);
+
+        var scriptsFile = GetMetaString(item.Meta, "extra_scripts_file");
+        if (!string.IsNullOrWhiteSpace(scriptsFile))
+        {
+            var resolved = ResolveMetaFilePath(item, rootPath, scriptsFile);
+            if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
+            {
+                parts.Add(File.ReadAllText(resolved));
+            }
+            else
+            {
+                Trace.TraceWarning(
+                    "PowerForge.Web: unable to resolve extra_scripts_file '{0}' for '{1}' (source: {2}).",
+                    scriptsFile,
+                    item.OutputPath,
+                    item.SourcePath);
+            }
+        }
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string BuildBodyClass(SiteSpec spec, ContentItem item)
+    {
+        var classes = new List<string>();
+        if (!string.IsNullOrWhiteSpace(spec.Head?.BodyClass))
+            classes.Add(spec.Head.BodyClass!);
+        var pageClass = GetMetaString(item.Meta, "body_class");
+        if (!string.IsNullOrWhiteSpace(pageClass))
+            classes.Add(pageClass);
+        return string.Join(" ", classes.Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static string BuildOpenGraphHtml(SiteSpec spec, ContentItem item, string outputRoot)
+    {
+        if (spec.Social is null || !spec.Social.Enabled)
+            return string.Empty;
+
+        // Social metadata defaults to enabled when site social is enabled.
+        // Authors can opt out per page with: meta.social: false
+        if (TryGetMetaBool(item.Meta, "social", out var enabled) && !enabled)
+            return string.Empty;
+
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
+        var title = GetMetaString(item.Meta, "social_title");
+        if (string.IsNullOrWhiteSpace(title))
+            title = ResolveSeoTitle(spec, item);
+        if (string.IsNullOrWhiteSpace(title))
+            title = spec.Name;
+        var description = GetMetaString(item.Meta, "social_description");
+        if (string.IsNullOrWhiteSpace(description))
+            description = ResolveMetaDescription(spec, item);
+        var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+        var url = ResolveAbsolutePublicUrl(spec, localization, item.Language, canonicalOrOutput);
+        var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
+        var imageOverride = ResolveSocialImageOverride(item);
+        var imagePath = ResolveSocialImagePath(spec, item, outputRoot, title, description, siteName, imageOverride);
+        var image = ResolveAbsoluteUrl(languageBaseUrl, imagePath);
+        var (imageWidth, imageHeight) = ResolveSocialImageDimensions(spec, item, imagePath);
+        var twitterCard = string.IsNullOrWhiteSpace(spec.Social.TwitterCard) ? "summary" : spec.Social.TwitterCard;
+        var twitterSite = NormalizeTwitterHandle(GetMetaString(item.Meta, "social_twitter_site"));
+        if (string.IsNullOrWhiteSpace(twitterSite))
+            twitterSite = NormalizeTwitterHandle(spec.Social.TwitterSite);
+        var twitterCreator = NormalizeTwitterHandle(GetMetaString(item.Meta, "social_twitter_creator"));
+        if (string.IsNullOrWhiteSpace(twitterCreator))
+            twitterCreator = NormalizeTwitterHandle(spec.Social.TwitterCreator);
+        var imageAlt = GetMetaString(item.Meta, "social_image_alt");
+        if (string.IsNullOrWhiteSpace(imageAlt))
+            imageAlt = title;
+        var isArticle = IsArticleLikePage(item);
+        var publishedTime = item.Date?.ToUniversalTime().ToString("O");
+        var modifiedTime = item.LastModifiedUtc?.ToString("O");
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<!-- Open Graph -->");
+        sb.AppendLine($@"<meta property=""og:title"" content=""{System.Web.HttpUtility.HtmlEncode(title)}"" />");
+        if (!string.IsNullOrWhiteSpace(description))
+            sb.AppendLine($@"<meta property=""og:description"" content=""{System.Web.HttpUtility.HtmlEncode(description)}"" />");
+        sb.AppendLine($@"<meta property=""og:type"" content=""{(isArticle ? "article" : "website")}"" />");
+        if (!string.IsNullOrWhiteSpace(url))
+            sb.AppendLine($@"<meta property=""og:url"" content=""{System.Web.HttpUtility.HtmlEncode(url)}"" />");
+        if (!string.IsNullOrWhiteSpace(image))
+            sb.AppendLine($@"<meta property=""og:image"" content=""{System.Web.HttpUtility.HtmlEncode(image)}"" />");
+        if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
+            sb.AppendLine($@"<meta property=""og:image:alt"" content=""{System.Web.HttpUtility.HtmlEncode(imageAlt)}"" />");
+        if (imageWidth > 0)
+            sb.AppendLine($@"<meta property=""og:image:width"" content=""{imageWidth}"" />");
+        if (imageHeight > 0)
+            sb.AppendLine($@"<meta property=""og:image:height"" content=""{imageHeight}"" />");
+        if (!string.IsNullOrWhiteSpace(siteName))
+            sb.AppendLine($@"<meta property=""og:site_name"" content=""{System.Web.HttpUtility.HtmlEncode(siteName)}"" />");
+        if (isArticle && !string.IsNullOrWhiteSpace(publishedTime))
+            sb.AppendLine($@"<meta property=""article:published_time"" content=""{System.Web.HttpUtility.HtmlEncode(publishedTime)}"" />");
+        if (isArticle && !string.IsNullOrWhiteSpace(modifiedTime))
+            sb.AppendLine($@"<meta property=""article:modified_time"" content=""{System.Web.HttpUtility.HtmlEncode(modifiedTime)}"" />");
+        if (isArticle)
+        {
+            foreach (var authorUrl in ResolveContentAuthorUrls(item).Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase))
+                sb.AppendLine($@"<meta property=""article:author"" content=""{System.Web.HttpUtility.HtmlEncode(authorUrl.Trim())}"" />");
+        }
+        if (isArticle && item.Tags is { Length: > 0 })
+        {
+            foreach (var tag in item.Tags.Where(static tag => !string.IsNullOrWhiteSpace(tag)).Distinct(StringComparer.OrdinalIgnoreCase))
+                sb.AppendLine($@"<meta property=""article:tag"" content=""{System.Web.HttpUtility.HtmlEncode(tag.Trim())}"" />");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("<!-- Twitter Card -->");
+        sb.AppendLine($@"<meta name=""twitter:card"" content=""{System.Web.HttpUtility.HtmlEncode(twitterCard)}"" />");
+        sb.AppendLine($@"<meta name=""twitter:title"" content=""{System.Web.HttpUtility.HtmlEncode(title)}"" />");
+        if (!string.IsNullOrWhiteSpace(twitterSite))
+            sb.AppendLine($@"<meta name=""twitter:site"" content=""{System.Web.HttpUtility.HtmlEncode(twitterSite)}"" />");
+        if (!string.IsNullOrWhiteSpace(twitterCreator))
+            sb.AppendLine($@"<meta name=""twitter:creator"" content=""{System.Web.HttpUtility.HtmlEncode(twitterCreator)}"" />");
+        if (!string.IsNullOrWhiteSpace(url))
+            sb.AppendLine($@"<meta name=""twitter:url"" content=""{System.Web.HttpUtility.HtmlEncode(url)}"" />");
+        if (!string.IsNullOrWhiteSpace(description))
+            sb.AppendLine($@"<meta name=""twitter:description"" content=""{System.Web.HttpUtility.HtmlEncode(description)}"" />");
+        if (!string.IsNullOrWhiteSpace(image))
+            sb.AppendLine($@"<meta name=""twitter:image"" content=""{System.Web.HttpUtility.HtmlEncode(image)}"" />");
+        if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
+            sb.AppendLine($@"<meta name=""twitter:image:alt"" content=""{System.Web.HttpUtility.HtmlEncode(imageAlt)}"" />");
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string BuildStructuredDataHtml(SiteSpec spec, ContentItem item, BreadcrumbItem[] breadcrumbs)
+    {
+        if (spec.StructuredData is null || !spec.StructuredData.Enabled)
+            return string.Empty;
+
+        // Structured data defaults to enabled when site structured data is enabled.
+        // Authors can opt out per page with: meta.structured_data: false
+        if (TryGetMetaBool(item.Meta, "structured_data", out var enabled) && !enabled)
+            return string.Empty;
+
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
+        var baseUrl = languageBaseUrl?.TrimEnd('/') ?? string.Empty;
+        var scripts = new List<string>();
+
+        if (spec.StructuredData.Breadcrumbs && breadcrumbs.Length > 0)
+        {
+            var items = breadcrumbs
+                .Select((crumb, index) => new Dictionary<string, object?>
+                {
+                    ["@type"] = "ListItem",
+                    ["position"] = index + 1,
+                    ["name"] = crumb.Title ?? string.Empty,
+                    ["item"] = ResolveAbsolutePublicUrl(spec, localization, item.Language, crumb.Url)
+                })
+                .ToArray();
+
+            scripts.Add(BuildJsonLdScript(new Dictionary<string, object?>
+            {
+                ["@context"] = "https://schema.org",
+                ["@type"] = "BreadcrumbList",
+                ["itemListElement"] = items
+            }));
+        }
+
+        var pageUrl = ResolveAbsolutePublicUrl(spec, localization, item.Language, string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical);
+        if (spec.StructuredData.Website && item.Kind == PageKind.Home)
+        {
+            var webSiteModel = new Dictionary<string, object?>
+            {
+                ["@context"] = "https://schema.org",
+                ["@type"] = "WebSite",
+                ["name"] = spec.Name,
+                ["url"] = string.IsNullOrWhiteSpace(baseUrl) ? pageUrl : baseUrl
+            };
+
+            if (spec.Features?.Any(feature => feature.Equals("search", StringComparison.OrdinalIgnoreCase)) == true)
+            {
+                var searchUrl = ResolveAbsoluteUrl(languageBaseUrl, "/search/?q={search_term_string}");
+                if (!string.IsNullOrWhiteSpace(searchUrl))
+                {
+                    webSiteModel["potentialAction"] = new Dictionary<string, object?>
+                    {
+                        ["@type"] = "SearchAction",
+                        ["target"] = searchUrl,
+                        ["query-input"] = "required name=search_term_string"
+                    };
+                }
+            }
+
+            scripts.Add(BuildJsonLdScript(webSiteModel));
+        }
+
+        if (spec.StructuredData.Organization && item.Kind == PageKind.Home)
+        {
+            var organizationModel = new Dictionary<string, object?>
+            {
+                ["@context"] = "https://schema.org",
+                ["@type"] = "Organization",
+                ["name"] = spec.Name
+            };
+            if (!string.IsNullOrWhiteSpace(baseUrl))
+                organizationModel["url"] = baseUrl;
+            if (!string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationLegalName))
+                organizationModel["legalName"] = spec.StructuredData.OrganizationLegalName;
+            if (!string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationDescription))
+                organizationModel["description"] = spec.StructuredData.OrganizationDescription;
+
+            var logoSource = string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationLogo)
+                ? spec.Social?.Image
+                : spec.StructuredData.OrganizationLogo;
+            var logo = ResolveAbsoluteUrl(languageBaseUrl, logoSource);
+            if (!string.IsNullOrWhiteSpace(logo))
+                organizationModel["logo"] = logo;
+
+            if (spec.StructuredData.OrganizationSameAs is { Length: > 0 })
+            {
+                var sameAs = spec.StructuredData.OrganizationSameAs
+                    .Where(link => !string.IsNullOrWhiteSpace(link))
+                    .Select(link => ResolveAbsoluteUrl(languageBaseUrl, link))
+                    .Where(link => !string.IsNullOrWhiteSpace(link))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                if (sameAs.Length > 0)
+                    organizationModel["sameAs"] = sameAs;
+            }
+
+            var contactPoint = new Dictionary<string, object?>
+            {
+                ["@type"] = "ContactPoint"
+            };
+            var hasContactData = false;
+            if (!string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationEmail))
+            {
+                contactPoint["email"] = spec.StructuredData.OrganizationEmail;
+                hasContactData = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationTelephone))
+            {
+                contactPoint["telephone"] = spec.StructuredData.OrganizationTelephone;
+                hasContactData = true;
+            }
+
+            var contactUrl = ResolveAbsoluteUrl(languageBaseUrl, spec.StructuredData.OrganizationContactUrl);
+            if (!string.IsNullOrWhiteSpace(contactUrl))
+            {
+                contactPoint["url"] = contactUrl;
+                hasContactData = true;
+            }
+
+            if (hasContactData)
+            {
+                contactPoint["contactType"] = "customer support";
+                organizationModel["contactPoint"] = new[] { contactPoint };
+            }
+
+            scripts.Add(BuildJsonLdScript(organizationModel));
+        }
+
+        var articleType = ResolveStructuredArticleType(spec.StructuredData, item);
+        if (!string.IsNullOrWhiteSpace(articleType))
+        {
+            var articleScript = BuildArticleStructuredDataScript(spec, item, pageUrl, articleType);
+            if (!string.IsNullOrWhiteSpace(articleScript))
+                scripts.Add(articleScript);
+        }
+
+        if (spec.StructuredData.FaqPage)
+        {
+            var faqScript = BuildFaqStructuredDataScript(item, pageUrl);
+            if (!string.IsNullOrWhiteSpace(faqScript))
+                scripts.Add(faqScript);
+        }
+
+        if (spec.StructuredData.HowTo)
+        {
+            var howToScript = BuildHowToStructuredDataScript(item, pageUrl);
+            if (!string.IsNullOrWhiteSpace(howToScript))
+                scripts.Add(howToScript);
+        }
+
+        if (spec.StructuredData.SoftwareApplication)
+        {
+            var softwareScript = BuildSoftwareApplicationStructuredDataScript(spec, item, pageUrl);
+            if (!string.IsNullOrWhiteSpace(softwareScript))
+                scripts.Add(softwareScript);
+        }
+
+        if (spec.StructuredData.Product)
+        {
+            var productScript = BuildProductStructuredDataScript(spec, item, pageUrl);
+            if (!string.IsNullOrWhiteSpace(productScript))
+                scripts.Add(productScript);
+        }
+
+        return scripts.Count == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, scripts.Where(static script => !string.IsNullOrWhiteSpace(script)));
+    }
+
+    private static string BuildJsonLdScript(object payload)
+    {
+        var json = JsonSerializer.Serialize(payload);
+        return $"<script type=\"application/ld+json\">{json}</script>";
+    }
+
+    private static (int Width, int Height) ResolveSocialImageDimensions(SiteSpec spec, ContentItem item, string imagePath)
+    {
+        var width = GetMetaInt(item.Meta, "social_image_width") ?? GetMetaInt(item.Meta, "social.image.width");
+        var height = GetMetaInt(item.Meta, "social_image_height") ?? GetMetaInt(item.Meta, "social.image.height");
+        if (width is > 0 || height is > 0)
+            return (Math.Max(0, width ?? 0), Math.Max(0, height ?? 0));
+
+        if (spec.Social?.AutoGenerateCards == true)
+        {
+            var generatedPrefix = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath) + "/";
+            var normalizedImagePath = NormalizeImagePath(imagePath);
+            if (!string.IsNullOrWhiteSpace(normalizedImagePath) &&
+                normalizedImagePath.StartsWith(generatedPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return (Math.Max(0, spec.Social.GeneratedCardWidth), Math.Max(0, spec.Social.GeneratedCardHeight));
+            }
+        }
+
+        return (Math.Max(0, spec.Social?.ImageWidth ?? 0), Math.Max(0, spec.Social?.ImageHeight ?? 0));
+    }
+
+    private static string NormalizeImagePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute))
+            trimmed = absolute.AbsolutePath;
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            trimmed = "/" + trimmed.TrimStart('/');
+        return trimmed;
+    }
+
+    private static string NormalizeTwitterHandle(string? handle)
+    {
+        if (string.IsNullOrWhiteSpace(handle))
+            return string.Empty;
+
+        var trimmed = handle.Trim();
+        if (!trimmed.StartsWith("@", StringComparison.Ordinal))
+            trimmed = "@" + trimmed.TrimStart('@');
+        return trimmed;
+    }
+
+    private static bool IsArticleLikePage(ContentItem item)
+    {
+        if (item is null)
+            return false;
+        if (item.Kind != PageKind.Page)
+            return false;
+        if (!string.IsNullOrWhiteSpace(item.Collection) &&
+            IsEditorialCollection(item.Collection))
+            return true;
+        return item.Date.HasValue;
+    }
+
+    private static string? ResolveMetaFilePath(ContentItem item, string rootPath, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return null;
+
+        var allowedRoots = new List<string> { NormalizeRootPathForSink(rootPath) };
+        var baseDir = Path.GetDirectoryName(item.SourcePath);
+        if (!string.IsNullOrWhiteSpace(baseDir))
+            allowedRoots.Add(NormalizeRootPathForSink(baseDir));
+
+        if (Path.IsPathRooted(filePath))
+        {
+            var rootedPath = Path.GetFullPath(filePath);
+            return IsPathWithinAnyRoot(allowedRoots, rootedPath) ? rootedPath : null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(baseDir))
+        {
+            var candidate = Path.GetFullPath(Path.Combine(baseDir, filePath));
+            if (IsPathWithinAnyRoot(allowedRoots, candidate) && File.Exists(candidate))
+                return candidate;
+        }
+
+        var rootCandidate = Path.GetFullPath(Path.Combine(rootPath, filePath));
+        return IsPathWithinAnyRoot(allowedRoots, rootCandidate) ? rootCandidate : null;
+    }
+
+    private static string ResolveAbsoluteUrl(string? baseUrl, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return path;
+        if (string.IsNullOrWhiteSpace(baseUrl)) return path;
+        var trimmedBase = baseUrl.TrimEnd('/');
+        var trimmedPath = path.StartsWith("/") ? path : "/" + path;
+        return trimmedBase + trimmedPath;
+    }
+
+    private static string ResolveAbsolutePublicUrl(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string? languageCode,
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var effectiveLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
+        if (IsAbsoluteHttpUrl(path))
+        {
+            return TryRebaseAbsoluteUrlForSelectedLanguageRootBuild(spec, localization, path, effectiveLanguage, out var rebased)
+                ? rebased
+                : path;
+        }
+
+        var baseUrl = ResolveLanguageBaseUrl(spec, localization, effectiveLanguage);
+        var publicRoute = ResolvePublicRouteForLanguage(spec, localization, path, effectiveLanguage);
+        return ResolveAbsoluteUrl(baseUrl, publicRoute);
+    }
+
+    private static string? ResolveThemeRoot(SiteSpec spec, string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(spec.DefaultTheme)) return null;
+        var basePath = ResolveThemesRoot(spec, rootPath);
+        return string.IsNullOrWhiteSpace(basePath) ? null : Path.Combine(basePath, spec.DefaultTheme);
+    }
+
+    private static string? ResolveThemesRoot(SiteSpec spec, string rootPath)
+    {
+        var themesRoot = string.IsNullOrWhiteSpace(spec.ThemesRoot) ? "themes" : spec.ThemesRoot;
+        return Path.IsPathRooted(themesRoot) ? themesRoot : Path.Combine(rootPath, themesRoot);
+    }
+
+    private static IEnumerable<(string Root, ThemeManifest Manifest)> BuildThemeChain(string themeRoot, ThemeManifest manifest)
+    {
+        var chain = new List<(string Root, ThemeManifest Manifest)>();
+        var current = manifest;
+        var currentRoot = themeRoot;
+        while (current is not null)
+        {
+            chain.Add((currentRoot, current));
+            if (current.Base is null || string.IsNullOrWhiteSpace(current.BaseRoot))
+                break;
+            currentRoot = current.BaseRoot;
+            current = current.Base;
+        }
+
+        chain.Reverse();
+        return chain;
+    }
+
+    private static IEnumerable<string> ResolveCssLinks(AssetRegistrySpec? assets, string route)
+    {
+        var bundles = ResolveBundles(assets, route);
+        return bundles.SelectMany(b => b.Css).Distinct();
+    }
+
+    private static IEnumerable<string> ResolveJsLinks(AssetRegistrySpec? assets, string route)
+    {
+        var bundles = ResolveBundles(assets, route);
+        return bundles.SelectMany(b => b.Js).Distinct();
+    }
+
+    private static IEnumerable<AssetBundleSpec> ResolveBundles(AssetRegistrySpec? assets, string route)
+    {
+        if (assets is null)
+            return Array.Empty<AssetBundleSpec>();
+
+        var bundleMap = assets.Bundles.ToDictionary(b => b.Name, StringComparer.OrdinalIgnoreCase);
+        var results = new List<AssetBundleSpec>();
+        foreach (var mapping in assets.RouteBundles)
+        {
+            if (!GlobMatch(mapping.Match, route)) continue;
+            foreach (var name in mapping.Bundles)
+            {
+                if (bundleMap.TryGetValue(name, out var bundle))
+                    results.Add(bundle);
+            }
+        }
+
+        return results;
+    }
+
+    private static AssetRegistrySpec? BuildAssetRegistry(
+        SiteSpec spec,
+        string? themeRoot,
+        ThemeManifest? manifest)
+    {
+        AssetRegistrySpec? themeAssets = null;
+        if (manifest is not null && !string.IsNullOrWhiteSpace(themeRoot))
+        {
+            foreach (var entry in BuildThemeChain(themeRoot, manifest))
+            {
+                if (entry.Manifest.Assets is null) continue;
+                if (entry.Manifest.Base is not null &&
+                    ReferenceEquals(entry.Manifest.Assets, entry.Manifest.Base.Assets))
+                    continue;
+                var themeName = string.IsNullOrWhiteSpace(entry.Manifest.Name)
+                    ? Path.GetFileName(entry.Root)
+                    : entry.Manifest.Name;
+                if (string.IsNullOrWhiteSpace(themeName)) continue;
+                var normalized = NormalizeThemeAssets(entry.Manifest.Assets, themeName, spec);
+                themeAssets = MergeAssetRegistryForTheme(themeAssets, normalized);
+            }
+        }
+
+        return MergeAssetRegistry(themeAssets, spec.AssetRegistry);
+    }
+
+    private static AssetRegistrySpec? MergeAssetRegistry(AssetRegistrySpec? baseAssets, AssetRegistrySpec? overrides)
+    {
+        if (baseAssets is null && overrides is null) return null;
+        if (baseAssets is null) return CloneAssets(overrides);
+        if (overrides is null) return CloneAssets(baseAssets);
+
+        var bundleMap = baseAssets.Bundles.ToDictionary(b => b.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var bundle in overrides.Bundles)
+            bundleMap[bundle.Name] = CloneBundle(bundle);
+
+        var routeBundles = overrides.RouteBundles.Length > 0 ? overrides.RouteBundles : baseAssets.RouteBundles;
+        var preloads = overrides.Preloads.Length > 0 ? overrides.Preloads : baseAssets.Preloads;
+        var criticalCss = overrides.CriticalCss.Length > 0 ? overrides.CriticalCss : baseAssets.CriticalCss;
+        var cssStrategy = !string.IsNullOrWhiteSpace(overrides.CssStrategy) ? overrides.CssStrategy : baseAssets.CssStrategy;
+
+        return new AssetRegistrySpec
+        {
+            Bundles = bundleMap.Values.ToArray(),
+            RouteBundles = routeBundles.Select(r => new RouteBundleSpec
+            {
+                Match = r.Match,
+                Bundles = r.Bundles.ToArray()
+            }).ToArray(),
+            Preloads = preloads.Select(p => new PreloadSpec
+            {
+                Href = p.Href,
+                As = p.As,
+                Type = p.Type,
+                Crossorigin = p.Crossorigin
+            }).ToArray(),
+            CriticalCss = criticalCss.Select(c => new CriticalCssSpec
+            {
+                Name = c.Name,
+                Path = c.Path
+            }).ToArray(),
+            CssStrategy = cssStrategy
+        };
+    }
+
+    private static AssetRegistrySpec? MergeAssetRegistryForTheme(AssetRegistrySpec? baseAssets, AssetRegistrySpec? child)
+    {
+        if (baseAssets is null && child is null) return null;
+        if (baseAssets is null) return CloneAssets(child);
+        if (child is null) return CloneAssets(baseAssets);
+
+        var bundleMap = baseAssets.Bundles.ToDictionary(b => b.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var bundle in child.Bundles)
+            bundleMap[bundle.Name] = CloneBundle(bundle);
+
+        var criticalMap = baseAssets.CriticalCss.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var css in child.CriticalCss)
+            criticalMap[css.Name] = new CriticalCssSpec { Name = css.Name, Path = css.Path };
+
+        return new AssetRegistrySpec
+        {
+            Bundles = bundleMap.Values.ToArray(),
+            RouteBundles = baseAssets.RouteBundles.Concat(child.RouteBundles)
+                .Select(r => new RouteBundleSpec
+                {
+                    Match = r.Match,
+                    Bundles = r.Bundles.ToArray()
+                }).ToArray(),
+            Preloads = baseAssets.Preloads.Concat(child.Preloads)
+                .Select(p => new PreloadSpec
+                {
+                    Href = p.Href,
+                    As = p.As,
+                    Type = p.Type,
+                    Crossorigin = p.Crossorigin
+                }).ToArray(),
+            CriticalCss = criticalMap.Values.ToArray(),
+            CssStrategy = child.CssStrategy ?? baseAssets.CssStrategy
+        };
+    }
+
+    private static AssetRegistrySpec? NormalizeThemeAssets(AssetRegistrySpec assets, string themeName, SiteSpec spec)
+    {
+        if (string.IsNullOrWhiteSpace(themeName)) return CloneAssets(assets);
+        var themesRoot = ResolveThemesFolder(spec);
+        var urlPrefix = "/" + themesRoot.TrimEnd('/', '\\') + "/" + themeName.Trim().Trim('/', '\\') + "/";
+        var filePrefix = themesRoot.TrimEnd('/', '\\') + "/" + themeName.Trim().Trim('/', '\\') + "/";
+
+        var normalized = CloneAssets(assets) ?? new AssetRegistrySpec();
+        foreach (var bundle in normalized.Bundles)
+        {
+            bundle.Css = bundle.Css.Select(path => NormalizeAssetUrl(path, urlPrefix)).ToArray();
+            bundle.Js = bundle.Js.Select(path => NormalizeAssetUrl(path, urlPrefix)).ToArray();
+        }
+
+        foreach (var preload in normalized.Preloads)
+            preload.Href = NormalizeAssetUrl(preload.Href, urlPrefix);
+
+        foreach (var css in normalized.CriticalCss)
+        {
+            if (!string.IsNullOrWhiteSpace(css.Path) && !Path.IsPathRooted(css.Path) && !IsExternalPath(css.Path))
+                css.Path = filePrefix + css.Path.TrimStart('/', '\\');
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeAssetUrl(string path, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return path;
+        if (IsExternalPath(path) || path.StartsWith("/", StringComparison.Ordinal))
+            return path;
+        return prefix + path.TrimStart('/', '\\');
+    }
+
+    private static bool IsExternalPath(string path)
+    {
+        return path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith("//", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static AssetRegistrySpec? CloneAssets(AssetRegistrySpec? spec)
+    {
+        if (spec is null) return null;
+        return new AssetRegistrySpec
+        {
+            Bundles = spec.Bundles.Select(CloneBundle).ToArray(),
+            RouteBundles = spec.RouteBundles.Select(r => new RouteBundleSpec
+            {
+                Match = r.Match,
+                Bundles = r.Bundles.ToArray()
+            }).ToArray(),
+            Preloads = spec.Preloads.Select(p => new PreloadSpec
+            {
+                Href = p.Href,
+                As = p.As,
+                Type = p.Type,
+                Crossorigin = p.Crossorigin
+            }).ToArray(),
+            CriticalCss = spec.CriticalCss.Select(c => new CriticalCssSpec
+            {
+                Name = c.Name,
+                Path = c.Path
+            }).ToArray(),
+            CssStrategy = spec.CssStrategy
+        };
+    }
+
+    private static AssetBundleSpec CloneBundle(AssetBundleSpec bundle)
+    {
+        return new AssetBundleSpec
+        {
+            Name = bundle.Name,
+            Css = bundle.Css.ToArray(),
+            Js = bundle.Js.ToArray()
+        };
+    }
+
+    private static string ResolveThemesFolder(SiteSpec spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec.ThemesRoot)) return "themes";
+        if (Path.IsPathRooted(spec.ThemesRoot)) return "themes";
+        return spec.ThemesRoot.Trim().TrimStart('/', '\\');
+    }
+
+    private static bool GlobMatch(string pattern, string value)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        var regex = "^" + Regex.Escape(pattern)
+            .Replace("\\*\\*", ".*")
+            .Replace("\\*", "[^/]*") + "$";
+        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+    }
+
+    private static string BuildRoute(string baseOutput, string slug, TrailingSlashMode slashMode)
+    {
+        var basePath = NormalizePath(baseOutput);
+        var slugPath = NormalizePath(slug);
+        string combined;
+
+        if (string.IsNullOrWhiteSpace(slugPath) || slugPath == "index")
+        {
+            combined = basePath;
+        }
+        else if (string.IsNullOrWhiteSpace(basePath) || basePath == "/")
+        {
+            combined = slugPath;
+        }
+        else
+        {
+            combined = $"{basePath}/{slugPath}";
+        }
+
+        combined = "/" + combined.Trim('/');
+        return EnsureTrailingSlash(combined, slashMode);
+    }
+
+    private static string EnsureTrailingSlash(string path, TrailingSlashMode mode)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "/";
+
+        if (mode == TrailingSlashMode.Never)
+            return path.EndsWith("/") && path.Length > 1 ? path.TrimEnd('/') : path;
+
+        if (mode == TrailingSlashMode.Always && !path.EndsWith("/"))
+            return path + "/";
+
+        return path;
+    }
+
+    private static string NormalizeRootNotFoundPublicRoute(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return route;
+
+        // Root 404 content is written as /404.html, so public metadata must not advertise /404/.
+        var suffixIndex = route.IndexOfAny(new[] { '?', '#' });
+        var path = suffixIndex >= 0 ? route.Substring(0, suffixIndex) : route;
+        var suffix = suffixIndex >= 0 ? route.Substring(suffixIndex) : string.Empty;
+        var normalizedPath = NormalizePath(path);
+        return normalizedPath.Equals("404", StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.Equals("404.html", StringComparison.OrdinalIgnoreCase)
+            ? "/404.html" + suffix
+            : route;
+    }
+
+    private static string NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        var trimmed = path.Trim();
+        if (trimmed == "/") return "/";
+
+        var normalized = trimmed.Replace('\\', '/');
+        var segments = normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(segment => segment != ".")
+            .ToList();
+        if (segments.Count == 0)
+            return string.Empty;
+
+        var stack = new List<string>(segments.Count);
+        foreach (var segment in segments)
+        {
+            if (segment == "..")
+            {
+                if (stack.Count > 0)
+                    stack.RemoveAt(stack.Count - 1);
+                continue;
+            }
+            stack.Add(segment);
+        }
+
+        return string.Join("/", stack);
+    }
+
+    private static string ResolveOutputDirectory(string outputRoot, string route)
+    {
+        var trimmed = route.Trim('/');
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return outputRoot;
+
+        var combined = Path.GetFullPath(Path.Combine(outputRoot, trimmed.Replace('/', Path.DirectorySeparatorChar)));
+        var normalizedRoot = NormalizeRootPathForSink(outputRoot);
+        if (!IsPathWithinRoot(normalizedRoot, combined))
+            return outputRoot;
+        return combined;
+    }
+
+    private static string NormalizeAlias(string alias)
+    {
+        if (Uri.TryCreate(alias, UriKind.Absolute, out var uri))
+            return uri.AbsolutePath + uri.Query;
+        return alias;
+    }
+
+    private static string[] ExpandAliasRedirectSources(string alias)
+    {
+        var normalized = NormalizeAlias(alias)?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized))
+            return Array.Empty<string>();
+
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized.TrimStart('/');
+
+        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            normalized
+        };
+
+        if (!normalized.Contains('?', StringComparison.Ordinal) &&
+            !normalized.Contains('*', StringComparison.Ordinal) &&
+            !normalized.Contains('{', StringComparison.Ordinal) &&
+            !normalized.Equals("/", StringComparison.Ordinal))
+        {
+            var withoutTrailing = normalized.TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(withoutTrailing) && withoutTrailing.Contains('/', StringComparison.Ordinal))
+                values.Add(withoutTrailing);
+            if (!normalized.EndsWith("/", StringComparison.Ordinal))
+                values.Add(withoutTrailing + "/");
+        }
+
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsAliasRedirectSourceEquivalentToRoute(string aliasSource, string route)
+    {
+        var source = NormalizeRedirectComparisonPath(aliasSource);
+        var target = NormalizeRedirectComparisonPath(route);
+        return !string.IsNullOrWhiteSpace(source) &&
+               source.Equals(target, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeRedirectComparisonPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var normalized = NormalizeAlias(path).Trim();
+        var queryIndex = normalized.IndexOf('?', StringComparison.Ordinal);
+        var query = queryIndex >= 0 ? normalized[queryIndex..] : string.Empty;
+        var pathOnly = queryIndex >= 0 ? normalized[..queryIndex] : normalized;
+        // Query-bearing aliases are intentionally preserved as redirects, while their path segment still gets route normalization.
+        if (!pathOnly.StartsWith("/", StringComparison.Ordinal))
+            pathOnly = "/" + pathOnly.TrimStart('/');
+
+        var route = "/" + NormalizePath(pathOnly).Trim('/');
+        if (route.Length > 1)
+            route = route.TrimEnd('/');
+
+        return route + query;
+    }
+
+    private static string Slugify(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        var lower = input.Trim().ToLowerInvariant();
+        var sb = new System.Text.StringBuilder();
+        foreach (var ch in lower)
+        {
+            if (char.IsLetterOrDigit(ch)) sb.Append(ch);
+            else if (char.IsWhiteSpace(ch) || ch == '-' || ch == '_') sb.Append('-');
+        }
+        var slug = sb.ToString();
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        return slug.Trim('-');
+    }
+
+    private static IEnumerable<string> EnumerateCollectionFiles(string rootPath, string[] contentRoots, string input, string[]? includePatterns, string[]? excludePatterns)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return Array.Empty<string>();
+
+        var results = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var full in BuildCollectionInputCandidates(rootPath, contentRoots, input))
+        {
+            if (full.Contains('*', StringComparison.Ordinal))
+            {
+                foreach (var file in EnumerateCollectionFilesWithWildcard(full, includePatterns ?? Array.Empty<string>(), excludePatterns ?? Array.Empty<string>()))
+                {
+                    if (seen.Add(file))
+                        results.Add(file);
+                }
+                continue;
+            }
+
+            if (!Directory.Exists(full))
+                continue;
+
+            foreach (var file in FilterByPatterns(full,
+                         Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories),
+                         includePatterns ?? Array.Empty<string>(),
+                         excludePatterns ?? Array.Empty<string>()))
+            {
+                if (seen.Add(file))
+                    results.Add(file);
+            }
+        }
+
+        return results
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IEnumerable<string> BuildCollectionInputCandidates(string rootPath, string[] contentRoots, string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return Array.Empty<string>();
+        if (Path.IsPathRooted(input))
+            return new[] { Path.GetFullPath(input) };
+
+        var normalizedInput = input.Trim();
+        var normalizedRoot = Path.GetFullPath(rootPath);
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.GetFullPath(Path.Combine(normalizedRoot, normalizedInput))
+        };
+
+        var inputSegments = normalizedInput.Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var firstSegment = inputSegments.Length == 0 ? string.Empty : inputSegments[0];
+        foreach (var contentRoot in contentRoots)
+        {
+            if (string.IsNullOrWhiteSpace(contentRoot))
+                continue;
+
+            var fullContentRoot = Path.GetFullPath(contentRoot);
+            candidates.Add(Path.GetFullPath(Path.Combine(fullContentRoot, normalizedInput)));
+
+            if (string.IsNullOrWhiteSpace(firstSegment))
+                continue;
+            var rootName = Path.GetFileName(fullContentRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (!firstSegment.Equals(rootName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var remainder = normalizedInput.Substring(firstSegment.Length).TrimStart('/', '\\');
+            candidates.Add(string.IsNullOrWhiteSpace(remainder)
+                ? fullContentRoot
+                : Path.GetFullPath(Path.Combine(fullContentRoot, remainder)));
+        }
+
+        return candidates
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IEnumerable<string> EnumerateCollectionFilesWithWildcard(string path, string[] includePatterns, string[] excludePatterns)
+    {
+        var normalized = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        var parts = normalized.Split('*');
+        if (parts.Length != 2)
+            return Array.Empty<string>();
+
+        var basePath = parts[0].TrimEnd(Path.DirectorySeparatorChar);
+        var tail = parts[1].TrimStart(Path.DirectorySeparatorChar);
+        if (!Directory.Exists(basePath))
+            return Array.Empty<string>();
+
+        var results = new List<string>();
+        foreach (var dir in Directory.GetDirectories(basePath).OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            var candidate = string.IsNullOrEmpty(tail) ? dir : Path.Combine(dir, tail);
+            if (!Directory.Exists(candidate))
+                continue;
+            var files = Directory.EnumerateFiles(candidate, "*.md", SearchOption.AllDirectories)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
+            results.AddRange(FilterByPatterns(candidate, files, includePatterns, excludePatterns));
+        }
+
+        return results;
+    }
+
+    private static IEnumerable<string> FilterByPatterns(string basePath, IEnumerable<string> files, string[] includePatterns, string[] excludePatterns)
+    {
+        var includes = NormalizePatterns(includePatterns);
+        var excludes = NormalizePatterns(excludePatterns);
+
+        foreach (var file in files)
+        {
+            if (excludes.Length > 0 && MatchesAny(excludes, basePath, file))
+                continue;
+            if (includes.Length == 0 || MatchesAny(includes, basePath, file))
+                yield return file;
+        }
+    }
+
+    private static string[] NormalizePatterns(string[] patterns)
+    {
+        return patterns
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Replace('\\', '/').Trim())
+            .ToArray();
+    }
+
+    private static bool MatchesAny(string[] patterns, string basePath, string file)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (Path.IsPathRooted(pattern))
+            {
+                if (GlobMatch(pattern.Replace('\\', '/'), file.Replace('\\', '/')))
+                    return true;
+                continue;
+            }
+
+            var relative = Path.GetRelativePath(basePath, file).Replace('\\', '/');
+            if (GlobMatch(pattern, relative))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsPathWithinBase(string basePath, string filePath)
+    {
+        var fullBase = Path.GetFullPath(basePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullFile = Path.GetFullPath(filePath);
+
+        if (fullFile.Equals(fullBase, FileSystemPathComparison))
+            return true;
+
+        return fullFile.StartsWith(fullBase + Path.DirectorySeparatorChar, FileSystemPathComparison);
+    }
+
+    private static bool IsPathWithinAnyRoot(IEnumerable<string> normalizedRoots, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        foreach (var root in normalizedRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                continue;
+            if (full.StartsWith(root, FileSystemPathComparison))
+                return true;
+        }
+
+        return false;
+    }
+
+    internal static string[] BuildContentRootsForDiscovery(WebSitePlan plan)
+        => BuildContentRoots(plan);
+
+    internal static string[] EnumerateCollectionFilesForDiscovery(WebSitePlan plan, CollectionSpec collection)
+    {
+        var roots = BuildContentRoots(plan);
+        return EnumerateCollectionFiles(plan.RootPath, roots, collection.Input, collection.Include, collection.Exclude)
+            .ToArray();
+    }
+
+    internal static string? ResolveCollectionRootForDiscovery(WebSitePlan plan, CollectionSpec collection, string filePath)
+    {
+        var roots = BuildContentRoots(plan);
+        return ResolveCollectionRootForFile(plan.RootPath, roots, collection.Input, filePath);
+    }
+}

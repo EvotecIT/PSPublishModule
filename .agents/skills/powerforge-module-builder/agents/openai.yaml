@@ -1,0 +1,7 @@
+display_name: PowerForge Module Builder
+short_description: Build/migrate PowerShell modules with Invoke-ModuleBuild, install compatibility controls, and deterministic validation.
+default_prompt: >-
+  Build or refactor a PSPublishModule/PowerForge module pipeline using a deterministic
+  sequence: preflight config, JSON plan generation, build execution, validation/import,
+  install compatibility handling (legacy flat vs versioned), and documentation updates.
+  Keep logs actionable, avoid noisy false positives, and preserve branch/worktree hygiene.

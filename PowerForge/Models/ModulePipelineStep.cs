@@ -178,16 +178,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 4) Signing (after build/docs/formatting, before validation/packaging/publish/install).
-        if (plan.SignModule)
-        {
-            steps.Add(new ModulePipelineStep(
-                kind: ModulePipelineStepKind.Signing,
-                key: "sign",
-                title: "Sign module"));
-        }
-
-        // 5) Validation checks (after build/docs/formatting/signing, before packaging/publish/install).
+        // 4) Validation checks (after build/docs/formatting, before tests/packaging/publish/install).
         if (plan.FileConsistencySettings?.Enable == true)
         {
             var scope = plan.FileConsistencySettings.ResolveScope();
@@ -224,10 +215,27 @@ public sealed class ModulePipelineStep
                 title: "Validate module"));
         }
 
-        // 6) Tests (after validation, before packaging/publish/install).
+        if (plan.ImportModules?.RequiredModules == true &&
+            plan.ImportModules.AnalyzeBinaryConflicts != false)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Validation,
+                key: "validate:binary-conflicts",
+                title: "Analyze binary conflicts"));
+        }
+
+        // 5) Tests (after validation, before signing/packaging/publish/install).
         if (plan.ImportModules is not null &&
             (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
         {
+            if (plan.ImportModules.Self == true && plan.ImportModules.SkipBinaryDependencyCheck != true)
+            {
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Tests,
+                    key: "tests:binary-dependencies",
+                    title: "Check binary dependencies"));
+            }
+
             steps.Add(new ModulePipelineStep(
                 kind: ModulePipelineStepKind.Tests,
                 key: "tests:import-modules",
@@ -244,6 +252,15 @@ public sealed class ModulePipelineStep
                     key: key,
                     title: "Run tests"));
             }
+        }
+
+        // 6) Signing (after tests, before packaging/publish/install).
+        if (plan.SignModule)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Signing,
+                key: "sign",
+                title: "Sign module"));
         }
 
         // 7) Artefacts

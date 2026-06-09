@@ -1,4 +1,4 @@
-# Example: Advanced CI/CD with Custom Result Processing
+﻿# Example: Advanced CI/CD with Custom Result Processing
 # Shows how to use CI/CD mode with custom result handling for advanced scenarios
 
 param(

@@ -24,3 +24,6 @@ if ($NoBuild) { $invoke.NoBuild = $true }
 if ($Json) { $invoke.Json = $true }
 
 & $script @invoke
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}

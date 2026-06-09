@@ -12,6 +12,18 @@ public sealed class VersioningSpec
     /// <summary>Current version key.</summary>
     public string? Current { get; set; }
 
+    /// <summary>Optional path to a version-hub JSON document (relative to site.json or absolute).</summary>
+    public string? HubPath { get; set; }
+
+    /// <summary>When true, generate redirect aliases (for example latest/lts) into hosting redirect outputs.</summary>
+    public bool GenerateAliasRedirects { get; set; }
+
+    /// <summary>Optional source path for latest alias redirect. Defaults to &lt;basePath&gt;/latest/ when not set.</summary>
+    public string? LatestAliasPath { get; set; }
+
+    /// <summary>Optional source path for LTS alias redirect. Defaults to &lt;basePath&gt;/lts/ when not set.</summary>
+    public string? LtsAliasPath { get; set; }
+
     /// <summary>Known documentation versions.</summary>
     public VersionSpec[] Versions { get; set; } = Array.Empty<VersionSpec>();
 }
@@ -34,8 +46,14 @@ public sealed class VersionSpec
     /// <summary>Marks the latest version.</summary>
     public bool Latest { get; set; }
 
+    /// <summary>Marks the version as long-term support (LTS).</summary>
+    public bool Lts { get; set; }
+
     /// <summary>Marks the version as deprecated.</summary>
     public bool Deprecated { get; set; }
+
+    /// <summary>Optional alias sources (for example latest, stable, current) that should redirect to this version URL.</summary>
+    public string[] Aliases { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Link checking configuration.</summary>
@@ -62,4 +80,27 @@ public sealed class BuildCacheSpec
 
     /// <summary>Cache mode (contenthash, mtime).</summary>
     public string? Mode { get; set; }
+}
+
+/// <summary>Verification policy controls shared by CLI and pipeline verify/doctor commands.</summary>
+public sealed class VerifyPolicySpec
+{
+    /// <summary>When true, verify fails when any warning is emitted.</summary>
+    public bool? FailOnWarnings { get; set; }
+
+    /// <summary>When true, verify fails when navigation lint warnings are emitted.</summary>
+    public bool? FailOnNavLint { get; set; }
+
+    /// <summary>When true, verify fails when theme contract warnings are emitted.</summary>
+    public bool? FailOnThemeContract { get; set; }
+
+    /// <summary>
+    /// Optional list of warning codes/patterns to suppress (do not print, do not fail policy).
+    /// Entries may be:
+    /// - a code (matches <c>[CODE]</c> prefixes)
+    /// - a substring (case-insensitive)
+    /// - a wildcard pattern with <c>*</c> and <c>?</c>
+    /// - a regex prefixed with <c>re:</c>
+    /// </summary>
+    public string[] SuppressWarnings { get; set; } = Array.Empty<string>();
 }

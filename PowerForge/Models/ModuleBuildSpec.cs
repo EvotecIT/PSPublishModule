@@ -73,7 +73,72 @@ public sealed class ModuleBuildSpec
     public bool DisableBinaryCmdletScan { get; set; }
 
     /// <summary>
+    /// Optional module roots to scan for binary conflict advisories during build.
+    /// When empty, the builder uses default local PowerShell module roots for warning-only checks.
+    /// </summary>
+    public string[] BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Declared module names that should be treated as higher-priority during binary conflict analysis.
+    /// This helps distinguish true module dependency overlap from unrelated locally installed modules.
+    /// </summary>
+    public string[] BinaryConflictPriorityModuleNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional project-root path used for writing human-readable binary conflict reports.
+    /// </summary>
+    public string? BinaryConflictReportRoot { get; set; }
+
+    /// <summary>
+    /// Optional filters used to exclude copied binary libraries by package id, target key, relative path, or file name.
+    /// </summary>
+    public string[] ExcludeLibraryFilter { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// When true, copies only top-level published binaries and skips recursive runtime/native payload folders.
+    /// </summary>
+    public bool DoNotCopyLibrariesRecursively { get; set; }
+
+    /// <summary>
+    /// When true, the generated binary bootstrapper adds supported Windows runtime-native folders to PATH.
+    /// Non-Windows platforms keep their default native library probing behavior.
+    /// </summary>
+    public bool HandleRuntimes { get; set; }
+
+    /// <summary>
+    /// When true, the generated binary bootstrapper loads the binary module through a custom AssemblyLoadContext on
+    /// PowerShell Core, isolating the module's managed dependency graph from other modules in the session.
+    /// </summary>
+    public bool UseAssemblyLoadContext { get; set; }
+
+    /// <summary>
+    /// Controls optional type accelerator exposure for assemblies loaded in the module AssemblyLoadContext.
+    /// </summary>
+    public AssemblyTypeAcceleratorExportMode? AssemblyTypeAcceleratorMode { get; set; }
+
+    /// <summary>
+    /// Fully-qualified type names to expose as PowerShell type accelerators from the module AssemblyLoadContext.
+    /// </summary>
+    public string[] AssemblyTypeAccelerators { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Assembly simple names whose public types may be exposed as PowerShell type accelerators when assembly mode is enabled.
+    /// </summary>
+    public string[] AssemblyTypeAcceleratorAssemblies { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }
+
+    /// <summary>
+    /// Explicit binary-build settings that require a resolvable .csproj path for this build.
+    /// When populated and <see cref="CsprojPath"/> is empty, the builder should fail rather than reuse a stale Lib payload.
+    /// </summary>
+    public string[] CsprojRequiredReasons { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// When true, only refreshes the manifest (PSD1) and skips binary publish/merge operations.
+    /// </summary>
+    public bool RefreshManifestOnly { get; set; }
 }

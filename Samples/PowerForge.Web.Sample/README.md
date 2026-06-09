@@ -10,7 +10,7 @@ Intended use:
 
 ## Theme engines
 
-Theme engine is selected in `themes/<name>/theme.json`:
+Theme engine is selected in `themes/<name>/theme.manifest.json`:
 ```json
 {
   "name": "base",
@@ -140,7 +140,7 @@ powerforge-web new --collection blog --name \"hello-world\"
 
 ## Theme tokens
 
-Theme tokens live in `themes/<name>/theme.json` and are injected via the `theme-tokens` partial:
+Theme tokens live in `themes/<name>/theme.manifest.json` and are injected via the `theme-tokens` partial:
 ```html
 {{ include "theme-tokens" }}
 ```
@@ -155,6 +155,57 @@ Runs build + apidocs + llms + sitemap + optimize.
 ```
 powerforge-web pipeline --config Samples/PowerForge.Web.CodeGlyphX.Sample/pipeline.json
 ```
+
+### Optimize tips (dev vs CI)
+The `optimize` step can be expensive on large sites because it reads many HTML files multiple times (critical-css, hashing rewrites, minification, image tag rewrites).
+
+For development you can scope optimization to a smaller subset of pages:
+```json
+{
+  "task": "optimize",
+  "siteRoot": "_site",
+  "minifyHtml": true,
+  "minifyCss": false,
+  "minifyJs": false,
+  "optimizeImages": false,
+  "hashAssets": false,
+  "cacheHeaders": false,
+  "htmlInclude": [ "index.html", "docs/**/index.html" ],
+  "maxHtmlFiles": 50,
+  "reportPath": ".powerforge/optimize-report.json"
+}
+```
+
+For CI / production you can turn on the full set (with budgets):
+```json
+{
+  "task": "optimize",
+  "siteRoot": "_site",
+  "minifyHtml": true,
+  "minifyCss": true,
+  "minifyJs": true,
+  "optimizeImages": true,
+  "imageGenerateWebp": true,
+  "imagePreferNextGen": true,
+  "imageWidths": [ "480", "960", "1440" ],
+  "imageEnhanceTags": true,
+  "imageMaxBytesPerFile": 800000,
+  "imageMaxTotalBytes": 80000000,
+  "imageFailOnBudget": true,
+  "imageFailOnFailures": false,
+  "hashAssets": true,
+  "reportPath": ".powerforge/optimize-report.json"
+}
+```
+
+### Pipeline fast mode (local dev)
+If you want to keep using the same pipeline config but speed up local iteration, run:
+```
+powerforge-web pipeline --config pipeline.json --fast
+```
+Fast mode applies pragmatic overrides:
+- `optimize`: disables heavy flags (`optimizeImages`, `hashAssets`, `cacheHeaders`, `minifyCss`, `minifyJs`) and defaults `maxHtmlFiles` to 50 when not set
+- `audit`: disables `rendered` checks and defaults `maxHtmlFiles` to 200 when not set
 
 ### Pipeline (static only, no CodeMatrix paths)
 Builds and optimizes a static site into Artifacts without touching CodeMatrix.

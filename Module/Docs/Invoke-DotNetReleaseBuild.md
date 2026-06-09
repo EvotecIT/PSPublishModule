@@ -28,20 +28,24 @@ Use -WhatIf to preview the planned outputs without running build/pack/sign opera
 Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -PackDependencies
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -CertificateThumbprint '0123456789ABCDEF' -LocalStore CurrentUser
 ```
+
 
 ### EXAMPLE 3
 ```powershell
 Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary' -PackDependencies -WhatIf
 ```
 
+
 ### EXAMPLE 4
 ```powershell
 Invoke-DotNetReleaseBuild -ProjectPath '.\ProjectA\ProjectA.csproj', '.\ProjectB\ProjectB.csproj' -PackDependencies
 ```
+
 
 ## PARAMETERS
 
@@ -52,6 +56,7 @@ Optional certificate thumbprint used to sign assemblies and packages. When omitt
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -67,6 +72,7 @@ Certificate store location used when searching for the signing certificate. Defa
 Type: CertificateStoreLocation
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: CurrentUser, LocalMachine
 
 Required: False
 Position: named
@@ -82,6 +88,7 @@ When enabled, also packs all project dependencies that have their own .csproj fi
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -97,6 +104,7 @@ Path to the folder containing the project (*.csproj) file (or the csproj file it
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -112,6 +120,7 @@ Timestamp server URL used while signing. Default: http://timestamp.digicert.com.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -134,4 +143,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

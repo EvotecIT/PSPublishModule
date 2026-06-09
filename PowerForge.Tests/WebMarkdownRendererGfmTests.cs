@@ -1,0 +1,420 @@
+using PowerForge.Web;
+using ImageMagick;
+
+namespace PowerForge.Tests;
+
+public class WebMarkdownRendererGfmTests
+{
+    [Fact]
+    public void Build_QAStyleMarkdown_DoesNotRenderDefinitionLists()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # FAQ
+
+            ## Auth
+
+            **Q: `auth login` opens a URL but nothing happens.**  
+            A: Ensure the browser can reach the callback URL and try `--print` to paste the code manually.
+            """);
+
+        Assert.Contains("Q:", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("A: Ensure", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<dl>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<dt>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<dd>", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_FaqQABoldStyle_RendersStrongInsteadOfLiteralAsterisks()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # FAQ
+
+            ## Auth
+
+            **Q: `auth login` opens a URL but nothing happens.**  
+            A: Ensure the browser can reach the callback URL and try `--print` to paste the code manually.
+
+            **Q: I see `No OpenAI auth bundle found`.**  
+            A: Run `intelligencex auth login` or `intelligencex auth export --format store-base64`.
+            """);
+
+        Assert.Contains("<strong>Q:", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("* *Q", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("**Q:", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_StrongWrappedMarkdownLinks_RenderAsBoldLinks()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Docs
+
+            - **[Installation](/docs/installation/)** — NuGet packages, PowerShell module
+            - **[Quick Start](/docs/quickstart/)** — Build your first document in 5 steps
+            """);
+
+        Assert.Contains("<strong><a href=\"/docs/installation/\">Installation</a></strong>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<strong><a href=\"/docs/quickstart/\">Quick Start</a></strong>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[Installation](/docs/installation/)", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[Quick Start](/docs/quickstart/)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_HeadingWithInlineCode_RendersCodeInsideHeading()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Tool Catalog
+
+            ## Builtin Packs
+
+            ### Event Log (`eventlog`)
+
+            Representative tools.
+            """);
+
+        var headingMatch = System.Text.RegularExpressions.Regex.Match(
+            html,
+            "<h3[^>]*>(?<text>.*?)</h3>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        Assert.True(headingMatch.Success, "Expected an <h3> heading in rendered HTML.");
+        var headingText = headingMatch.Groups["text"].Value;
+
+        Assert.Contains("<code", headingText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("eventlog", headingText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("`eventlog`", headingText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MultilineHtmlImageTag_IsPreservedWithAttributes()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            <img src="/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg"
+                 alt="Issue Ops project board view with open infra blocker issues, status, linked pull request columns, and quick filtering for maintainer triage"
+                 width="1600"
+                 height="900"
+                 loading="lazy"
+                 decoding="async" />
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("width=\"1600\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("height=\"900\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_SingleLineHtmlImageTag_IsPreserved()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            <img src="/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg" alt="Issue Ops board" width="1600" height="900" loading="lazy" decoding="async" />
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("width=\"1600\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("height=\"900\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownImageSyntax_AddsDefaultImageHints()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Issue Ops board](/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg)
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("alt=\"Issue Ops board\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownImageSyntax_WithDimensionTitle_AddsDimensions_AndRemovesSyntheticTitle()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Issue Ops board](/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg "1600x900")
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("width=\"1600\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("height=\"900\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("title=\"1600x900\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_HtmlImageTag_RespectsExplicitLoadingAndAddsMissingDecoding()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            <img src="/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg" alt="Issue Ops board" loading="eager" />
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"eager\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownImageSyntax_DoesNotAddHints_WhenAutoImageHintsDisabled()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Issue Ops board](/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg)
+            """,
+            markdownOptions: new MarkdownSpec
+            {
+                AutoImageHints = false
+            });
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("loading=", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("decoding=", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownRootedLocalImage_AddsDimensions_WhenStaticFileExists()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Legacy screenshot](/wp-content/uploads/test/legacy-screenshot.png)
+            """,
+            configureRoot: root =>
+            {
+                var imagePath = Path.Combine(root, "static", "wp-content", "uploads", "test", "legacy-screenshot.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+                using var image = new MagickImage(MagickColors.SteelBlue, 640, 360);
+                image.Write(imagePath);
+            });
+
+        Assert.Contains("src=\"/wp-content/uploads/test/legacy-screenshot.png\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("width=\"640\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("height=\"360\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownRootedLocalImage_DoesNotAddDimensions_WhenDisabled()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Legacy screenshot](/wp-content/uploads/test/legacy-screenshot.png)
+            """,
+            markdownOptions: new MarkdownSpec
+            {
+                AutoImageDimensions = false
+            },
+            configureRoot: root =>
+            {
+                var imagePath = Path.Combine(root, "static", "wp-content", "uploads", "test", "legacy-screenshot.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+                using var image = new MagickImage(MagickColors.SteelBlue, 640, 360);
+                image.Write(imagePath);
+            });
+
+        Assert.Contains("src=\"/wp-content/uploads/test/legacy-screenshot.png\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("width=\"640\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("height=\"360\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MultilineHtmlIframeTag_IsPreservedWithAttributes()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Demo
+
+            <iframe
+              src="https://example.test/embed/demo"
+              loading="lazy"
+              title="Demo embed"
+              referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            """);
+
+        Assert.Contains("<iframe", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"https://example.test/embed/demo\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("title=\"Demo embed\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("&lt;iframe", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MultilineHtmlPictureAndSourceTags_ArePreserved()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Responsive Image
+
+            <picture>
+              <source
+                srcset="/images/hero-1600.webp"
+                media="(min-width: 1200px)" />
+              <img
+                src="/images/hero-640.webp"
+                alt="Hero image"
+                loading="lazy"
+                decoding="async" />
+            </picture>
+            """);
+
+        Assert.Contains("<picture>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<source", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("srcset=\"/images/hero-1600.webp\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("media=\"(min-width: 1200px)\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("&lt;source", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_GenericGitHubLinks_AddDestinationAwareAriaLabels()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Resources
+
+            - [GitHub](https://github.com/EvotecIT/PSWriteHTML)
+            - [GitHub](https://github.com/EvotecIT/PSWriteHTML/issues)
+            - [PowerShellGallery](https://www.powershellgallery.com/packages/PSWriteHTML)
+            """);
+
+        Assert.Contains("aria-label=\"GitHub repository PSWriteHTML\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"GitHub issues for PSWriteHTML\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"PowerShell Gallery package PSWriteHTML\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_GenericReferenceLinks_AddContextualAriaLabels()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # References
+
+            See details [here](https://technet.microsoft.com/en-us/library/bb125187.aspx) and watch this [YouTube video](https://www.youtube.com/watch?v=abc123xyz).
+            """);
+
+        Assert.Contains("aria-label=\"Open reference: bb125187\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"YouTube video abc123xyz\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MitLicenseLinks_UseRepositoryAwareAriaLabels()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Licenses
+
+            - [MIT license](https://github.com/fullcalendar/fullcalendar/blob/master/LICENSE.txt)
+            - [MIT license](https://github.com/jquery/jquery/blob/main/LICENSE.txt)
+            """);
+
+        Assert.Contains("aria-label=\"MIT license for fullcalendar\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"MIT license for jquery\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildSinglePageSite(string markdown, MarkdownSpec? markdownOptions = null, Action<string>? configureRoot = null)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-markdown-gfm-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                $$"""
+                ---
+                title: Home
+                slug: index
+                ---
+
+                {{markdown}}
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{TITLE}}</title></head>
+                <body>{{CONTENT}}</body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "t",
+                  "engine": "simple",
+                  "defaultLayout": "home"
+                }
+                """);
+            configureRoot?.Invoke(root);
+
+            var spec = new SiteSpec
+            {
+                Name = "Markdown GFM Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "t",
+                ThemesRoot = "themes",
+                Markdown = markdownOptions,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+
+            var outPath = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outPath);
+
+            var indexHtml = Path.Combine(outPath, "index.html");
+            Assert.True(File.Exists(indexHtml), "Expected index.html to be generated.");
+            return File.ReadAllText(indexHtml);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+}

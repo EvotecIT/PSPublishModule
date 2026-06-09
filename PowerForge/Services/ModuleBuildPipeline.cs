@@ -10,21 +10,40 @@ namespace PowerForge;
 public sealed class ModuleBuildPipeline
 {
     private readonly ILogger _logger;
+    private readonly IModuleManifestMutator _manifestMutator;
+    private readonly IScriptFunctionExportDetector _scriptFunctionExportDetector;
 
     /// <summary>
-    /// Creates a new pipeline that logs progress via <paramref name="logger"/>.
+    /// Creates a new pipeline that logs progress via <paramref name="logger"/> and builds modules using the supplied
+    /// manifest mutator and script export detector seams.
     /// </summary>
-    public ModuleBuildPipeline(ILogger logger) => _logger = logger;
+    public ModuleBuildPipeline(
+        ILogger logger,
+        IModuleManifestMutator manifestMutator,
+        IScriptFunctionExportDetector scriptFunctionExportDetector)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _manifestMutator = manifestMutator ?? throw new ArgumentNullException(nameof(manifestMutator));
+        _scriptFunctionExportDetector = scriptFunctionExportDetector ?? throw new ArgumentNullException(nameof(scriptFunctionExportDetector));
+    }
 
     internal sealed class StagingResult
     {
         public string SourcePath { get; }
         public string StagingPath { get; }
+        public int NormalizedLineEndingsCount { get; }
+        public int LineEndingNormalizationErrors { get; }
 
-        public StagingResult(string sourcePath, string stagingPath)
+        public StagingResult(
+            string sourcePath,
+            string stagingPath,
+            int normalizedLineEndingsCount,
+            int lineEndingNormalizationErrors)
         {
             SourcePath = sourcePath;
             StagingPath = stagingPath;
+            NormalizedLineEndingsCount = normalizedLineEndingsCount;
+            LineEndingNormalizationErrors = lineEndingNormalizationErrors;
         }
     }
 
@@ -79,8 +98,13 @@ public sealed class ModuleBuildPipeline
 
         _logger.Info($"Staging module '{spec.Name}' from '{source}' to '{staging}'");
         CopyDirectoryFiltered(source, staging, excluded, excludedFiles);
+        var normalization = NormalizeMixedPowerShellLineEndings(staging, excluded, excludedFiles);
 
-        return new StagingResult(source, staging);
+        return new StagingResult(
+            source,
+            staging,
+            normalization.Converted,
+            normalization.Errors);
     }
 
     internal ModuleBuildResult BuildInStaging(ModuleBuildSpec spec, string stagingPath)
@@ -92,13 +116,16 @@ public sealed class ModuleBuildPipeline
         var staging = Path.GetFullPath(stagingPath);
         if (!Directory.Exists(staging)) throw new DirectoryNotFoundException($"Staging directory not found: {staging}");
 
-        var builder = new ModuleBuilder(_logger);
+        var builder = new ModuleBuilder(
+            _logger,
+            _manifestMutator,
+            _scriptFunctionExportDetector);
         var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };
-        builder.BuildInPlace(new ModuleBuilder.Options
+        var buildNotes = builder.BuildInPlace(new ModuleBuilder.Options
         {
             ProjectRoot = staging,
             ModuleName = spec.Name,
-            CsprojPath = string.IsNullOrWhiteSpace(spec.CsprojPath) ? string.Empty : Path.GetFullPath(spec.CsprojPath),
+            CsprojPath = spec.RefreshManifestOnly || string.IsNullOrWhiteSpace(spec.CsprojPath) ? string.Empty : Path.GetFullPath(spec.CsprojPath),
             ModuleVersion = spec.Version,
             Configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration,
             Frameworks = tfms,
@@ -110,19 +137,52 @@ public sealed class ModuleBuildPipeline
             ProjectUri = spec.ProjectUri,
             ExportAssemblies = spec.ExportAssemblies ?? Array.Empty<string>(),
             DisableBinaryCmdletScan = spec.DisableBinaryCmdletScan,
+            BinaryConflictSearchRoots = spec.BinaryConflictSearchRoots ?? Array.Empty<string>(),
+            BinaryConflictPriorityModuleNames = spec.BinaryConflictPriorityModuleNames ?? Array.Empty<string>(),
+            BinaryConflictReportRoot = spec.BinaryConflictReportRoot,
+            ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
+            DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
+            CsprojRequiredReasons = spec.RefreshManifestOnly ? Array.Empty<string>() : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
         });
 
         var psd1 = Path.Combine(staging, $"{spec.Name}.psd1");
         if (!File.Exists(psd1))
             throw new FileNotFoundException($"Manifest not found after build: {psd1}");
 
-        var exports = ReadExportsFromManifest(psd1);
+        var exports = ModuleManifestExportReader.ReadExports(psd1);
 
         // Ensure the staged module has a clean, deterministic bootstrapper and (when binaries exist) a Libraries.ps1 file.
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
-        ModuleBootstrapperGenerator.Generate(staging, spec.Name, exports, spec.ExportAssemblies);
+        if (!spec.RefreshManifestOnly)
+        {
+            var assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorOptions.ResolveMode(
+                spec.AssemblyTypeAcceleratorMode,
+                spec.AssemblyTypeAccelerators,
+                spec.AssemblyTypeAcceleratorAssemblies);
+            var useAssemblyLoadContext = spec.UseAssemblyLoadContext
+                || assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None;
+            if (useAssemblyLoadContext && !spec.UseAssemblyLoadContext)
+                _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
 
-        return new ModuleBuildResult(staging, psd1, exports);
+            ModuleBootstrapperGenerator.Generate(
+                staging,
+                spec.Name,
+                exports,
+                spec.ExportAssemblies,
+                spec.HandleRuntimes,
+                useAssemblyLoadContext,
+                assemblyTypeAcceleratorMode,
+                spec.AssemblyTypeAccelerators,
+                spec.AssemblyTypeAcceleratorAssemblies,
+                targetFrameworks: spec.Frameworks,
+                log: message => _logger.Info(message));
+        }
+        else
+        {
+            _logger.Info("RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration.");
+        }
+
+        return new ModuleBuildResult(staging, psd1, exports, buildNotes);
     }
 
     /// <summary>
@@ -131,7 +191,7 @@ public sealed class ModuleBuildPipeline
     /// <param name="spec">Install specification.</param>
     /// <param name="updateManifestToResolvedVersion">When true, patches the PSD1 ModuleVersion to the resolved version.</param>
     /// <returns>Installer result including resolved version and installed paths.</returns>
-    public ModuleInstallerResult InstallFromStaging(ModuleInstallSpec spec, bool updateManifestToResolvedVersion = true)
+    public ModuleInstallerResult InstallFromStaging(ModuleInstallSpec spec, bool? updateManifestToResolvedVersion = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));        
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
@@ -146,14 +206,20 @@ public sealed class ModuleBuildPipeline
             fallbackVersion: null);
 
         var resolved = ModuleInstaller.ResolveTargetVersion(spec.Roots, spec.Name, spec.Version, spec.Strategy);
-        if (updateManifestToResolvedVersion)
+        var patchManifest = updateManifestToResolvedVersion ?? spec.UpdateManifestToResolvedVersion;
+        if (patchManifest)
         {
-            try { ManifestEditor.TrySetTopLevelModuleVersion(Path.Combine(staging, $"{spec.Name}.psd1"), resolved); }
+            try { _manifestMutator.TrySetTopLevelModuleVersion(Path.Combine(staging, $"{spec.Name}.psd1"), resolved); }
             catch { /* best effort */ }
         }
 
         var installer = new ModuleInstaller(_logger);
-        var options = new ModuleInstallerOptions(spec.Roots, InstallationStrategy.Exact, spec.KeepVersions);
+        var options = new ModuleInstallerOptions(
+            destinationRoots: spec.Roots,
+            strategy: InstallationStrategy.Exact,
+            keepVersions: spec.KeepVersions,
+            legacyFlatHandling: spec.LegacyFlatHandling,
+            preserveVersions: spec.PreserveVersions);
         return installer.InstallFromStaging(staging, spec.Name, resolved, options);
     }
 
@@ -164,7 +230,7 @@ public sealed class ModuleBuildPipeline
         try
         {
             if (File.Exists(manifestPath) &&
-                ManifestEditor.TryGetTopLevelString(manifestPath, "ModuleVersion", out var v) &&
+                ModuleManifestValueReader.TryGetTopLevelString(manifestPath, "ModuleVersion", out var v) &&
                 !string.IsNullOrWhiteSpace(v))
             {
                 _logger.Verbose($"Resolved ModuleVersion from manifest: {manifestPath} -> {v}");
@@ -249,17 +315,46 @@ public sealed class ModuleBuildPipeline
         return child.StartsWith(parent, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ExportSet ReadExportsFromManifest(string psd1Path)
-        => new(ReadStringOrArray(psd1Path, "FunctionsToExport"),
-            ReadStringOrArray(psd1Path, "CmdletsToExport"),
-            ReadStringOrArray(psd1Path, "AliasesToExport"));
-
-    private static string[] ReadStringOrArray(string psd1Path, string key)
+    private (int Converted, int Errors) NormalizeMixedPowerShellLineEndings(string stagingPath, ISet<string> excludedDirectoryNames, ISet<string> excludedFileNames)
     {
-        if (ManifestEditor.TryGetTopLevelStringArray(psd1Path, key, out var values) && values is not null)
-            return values;
-        if (ManifestEditor.TryGetTopLevelString(psd1Path, key, out var value) && !string.IsNullOrWhiteSpace(value))
-            return new[] { value! };
-        return Array.Empty<string>();
+        try
+        {
+            var excludes = new HashSet<string>(excludedDirectoryNames, StringComparer.OrdinalIgnoreCase)
+            {
+                ".git", ".vs", ".vscode", "bin", "obj", "packages", "node_modules", "Artefacts", "Modules", "Ignore"
+            };
+
+            var enumeration = new ProjectEnumeration(
+                rootPath: stagingPath,
+                kind: ProjectKind.PowerShell,
+                customExtensions: null,
+                excludeDirectories: excludes,
+                excludeFiles: excludedFileNames);
+
+            var converter = new LineEndingConverter();
+            var result = converter.Convert(new LineEndingConversionOptions(
+                enumeration: enumeration,
+                target: LineEnding.CRLF,
+                createBackups: false,
+                backupDirectory: null,
+                force: true,
+                onlyMixed: false,
+                ensureFinalNewline: false,
+                onlyMissingNewline: false,
+                preferUtf8BomForPowerShell: true));
+
+            if (result.Converted > 0)
+                _logger.Info($"Normalized staged line endings to CRLF ({result.Converted} file(s)).");
+            if (result.Errors > 0)
+                _logger.Warn($"Failed to normalize line endings for {result.Errors} staged file(s).");
+            return (result.Converted, result.Errors);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Mixed line-ending normalization in staging failed: {ex.Message}");
+            // This outer catch can fire before the converter returns per-file totals, so the error count is an
+            // approximate "normalization failed" signal rather than an exact count of failed files.
+            return (0, 1);
+        }
     }
 }

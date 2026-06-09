@@ -52,11 +52,26 @@ public sealed class BuildModuleConfiguration
     /// <summary>Use local versioning (legacy key: LocalVersion).</summary>
     public bool? LocalVersion { get; set; }
 
+    /// <summary>
+    /// When true, synchronizes the source .NET project version with the resolved module version before staging.
+    /// </summary>
+    public bool? SyncNETProjectVersion { get; set; }
+
     /// <summary>Installation strategy for versioned installs.</summary>
     public InstallationStrategy? VersionedInstallStrategy { get; set; }
 
     /// <summary>How many versions to keep per module when using versioned installs.</summary>
     public int? VersionedInstallKeep { get; set; }
+
+    /// <summary>
+    /// Controls how legacy flat installs under &lt;root&gt;\&lt;ModuleName&gt; are handled during install.
+    /// </summary>
+    public LegacyFlatModuleHandling? LegacyFlatHandling { get; set; }
+
+    /// <summary>
+    /// Version folder names to preserve during pruning (for example older major versions).
+    /// </summary>
+    public string[]? PreserveInstallVersions { get; set; }
 
     /// <summary>
     /// When true, installs missing module dependencies (Required/External modules) before running the build.

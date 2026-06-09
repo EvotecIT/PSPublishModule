@@ -1,11 +1,26 @@
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
 /// <summary>Lightweight static file server for local preview.</summary>
 public static class WebStaticServer
 {
+    private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
+    private static readonly Regex LanguageDirectoryNameRegex = new(
+        "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly HashSet<string> ReservedLanguageDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "api",
+        "app",
+        "rss",
+        "www"
+    };
+
     /// <summary>Starts a blocking static file server.</summary>
     /// <param name="rootPath">Root directory to serve.</param>
     /// <param name="host">Host/IP to bind.</param>
@@ -13,6 +28,34 @@ public static class WebStaticServer
     /// <param name="token">Cancellation token to stop the server.</param>
     /// <param name="log">Optional log callback.</param>
     public static void Serve(string rootPath, string host, int port, CancellationToken token, Action<string>? log = null)
+        => ServeCore(rootPath, host, port, token, log, autoPortFallback: false, maxPortAttempts: 1);
+
+    /// <summary>
+    /// Starts a blocking static file server and, when the requested port is busy, tries subsequent ports.
+    /// </summary>
+    /// <param name="rootPath">Root directory to serve.</param>
+    /// <param name="host">Host/IP to bind.</param>
+    /// <param name="port">Preferred port to bind.</param>
+    /// <param name="token">Cancellation token to stop the server.</param>
+    /// <param name="log">Optional log callback.</param>
+    /// <param name="maxPortAttempts">Maximum number of sequential ports to try.</param>
+    public static void ServeWithPortFallback(
+        string rootPath,
+        string host,
+        int port,
+        CancellationToken token,
+        Action<string>? log = null,
+        int maxPortAttempts = 20)
+        => ServeCore(rootPath, host, port, token, log, autoPortFallback: true, maxPortAttempts: maxPortAttempts);
+
+    private static void ServeCore(
+        string rootPath,
+        string host,
+        int port,
+        CancellationToken token,
+        Action<string>? log,
+        bool autoPortFallback,
+        int maxPortAttempts)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new ArgumentException("Root path is required.", nameof(rootPath));
@@ -21,40 +64,122 @@ public static class WebStaticServer
         if (!Directory.Exists(basePath))
             throw new DirectoryNotFoundException($"Directory does not exist: {basePath}");
 
-        var prefix = $"http://{host}:{port}/";
-        using var listener = new HttpListener();
-        listener.Prefixes.Add(prefix);
-        listener.Start();
+        var attempts = Math.Max(1, maxPortAttempts);
+        var requestedPort = port <= 0 ? 8080 : port;
+        if (requestedPort > 65535)
+            throw new ArgumentOutOfRangeException(nameof(port), port, "Port must be between 1 and 65535.");
 
-        log?.Invoke($"Serving {basePath}");
-        log?.Invoke($"Listening on {prefix} (Ctrl+C to stop)");
-
-        token.Register(() =>
+        var (listener, boundPort) = StartListener(host, requestedPort, autoPortFallback, attempts);
+        using (listener)
         {
-            try { listener.Close(); } catch { }
-        });
+            var prefix = $"http://{host}:{boundPort}/";
+            log?.Invoke($"Serving {basePath}");
+            if (boundPort != requestedPort)
+                log?.Invoke($"Requested port {requestedPort} is busy. Using {boundPort}.");
+            log?.Invoke($"Listening on {prefix} (Ctrl+C to stop)");
 
-        while (!token.IsCancellationRequested)
+            token.Register(() =>
+            {
+                try { listener.Close(); } catch { }
+            });
+
+            while (!token.IsCancellationRequested)
+            {
+                HttpListenerContext? context = null;
+                try
+                {
+                    context = listener.GetContext();
+                }
+                catch (HttpListenerException)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
+
+                if (context is null)
+                    continue;
+
+                _ = Task.Run(() => HandleRequest(context, basePath), token);
+            }
+        }
+    }
+
+    private static (HttpListener Listener, int BoundPort) StartListener(string host, int requestedPort, bool autoPortFallback, int attempts)
+    {
+        HttpListenerException? lastBindException = null;
+
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
-            HttpListenerContext? context = null;
+            var candidatePort = requestedPort + attempt;
+            if (candidatePort > 65535)
+                break;
+
+            var listener = new HttpListener();
+            var prefix = $"http://{host}:{candidatePort}/";
+            listener.Prefixes.Add(prefix);
+
             try
             {
-                context = listener.GetContext();
+                listener.Start();
+                return (listener, candidatePort);
             }
-            catch (HttpListenerException)
+            catch (HttpListenerException ex)
             {
-                break;
+                var portUnavailable = IsPortUnavailableForBinding(ex);
+                if (autoPortFallback && portUnavailable)
+                {
+                    lastBindException = ex;
+                    try { listener.Close(); } catch { }
+                    if (attempt + 1 < attempts)
+                        continue;
+                    break;
+                }
+
+                try { listener.Close(); } catch { }
+                throw;
             }
-            catch (ObjectDisposedException)
+            catch
             {
-                break;
+                try { listener.Close(); } catch { }
+                throw;
             }
-
-            if (context is null)
-                continue;
-
-            _ = Task.Run(() => HandleRequest(context, basePath), token);
         }
+
+        if (lastBindException is not null)
+        {
+            throw new IOException(
+                $"Could not start server on {host}:{requestedPort} after trying {attempts} ports. " +
+                "Use --port to select a different range.",
+                lastBindException);
+        }
+
+        throw new IOException($"Could not start server on {host}:{requestedPort}.");
+    }
+
+    private static bool IsPortUnavailableForBinding(HttpListenerException ex)
+    {
+        var code = ex.NativeErrorCode;
+        // These platform-specific codes indicate the requested prefix/port is not bindable.
+        // 5: Access denied (common when URL ACL is missing or prefix already registered)
+        // 32: Sharing violation (seen when another listener holds the prefix)
+        // 98/10048: Address already in use
+        // 183: Already exists
+        if (code == 5 || code == 32 || code == 183 || code == 10048 || code == 98)
+            return true;
+
+        var message = ex.Message ?? string.Empty;
+        if (message.IndexOf("access is denied", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("permission denied", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("being used by another process", StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+
+        return message.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("in use", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("address already", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("conflict", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static void HandleRequest(HttpListenerContext context, string basePath)
@@ -72,6 +197,8 @@ public static class WebStaticServer
         var rawPath = request.Url?.AbsolutePath ?? "/";
         var path = Uri.UnescapeDataString(rawPath);
         var filePath = ResolveFilePath(basePath, path);
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            filePath = ResolveLocalizedAliasFilePath(basePath, path);
 
         if (filePath is null || !File.Exists(filePath))
         {
@@ -113,13 +240,14 @@ public static class WebStaticServer
 
     private static string? ResolveFilePath(string basePath, string urlPath)
     {
+        var normalizedRoot = NormalizeRootPath(basePath);
         var relative = urlPath.TrimStart('/');
         relative = relative.Replace('/', Path.DirectorySeparatorChar);
         if (string.IsNullOrWhiteSpace(relative))
             relative = "index.html";
 
         var candidate = Path.GetFullPath(Path.Combine(basePath, relative));
-        if (!candidate.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+        if (!IsPathWithinRoot(normalizedRoot, candidate))
             return null;
 
         if (Directory.Exists(candidate))
@@ -142,6 +270,87 @@ public static class WebStaticServer
         }
 
         return candidate;
+    }
+
+    private static string? ResolveLocalizedAliasFilePath(string basePath, string urlPath)
+    {
+        if (string.IsNullOrWhiteSpace(urlPath) ||
+            string.Equals(urlPath, "/", StringComparison.Ordinal) ||
+            Path.HasExtension(urlPath))
+        {
+            return null;
+        }
+
+        if (HasLeadingLanguagePrefix(urlPath))
+            return null;
+
+        string[] languageDirectories;
+        try
+        {
+            languageDirectories = Directory.GetDirectories(basePath)
+                .Select(Path.GetFileName)
+                .Where(static name => !string.IsNullOrWhiteSpace(name) && IsLanguageDirectoryName(name!))
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (languageDirectories.Length == 0)
+            return null;
+
+        string? match = null;
+        foreach (var languageDirectory in languageDirectories)
+        {
+            var candidatePath = ResolveFilePath(basePath, "/" + languageDirectory + urlPath);
+            if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(match))
+                return null;
+
+            match = candidatePath;
+        }
+
+        return match;
+    }
+
+    private static bool HasLeadingLanguagePrefix(string urlPath)
+    {
+        if (string.IsNullOrWhiteSpace(urlPath))
+            return false;
+
+        var trimmed = urlPath.Trim('/');
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        var firstSegmentEnd = trimmed.IndexOf('/');
+        var firstSegment = firstSegmentEnd >= 0 ? trimmed[..firstSegmentEnd] : trimmed;
+        return IsLanguageDirectoryName(firstSegment);
+    }
+
+    private static bool IsLanguageDirectoryName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        return !ReservedLanguageDirectoryNames.Contains(trimmed) &&
+            LanguageDirectoryNameRegex.IsMatch(trimmed);
+    }
+
+    private static string NormalizeRootPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    }
+
+    private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
     }
 
     private static void WriteFile(HttpListenerResponse response, string filePath, int statusCode, bool headOnly = false)

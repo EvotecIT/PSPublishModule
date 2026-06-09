@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
+using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 
 namespace PowerForge;
@@ -13,6 +13,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProjectCleanupService
 {
+    private static readonly Regex FilePatternClassifier = CreateWildcardRegex("*.*");
+
     /// <summary>
     /// Executes cleanup for the specified project according to <paramref name="spec"/>.
     /// </summary>
@@ -281,15 +283,15 @@ public sealed class ProjectCleanupService
     {
         var processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var excludePatternMatchers = excludePatterns
-            .Select(p => new WildcardPattern(p, WildcardOptions.IgnoreCase | WildcardOptions.CultureInvariant))
+            .Select(CreateWildcardRegex)
             .ToArray();
 
         var folderMatchers = patterns.Folders
-            .Select(p => new WildcardPattern(p, WildcardOptions.IgnoreCase | WildcardOptions.CultureInvariant))
+            .Select(CreateWildcardRegex)
             .ToArray();
 
         var fileMatchers = patterns.Files
-            .Select(p => new WildcardPattern(p, WildcardOptions.IgnoreCase | WildcardOptions.CultureInvariant))
+            .Select(CreateWildcardRegex)
             .ToArray();
 
         var baseDir = projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -376,7 +378,7 @@ public sealed class ProjectCleanupService
         }
     }
 
-    private static string? FirstMatch(WildcardPattern[] matchers, string value, string[] patterns)
+    private static string? FirstMatch(Regex[] matchers, string value, string[] patterns)
     {
         for (var i = 0; i < matchers.Length; i++)
         {
@@ -486,11 +488,10 @@ public sealed class ProjectCleanupService
             var folderPatterns = new List<string>();
             var filePatterns = new List<string>();
 
-            var classifyAsFile = new WildcardPattern("*.*", WildcardOptions.IgnoreCase | WildcardOptions.CultureInvariant);
             foreach (var p in includePatterns ?? Array.Empty<string>())
             {
                 if (string.IsNullOrWhiteSpace(p)) continue;
-                if (classifyAsFile.IsMatch(p)) filePatterns.Add(p);
+                if (FilePatternClassifier.IsMatch(p)) filePatterns.Add(p);
                 else folderPatterns.Add(p);
             }
 
@@ -543,5 +544,13 @@ public sealed class ProjectCleanupService
         public ProjectCleanupItemType Type { get; set; }
         public string Pattern { get; set; } = string.Empty;
         public long Size { get; set; }
+    }
+
+    private static Regex CreateWildcardRegex(string pattern)
+    {
+        var regexPattern = "^" + Regex.Escape(pattern)
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".") + "$";
+        return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 }

@@ -11,12 +11,17 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ## SYNTAX
 ### Modern (Default)
 ```powershell
-Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+```
+
+### Config
+```powershell
+Invoke-ModuleBuild -ConfigPath <string> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
 ```powershell
-Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -30,34 +35,61 @@ steps, use -JsonOnly with -JsonPath.
 When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
 Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).
 
+Dependency behavior is composed from the configuration segments you emit. Typically this means:
+New-ConfigurationModule declares dependencies, New-ConfigurationBuild decides whether the build host
+should install missing ones, and New-ConfigurationArtefact decides whether required modules should be
+bundled into the output artefact.
+
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings {
-New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
+    New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md'
 }
 ```
+
 
 ### EXAMPLE 2
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
 ```
+
 
 ### EXAMPLE 3
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -ExitCode -Settings {
-New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
-New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {
+    New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
+    New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
 }
 ```
 
+
 ### EXAMPLE 4
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
--CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
--Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
+    -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+    -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
 ```
+
+
+### EXAMPLE 5
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
+    -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+    -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning
+```
+
+
+### EXAMPLE 6
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
+    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
+    New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
+    New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto
+}
+```
+
 
 ## PARAMETERS
 
@@ -68,8 +100,25 @@ Folder name containing aliases to export. Default: Public.
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ConfigPath
+Path to a module pipeline JSON config generated by Invoke-ModuleBuild -JsonOnly.
+
+```yaml
+Type: String
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -83,6 +132,7 @@ Legacy configuration dictionary for backwards compatibility.
 Type: IDictionary
 Parameter Sets: Configuration
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -98,6 +148,40 @@ Optional path to a .NET project (.csproj) to publish into the module.
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DiagnosticsBaselinePath
+Optional path to a diagnostics baseline file used to compare current issues with known issues.
+
+```yaml
+Type: String
+Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DiagnosticsBinaryConflictSearchRoot
+Optional module roots to scan for deterministic binary conflict diagnostics.
+When provided, conflict findings can participate in diagnostics baselines and policy.
+
+```yaml
+Type: String[]
+Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -113,6 +197,7 @@ Build configuration for publishing the .NET project (Release or Debug).
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values: Release, Debug
 
 Required: False
 Position: named
@@ -128,6 +213,7 @@ Target frameworks to publish (e.g., net472, net8.0).
 Type: String[]
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -141,8 +227,9 @@ Directory names excluded from staging copy (matched by directory name, not by pa
 
 ```yaml
 Type: String[]
-Parameter Sets: Modern, Configuration
+Parameter Sets: Modern, Config, Configuration
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -156,8 +243,9 @@ File names excluded from staging copy (matched by file name, not by path).
 
 ```yaml
 Type: String[]
-Parameter Sets: Modern, Configuration
+Parameter Sets: Modern, Config, Configuration
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -173,6 +261,7 @@ Exclude patterns for artefact packaging.
 Type: String[]
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -186,8 +275,41 @@ When specified, requests the host to exit with code 0 on success and 1 on failur
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Modern, Configuration
+Parameter Sets: Modern, Config, Configuration
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -FailOnDiagnosticsSeverity
+Fails the build when diagnostics at or above the specified severity are present.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values: Warning, Error
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -FailOnNewDiagnostics
+Fails the build when diagnostics appear that are not present in the loaded baseline.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -203,6 +325,23 @@ Folder name containing functions to export. Default: Public.
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -GenerateDiagnosticsBaseline
+Writes a diagnostics baseline file from the current run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -218,6 +357,7 @@ Folders from which to include all files in artefacts.
 Type: String[]
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -233,6 +373,7 @@ Optional script block executed during staging that can add custom files/folders 
 Type: ScriptBlock
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -248,6 +389,7 @@ Folders from which to include .ps1 files in artefacts.
 Type: String[]
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -263,6 +405,7 @@ Include patterns for root files in artefacts.
 Type: String[]
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -278,6 +421,7 @@ Advanced hashtable form for includes (maps IncludeRoot/IncludePS1/IncludeAll etc
 Type: IDictionary
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -293,6 +437,7 @@ Destination module roots for install. When omitted, defaults are used.
 Type: String[]
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -308,6 +453,7 @@ Installation strategy used when installing the module.
 Type: InstallationStrategy
 Parameter Sets: Modern
 Aliases: None
+Possible values: Exact, AutoRevision
 
 Required: False
 Position: named
@@ -322,8 +468,9 @@ Intended for migrating legacy DSL scripts to powerforge CLI configuration.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Modern, Configuration
+Parameter Sets: Modern, Config, Configuration
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -333,13 +480,14 @@ Accept wildcard characters: True
 ```
 
 ### -JsonPath
-Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).
+Output path for the generated pipeline JSON file (used with JsonOnly).
 Defaults to powerforge.json in the project root.
 
 ```yaml
 Type: String
-Parameter Sets: Modern, Configuration
+Parameter Sets: Modern, Config, Configuration
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -355,6 +503,7 @@ Keep staging directory after build/install.
 Type: SwitchParameter
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -370,6 +519,7 @@ Number of versions to keep per module root when installing.
 Type: Int32
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -383,8 +533,25 @@ Compatibility switch. Historically forced the PowerShell-script build pipeline; 
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Modern, Configuration
+Parameter Sets: Modern, Config, Configuration
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LegacyFlatHandling
+How to handle legacy flat installs found under module roots.
+
+```yaml
+Type: LegacyFlatModuleHandling
+Parameter Sets: Modern
+Aliases: None
+Possible values: Warn, Convert, Delete, Ignore
 
 Required: False
 Position: named
@@ -400,6 +567,7 @@ Alternate relative path for .NET Core-targeted libraries folder. Default: Lib/Co
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -415,6 +583,7 @@ Alternate relative path for .NET Framework-targeted libraries folder. Default: L
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -430,6 +599,7 @@ Alternate relative path for .NET Standard-targeted libraries folder. Default: Li
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -445,6 +615,7 @@ Name of the module being built.
 Type: String
 Parameter Sets: Modern
 Aliases: ProjectName
+Possible values:
 
 Required: True
 Position: named
@@ -458,8 +629,9 @@ Disables the interactive progress UI and emits plain log output.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Modern, Configuration
+Parameter Sets: Modern, Config, Configuration
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -469,12 +641,29 @@ Accept wildcard characters: True
 ```
 
 ### -Path
-Path to the folder where the project exists or should be created. When omitted, uses the parent of the calling script directory.
+Path to the parent folder where the project exists or should be created. The module project resolves to Path\ModuleName. When omitted, uses the parent of the calling script directory.
 
 ```yaml
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PreserveInstallVersions
+Version folders to preserve when pruning installed versions.
+
+```yaml
+Type: String[]
+Parameter Sets: Modern
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -490,6 +679,7 @@ Provides settings for the module in the form of a script block (DSL).
 Type: ScriptBlock
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: 0
@@ -505,6 +695,7 @@ Skips installing the module after build.
 Type: SwitchParameter
 Parameter Sets: Modern
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -520,6 +711,23 @@ Staging directory for the PowerForge pipeline. When omitted, a temporary folder 
 Type: String
 Parameter Sets: Modern
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UpdateDiagnosticsBaseline
+Updates a diagnostics baseline file from the current run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -542,4 +750,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

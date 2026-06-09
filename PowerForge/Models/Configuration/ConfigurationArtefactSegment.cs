@@ -97,6 +97,9 @@ public sealed class ArtefactRequiredModulesConfiguration
 
     /// <summary>Optional credential used for repository access when downloading required modules.</summary>
     public RepositoryCredential? Credential { get; set; }
+
+    /// <summary>Required module names that should not be copied into the artefact.</summary>
+    public string[] ExcludeModuleName { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>

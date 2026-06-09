@@ -27,14 +27,14 @@ without hardcoding them into source files.
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'
+PS> New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'
 ```
 
 Replaces all occurrences of {{ModuleVersion}} in merged content.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }
+PS> New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }
 ```
 
 Emits multiple placeholder replacement segments in one call.
@@ -42,12 +42,13 @@ Emits multiple placeholder replacement segments in one call.
 ## PARAMETERS
 
 ### -CustomReplacement
-Custom placeholder replacements. Accepts legacy hashtable array (@{ Find='..'; Replace='..' }) or T:PowerForge.PlaceHolderReplacement[].
+Custom placeholder replacements. Accepts legacy hashtable array (@{ Find='..'; Replace='..' }) or PlaceHolderReplacement[].
 
 ```yaml
 Type: PlaceHolderReplacement[]
 Parameter Sets: CustomReplacement
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -63,6 +64,7 @@ The string to find in the script or module content.
 Type: String
 Parameter Sets: FindAndReplace
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -78,6 +80,7 @@ The string to replace the Find string in the script or module content.
 Type: String
 Parameter Sets: FindAndReplace
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -100,4 +103,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

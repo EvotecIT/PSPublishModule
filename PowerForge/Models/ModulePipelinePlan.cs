@@ -33,9 +33,24 @@ public sealed class ModulePipelinePlan
     public string? PreRelease { get; }
 
     /// <summary>
-    /// Final build spec used for <see cref="ModuleBuildPipeline.BuildToStaging"/>.
+    /// Manifest configuration resolved from <c>Manifest</c> segments (last-wins).
+    /// </summary>
+    public ManifestConfiguration? Manifest { get; }
+
+    /// <summary>
+    /// Final build spec used by the module build pipeline staging step.
     /// </summary>
     public ModuleBuildSpec BuildSpec { get; }
+
+    /// <summary>
+    /// Resolved source .csproj path for the module's .NET project, even when build execution skips binary publish.
+    /// </summary>
+    public string? ResolvedCsprojPath { get; }
+
+    /// <summary>
+    /// When true, the pipeline updates the source .csproj version to the resolved module version before staging.
+    /// </summary>
+    public bool SyncNETProjectVersion { get; }
 
     /// <summary>
     /// Compatible PowerShell editions requested by configuration (used for manifest patching and install root derivation).
@@ -45,7 +60,7 @@ public sealed class ModulePipelinePlan
     /// <summary>
     /// Required module entries requested by configuration (used for manifest patching).
     /// </summary>
-    public ManifestEditor.RequiredModule[] RequiredModules { get; }
+    public RequiredModuleReference[] RequiredModules { get; }
 
     /// <summary>
     /// External module dependencies (PSData.ExternalModuleDependencies).
@@ -55,7 +70,7 @@ public sealed class ModulePipelinePlan
     /// <summary>
     /// Required modules that should be packaged into artefacts when enabled (excludes ExternalModule dependencies).
     /// </summary>
-    public ManifestEditor.RequiredModule[] RequiredModulesForPackaging { get; }
+    public RequiredModuleReference[] RequiredModulesForPackaging { get; }
 
     /// <summary>
     /// Optional information configuration (include/exclude patterns) used for artefact packaging.
@@ -143,6 +158,11 @@ public sealed class ModulePipelinePlan
     public bool MergeMissing { get; }
 
     /// <summary>
+    /// When true, skips legacy relative path normalization during merge.
+    /// </summary>
+    public bool DoNotAttemptToFixRelativePaths { get; }
+
+    /// <summary>
     /// Approved module names that can be used as function donors during merge.
     /// </summary>
     public string[] ApprovedModules { get; }
@@ -193,6 +213,16 @@ public sealed class ModulePipelinePlan
     public string[] InstallRoots { get; }
 
     /// <summary>
+    /// Controls how legacy flat installs should be handled during install.
+    /// </summary>
+    public LegacyFlatModuleHandling InstallLegacyFlatHandling { get; }
+
+    /// <summary>
+    /// Version folder names that should be preserved during pruning.
+    /// </summary>
+    public string[] InstallPreserveVersions { get; }
+
+    /// <summary>
     /// When true, installs missing module dependencies before running the build.
     /// </summary>
     public bool InstallMissingModules { get; }
@@ -236,11 +266,120 @@ public sealed class ModulePipelinePlan
         string expectedVersion,
         string resolvedVersion,
         string? preRelease,
+        ManifestConfiguration? manifest,
         ModuleBuildSpec buildSpec,
+        string? resolvedCsprojPath,
+        bool syncNETProjectVersion,
         string[] compatiblePSEditions,
-        ManifestEditor.RequiredModule[] requiredModules,
+        RequiredModuleReference[] requiredModules,
         string[] externalModuleDependencies,
-        ManifestEditor.RequiredModule[] requiredModulesForPackaging,
+        RequiredModuleReference[] requiredModulesForPackaging,
+        InformationConfiguration? information,
+        DocumentationConfiguration? documentation,
+        DeliveryOptionsConfiguration? delivery,
+        BuildDocumentationConfiguration? documentationBuild,
+        CompatibilitySettings? compatibilitySettings,
+        FileConsistencySettings? fileConsistencySettings,
+        ModuleValidationSettings? validationSettings,
+        ConfigurationFormattingSegment? formatting,
+        ImportModulesConfiguration? importModules,
+        PlaceHolderReplacement[] placeHolders,
+        PlaceHolderOptionConfiguration? placeHolderOption,
+        IReadOnlyDictionary<string, string[]> commandModuleDependencies,
+        TestConfiguration[] testsAfterMerge,
+        bool mergeModule,
+        bool mergeMissing,
+        bool doNotAttemptToFixRelativePaths,
+        string[] approvedModules,
+        ModuleSkipConfiguration? moduleSkip,
+        bool signModule,
+        SigningOptionsConfiguration? signing,
+        ConfigurationPublishSegment[] publishes,
+        ConfigurationArtefactSegment[] artefacts,
+        bool installEnabled,
+        InstallationStrategy installStrategy,
+        int installKeepVersions,
+        string[] installRoots,
+        LegacyFlatModuleHandling installLegacyFlatHandling,
+        string[] installPreserveVersions,
+        bool installMissingModules,
+        bool installMissingModulesForce,
+        bool installMissingModulesPrerelease,
+        string? installMissingModulesRepository,
+        RepositoryCredential? installMissingModulesCredential,
+        bool stagingWasGenerated,
+        bool deleteGeneratedStagingAfterRun)
+        : this(
+            moduleName,
+            projectRoot,
+            expectedVersion,
+            resolvedVersion,
+            preRelease,
+            manifest,
+            buildSpec,
+            resolvedCsprojPath,
+            syncNETProjectVersion,
+            compatiblePSEditions,
+            requiredModules,
+            externalModuleDependencies,
+            requiredModulesForPackaging,
+            information,
+            documentation,
+            delivery,
+            documentationBuild,
+            compatibilitySettings,
+            fileConsistencySettings,
+            validationSettings,
+            formatting,
+            importModules,
+            placeHolders,
+            placeHolderOption,
+            commandModuleDependencies,
+            testsAfterMerge,
+            Array.Empty<ConfigurationAppleAppSegment>(),
+            Array.Empty<ConfigurationXcodeProjectVersionSegment>(),
+            mergeModule,
+            mergeMissing,
+            doNotAttemptToFixRelativePaths,
+            approvedModules,
+            moduleSkip,
+            signModule,
+            signing,
+            publishes,
+            artefacts,
+            installEnabled,
+            installStrategy,
+            installKeepVersions,
+            installRoots,
+            installLegacyFlatHandling,
+            installPreserveVersions,
+            installMissingModules,
+            installMissingModulesForce,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            stagingWasGenerated,
+            deleteGeneratedStagingAfterRun)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new plan instance.
+    /// </summary>
+    public ModulePipelinePlan(
+        string moduleName,
+        string projectRoot,
+        string expectedVersion,
+        string resolvedVersion,
+        string? preRelease,
+        ManifestConfiguration? manifest,
+        ModuleBuildSpec buildSpec,
+        string? resolvedCsprojPath,
+        bool syncNETProjectVersion,
+        string[] compatiblePSEditions,
+        RequiredModuleReference[] requiredModules,
+        string[] externalModuleDependencies,
+        RequiredModuleReference[] requiredModulesForPackaging,
         InformationConfiguration? information,
         DocumentationConfiguration? documentation,
         DeliveryOptionsConfiguration? delivery,
@@ -258,6 +397,7 @@ public sealed class ModulePipelinePlan
         ConfigurationXcodeProjectVersionSegment[] xcodeProjectVersions,
         bool mergeModule,
         bool mergeMissing,
+        bool doNotAttemptToFixRelativePaths,
         string[] approvedModules,
         ModuleSkipConfiguration? moduleSkip,
         bool signModule,
@@ -268,6 +408,8 @@ public sealed class ModulePipelinePlan
         InstallationStrategy installStrategy,
         int installKeepVersions,
         string[] installRoots,
+        LegacyFlatModuleHandling installLegacyFlatHandling,
+        string[] installPreserveVersions,
         bool installMissingModules,
         bool installMissingModulesForce,
         bool installMissingModulesPrerelease,
@@ -281,7 +423,10 @@ public sealed class ModulePipelinePlan
         ExpectedVersion = expectedVersion;
         ResolvedVersion = resolvedVersion;
         PreRelease = preRelease;
+        Manifest = manifest;
         BuildSpec = buildSpec;
+        ResolvedCsprojPath = resolvedCsprojPath;
+        SyncNETProjectVersion = syncNETProjectVersion;
         CompatiblePSEditions = compatiblePSEditions;
         RequiredModules = requiredModules;
         ExternalModuleDependencies = externalModuleDependencies ?? Array.Empty<string>();
@@ -303,6 +448,7 @@ public sealed class ModulePipelinePlan
         XcodeProjectVersions = xcodeProjectVersions ?? Array.Empty<ConfigurationXcodeProjectVersionSegment>();
         MergeModule = mergeModule;
         MergeMissing = mergeMissing;
+        DoNotAttemptToFixRelativePaths = doNotAttemptToFixRelativePaths;
         ApprovedModules = approvedModules ?? Array.Empty<string>();
         ModuleSkip = moduleSkip;
         SignModule = signModule;
@@ -313,6 +459,8 @@ public sealed class ModulePipelinePlan
         InstallStrategy = installStrategy;
         InstallKeepVersions = installKeepVersions;
         InstallRoots = installRoots;
+        InstallLegacyFlatHandling = installLegacyFlatHandling;
+        InstallPreserveVersions = installPreserveVersions ?? Array.Empty<string>();
         InstallMissingModules = installMissingModules;
         InstallMissingModulesForce = installMissingModulesForce;
         InstallMissingModulesPrerelease = installMissingModulesPrerelease;

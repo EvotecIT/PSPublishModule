@@ -1,0 +1,355 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Management.Automation.Language;
+
+namespace PowerForge;
+
+internal sealed class PowerShellMarkdownExampleIndentClassifier : IMarkdownExampleIndentClassifier
+{
+    public static PowerShellMarkdownExampleIndentClassifier Instance { get; } = new();
+
+    private PowerShellMarkdownExampleIndentClassifier()
+    {
+    }
+
+    public string NormalizeAfterSharedIndent(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return code;
+
+        try
+        {
+            var normalized = code.Replace("\r\n", "\n").Replace('\r', '\n');
+            var lines = normalized.Split('\n');
+            var ast = Parser.ParseInput(normalized, out var tokens, out var errors);
+            var errorLines = GetErrorLines(errors);
+            var commentLines = GetCommentLines(tokens);
+            var hereStringLines = GetHereStringLines(tokens);
+
+            var statements = ast.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
+            if (statements.Length == 0)
+                return normalized;
+
+            var firstStatementIndex = FindFirstUsableStatementIndex(statements, errorLines);
+            if (firstStatementIndex < 0)
+                return normalized;
+
+            // Mixed command/output examples are ambiguous when the output is valid PowerShell syntax.
+            // Keep this parser-backed and avoid command-name or keyword allow/deny lists here.
+            var firstStatement = statements[firstStatementIndex];
+            var firstLine = lines[firstStatement.Extent.StartLineNumber - 1];
+            if (firstLine.Length == 0)
+                return normalized;
+
+            var linesToNormalize = FindLinesToNormalize(statements, firstStatementIndex, errorLines, firstLine);
+            if (linesToNormalize.Count == 0)
+                return normalized;
+
+            var indent = GetCommonIndent(lines, linesToNormalize);
+            if (indent < 8)
+                return normalized;
+
+            if (statements.Length == 1 && !ShouldNormalizeSingleStatement(firstStatement, lines, linesToNormalize, commentLines, hereStringLines, indent))
+                return normalized;
+
+            AddIndentedCommentLines(lines, commentLines, linesToNormalize, indent, firstStatement.Extent.EndLineNumber - 1);
+
+            foreach (var lineIndex in linesToNormalize)
+            {
+                lines[lineIndex] = RemoveLeadingWhitespace(lines[lineIndex], indent);
+            }
+
+            return string.Join("\n", lines);
+        }
+        catch (Exception)
+        {
+            return code;
+        }
+    }
+
+    private static HashSet<int> GetErrorLines(ParseError[] errors)
+    {
+        var lines = new HashSet<int>();
+        foreach (var error in errors)
+        {
+            var start = Math.Max(1, error.Extent.StartLineNumber);
+            var end = Math.Max(start, error.Extent.EndLineNumber);
+            for (var line = start; line <= end; line++)
+            {
+                lines.Add(line);
+            }
+        }
+
+        return lines;
+    }
+
+    private static HashSet<int> GetCommentLines(Token[] tokens)
+    {
+        var lines = new HashSet<int>();
+        foreach (var token in tokens)
+        {
+            if (token.Kind != TokenKind.Comment)
+                continue;
+
+            var start = Math.Max(1, token.Extent.StartLineNumber);
+            var end = Math.Max(start, token.Extent.EndLineNumber);
+            for (var line = start; line <= end; line++)
+            {
+                lines.Add(line - 1);
+            }
+        }
+
+        return lines;
+    }
+
+    private static HashSet<int> GetHereStringLines(Token[] tokens)
+    {
+        var lines = new HashSet<int>();
+        foreach (var token in tokens)
+        {
+            if (token.Kind != TokenKind.HereStringExpandable && token.Kind != TokenKind.HereStringLiteral)
+                continue;
+
+            var start = Math.Max(1, token.Extent.StartLineNumber);
+            var end = Math.Max(start, token.Extent.EndLineNumber);
+            for (var line = start; line <= end; line++)
+            {
+                lines.Add(line - 1);
+            }
+        }
+
+        return lines;
+    }
+
+    private static int FindFirstUsableStatementIndex(StatementAst[] statements, HashSet<int> errorLines)
+    {
+        for (var i = 0; i < statements.Length; i++)
+        {
+            if (!errorLines.Contains(statements[i].Extent.StartLineNumber))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static HashSet<int> FindLinesToNormalize(
+        StatementAst[] statements,
+        int firstStatementIndex,
+        HashSet<int> errorLines,
+        string firstLine)
+    {
+        var firstStatement = statements[firstStatementIndex];
+        var lines = new HashSet<int>();
+        if (ParsesWithoutErrors(firstLine))
+        {
+            if (firstStatement is not AssignmentStatementAst)
+                return lines;
+
+            AddStatementLines(statements, firstStatementIndex + 1, errorLines, lines);
+            return lines;
+        }
+
+        if (firstStatement is AssignmentStatementAst assignment)
+        {
+            if (!ContainsStructuredMultilineRightHandSide(assignment))
+                return lines;
+
+            AddStatementLines(firstStatement, errorLines, lines, skipFirstLine: true);
+            AddStatementLines(statements, firstStatementIndex + 1, errorLines, lines);
+            return lines;
+        }
+
+        if (firstStatement.Extent.EndLineNumber <= firstStatement.Extent.StartLineNumber)
+            return lines;
+
+        AddStatementLines(firstStatement, errorLines, lines, skipFirstLine: true);
+        AddStatementLines(statements, firstStatementIndex + 1, errorLines, lines);
+        return lines;
+    }
+
+    private static void AddStatementLines(
+        StatementAst[] statements,
+        int startIndex,
+        HashSet<int> errorLines,
+        HashSet<int> lines)
+    {
+        for (var i = startIndex; i < statements.Length; i++)
+        {
+            AddStatementLines(statements[i], errorLines, lines, skipFirstLine: false);
+        }
+    }
+
+    private static void AddStatementLines(
+        StatementAst statement,
+        HashSet<int> errorLines,
+        HashSet<int> lines,
+        bool skipFirstLine)
+    {
+        var start = statement.Extent.StartLineNumber + (skipFirstLine ? 1 : 0);
+        for (var line = start; line <= statement.Extent.EndLineNumber; line++)
+        {
+            if (!errorLines.Contains(line) || IsInsideMultilineStatement(statement, line))
+                lines.Add(line - 1);
+        }
+    }
+
+    private static bool IsInsideMultilineStatement(StatementAst statement, int line)
+        => statement.Extent.EndLineNumber > statement.Extent.StartLineNumber
+            && line > statement.Extent.StartLineNumber
+            && line <= statement.Extent.EndLineNumber;
+
+    private static bool ParsesWithoutErrors(string code)
+    {
+        Parser.ParseInput(code, out _, out var errors);
+        return errors.Length == 0;
+    }
+
+    private static bool ContainsStructuredMultilineRightHandSide(AssignmentStatementAst assignment)
+        => assignment.Right.Find(
+            static ast => ast is ArrayExpressionAst
+                || ast is ArrayLiteralAst
+                || ast is HashtableAst
+                || ast is ScriptBlockExpressionAst,
+            searchNestedScriptBlocks: true) is not null;
+
+    private static int GetCommonIndent(string[] lines, HashSet<int> lineIndexes)
+    {
+        var common = int.MaxValue;
+        foreach (var lineIndex in lineIndexes)
+        {
+            if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
+                continue;
+
+            var indent = CountLeadingWhitespace(lines[lineIndex]);
+            if (indent == 0)
+                continue;
+
+            common = Math.Min(common, indent);
+        }
+
+        return common == int.MaxValue ? 0 : common;
+    }
+
+    private static bool HasNestedIndent(string[] lines, HashSet<int> lineIndexes, int commonIndent)
+    {
+        foreach (var lineIndex in lineIndexes)
+        {
+            if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
+                continue;
+
+            if (CountLeadingWhitespace(lines[lineIndex]) > commonIndent)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ShouldNormalizeSingleStatement(
+        StatementAst statement,
+        string[] lines,
+        HashSet<int> lineIndexes,
+        HashSet<int> commentLines,
+        HashSet<int> hereStringLines,
+        int commonIndent)
+    {
+        if (!IsSingleCommandScriptBlockStatement(statement))
+            return false;
+
+        if (!HasNestedIndent(lines, lineIndexes, commonIndent))
+            return false;
+
+        foreach (var lineIndex in lineIndexes)
+        {
+            if (lineIndex < 0 || lineIndex >= lines.Length || string.IsNullOrWhiteSpace(lines[lineIndex]))
+                continue;
+
+            if (CountLeadingWhitespace(lines[lineIndex]) != commonIndent)
+                continue;
+
+            if (hereStringLines.Contains(lineIndex))
+                return false;
+
+            if (commentLines.Contains(lineIndex))
+                continue;
+
+            if (!IsClosingDelimiterLine(lines[lineIndex]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsSingleCommandScriptBlockStatement(StatementAst statement)
+    {
+        if (statement is AssignmentStatementAst assignment)
+            return IsSingleCommandScriptBlockStatement(assignment.Right);
+
+        if (statement is not PipelineAst pipeline || pipeline.PipelineElements.Count != 1)
+            return false;
+
+        if (pipeline.PipelineElements[0] is not CommandAst command)
+            return false;
+
+        return command.CommandElements.Any(static element => element is ScriptBlockExpressionAst);
+    }
+
+    private static bool IsClosingDelimiterLine(string line)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.Length == 0 || (trimmed[0] != '}' && trimmed[0] != ')' && trimmed[0] != ']'))
+            return false;
+
+        if (trimmed.Length == 1)
+            return true;
+
+        var remainder = trimmed.Substring(1).TrimStart();
+        return remainder.StartsWith("-", StringComparison.Ordinal)
+            || remainder.StartsWith("|", StringComparison.Ordinal);
+    }
+
+    private static void AddIndentedCommentLines(
+        string[] lines,
+        HashSet<int> commentLines,
+        HashSet<int> linesToNormalize,
+        int indent,
+        int startLineIndex)
+    {
+        if (linesToNormalize.Count == 0)
+            return;
+
+        var endLineIndex = linesToNormalize.Max();
+        for (var lineIndex = Math.Max(0, startLineIndex); lineIndex <= endLineIndex; lineIndex++)
+        {
+            if (!commentLines.Contains(lineIndex))
+                continue;
+
+            if (lineIndex >= lines.Length || CountLeadingWhitespace(lines[lineIndex]) < indent)
+                continue;
+
+            linesToNormalize.Add(lineIndex);
+        }
+    }
+
+    private static int CountLeadingWhitespace(string line)
+    {
+        var count = 0;
+        while (count < line.Length && (line[count] == ' ' || line[count] == '\t'))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    private static string RemoveLeadingWhitespace(string line, int count)
+    {
+        var remove = 0;
+        while (remove < line.Length && remove < count && (line[remove] == ' ' || line[remove] == '\t'))
+        {
+            remove++;
+        }
+
+        return remove == 0 ? line : line.Substring(remove);
+    }
+}

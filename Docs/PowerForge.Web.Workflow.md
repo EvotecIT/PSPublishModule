@@ -47,7 +47,7 @@ content/
   docs/
   blog/
 projects/
-  HtmlForgeX/
+  ExampleLibrary/
     project.json
     content/
       pages/
@@ -74,7 +74,8 @@ powerforge-web build --config ./site.json --out ./Artifacts/site
 Output:
 - `Artifacts/site/` (final HTML, CSS, JS, images)
 - `Artifacts/site/_powerforge/` (build meta, plan/spec/redirects)
-- `Artifacts/site/search.json` (search index)
+- `Artifacts/site/search/index.json` (search index, all languages)
+- `Artifacts/site/search/<lang>/index.json` (per-language shard when localization is enabled)
 - `Artifacts/site/redirects.json` (if redirects were defined)
 - `Artifacts/site/_powerforge/linkcheck.json` (if link check enabled)
 
@@ -90,23 +91,26 @@ Example pipeline:
     { "task": "build", "config": "./site.json", "out": "./Artifacts/site" },
     {
       "task": "apidocs",
-      "type": "csharp",
-      "xmlPath": "./Artifacts/generated/MyLibrary.xml",
-      "assemblyPath": "./Artifacts/generated/MyLibrary.dll",
-      "outputPath": "./Artifacts/site/api",
+      "config": "./site.json",
+      "type": "CSharp",
+      "xml": "./Artifacts/generated/MyLibrary.xml",
+      "assembly": "./Artifacts/generated/MyLibrary.dll",
+      "out": "./Artifacts/site/api",
       "baseUrl": "/api",
       "format": "json"
     },
     {
       "task": "apidocs",
-      "type": "csharp",
-      "xmlPath": "./Artifacts/generated/MyLibrary.xml",
-      "assemblyPath": "./Artifacts/generated/MyLibrary.dll",
-      "outputPath": "./Artifacts/site/api-docs",
+      "config": "./site.json",
+      "type": "CSharp",
+      "xml": "./Artifacts/generated/MyLibrary.xml",
+      "assembly": "./Artifacts/generated/MyLibrary.dll",
+      "out": "./Artifacts/site/api-docs",
       "baseUrl": "/api",
       "format": "hybrid",
-      "headerHtmlPath": "./apidocs/header.html",
-      "footerHtmlPath": "./apidocs/footer.html"
+      "headerHtml": "./apidocs/header.html",
+      "footerHtml": "./apidocs/footer.html",
+      "nav": "./site.json"
     },
     { "task": "sitemap", "siteRoot": "./Artifacts/site", "baseUrl": "https://example.com", "html": true },
     { "task": "optimize", "siteRoot": "./Artifacts/site" }
@@ -123,7 +127,7 @@ PowerForge.Web emits redirects in two ways:
 Build output writes:
 - `Artifacts/site/_powerforge/redirects.json` (full list)
 
-That file can be transformed into host-specific formats later (Netlify, nginx, etc).
+PowerForge.Web emits common host redirect files (`_redirects`, `staticwebapp.config.json`, `vercel.json`, `.htaccess`, `nginx.redirects.conf`, `web.config`) and keeps the full canonical list in `_powerforge/redirects.json`.
 
 ## 7) Assets and theming (central control)
 
@@ -166,4 +170,4 @@ Artifacts/
 - `Docs/PowerForge.Web.ContentSpec.md`
 - `Docs/PowerForge.Web.Theme.md`
 - `Docs/PowerForge.Web.Pipeline.md`
-- `Docs/PowerForge.Web.CodeGlyphX.Build.md`
+- `Docs/PowerForge.Web.WebsiteStarter.md`

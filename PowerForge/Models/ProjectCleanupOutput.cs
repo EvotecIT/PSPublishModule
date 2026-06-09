@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Output object returned by <see cref="ProjectCleanupService"/> when detailed results are requested.
+/// Output object returned by the project cleanup workflow when detailed results are requested.
 /// </summary>
 public sealed class ProjectCleanupOutput
 {
@@ -11,4 +11,3 @@ public sealed class ProjectCleanupOutput
     /// <summary>Per-item results.</summary>
     public ProjectCleanupItemResult[] Results { get; set; } = System.Array.Empty<ProjectCleanupItemResult>();
 }
-

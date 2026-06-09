@@ -27,6 +27,7 @@ public static class WebSitePlanner
             ConfigPath = fullConfigPath,
             RootPath = root,
             ContentRoot = ResolvePath(root, spec.ContentRoot),
+            ContentRoots = ResolvePaths(root, spec.ContentRoots),
             ProjectsRoot = ResolvePath(root, spec.ProjectsRoot),
             ThemesRoot = ResolvePath(root, spec.ThemesRoot),
             SharedRoot = ResolvePath(root, spec.SharedRoot),
@@ -109,6 +110,20 @@ public static class WebSitePlanner
         if (Path.IsPathRooted(path))
             return Path.GetFullPath(path);
         return Path.GetFullPath(Path.Combine(root, path));
+    }
+
+    private static string[] ResolvePaths(string root, string[]? paths)
+    {
+        if (paths is null || paths.Length == 0)
+            return Array.Empty<string>();
+
+        return paths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolvePath(root, path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToArray();
     }
 
     private static int CountMarkdownFiles(string? path, string[]? includePatterns, string[]? excludePatterns)

@@ -1,95 +1,20 @@
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlTinkerX;
 
 namespace PowerForge.Web;
 
-/// <summary>Options for static site audit.</summary>
-public sealed class WebAuditOptions
-{
-    /// <summary>Root directory of the generated site.</summary>
-    public string SiteRoot { get; set; } = ".";
-    /// <summary>Optional include glob patterns (relative to site root).</summary>
-    public string[] Include { get; set; } = Array.Empty<string>();
-    /// <summary>Optional exclude glob patterns (relative to site root).</summary>
-    public string[] Exclude { get; set; } = Array.Empty<string>();
-    /// <summary>When true, apply built-in exclude patterns for partial HTML files.</summary>
-    public bool UseDefaultExcludes { get; set; } = true;
-    /// <summary>When true, validate HTML structure.</summary>
-    public bool CheckHtmlStructure { get; set; } = true;
-    /// <summary>When true, enforce non-empty page titles.</summary>
-    public bool CheckTitles { get; set; } = true;
-    /// <summary>When true, detect duplicate element IDs.</summary>
-    public bool CheckDuplicateIds { get; set; } = true;
-    /// <summary>When true, validate internal links.</summary>
-    public bool CheckLinks { get; set; } = true;
-    /// <summary>When true, validate local assets (CSS/JS/images).</summary>
-    public bool CheckAssets { get; set; } = true;
-    /// <summary>When true, check nav consistency across pages.</summary>
-    public bool CheckNavConsistency { get; set; } = true;
-    /// <summary>CSS selector used to identify the nav container.</summary>
-    public string NavSelector { get; set; } = "nav";
-    /// <summary>Optional glob patterns to skip nav checks for specific pages.</summary>
-    public string[] IgnoreNavFor { get; set; } = new[]
-    {
-        "api-docs/**",
-        "docs/api/**",
-        "api/**"
-    };
-    /// <summary>Require all pages to contain a nav element.</summary>
-    public bool NavRequired { get; set; } = true;
-    /// <summary>Skip nav checks on pages that match a prefix list (path-based).</summary>
-    public string[] NavIgnorePrefixes { get; set; } = Array.Empty<string>();
-    /// <summary>When true, run rendered (Playwright) checks.</summary>
-    public bool CheckRendered { get; set; }
-    /// <summary>Maximum number of pages to render (0 = all).</summary>
-    public int RenderedMaxPages { get; set; } = 20;
-    /// <summary>Optional include glob patterns for rendered checks.</summary>
-    public string[] RenderedInclude { get; set; } = Array.Empty<string>();
-    /// <summary>Optional exclude glob patterns for rendered checks.</summary>
-    public string[] RenderedExclude { get; set; } = Array.Empty<string>();
-    /// <summary>Browser engine name for rendered checks.</summary>
-    public string RenderedEngine { get; set; } = "Chromium";
-    /// <summary>When true, auto-install Playwright browsers before rendered checks.</summary>
-    public bool RenderedEnsureInstalled { get; set; }
-    /// <summary>Base URL for rendered checks (if set, uses HTTP instead of file://).</summary>
-    public string? RenderedBaseUrl { get; set; }
-    /// <summary>When true, start a local static server for rendered checks if no base URL is provided.</summary>
-    public bool RenderedServe { get; set; } = true;
-    /// <summary>Host for the local rendered server.</summary>
-    public string RenderedServeHost { get; set; } = "localhost";
-    /// <summary>Port for the local rendered server (0 = auto).</summary>
-    public int RenderedServePort { get; set; }
-    /// <summary>Run rendered checks in headless mode.</summary>
-    public bool RenderedHeadless { get; set; } = true;
-    /// <summary>Rendered check timeout in milliseconds.</summary>
-    public int RenderedTimeoutMs { get; set; } = 30000;
-    /// <summary>When true, flag console errors during rendered checks.</summary>
-    public bool RenderedCheckConsoleErrors { get; set; } = true;
-    /// <summary>When true, record console warnings during rendered checks.</summary>
-    public bool RenderedCheckConsoleWarnings { get; set; } = true;
-    /// <summary>When true, flag failed network requests during rendered checks.</summary>
-    public bool RenderedCheckFailedRequests { get; set; } = true;
-    /// <summary>Optional path to write audit summary JSON (relative to site root if not rooted).</summary>
-    public string? SummaryPath { get; set; }
-    /// <summary>Maximum number of issues to include in the summary.</summary>
-    public int SummaryMaxIssues { get; set; } = 10;
-}
-
 /// <summary>Audits generated HTML output using static checks.</summary>
-public static class WebSiteAuditor
+public static partial class WebSiteAuditor
 {
     private static readonly string[] DefaultHtmlExtensions = { ".html", ".htm" };
     private static readonly string[] IgnoreLinkPrefixes = { "#", "mailto:", "tel:", "javascript:", "data:", "blob:" };
+    private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
+    private const long MaxAuditDataFileSizeBytes = 10 * 1024 * 1024;
     private const int RenderedDetailLimit = 3;
-    private static readonly string[] DefaultExcludePatterns =
-    {
-        "*.scripts.html",
-        "**/*.scripts.html",
-        "*.head.html",
-        "**/*.head.html",
-        "**/api-fragments/**",
-        "api-fragments/**"
-    };
 
     /// <summary>Runs static audit checks on a generated site output.</summary>
     /// <param name="options">Audit options.</param>
@@ -106,33 +31,300 @@ public static class WebSiteAuditor
 
         var errors = new List<string>();
         var warnings = new List<string>();
-        var htmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes).ToList();
-        if (htmlFiles.Count == 0)
+        var issues = new List<WebAuditIssue>();
+        var suppressIssuePatterns = WebSuppressionMatcher.NormalizePatterns(options.SuppressIssues);
+        var maxTotalFiles = Math.Max(0, options.MaxTotalFiles);
+        var totalFileCountTruncated = false;
+        var totalFileCount = maxTotalFiles > 0
+            ? CountAllFiles(siteRoot, maxTotalFiles, options.BudgetExclude, options.UseDefaultExcludes, out totalFileCountTruncated)
+            : 0;
+        var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var hasHtmlIncludeScope = options.Include.Any(pattern => !string.IsNullOrWhiteSpace(pattern));
+        // Sitemap-wide SEO checks must still inspect every generated page when the main
+        // audit is narrowed with Include/MaxHtmlFiles for a fast page sample.
+        var sitemapSeoHtmlFiles = options.CheckSeoMeta
+            ? hasHtmlIncludeScope
+                ? EnumerateHtmlFiles(siteRoot, Array.Empty<string>(), options.Exclude, options.UseDefaultExcludes)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : allHtmlFiles
+            : new List<string>();
+        var htmlFiles = allHtmlFiles;
+        if (options.MaxHtmlFiles > 0 && htmlFiles.Count > options.MaxHtmlFiles)
+            htmlFiles = htmlFiles.Take(options.MaxHtmlFiles).ToList();
+        var htmlFileCount = allHtmlFiles.Count;
+        var htmlSelectedFileCount = htmlFiles.Count;
+        var navIgnorePrefixes = options.NavIgnorePrefixes
+            .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
+            .Select(prefix => prefix.Trim().TrimStart('/'))
+            .ToArray();
+        var failCategories = options.FailOnCategories
+            .Where(category => !string.IsNullOrWhiteSpace(category))
+            .Select(category => category.Trim().ToLowerInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var failIssuePatterns = WebSuppressionMatcher.NormalizePatterns(options.FailOnIssueCodes);
+        var minNavCoveragePercent = Math.Clamp(options.MinNavCoveragePercent, 0, 100);
+
+        void AddIssue(string severity, string category, string? path, string message, string? keyHint = null)
         {
-            warnings.Add("No HTML files found to audit.");
+            var normalizedSeverity = string.IsNullOrWhiteSpace(severity)
+                ? "warning"
+                : severity.Trim().ToLowerInvariant();
+            var normalizedCategory = string.IsNullOrWhiteSpace(category)
+                ? "general"
+                : category.Trim().ToLowerInvariant();
+            var issuePath = string.IsNullOrWhiteSpace(path) ? null : path.Replace('\\', '/');
+            var issueText = string.IsNullOrWhiteSpace(issuePath)
+                ? message
+                : $"{issuePath}: {message}";
+            var issueHint = NormalizeIssueToken(keyHint ?? message);
+            var issueKey = BuildIssueKey(normalizedSeverity, normalizedCategory, issuePath, issueHint);
+
+            var suppressionCode = BuildIssueCategoryCode(normalizedCategory);
+            var issueCode = BuildIssueRuleCode(normalizedCategory, issueHint);
+            if (suppressIssuePatterns.Length > 0)
+            {
+                var suppressionText = $"[{suppressionCode}] [{issueCode}] {issueText} (hint:{issueHint}) (key:{issueKey})";
+                if (WebSuppressionMatcher.IsSuppressed(suppressionText, suppressionCode, suppressIssuePatterns))
+                    return;
+            }
+
+            var issueLine = $"[{suppressionCode}] {issueText}";
+            issues.Add(new WebAuditIssue
+            {
+                Severity = normalizedSeverity,
+                Category = normalizedCategory,
+                Code = issueCode,
+                Hint = issueHint,
+                Path = issuePath,
+                Message = message,
+                Key = issueKey
+            });
+
+            if (normalizedSeverity == "error")
+                errors.Add(issueLine);
+            else
+                warnings.Add(issueLine);
         }
 
-        var baselineNavSignature = (string?)null;
+        if (htmlFiles.Count == 0)
+            AddIssue("warning", "general", null, "No HTML files found to audit.", "no-html");
+
+        if (maxTotalFiles > 0 && totalFileCount > maxTotalFiles)
+        {
+            var countLabel = totalFileCountTruncated ? $"> {maxTotalFiles}" : totalFileCount.ToString();
+            AddIssue("warning", "budget", null, $"total file count under site root exceeds budget: {countLabel} (budget {maxTotalFiles}).", "max-total-files");
+        }
+
+        var baselineNavSignatures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var baselineNavSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pageCount = 0;
         var linkCount = 0;
         var brokenLinkCount = 0;
         var assetCount = 0;
         var missingAssetCount = 0;
         var navMismatchCount = 0;
+        var navCheckedCount = 0;
+        var navIgnoredCount = 0;
+        var navMissing = new Dictionary<string, (int Count, List<string> Samples)>(StringComparer.OrdinalIgnoreCase);
         var duplicateIdCount = 0;
+        var requiredRouteCount = 0;
+        var missingRequiredRouteCount = 0;
+        var forbiddenRouteCount = 0;
+        var presentForbiddenRouteCount = 0;
         var renderedPageCount = 0;
         var renderedConsoleErrorCount = 0;
         var renderedConsoleWarningCount = 0;
         var renderedFailedRequestCount = 0;
+        var renderedContrastIssueCount = 0;
+        var requiredNavLinks = options.NavRequiredLinks
+            .Where(link => !string.IsNullOrWhiteSpace(link))
+            .Select(NormalizeNavHref)
+            .Where(link => !string.IsNullOrWhiteSpace(link))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var navProfiles = NormalizeNavProfiles(options.NavProfiles);
+        var mediaProfiles = NormalizeMediaProfiles(options.MediaProfiles);
+        var redirectMap = LoadAuditRedirectMap(siteRoot);
+        var canonicalNavLinks = Array.Empty<string>();
+
+        if (options.CheckNavConsistency && !string.IsNullOrWhiteSpace(options.NavCanonicalPath))
+        {
+            var canonicalPath = ResolveSummaryPath(siteRoot, options.NavCanonicalPath);
+            if (!File.Exists(canonicalPath))
+            {
+                var missingMessage = $"Canonical nav file not found: {ToRelative(siteRoot, canonicalPath)}.";
+                if (options.NavCanonicalRequired)
+                    AddIssue("error", "nav", null, missingMessage, "nav-canonical-missing");
+                else
+                    AddIssue("warning", "nav", null, missingMessage, "nav-canonical-missing");
+            }
+            else
+            {
+                try
+                {
+                    var canonicalHtml = File.ReadAllText(canonicalPath);
+                    var canonicalDoc = HtmlParser.ParseWithAngleSharp(canonicalHtml);
+                    var selector = string.IsNullOrWhiteSpace(options.NavCanonicalSelector)
+                        ? options.NavSelector
+                        : options.NavCanonicalSelector!;
+                    var canonicalNav = canonicalDoc.QuerySelector(selector);
+                    if (canonicalNav is null)
+                    {
+                        var selectorMessage = $"Canonical nav selector '{selector}' was not found in {ToRelative(siteRoot, canonicalPath)}.";
+                        if (options.NavCanonicalRequired)
+                            AddIssue("error", "nav", null, selectorMessage, "nav-canonical-selector");
+                        else
+                            AddIssue("warning", "nav", null, selectorMessage, "nav-canonical-selector");
+                    }
+                    else
+                    {
+                        var canonicalScope = BuildNavScopeKey(null, selector);
+                        baselineNavSignatures[canonicalScope] = BuildNavSignature(canonicalNav);
+                        baselineNavSources[canonicalScope] = ToRelative(siteRoot, canonicalPath);
+                        canonicalNavLinks = canonicalNav.QuerySelectorAll("a[href]")
+                            .Select(anchor => NormalizeNavHref(anchor.GetAttribute("href")))
+                            .Where(link => !string.IsNullOrWhiteSpace(link))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToArray();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    var parseMessage = $"Canonical nav parse failed ({ex.Message}).";
+                    if (options.NavCanonicalRequired)
+                        AddIssue("error", "nav", null, parseMessage, "nav-canonical-parse");
+                    else
+                        AddIssue("warning", "nav", null, parseMessage, "nav-canonical-parse");
+                }
+            }
+        }
+
+        if (canonicalNavLinks.Length > 0)
+        {
+            requiredNavLinks = requiredNavLinks
+                .Concat(canonicalNavLinks)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        var requiredRoutes = options.RequiredRoutes
+            .Where(route => !string.IsNullOrWhiteSpace(route))
+            .Select(route => route.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        HashSet<string>? routeFileSet = null;
+        HashSet<string> GetRouteFileSet()
+        {
+            return routeFileSet ??= new HashSet<string>(
+                EnumerateRouteFiles(siteRoot, options.Exclude, options.UseDefaultExcludes)
+                    .Select(path => Path.GetRelativePath(siteRoot, path).Replace('\\', '/')),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        requiredRouteCount = requiredRoutes.Length;
+        if (requiredRoutes.Length > 0)
+        {
+            var generatedRoutes = GetRouteFileSet();
+            foreach (var requiredRoute in requiredRoutes)
+            {
+                var candidates = ResolveRequiredRouteCandidates(requiredRoute);
+                if (candidates.Length == 0)
+                    continue;
+
+                var exists = candidates.Any(candidate => generatedRoutes.Contains(candidate));
+                if (exists)
+                    continue;
+
+                missingRequiredRouteCount++;
+                var expected = string.Join(", ", candidates.Select(path => "/" + path));
+                AddIssue("error", "route", null,
+                    $"required route '{requiredRoute}' is missing. Expected one of: {expected}.",
+                    $"required-route:{requiredRoute}");
+            }
+        }
+
+        var forbiddenRoutes = options.ForbiddenRoutes
+            .Where(route => !string.IsNullOrWhiteSpace(route))
+            .Select(route => route.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        forbiddenRouteCount = forbiddenRoutes.Length;
+        if (forbiddenRoutes.Length > 0)
+        {
+            var generatedRoutes = GetRouteFileSet();
+            foreach (var forbiddenRoute in forbiddenRoutes)
+            {
+                var candidates = ResolveRequiredRouteCandidates(forbiddenRoute);
+                if (candidates.Length == 0)
+                    continue;
+
+                var matches = candidates
+                    .Where(candidate => generatedRoutes.Contains(candidate))
+                    .ToArray();
+                if (matches.Length == 0)
+                    continue;
+
+                presentForbiddenRouteCount++;
+                var matched = string.Join(", ", matches.Select(path => "/" + path));
+                AddIssue("error", "route", null,
+                    $"forbidden route '{forbiddenRoute}' exists. Matched: {matched}.",
+                    $"forbidden-route:{forbiddenRoute}");
+            }
+        }
+
+        HashSet<string>? baselineIssueKeys = null;
+        var baselineKeysAreHashed = false;
+        var baselineExplicitlyEmpty = false;
+        string? baselinePath = null;
+        if (!string.IsNullOrWhiteSpace(options.BaselinePath))
+        {
+            baselinePath = ResolveBaselinePath(siteRoot, options.BaselineRoot, options.BaselinePath);
+            baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue, out baselineKeysAreHashed, out baselineExplicitlyEmpty);
+
+            // Best practice: fail-on-new requires a usable baseline. If it's missing/empty, fail clearly
+            // rather than treating every issue as "new" (which makes the failure noisy and harder to diagnose).
+            if (options.FailOnNewIssues && baselineIssueKeys.Count == 0 && !baselineExplicitlyEmpty)
+            {
+                AddIssue("error", "gate", null,
+                    $"Audit gate failed: fail-on-new is enabled but the baseline is missing/empty: {ToRelative(siteRoot, baselinePath)}.",
+                    "gate-baseline-fail-on-new");
+                baselineIssueKeys = null;
+            }
+        }
+        else if (options.FailOnNewIssues)
+        {
+            AddIssue("error", "gate", null,
+                "Audit gate failed: fail-on-new is enabled but no baselinePath was provided.",
+                "gate-baseline-fail-on-new");
+        }
+
+        const int NavMissingSampleLimit = 5;
+        void RecordNavMissing(string selector, string relativePath)
+        {
+            var key = string.IsNullOrWhiteSpace(selector) ? "nav" : selector.Trim();
+            if (!navMissing.TryGetValue(key, out var entry))
+                entry = (0, new List<string>(NavMissingSampleLimit));
+
+            entry.Count++;
+            if (entry.Samples.Count < NavMissingSampleLimit)
+                entry.Samples.Add(relativePath);
+
+            navMissing[key] = entry;
+        }
 
         foreach (var file in htmlFiles)
         {
             pageCount++;
             var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
-            var html = File.ReadAllText(file);
+            var html = options.CheckUtf8
+                ? ReadFileAsUtf8(file, relativePath, AddIssue)
+                : File.ReadAllText(file);
             if (string.IsNullOrWhiteSpace(html))
             {
-                warnings.Add($"{relativePath}: empty HTML file.");
+                AddIssue("warning", "html", relativePath, "empty HTML file.", "empty-html");
                 continue;
             }
 
@@ -143,24 +335,49 @@ public static class WebSiteAuditor
             }
             catch (Exception ex)
             {
-                errors.Add($"{relativePath}: failed to parse HTML ({ex.Message}).");
+                AddIssue("error", "html", relativePath, $"failed to parse HTML ({ex.Message}).", "parse-html");
                 continue;
             }
+
+            if (options.CheckUtf8 && options.CheckUnicodeReplacementChars && html.IndexOf('\uFFFD') >= 0)
+                AddIssue("warning", "utf8", relativePath, "contains replacement characters (�).", "replacement-char");
+
+            var routePath = ToRoutePath(relativePath);
+
+            if (options.CheckUtf8 && options.CheckMetaCharset && !HasUtf8Meta(doc))
+                AddIssue("warning", "utf8", relativePath, "missing UTF-8 meta charset declaration.", "meta-charset");
 
             if (options.CheckHtmlStructure)
             {
                 if (doc.DocumentElement is null || !string.Equals(doc.DocumentElement.TagName, "HTML", StringComparison.OrdinalIgnoreCase))
-                    warnings.Add($"{relativePath}: missing <html> root element.");
+                    AddIssue("warning", "structure", relativePath, "missing <html> root element.", "html-root");
                 if (doc.Head is null)
-                    warnings.Add($"{relativePath}: missing <head> section.");
+                    AddIssue("warning", "structure", relativePath, "missing <head> section.", "head");
                 if (doc.Body is null)
-                    warnings.Add($"{relativePath}: missing <body> section.");
+                    AddIssue("warning", "structure", relativePath, "missing <body> section.", "body");
             }
+
+            if (options.CheckNetworkHints)
+                ValidateNetworkHints(doc, relativePath, AddIssue);
+
+            if (options.CheckRenderBlockingResources)
+            {
+                var maxHeadBlockingResources = Math.Max(0, options.MaxHeadBlockingResources);
+                ValidateHeadRenderBlocking(doc, relativePath, maxHeadBlockingResources, AddIssue);
+            }
+
+            var mediaIgnored = options.IgnoreMediaFor.Length > 0 &&
+                               MatchesAny(options.IgnoreMediaFor, relativePath);
+            var mediaProfile = ResolveMediaProfile(relativePath, mediaProfiles);
+            if (mediaProfile?.Ignore == true)
+                mediaIgnored = true;
+            if (options.CheckMediaEmbeds && !mediaIgnored)
+                ValidateMediaEmbeds(doc, html, relativePath, mediaProfile, AddIssue);
 
             if (options.CheckTitles)
             {
                 if (string.IsNullOrWhiteSpace(doc.Title))
-                    errors.Add($"{relativePath}: missing <title>.");
+                    AddIssue("error", "title", relativePath, "missing <title>.", "title");
             }
 
             if (options.CheckDuplicateIds)
@@ -177,34 +394,72 @@ public static class WebSiteAuditor
                 if (duplicateIds.Length > 0)
                 {
                     duplicateIdCount += duplicateIds.Length;
-                    warnings.Add($"{relativePath}: duplicate id(s) detected: {string.Join(", ", duplicateIds)}.");
+                    AddIssue("warning", "duplicate-id", relativePath, $"duplicate id(s) detected: {string.Join(", ", duplicateIds)}.", string.Join('|', duplicateIds));
                 }
             }
 
+            if (options.CheckHeadingOrder)
+                ValidateHeadingOrder(doc, relativePath, AddIssue);
+
+            if (options.CheckSeoMeta)
+                ValidateSeoMetadata(doc, html, relativePath, AddIssue);
+
+            if (options.CheckLinkPurposeConsistency)
+                ValidateLinkPurposeConsistency(doc, relativePath, redirectMap, AddIssue);
+
+            var navProfile = ResolveNavProfile(relativePath, navProfiles);
+            var navSelector = !string.IsNullOrWhiteSpace(navProfile?.Selector)
+                ? navProfile!.Selector!
+                : options.NavSelector;
+            var navRequired = navProfile?.Required ?? options.NavRequired;
+            var requiredNavLinksForPage = MergeRequiredNavLinks(requiredNavLinks, navProfile);
             var navIgnored = options.IgnoreNavFor.Length > 0 &&
                              MatchesAny(options.IgnoreNavFor, relativePath);
-            var prefixIgnored = options.NavIgnorePrefixes.Length > 0 &&
-                                options.NavIgnorePrefixes.Any(prefix =>
-                                    relativePath.StartsWith(prefix.TrimStart('/'), StringComparison.OrdinalIgnoreCase));
-            if (options.CheckNavConsistency && !navIgnored && !prefixIgnored)
+            var prefixIgnored = navIgnorePrefixes.Length > 0 &&
+                                navIgnorePrefixes.Any(prefix => relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            var profileIgnored = navProfile?.Ignore ?? false;
+            if (options.CheckNavConsistency && (navIgnored || prefixIgnored || profileIgnored))
+                navIgnoredCount++;
+            if (options.CheckNavConsistency && !navIgnored && !prefixIgnored && !profileIgnored)
             {
-                var navElement = doc.QuerySelector(options.NavSelector);
+                navCheckedCount++;
+                var navElement = doc.QuerySelector(navSelector);
                 if (navElement is null)
                 {
-                    if (options.NavRequired)
-                        warnings.Add($"{relativePath}: nav not found using selector '{options.NavSelector}'.");
+                    if (navRequired)
+                        RecordNavMissing(navSelector, relativePath);
                 }
                 else
                 {
+                    var navScope = BuildNavScopeKey(navProfile, navSelector);
                     var signature = BuildNavSignature(navElement);
-                    if (baselineNavSignature is null)
+                    if (!baselineNavSignatures.TryGetValue(navScope, out var baselineNavSignature))
                     {
-                        baselineNavSignature = signature;
+                        baselineNavSignatures[navScope] = signature;
+                        baselineNavSources[navScope] = relativePath;
                     }
                     else if (!string.Equals(baselineNavSignature, signature, StringComparison.Ordinal))
                     {
                         navMismatchCount++;
-                        warnings.Add($"{relativePath}: nav differs from baseline.");
+                        baselineNavSources.TryGetValue(navScope, out var baselineNavSource);
+                        var sourceLabel = string.IsNullOrWhiteSpace(baselineNavSource) ? "baseline" : baselineNavSource;
+                        AddIssue("warning", "nav", relativePath, $"nav differs from baseline ({sourceLabel}).", "nav-mismatch");
+                    }
+
+                    if (requiredNavLinksForPage.Length > 0)
+                    {
+                        var navLinks = navElement.QuerySelectorAll("a[href]")
+                            .Select(a => NormalizeNavHref(a.GetAttribute("href")))
+                            .Where(link => !string.IsNullOrWhiteSpace(link))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                        var missing = requiredNavLinksForPage
+                            .Where(required => !navLinks.Contains(required))
+                            .ToArray();
+
+                        if (missing.Length > 0)
+                            AddIssue("warning", "nav", relativePath, $"nav missing required links: {string.Join(", ", missing)}.", string.Join('|', missing));
                     }
                 }
             }
@@ -228,7 +483,7 @@ public static class WebSiteAuditor
                         if (!File.Exists(resolvedPath))
                         {
                             brokenLinkCount++;
-                            errors.Add($"{relativePath}: broken link '{href}' -> {ToRelative(siteRoot, resolvedPath)}");
+                            AddIssue("error", "link", relativePath, $"broken link '{href}' -> {ToRelative(siteRoot, resolvedPath)}", href);
                         }
                     }
                 }
@@ -246,7 +501,7 @@ public static class WebSiteAuditor
                     if (!File.Exists(resolvedPath))
                     {
                         missingAssetCount++;
-                        errors.Add($"{relativePath}: missing asset '{href}' -> {ToRelative(siteRoot, resolvedPath)}");
+                        AddIssue("error", "asset", relativePath, $"missing asset '{href}' -> {ToRelative(siteRoot, resolvedPath)}", href);
                     }
                 }
 
@@ -263,16 +518,39 @@ public static class WebSiteAuditor
                         if (!File.Exists(resolvedPath))
                         {
                             missingAssetCount++;
-                            errors.Add($"{relativePath}: missing asset '{src}' -> {ToRelative(siteRoot, resolvedPath)}");
+                            AddIssue("error", "asset", relativePath, $"missing asset '{src}' -> {ToRelative(siteRoot, resolvedPath)}", src);
                         }
                     }
                 }
             }
         }
 
+        if (navMissing.Count > 0)
+        {
+            foreach (var entry in navMissing.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var selector = entry.Key;
+                var count = entry.Value.Count;
+                var samples = entry.Value.Samples;
+                var sampleText = samples.Count > 0 ? $" Sample: {string.Join(", ", samples)}." : string.Empty;
+                AddIssue("warning", "nav", null,
+                    $"nav not found using selector '{selector}' on {count} page(s).{sampleText}",
+                    $"nav-missing:{selector}");
+            }
+        }
+
+        if (options.CheckSeoMeta)
+        {
+            var sitemapSeoScan = CollectSitemapSeoMetadata(siteRoot, sitemapSeoHtmlFiles, AddIssue);
+            ValidateSitemapSeoConsistency(siteRoot, sitemapSeoScan.NoIndexRoutes, sitemapSeoScan.PagesByRoute, AddIssue);
+        }
+
         if (options.CheckRendered && htmlFiles.Count > 0)
         {
-            var engine = ResolveEngine(options.RenderedEngine, warnings);
+            var renderedWarnings = new List<string>();
+            var engine = ResolveEngine(options.RenderedEngine, renderedWarnings);
+            foreach (var warning in renderedWarnings)
+                AddIssue("warning", "rendered", null, warning, "rendered-engine");
             if (options.RenderedEnsureInstalled)
             {
                 try
@@ -289,7 +567,7 @@ public static class WebSiteAuditor
                     {
                         // ignore secondary failure, use original message for visibility
                     }
-                    warnings.Add($"Rendered audit install failed: {ex.Message}");
+                    AddIssue("warning", "rendered", null, $"Rendered audit install failed: {ex.Message}", "rendered-install");
                 }
             }
             var renderedFiles = FilterRenderedFiles(siteRoot, htmlFiles, options.RenderedInclude, options.RenderedExclude);
@@ -297,12 +575,18 @@ public static class WebSiteAuditor
                 ? renderedFiles.Count
                 : Math.Min(renderedFiles.Count, options.RenderedMaxPages);
 
-            var (baseUrl, serverCts, serverTask) = EnsureRenderedBaseUrl(siteRoot, options, warnings);
+            var serveWarnings = new List<string>();
+            var (baseUrl, serverCts, serverTask) = EnsureRenderedBaseUrl(siteRoot, options, serveWarnings);
+            foreach (var warning in serveWarnings)
+                AddIssue("warning", "rendered", null, warning, "rendered-serve");
             foreach (var file in renderedFiles.Take(maxPages))
             {
                 var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
                 try
                 {
+                    var renderedTarget = string.IsNullOrWhiteSpace(baseUrl)
+                        ? new Uri(Path.GetFullPath(file)).AbsoluteUri
+                        : CombineUrl(baseUrl, ToRoutePath(relativePath));
                     var renderedResult = string.IsNullOrWhiteSpace(baseUrl)
                         ? HtmlBrowserTester.TestFileAsync(
                             file,
@@ -310,16 +594,17 @@ public static class WebSiteAuditor
                             options.RenderedHeadless,
                             options.RenderedTimeoutMs).GetAwaiter().GetResult()
                         : HtmlBrowserTester.TestUrlAsync(
-                            CombineUrl(baseUrl, ToRoutePath(relativePath)),
+                            renderedTarget,
                             engine,
                             options.RenderedHeadless,
                             options.RenderedTimeoutMs).GetAwaiter().GetResult();
 
                     if (IsPlaywrightMissing(renderedResult.ConsoleErrors, out var missingMessage))
                     {
-                        warnings.Add(string.IsNullOrWhiteSpace(missingMessage)
+                        AddIssue("warning", "rendered", relativePath, string.IsNullOrWhiteSpace(missingMessage)
                             ? "Rendered audit skipped: Playwright browsers not installed."
-                            : $"Rendered audit skipped: Playwright browsers not installed. {missingMessage}");
+                            : $"Rendered audit skipped: Playwright browsers not installed. {missingMessage}",
+                            "rendered-playwright");
                         break;
                     }
 
@@ -329,32 +614,74 @@ public static class WebSiteAuditor
                     {
                         renderedConsoleErrorCount += renderedResult.ErrorCount;
                         var detail = BuildConsoleSummary(renderedResult.ConsoleErrors, RenderedDetailLimit);
-                        errors.Add(string.IsNullOrWhiteSpace(detail)
-                            ? $"{relativePath}: console errors ({renderedResult.ErrorCount})."
-                            : $"{relativePath}: console errors ({renderedResult.ErrorCount}) -> {detail}");
+                        AddIssue("error", "rendered-console-error", relativePath, string.IsNullOrWhiteSpace(detail)
+                            ? $"console errors ({renderedResult.ErrorCount})."
+                            : $"console errors ({renderedResult.ErrorCount}) -> {detail}",
+                            "rendered-console-errors");
                     }
 
                     if (options.RenderedCheckConsoleWarnings && renderedResult.WarningCount > 0)
                     {
                         renderedConsoleWarningCount += renderedResult.WarningCount;
                         var detail = BuildConsoleSummary(renderedResult.ConsoleWarnings, RenderedDetailLimit);
-                        warnings.Add(string.IsNullOrWhiteSpace(detail)
-                            ? $"{relativePath}: console warnings ({renderedResult.WarningCount})."
-                            : $"{relativePath}: console warnings ({renderedResult.WarningCount}) -> {detail}");
+                        AddIssue("warning", "rendered-console-warning", relativePath, string.IsNullOrWhiteSpace(detail)
+                            ? $"console warnings ({renderedResult.WarningCount})."
+                            : $"console warnings ({renderedResult.WarningCount}) -> {detail}",
+                            "rendered-console-warnings");
                     }
 
                     if (options.RenderedCheckFailedRequests && renderedResult.FailedRequestCount > 0)
                     {
                         renderedFailedRequestCount += renderedResult.FailedRequestCount;
                         var detail = BuildFailedRequestSummary(renderedResult.FailedRequests, RenderedDetailLimit);
-                        errors.Add(string.IsNullOrWhiteSpace(detail)
-                            ? $"{relativePath}: failed network requests ({renderedResult.FailedRequestCount})."
-                            : $"{relativePath}: failed network requests ({renderedResult.FailedRequestCount}) -> {detail}");
+                        AddIssue("error", "rendered-request-failure", relativePath, string.IsNullOrWhiteSpace(detail)
+                            ? $"failed network requests ({renderedResult.FailedRequestCount})."
+                            : $"failed network requests ({renderedResult.FailedRequestCount}) -> {detail}",
+                            "rendered-failed-requests");
+                    }
+
+                    if (options.RenderedCheckContrast)
+                    {
+                        try
+                        {
+                            var contrastFindings = FindRenderedContrastIssues(
+                                renderedTarget,
+                                engine,
+                                options.RenderedHeadless,
+                                options.RenderedTimeoutMs,
+                                options.RenderedContrastMinRatio,
+                                options.RenderedContrastMaxFindings);
+                            if (contrastFindings.Length > 0)
+                            {
+                                renderedContrastIssueCount += contrastFindings.Length;
+                                var detail = BuildRenderedContrastSummary(contrastFindings, RenderedDetailLimit);
+                                AddIssue("warning", "rendered-contrast", relativePath, string.IsNullOrWhiteSpace(detail)
+                                    ? $"low-contrast text detected ({contrastFindings.Length})."
+                                    : $"low-contrast text detected ({contrastFindings.Length}) -> {detail}",
+                                    "rendered-contrast-low");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            var message = ex.Message?.Trim() ?? string.Empty;
+                            if (message.IndexOf("executable doesn't exist", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                message.IndexOf("playwright", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                AddIssue("warning", "rendered-contrast", relativePath,
+                                    "Rendered contrast audit skipped: Playwright browsers not installed.",
+                                    "rendered-contrast-playwright");
+                                break;
+                            }
+
+                            AddIssue("warning", "rendered-contrast", relativePath,
+                                $"Rendered contrast audit failed ({message}).",
+                                "rendered-contrast-failed");
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"{relativePath}: rendered audit failed ({ex.Message}).");
+                    AddIssue("error", "rendered", relativePath, $"rendered audit failed ({ex.Message}).", "rendered-failed");
                 }
             }
 
@@ -368,41 +695,177 @@ public static class WebSiteAuditor
             }
         }
 
+        if (baselineIssueKeys is not null)
+        {
+            foreach (var issue in issues)
+            {
+                if (issue is null || string.IsNullOrWhiteSpace(issue.Key))
+                    continue;
+                var key = baselineKeysAreHashed ? WebAuditKeyHasher.Hash(issue.Key) : issue.Key;
+                issue.IsNew = string.IsNullOrWhiteSpace(key) || !baselineIssueKeys.Contains(key);
+            }
+        }
+
+        var navTotalCount = navCheckedCount + navIgnoredCount;
+        var navCoveragePercent = navTotalCount == 0
+            ? 100d
+            : (double)navCheckedCount * 100d / navTotalCount;
+
+        var preGateErrorCount = errors.Count;
+        var preGateWarningCount = warnings.Count;
+        var preGateNewIssueCount = issues.Count(issue => issue.IsNew);
+
+        if (failCategories.Count > 0)
+        {
+            var categoryHits = issues.Count(issue => failCategories.Contains(issue.Category));
+            if (categoryHits > 0)
+            {
+                AddIssue("error", "gate", null,
+                    $"Audit gate failed: {categoryHits} issue(s) match fail categories [{string.Join(", ", failCategories.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))}].",
+                    "gate-category");
+            }
+        }
+
+        if (failIssuePatterns.Length > 0)
+        {
+            var issueHits = issues.Count(issue =>
+                !issue.Category.Equals("gate", StringComparison.OrdinalIgnoreCase) &&
+                MatchesFailIssuePatterns(issue, failIssuePatterns));
+            if (issueHits > 0)
+            {
+                AddIssue("error", "gate", null,
+                    $"Audit gate failed: {issueHits} issue(s) match fail issue codes [{string.Join(", ", failIssuePatterns.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))}].",
+                    "gate-issue-code");
+            }
+        }
+
+        if (options.MaxErrors >= 0 && preGateErrorCount > options.MaxErrors)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: errors {preGateErrorCount} exceed max-errors {options.MaxErrors}.",
+                "gate-max-errors");
+        }
+
+        if (options.MaxWarnings >= 0 && preGateWarningCount > options.MaxWarnings)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: warnings {preGateWarningCount} exceed max-warnings {options.MaxWarnings}.",
+                "gate-max-warnings");
+        }
+
+        if (options.CheckNavConsistency && minNavCoveragePercent > 0 && navTotalCount > 0 &&
+            navCoveragePercent < minNavCoveragePercent)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: nav coverage {navCoveragePercent:0.0}% is below min-nav-coverage {minNavCoveragePercent}%.",
+                "gate-nav-coverage");
+        }
+
+        if (options.FailOnWarnings && preGateWarningCount > 0)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: warnings present ({preGateWarningCount}) and fail-on-warnings is enabled.",
+                "gate-fail-warnings");
+        }
+
+        if (options.FailOnNewIssues && preGateNewIssueCount > 0)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: new issues present ({preGateNewIssueCount}) and fail-on-new is enabled.",
+                "gate-fail-new");
+        }
+
+        if (baselineIssueKeys is not null)
+        {
+            foreach (var issue in issues)
+            {
+                if (issue is null || string.IsNullOrWhiteSpace(issue.Key))
+                    continue;
+                var key = baselineKeysAreHashed ? WebAuditKeyHasher.Hash(issue.Key) : issue.Key;
+                issue.IsNew = string.IsNullOrWhiteSpace(key) || !baselineIssueKeys.Contains(key);
+            }
+        }
+
+        var errorCount = errors.Count;
+        var warningCount = warnings.Count;
+        var newIssueCount = issues.Count(issue => issue.IsNew);
+        var newErrorCount = issues.Count(issue => issue.IsNew && issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+        var newWarningCount = issues.Count(issue => issue.IsNew && issue.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase));
+
         var result = new WebAuditResult
         {
-            Success = errors.Count == 0,
+            Success = errorCount == 0,
+            HtmlFileCount = htmlFileCount,
+            HtmlSelectedFileCount = htmlSelectedFileCount,
             PageCount = pageCount,
+            TotalFileCount = totalFileCount,
             LinkCount = linkCount,
             BrokenLinkCount = brokenLinkCount,
             AssetCount = assetCount,
             MissingAssetCount = missingAssetCount,
             NavMismatchCount = navMismatchCount,
+            NavCheckedCount = navCheckedCount,
+            NavIgnoredCount = navIgnoredCount,
+            NavTotalCount = navTotalCount,
+            NavCoveragePercent = navCoveragePercent,
             DuplicateIdCount = duplicateIdCount,
+            RequiredRouteCount = requiredRouteCount,
+            MissingRequiredRouteCount = missingRequiredRouteCount,
+            ForbiddenRouteCount = forbiddenRouteCount,
+            PresentForbiddenRouteCount = presentForbiddenRouteCount,
             RenderedPageCount = renderedPageCount,
             RenderedConsoleErrorCount = renderedConsoleErrorCount,
             RenderedConsoleWarningCount = renderedConsoleWarningCount,
             RenderedFailedRequestCount = renderedFailedRequestCount,
+            RenderedContrastIssueCount = renderedContrastIssueCount,
+            ErrorCount = errorCount,
+            WarningCount = warningCount,
+            NewIssueCount = newIssueCount,
+            NewErrorCount = newErrorCount,
+            NewWarningCount = newWarningCount,
+            BaselinePath = baselinePath,
+            BaselineIssueCount = baselineIssueKeys?.Count ?? 0,
+            Issues = issues.ToArray(),
             Errors = errors.ToArray(),
             Warnings = warnings.ToArray()
         };
 
-        if (!string.IsNullOrWhiteSpace(options.SummaryPath))
+        if (!string.IsNullOrWhiteSpace(options.SummaryPath) &&
+            (!options.SummaryOnFailOnly || !result.Success))
         {
             var summaryPath = ResolveSummaryPath(siteRoot, options.SummaryPath);
             var summary = new WebAuditSummary
             {
                 Success = result.Success,
                 PageCount = result.PageCount,
+                TotalFileCount = result.TotalFileCount,
                 LinkCount = result.LinkCount,
                 BrokenLinkCount = result.BrokenLinkCount,
                 AssetCount = result.AssetCount,
                 MissingAssetCount = result.MissingAssetCount,
                 NavMismatchCount = result.NavMismatchCount,
+                NavCheckedCount = result.NavCheckedCount,
+                NavIgnoredCount = result.NavIgnoredCount,
+                NavTotalCount = result.NavTotalCount,
+                NavCoveragePercent = result.NavCoveragePercent,
                 DuplicateIdCount = result.DuplicateIdCount,
+                RequiredRouteCount = result.RequiredRouteCount,
+                MissingRequiredRouteCount = result.MissingRequiredRouteCount,
+                ForbiddenRouteCount = result.ForbiddenRouteCount,
+                PresentForbiddenRouteCount = result.PresentForbiddenRouteCount,
                 RenderedPageCount = result.RenderedPageCount,
                 RenderedConsoleErrorCount = result.RenderedConsoleErrorCount,
                 RenderedConsoleWarningCount = result.RenderedConsoleWarningCount,
                 RenderedFailedRequestCount = result.RenderedFailedRequestCount,
+                RenderedContrastIssueCount = result.RenderedContrastIssueCount,
+                ErrorCount = result.ErrorCount,
+                WarningCount = result.WarningCount,
+                NewIssueCount = result.NewIssueCount,
+                NewErrorCount = result.NewErrorCount,
+                NewWarningCount = result.NewWarningCount,
+                BaselinePath = result.BaselinePath,
+                BaselineIssueCount = result.BaselineIssueCount,
+                Issues = TakeIssues(result.Issues, options.SummaryMaxIssues),
                 Errors = TakeIssues(result.Errors, options.SummaryMaxIssues),
                 Warnings = TakeIssues(result.Warnings, options.SummaryMaxIssues)
             };
@@ -410,474 +873,14 @@ public static class WebSiteAuditor
             result.SummaryPath = summaryPath;
         }
 
+        if (!string.IsNullOrWhiteSpace(options.SarifPath) &&
+            (!options.SarifOnFailOnly || !result.Success))
+        {
+            var sarifPath = ResolveSummaryPath(siteRoot, options.SarifPath);
+            WriteSarif(sarifPath, result.Issues, warnings);
+            result.SarifPath = sarifPath;
+        }
+
         return result;
-    }
-
-    private static IEnumerable<string> EnumerateHtmlFiles(string root, string[] includePatterns, string[] excludePatterns, bool useDefaultExcludes)
-    {
-        var includes = NormalizePatterns(includePatterns);
-        var excludes = BuildExcludePatterns(excludePatterns, useDefaultExcludes);
-        var files = Directory.EnumerateFiles(root, "*.html", SearchOption.AllDirectories)
-            .Concat(Directory.EnumerateFiles(root, "*.htm", SearchOption.AllDirectories));
-
-        foreach (var file in files)
-        {
-            var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
-            if (excludes.Length > 0 && MatchesAny(excludes, relative))
-                continue;
-            if (includes.Length > 0 && !MatchesAny(includes, relative))
-                continue;
-            yield return file;
-        }
-    }
-
-    private static string[] NormalizePatterns(string[] patterns)
-    {
-        return patterns
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p.Replace('\\', '/').Trim())
-            .ToArray();
-    }
-
-    private static string[] BuildExcludePatterns(string[] patterns, bool useDefaults)
-    {
-        var list = NormalizePatterns(patterns).ToList();
-        if (useDefaults)
-        {
-            list.AddRange(DefaultExcludePatterns);
-        }
-        return list
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static bool MatchesAny(string[] patterns, string value)
-    {
-        foreach (var pattern in patterns)
-        {
-            if (GlobMatch(pattern, value))
-                return true;
-        }
-        return false;
-    }
-
-    private static bool GlobMatch(string pattern, string value)
-    {
-        if (string.IsNullOrWhiteSpace(pattern)) return false;
-        var regex = "^" + Regex.Escape(pattern)
-            .Replace("\\*\\*", ".*")
-            .Replace("\\*", "[^/]*") + "$";
-        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
-    }
-
-    private static bool ShouldSkipLink(string href)
-    {
-        if (string.IsNullOrWhiteSpace(href)) return true;
-        foreach (var prefix in IgnoreLinkPrefixes)
-        {
-            if (href.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
-    }
-
-    private static bool IsExternalLink(string href)
-    {
-        if (string.IsNullOrWhiteSpace(href)) return false;
-        if (href.StartsWith("//")) return true;
-        return href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-               href.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string StripQueryAndFragment(string href)
-    {
-        var trimmed = href.Trim();
-        var queryIndex = trimmed.IndexOf('?');
-        if (queryIndex >= 0)
-            trimmed = trimmed.Substring(0, queryIndex);
-        var hashIndex = trimmed.IndexOf('#');
-        if (hashIndex >= 0)
-            trimmed = trimmed.Substring(0, hashIndex);
-        return trimmed;
-    }
-
-    private static bool TryResolveLocalTarget(string siteRoot, string baseDir, string href, out string resolvedPath)
-    {
-        resolvedPath = string.Empty;
-        if (string.IsNullOrWhiteSpace(href)) return false;
-
-        var cleaned = StripQueryAndFragment(href);
-        if (string.IsNullOrWhiteSpace(cleaned)) return false;
-
-        var isRooted = cleaned.StartsWith("/");
-        var isExplicitDir = cleaned.EndsWith("/");
-        var relative = isRooted ? cleaned.TrimStart('/') : cleaned;
-        relative = relative.Replace('/', Path.DirectorySeparatorChar);
-
-        var candidateBase = isRooted ? siteRoot : baseDir;
-        var candidate = Path.GetFullPath(Path.Combine(candidateBase, relative));
-        if (!candidate.StartsWith(siteRoot, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        if (isExplicitDir)
-        {
-            var dir = candidate.TrimEnd(Path.DirectorySeparatorChar);
-            var indexPath = Path.Combine(dir, "index.html");
-            if (File.Exists(indexPath))
-            {
-                resolvedPath = indexPath;
-                return true;
-            }
-
-            resolvedPath = indexPath;
-            return true;
-        }
-
-        if (Path.HasExtension(candidate))
-        {
-            resolvedPath = candidate;
-            return true;
-        }
-
-        foreach (var ext in DefaultHtmlExtensions)
-        {
-            var htmlCandidate = candidate + ext;
-            if (File.Exists(htmlCandidate))
-            {
-                resolvedPath = htmlCandidate;
-                return true;
-            }
-        }
-
-        var indexCandidate = Path.Combine(candidate, "index.html");
-        resolvedPath = indexCandidate;
-        return true;
-    }
-
-    private static string? ResolveBaseHref(AngleSharp.Dom.IDocument doc)
-    {
-        var baseElement = doc.QuerySelector("base[href]");
-        if (baseElement is null) return null;
-        var href = baseElement.GetAttribute("href");
-        if (string.IsNullOrWhiteSpace(href)) return null;
-        if (IsExternalLink(href)) return null;
-        if (!href.StartsWith("/", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-        return href.TrimEnd('/');
-    }
-
-    private static string BuildNavSignature(AngleSharp.Dom.IElement nav)
-    {
-        var tokens = new List<string>();
-        foreach (var link in nav.QuerySelectorAll("a"))
-        {
-            var href = link.GetAttribute("href") ?? string.Empty;
-            var text = link.TextContent?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(text))
-                text = link.GetAttribute("aria-label") ?? link.GetAttribute("title") ?? string.Empty;
-            tokens.Add($"{href.Trim()}|{text.Trim()}");
-        }
-        return string.Join("||", tokens);
-    }
-
-    private static IEnumerable<string> GetAssetHrefs(AngleSharp.Dom.IDocument doc)
-    {
-        foreach (var link in doc.QuerySelectorAll("link[href]"))
-        {
-            var rel = (link.GetAttribute("rel") ?? string.Empty).ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(rel))
-                continue;
-
-            if (rel.Contains("stylesheet") || rel.Contains("icon") || rel.Contains("manifest") || rel.Contains("preload"))
-            {
-                var href = link.GetAttribute("href");
-                if (!string.IsNullOrWhiteSpace(href))
-                    yield return href;
-            }
-        }
-
-        foreach (var script in doc.QuerySelectorAll("script[src]"))
-        {
-            var src = script.GetAttribute("src");
-            if (!string.IsNullOrWhiteSpace(src))
-                yield return src;
-        }
-
-        foreach (var img in doc.QuerySelectorAll("img[src]"))
-        {
-            var src = img.GetAttribute("src");
-            if (!string.IsNullOrWhiteSpace(src))
-                yield return src;
-        }
-
-        foreach (var source in doc.QuerySelectorAll("source[src]"))
-        {
-            var src = source.GetAttribute("src");
-            if (!string.IsNullOrWhiteSpace(src))
-                yield return src;
-        }
-    }
-
-    private static IEnumerable<string> GetAssetSrcSets(AngleSharp.Dom.IDocument doc)
-    {
-        foreach (var img in doc.QuerySelectorAll("img[srcset]"))
-        {
-            var srcset = img.GetAttribute("srcset");
-            if (!string.IsNullOrWhiteSpace(srcset))
-                yield return srcset;
-        }
-
-        foreach (var source in doc.QuerySelectorAll("source[srcset]"))
-        {
-            var srcset = source.GetAttribute("srcset");
-            if (!string.IsNullOrWhiteSpace(srcset))
-                yield return srcset;
-        }
-    }
-
-    private static IEnumerable<string> ParseSrcSet(string srcset)
-    {
-        if (string.IsNullOrWhiteSpace(srcset))
-            yield break;
-
-        var parts = srcset.Split(',');
-        foreach (var part in parts)
-        {
-            var trimmed = part.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed))
-                continue;
-            var spaceIdx = trimmed.IndexOf(' ');
-            if (spaceIdx > 0)
-                trimmed = trimmed.Substring(0, spaceIdx);
-            if (!string.IsNullOrWhiteSpace(trimmed))
-                yield return trimmed;
-        }
-    }
-
-    private static string ToRelative(string root, string path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return path;
-        var fullRoot = Path.GetFullPath(root);
-        var fullPath = Path.GetFullPath(path);
-        if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
-            return fullPath;
-        return Path.GetRelativePath(fullRoot, fullPath).Replace('\\', '/');
-    }
-
-    private static (string? BaseUrl, CancellationTokenSource? Cts, Task? ServerTask) EnsureRenderedBaseUrl(
-        string siteRoot,
-        WebAuditOptions options,
-        IList<string> warnings)
-    {
-        if (!string.IsNullOrWhiteSpace(options.RenderedBaseUrl))
-            return (options.RenderedBaseUrl.TrimEnd('/'), null, null);
-
-        if (!options.RenderedServe)
-            return (null, null, null);
-
-        var host = string.IsNullOrWhiteSpace(options.RenderedServeHost) ? "localhost" : options.RenderedServeHost;
-        var port = options.RenderedServePort;
-        if (port <= 0)
-        {
-            port = GetFreePort();
-        }
-
-        var cts = new CancellationTokenSource();
-        var task = Task.Run(() => WebStaticServer.Serve(siteRoot, host, port, cts.Token), cts.Token);
-        var baseUrl = $"http://{host}:{port}";
-        return (baseUrl, cts, task);
-    }
-
-    private static int GetFreePort()
-    {
-        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
-    private static string CombineUrl(string baseUrl, string path)
-    {
-        var trimmedBase = baseUrl.TrimEnd('/');
-        var trimmedPath = path.StartsWith("/") ? path : "/" + path;
-        return trimmedBase + trimmedPath;
-    }
-
-    private static string ToRoutePath(string relativePath)
-    {
-        if (string.IsNullOrWhiteSpace(relativePath))
-            return "/";
-
-        var normalized = relativePath.Replace('\\', '/').TrimStart('/');
-        if (normalized.EndsWith("index.html", StringComparison.OrdinalIgnoreCase))
-        {
-            var withoutIndex = normalized.Substring(0, normalized.Length - "index.html".Length);
-            if (string.IsNullOrWhiteSpace(withoutIndex))
-                return "/";
-            return "/" + withoutIndex.TrimEnd('/') + "/";
-        }
-
-        return "/" + normalized;
-    }
-
-    private static List<string> FilterRenderedFiles(string siteRoot, List<string> htmlFiles, string[] includePatterns, string[] excludePatterns)
-    {
-        var includes = NormalizePatterns(includePatterns);
-        var excludes = NormalizePatterns(excludePatterns);
-        if (includes.Length == 0 && excludes.Length == 0)
-            return htmlFiles;
-
-        var list = new List<string>();
-        foreach (var file in htmlFiles)
-        {
-            var relative = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
-            if (excludes.Length > 0 && MatchesAny(excludes, relative))
-                continue;
-            if (includes.Length > 0 && !MatchesAny(includes, relative))
-                continue;
-            list.Add(file);
-        }
-        return list;
-    }
-
-    private static string ResolveSummaryPath(string siteRoot, string summaryPath)
-    {
-        var trimmed = summaryPath.Trim();
-        var full = Path.IsPathRooted(trimmed)
-            ? trimmed
-            : Path.Combine(siteRoot, trimmed);
-        return Path.GetFullPath(full);
-    }
-
-    private static string[] TakeIssues(string[] issues, int max)
-    {
-        if (issues.Length == 0) return Array.Empty<string>();
-        if (max <= 0) return Array.Empty<string>();
-        return issues.Take(max).ToArray();
-    }
-
-    private static void WriteSummary(string summaryPath, WebAuditSummary summary, IList<string> warnings)
-    {
-        try
-        {
-            var dir = Path.GetDirectoryName(summaryPath);
-            if (!string.IsNullOrWhiteSpace(dir))
-                Directory.CreateDirectory(dir);
-            var json = System.Text.Json.JsonSerializer.Serialize(summary, new System.Text.Json.JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-            File.WriteAllText(summaryPath, json);
-        }
-        catch (Exception ex)
-        {
-            warnings.Add($"Audit summary write failed: {ex.Message}");
-        }
-    }
-
-    private static HtmlBrowserEngine ResolveEngine(string? value, IList<string> warnings)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return HtmlBrowserEngine.Chromium;
-
-        if (Enum.TryParse<HtmlBrowserEngine>(value, true, out var engine))
-            return engine;
-
-        warnings.Add($"Rendered engine '{value}' not recognized; using Chromium.");
-        return HtmlBrowserEngine.Chromium;
-    }
-
-    private static string BuildConsoleSummary(IEnumerable<object>? entries, int max)
-    {
-        return BuildRenderedSummary(entries, max, entry =>
-        {
-            var text = GetEntryString(entry, "Text") ?? entry?.ToString();
-            if (string.IsNullOrWhiteSpace(text))
-                return null;
-            var location = GetEntryString(entry, "FullLocation") ?? GetEntryString(entry, "Location");
-            return string.IsNullOrWhiteSpace(location) ? text : $"{text} ({location})";
-        });
-    }
-
-    private static string BuildFailedRequestSummary(IEnumerable<object>? entries, int max)
-    {
-        return BuildRenderedSummary(entries, max, entry =>
-        {
-            var url = GetEntryString(entry, "Url");
-            if (string.IsNullOrWhiteSpace(url))
-                url = entry?.ToString();
-
-            var method = GetEntryString(entry, "Method");
-            var status = GetEntryString(entry, "Status");
-            var error = GetEntryString(entry, "ErrorMessage") ?? GetEntryString(entry, "ErrorType");
-
-            var parts = new List<string>();
-            if (!string.IsNullOrWhiteSpace(method))
-                parts.Add(method);
-            if (!string.IsNullOrWhiteSpace(url))
-                parts.Add(url);
-            if (!string.IsNullOrWhiteSpace(status))
-                parts.Add($"status {status}");
-            if (!string.IsNullOrWhiteSpace(error))
-                parts.Add(error);
-
-            return parts.Count == 0 ? null : string.Join(" ", parts);
-        });
-    }
-
-    private static string BuildRenderedSummary(IEnumerable<object>? entries, int max, Func<object?, string?> formatter)
-    {
-        if (entries is null || max <= 0)
-            return string.Empty;
-
-        var list = new List<string>();
-        foreach (var entry in entries)
-        {
-            if (entry is null) continue;
-            var formatted = formatter(entry);
-            if (string.IsNullOrWhiteSpace(formatted))
-                continue;
-            list.Add(formatted.Trim());
-            if (list.Count >= max)
-                break;
-        }
-
-        return list.Count == 0 ? string.Empty : string.Join(" | ", list);
-    }
-
-    private static string? GetEntryString(object? entry, string property)
-    {
-        if (entry is null) return null;
-        var prop = entry.GetType().GetProperty(property);
-        if (prop is null) return null;
-        var value = prop.GetValue(entry);
-        return value?.ToString();
-    }
-
-
-    private static bool IsPlaywrightMissing(IEnumerable<object>? entries, out string? message)
-    {
-        message = null;
-        if (entries is null) return false;
-
-        foreach (var entry in entries)
-        {
-            var text = GetEntryString(entry, "Text");
-            if (string.IsNullOrWhiteSpace(text))
-                continue;
-            if (text.IndexOf("Executable doesn't exist", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                (text.IndexOf("playwright", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                 text.IndexOf("install", StringComparison.OrdinalIgnoreCase) >= 0))
-            {
-                message = text.Trim();
-                return true;
-            }
-        }
-
-        return false;
     }
 }

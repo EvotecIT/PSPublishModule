@@ -1,16 +1,20 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text;
 
 namespace PowerForge;
 
 /// <summary>
-/// Writes markdown help files in a PlatyPS-compatible structure.
+/// Writes PowerShell command markdown help files.
 /// </summary>
 internal sealed class MarkdownHelpWriter
 {
-    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private readonly IMarkdownExampleIndentClassifier? _exampleIndentClassifier;
+
+    public MarkdownHelpWriter(IMarkdownExampleIndentClassifier? exampleIndentClassifier = null)
+    {
+        _exampleIndentClassifier = exampleIndentClassifier;
+    }
 
     public void WriteCommandHelpFiles(DocumentationExtractionPayload payload, string moduleName, string docsPath)
     {
@@ -26,9 +30,9 @@ internal sealed class MarkdownHelpWriter
                      .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
                      .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion);
+            var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion, exampleIndentClassifier: _exampleIndentClassifier);
             var path = Path.Combine(docsPath, $"{cmd.Name.Trim()}.md");
-            File.WriteAllText(path, md, Utf8NoBom);
+            GeneratedTextNormalizer.WriteUtf8NoBom(path, md);
         }
     }
 
@@ -41,28 +45,26 @@ internal sealed class MarkdownHelpWriter
 
         var readmeDir = Path.GetDirectoryName(Path.GetFullPath(readmePath)) ?? Path.GetFullPath(docsPath);
 
-        var sb = new StringBuilder();
-        sb.AppendLine("---");
-        sb.AppendLine($"Module Name: {moduleName}");
-        if (!string.IsNullOrWhiteSpace(payload.ModuleGuid))
-            sb.AppendLine($"Module Guid: {payload.ModuleGuid}");
-        else
-            sb.AppendLine("Module Guid: {{ Fill in module Guid }}");
+        var doc = new MarkdownDocumentBuilder(blankLineAfterFrontMatter: false);
+        doc.FrontMatterRaw("Module Name", moduleName);
+        doc.FrontMatterRaw("Module Guid",
+            !string.IsNullOrWhiteSpace(payload.ModuleGuid)
+                ? payload.ModuleGuid!.Trim()
+                : "{{ Fill in module Guid }}");
         var downloadLink = !string.IsNullOrWhiteSpace(payload.HelpInfoUri)
             ? payload.HelpInfoUri!.Trim()
             : string.IsNullOrWhiteSpace(payload.ProjectUri) ? "{{ Update Download Link }}" : payload.ProjectUri!.Trim();
-        sb.AppendLine($"Download Help Link: {downloadLink}");
+        doc.FrontMatterRaw("Download Help Link", downloadLink);
         var helpVersion = string.IsNullOrWhiteSpace(payload.ModuleVersion)
             ? "{{ Please enter version of help manually (X.X.X.X) format }}"
             : payload.ModuleVersion!.Trim();
-        sb.AppendLine($"Help Version: {helpVersion}");
-        sb.AppendLine("Locale: en-US");
-        sb.AppendLine("---");
-        sb.AppendLine($"# {moduleName} Module");
-        sb.AppendLine("## Description");
-        sb.AppendLine(string.IsNullOrWhiteSpace(payload.ModuleDescription) ? "{{ Fill in the Description }}" : payload.ModuleDescription!.Trim());
-        sb.AppendLine();
-        sb.AppendLine($"## {moduleName} Cmdlets");
+        doc.FrontMatterRaw("Help Version", helpVersion);
+        doc.FrontMatterRaw("Locale", "en-US");
+        doc.RawLine($"# {moduleName} Module");
+        doc.RawLine("## Description");
+        doc.RawLine(string.IsNullOrWhiteSpace(payload.ModuleDescription) ? "{{ Fill in the Description }}" : payload.ModuleDescription!.Trim());
+        doc.BlankLine();
+        doc.RawLine($"## {moduleName} Cmdlets");
 
         foreach (var cmd in (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
                      .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
@@ -70,9 +72,9 @@ internal sealed class MarkdownHelpWriter
         {
             var cmdFilePath = Path.Combine(Path.GetFullPath(docsPath), $"{cmd.Name.Trim()}.md");
             var rel = GetRelativeLink(readmeDir, cmdFilePath);
-            sb.AppendLine($"### [{cmd.Name.Trim()}]({rel})");
-            sb.AppendLine(string.IsNullOrWhiteSpace(cmd.Synopsis) ? "{{ Fill in the Description }}" : cmd.Synopsis.Trim());
-            sb.AppendLine();
+            doc.RawLine($"### [{cmd.Name.Trim()}]({rel})");
+            doc.RawLine(string.IsNullOrWhiteSpace(cmd.Synopsis) ? "{{ Fill in the Description }}" : cmd.Synopsis.Trim());
+            doc.BlankLine();
         }
 
         try
@@ -81,21 +83,22 @@ internal sealed class MarkdownHelpWriter
             if (Directory.Exists(aboutDir))
             {
                 var aboutFiles = Directory.EnumerateFiles(aboutDir, "*.md", SearchOption.TopDirectoryOnly)
+                    .Where(f => !string.Equals(Path.GetFileName(f), "README.md", StringComparison.OrdinalIgnoreCase))
                     .Select(Path.GetFullPath)
                     .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
                 if (aboutFiles.Length > 0)
                 {
-                    sb.AppendLine($"## About Topics");
-                    sb.AppendLine();
+                    doc.RawLine("## About Topics");
+                    doc.BlankLine();
 
                     foreach (var f in aboutFiles)
                     {
                         var rel = GetRelativeLink(readmeDir, f);
                         var title = Path.GetFileNameWithoutExtension(f);
-                        sb.AppendLine($"### [{title}]({rel})");
-                        sb.AppendLine();
+                        doc.RawLine($"### [{title}]({rel})");
+                        doc.BlankLine();
                     }
                 }
             }
@@ -105,33 +108,36 @@ internal sealed class MarkdownHelpWriter
             // best effort
         }
 
-        File.WriteAllText(readmePath, sb.ToString(), Utf8NoBom);
+        GeneratedTextNormalizer.WriteUtf8NoBom(readmePath, doc.ToString());
     }
 
-    private static string RenderCommandMarkdown(string moduleName, DocumentationCommandHelp cmd, string? onlineVersion)
+    internal static string RenderCommandMarkdown(
+        string moduleName,
+        DocumentationCommandHelp cmd,
+        string? onlineVersion = null,
+        DocumentationExampleLayout examplesLayout = DocumentationExampleLayout.MamlDefault,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier = null)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("---");
-        sb.AppendLine($"external help file: {moduleName}-help.xml");
-        sb.AppendLine($"Module Name: {moduleName}");
-        sb.AppendLine(string.IsNullOrWhiteSpace(onlineVersion) ? "online version:" : $"online version: {onlineVersion!.Trim()}");
-        sb.AppendLine("schema: 2.0.0");
-        sb.AppendLine("---");
-        sb.AppendLine($"# {cmd.Name.Trim()}");
-        sb.AppendLine("## SYNOPSIS");
-        sb.AppendLine(string.IsNullOrWhiteSpace(cmd.Synopsis) ? "{{ Fill in the Synopsis }}" : cmd.Synopsis.Trim());
-        sb.AppendLine();
+        var doc = new MarkdownDocumentBuilder(blankLineAfterFrontMatter: false);
+        doc.FrontMatterRaw("external help file", $"{moduleName}-help.xml");
+        doc.FrontMatterRaw("Module Name", moduleName);
+        if (string.IsNullOrWhiteSpace(onlineVersion))
+            doc.FrontMatterRaw("online version");
+        else
+            doc.FrontMatterRaw("online version", onlineVersion!.Trim());
+        doc.FrontMatterRaw("schema", "2.0.0");
+        doc.RawLine($"# {cmd.Name.Trim()}");
+        doc.RawLine("## SYNOPSIS");
+        doc.RawLine(string.IsNullOrWhiteSpace(cmd.Synopsis) ? "{{ Fill in the Synopsis }}" : cmd.Synopsis.Trim());
+        doc.BlankLine();
 
-        sb.AppendLine("## SYNTAX");
+        doc.RawLine("## SYNTAX");
         var syntax = (cmd.Syntax ?? Enumerable.Empty<DocumentationSyntaxHelp>())
             .Where(s => s is not null && !string.IsNullOrWhiteSpace(s.Text))
             .ToArray();
         if (syntax.Length == 0)
         {
-            sb.AppendLine("```powershell");
-            sb.AppendLine(cmd.Name.Trim());
-            sb.AppendLine("```");
-            sb.AppendLine();
+            doc.CodeFence("powershell", cmd.Name.Trim());
         }
         else
         {
@@ -139,128 +145,169 @@ internal sealed class MarkdownHelpWriter
             {
                 var title = string.IsNullOrWhiteSpace(s.Name) ? "Default" : s.Name.Trim();
                 if (s.IsDefault) title += " (Default)";
-                sb.AppendLine($"### {title}");
-                sb.AppendLine("```powershell");
-                sb.AppendLine(s.Text.TrimEnd());
-                sb.AppendLine("```");
-                sb.AppendLine();
+                doc.RawLine($"### {title}");
+                doc.CodeFence("powershell", s.Text.TrimEnd());
             }
         }
 
-        sb.AppendLine("## DESCRIPTION");
+        doc.RawLine("## DESCRIPTION");
         var description = string.IsNullOrWhiteSpace(cmd.Description) ? cmd.Synopsis : cmd.Description;
-        sb.AppendLine(string.IsNullOrWhiteSpace(description) ? "{{ Fill in the Description }}" : description.Trim());
-        sb.AppendLine();
+        doc.RawLine(string.IsNullOrWhiteSpace(description) ? "{{ Fill in the Description }}" : description.Trim());
+        doc.BlankLine();
 
-        sb.AppendLine("## EXAMPLES");
-        sb.AppendLine();
+        doc.RawLine("## EXAMPLES");
+        doc.BlankLine();
         var examples = (cmd.Examples ?? Enumerable.Empty<DocumentationExampleHelp>())
             .Where(e => e is not null)
             .ToArray();
         if (examples.Length == 0)
         {
-            sb.AppendLine("### EXAMPLE 1");
-            sb.AppendLine("```powershell");
-            sb.AppendLine(cmd.Name.Trim());
-            sb.AppendLine("```");
-            sb.AppendLine();
+            doc.RawLine("### EXAMPLE 1");
+            doc.CodeFence("powershell", cmd.Name.Trim());
         }
         else
         {
             for (var i = 0; i < examples.Length; i++)
             {
                 var ex = examples[i];
-                sb.AppendLine($"### EXAMPLE {i + 1}");
-                sb.AppendLine("```powershell");
-                sb.AppendLine(string.IsNullOrWhiteSpace(ex.Code) ? cmd.Name.Trim() : ex.Code.Replace("\r\n", "\n").TrimEnd('\n', '\r').Replace("\n", Environment.NewLine));
-                sb.AppendLine("```");
-                if (!string.IsNullOrWhiteSpace(ex.Remarks))
+                doc.RawLine($"### EXAMPLE {i + 1}");
+                var code = RenderMarkdownExampleCode(cmd.Name.Trim(), ex, exampleIndentClassifier);
+                var remarks = (ex.Remarks ?? string.Empty).Replace("\r\n", "\n").TrimEnd('\n', '\r');
+                if (examplesLayout == DocumentationExampleLayout.ProseFirst)
                 {
-                    sb.AppendLine();
-                    sb.AppendLine(ex.Remarks.Replace("\r\n", "\n").TrimEnd('\n', '\r').Replace("\n", Environment.NewLine));
+                    if (!string.IsNullOrWhiteSpace(remarks))
+                    {
+                        doc.RawLine(remarks.Replace("\n", Environment.NewLine));
+                    }
+
+                    doc.CodeFence("powershell", code);
                 }
-                sb.AppendLine();
+                else if (examplesLayout == DocumentationExampleLayout.AllAsCode)
+                {
+                    var block = string.IsNullOrWhiteSpace(remarks)
+                        ? code
+                        : code.TrimEnd() + Environment.NewLine + Environment.NewLine + remarks.Replace("\n", Environment.NewLine);
+                    doc.CodeFence("powershell", block);
+                }
+                else
+                {
+                    doc.CodeFence("powershell", code);
+                    if (!string.IsNullOrWhiteSpace(remarks))
+                    {
+                        doc.RawLine(remarks.Replace("\n", Environment.NewLine));
+                    }
+                }
+                doc.BlankLine();
             }
         }
 
-        sb.AppendLine("## PARAMETERS");
-        sb.AppendLine();
+        doc.RawLine("## PARAMETERS");
+        doc.BlankLine();
 
         foreach (var p in (cmd.Parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
                      .Where(p => p is not null && !string.IsNullOrWhiteSpace(p.Name)))
         {
             var name = p.Name.Trim();
-            sb.AppendLine($"### -{name}");
-            sb.AppendLine(string.IsNullOrWhiteSpace(p.Description) ? $"{{{{ Fill {name} Description }}}}" : p.Description.Trim());
-            sb.AppendLine();
-            sb.AppendLine("```yaml");
-            sb.AppendLine($"Type: {p.Type}");
-            sb.AppendLine($"Parameter Sets: {FormatParameterSets(p)}");
-            sb.AppendLine($"Aliases: {FormatAliases(p)}");
-            sb.AppendLine();
-            sb.AppendLine($"Required: {Bool(p.Required)}");
-            sb.AppendLine($"Position: {p.Position}");
-            sb.AppendLine($"Default value: {DefaultValue(p.DefaultValue)}");
-            sb.AppendLine($"Accept pipeline input: {PipelineInput(p.PipelineInput)}");
-            sb.AppendLine($"Accept wildcard characters: {Bool(p.AcceptWildcardCharacters)}");
-            sb.AppendLine("```");
-            sb.AppendLine();
+            doc.RawLine($"### -{name}");
+            doc.RawLine(string.IsNullOrWhiteSpace(p.Description) ? $"{{{{ Fill {name} Description }}}}" : p.Description.Trim());
+            doc.BlankLine();
+            doc.CodeFence("yaml", string.Join(Environment.NewLine, new[]
+            {
+                $"Type: {p.Type}",
+                $"Parameter Sets: {FormatParameterSets(p)}",
+                $"Aliases: {FormatAliases(p)}",
+                $"Possible values: {FormatPossibleValues(p)}",
+                string.Empty,
+                $"Required: {Bool(p.Required)}",
+                $"Position: {p.Position}",
+                $"Default value: {DefaultValue(p.DefaultValue)}",
+                $"Accept pipeline input: {PipelineInput(p.PipelineInput)}",
+                $"Accept wildcard characters: {Bool(p.AcceptWildcardCharacters)}"
+            }));
         }
 
-        sb.AppendLine("### CommonParameters");
-        sb.AppendLine("This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).");
-        sb.AppendLine();
+        doc.RawLine("### CommonParameters");
+        doc.RawLine("This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).");
+        doc.BlankLine();
 
-        sb.AppendLine("## INPUTS");
-        sb.AppendLine();
+        doc.RawLine("## INPUTS");
+        doc.BlankLine();
         var inputs = (cmd.Inputs ?? Enumerable.Empty<DocumentationTypeHelp>())
             .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
             .ToArray();
-        if (inputs.Length == 0) sb.AppendLine("- `None`");
+        if (inputs.Length == 0) doc.RawLine("- `None`");
         foreach (var i in inputs)
         {
             var name = string.IsNullOrWhiteSpace(i.Name) ? "None" : i.Name.Trim();
             var desc = (i.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
-            sb.AppendLine(string.IsNullOrWhiteSpace(desc) ? $"- `{name}`" : $"- `{name}` — {desc}");
+            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- `{name}`" : $"- `{name}` — {desc}");
         }
-        sb.AppendLine();
+        doc.BlankLine();
 
-        sb.AppendLine("## OUTPUTS");
-        sb.AppendLine();
+        doc.RawLine("## OUTPUTS");
+        doc.BlankLine();
         var outputs = (cmd.Outputs ?? Enumerable.Empty<DocumentationTypeHelp>())
             .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
             .ToArray();
-        if (outputs.Length == 0) sb.AppendLine("- `None`");
+        if (outputs.Length == 0) doc.RawLine("- `None`");
         foreach (var o in outputs)
         {
             var name = string.IsNullOrWhiteSpace(o.Name) ? "None" : o.Name.Trim();
             var desc = (o.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
-            sb.AppendLine(string.IsNullOrWhiteSpace(desc) ? $"- `{name}`" : $"- `{name}` — {desc}");
+            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- `{name}`" : $"- `{name}` — {desc}");
         }
-        sb.AppendLine();
+        doc.BlankLine();
 
-        sb.AppendLine("## RELATED LINKS");
-        sb.AppendLine();
+        doc.RawLine("## RELATED LINKS");
+        doc.BlankLine();
         var links = (cmd.RelatedLinks ?? Enumerable.Empty<DocumentationLinkHelp>())
             .Where(l => l is not null && (!string.IsNullOrWhiteSpace(l.Text) || !string.IsNullOrWhiteSpace(l.Uri)))
             .ToArray();
-        if (links.Length == 0) sb.AppendLine("- None");
+        if (links.Length == 0) doc.RawLine("- None");
         foreach (var l in links)
         {
             var text = string.IsNullOrWhiteSpace(l.Text) ? l.Uri.Trim() : l.Text.Trim();
             if (string.IsNullOrWhiteSpace(l.Uri))
             {
-                sb.AppendLine($"- {text}");
+                doc.RawLine($"- {text}");
             }
             else
             {
                 var uri = l.Uri.Trim();
-                sb.AppendLine($"- [{text}]({uri})");
+                doc.RawLine($"- [{text}]({uri})");
             }
         }
-        sb.AppendLine();
+        doc.BlankLine();
 
-        return sb.ToString();
+        var notes = (cmd.Notes ?? Enumerable.Empty<DocumentationNoteHelp>())
+            .Where(n => n is not null && (!string.IsNullOrWhiteSpace(n.Title) || !string.IsNullOrWhiteSpace(n.Text)))
+            .ToArray();
+        if (notes.Length > 0)
+        {
+            doc.RawLine("## NOTES");
+            doc.BlankLine();
+            foreach (var note in notes)
+            {
+                var title = string.IsNullOrWhiteSpace(note.Title) ? "Note" : note.Title.Trim();
+                var text = (note.Text ?? string.Empty).Replace("\r\n", "\n").Trim();
+                doc.RawLine($"### {title}");
+                doc.BlankLine();
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    doc.RawLine("- {{ Fill in the note }}");
+                }
+                else
+                {
+                    foreach (var paragraph in text.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        doc.RawLine(paragraph.Replace("\n", Environment.NewLine).Trim());
+                        doc.BlankLine();
+                    }
+                }
+            }
+        }
+
+        return doc.ToString();
     }
 
     private static string FormatParameterSets(DocumentationParameterHelp p)
@@ -285,6 +332,17 @@ internal sealed class MarkdownHelpWriter
         return aliases.Length == 0 ? string.Empty : string.Join(", ", aliases);
     }
 
+    private static string FormatPossibleValues(DocumentationParameterHelp p)
+    {
+        var values = (p.PossibleValues ?? Enumerable.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return values.Length == 0 ? string.Empty : string.Join(", ", values);
+    }
+
     private static string DefaultValue(string value)
         => string.IsNullOrWhiteSpace(value) ? "None" : value.Trim();
 
@@ -292,6 +350,107 @@ internal sealed class MarkdownHelpWriter
         => string.IsNullOrWhiteSpace(value) ? "False" : value.Trim();
 
     private static string Bool(bool value) => value ? "True" : "False";
+
+    private static string RenderMarkdownExampleCode(
+        string commandName,
+        DocumentationExampleHelp example,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier)
+    {
+        var code = NormalizeMarkdownExampleCode(
+            string.IsNullOrWhiteSpace(example.Code) ? commandName : example.Code,
+            exampleIndentClassifier);
+
+        var introduction = (example.Introduction ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Trim('\r', '\n');
+
+        if (string.IsNullOrWhiteSpace(introduction))
+            return code.Replace("\n", Environment.NewLine);
+
+        if (code.StartsWith(introduction, StringComparison.Ordinal))
+            return code.Replace("\n", Environment.NewLine);
+
+        var lines = code.Split('\n');
+        if (lines.Length == 0)
+            return introduction;
+
+        lines[0] = introduction + lines[0];
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string NormalizeMarkdownExampleCode(
+        string code,
+        IMarkdownExampleIndentClassifier? exampleIndentClassifier)
+    {
+        var normalized = (code ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n')
+            .Trim('\n');
+
+        if (normalized.Length == 0)
+            return string.Empty;
+
+        var lines = normalized.Split('\n');
+        RemoveSharedIndent(lines, GetCommonIndent(lines));
+        normalized = string.Join("\n", lines);
+
+        if (exampleIndentClassifier is not null)
+            normalized = exampleIndentClassifier.NormalizeAfterSharedIndent(normalized);
+
+        return normalized.TrimEnd('\n');
+    }
+
+    private static int GetCommonIndent(IEnumerable<string> lines)
+    {
+        var common = int.MaxValue;
+
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            var indent = CountLeadingWhitespace(line);
+            common = Math.Min(common, indent);
+        }
+
+        return common == int.MaxValue ? 0 : common;
+    }
+
+    private static void RemoveSharedIndent(string[] lines, int indent)
+    {
+        if (indent <= 0)
+            return;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            lines[i] = RemoveLeadingWhitespace(lines[i], indent);
+        }
+    }
+
+    private static int CountLeadingWhitespace(string line)
+    {
+        var count = 0;
+        while (count < line.Length && (line[count] == ' ' || line[count] == '\t'))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    private static string RemoveLeadingWhitespace(string line, int count)
+    {
+        if (string.IsNullOrEmpty(line) || count <= 0)
+            return line;
+
+        var index = 0;
+        while (index < line.Length && index < count && (line[index] == ' ' || line[index] == '\t'))
+        {
+            index++;
+        }
+
+        return index == 0 ? line : line.Substring(index);
+    }
 
     private static string GetRelativeLink(string fromDirectory, string toPath)
     {
@@ -314,4 +473,11 @@ internal sealed class MarkdownHelpWriter
         var p = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return p + Path.DirectorySeparatorChar;
     }
+}
+
+internal enum DocumentationExampleLayout
+{
+    MamlDefault,
+    ProseFirst,
+    AllAsCode
 }

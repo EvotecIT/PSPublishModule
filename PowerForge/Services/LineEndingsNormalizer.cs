@@ -63,17 +63,12 @@ public sealed class LineEndingsNormalizer : ILineEndingsNormalizer
     /// </summary>
     private static string NormalizeEndings(string text, string target)
     {
-        // Fast path: already consistent
         if (target == "\r\n")
         {
-            // Replace bare LF not preceded by CR
-            return text.Replace("\r\n", "\n").Replace("\n", "\r\n");
+            return text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
         }
-        else
-        {
-            // Target LF: remove CRs before LFs
-            return text.Replace("\r\n", "\n");
-        }
+
+        return text.Replace("\r\n", "\n").Replace("\r", "\n");
     }
 
     /// <summary>

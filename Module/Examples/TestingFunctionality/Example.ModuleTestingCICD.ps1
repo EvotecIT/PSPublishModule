@@ -1,4 +1,4 @@
-# Example: Simple CI/CD Pipeline Integration
+﻿# Example: Simple CI/CD Pipeline Integration
 # This example shows the simplest way to integrate testing into CI/CD pipelines
 
 # For CI/CD - just use the -CICD switch for optimized settings

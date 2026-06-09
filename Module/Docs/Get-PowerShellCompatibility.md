@@ -25,21 +25,21 @@ when supporting Windows PowerShell 5.1.
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-PowerShellCompatibility -Path 'C:\MyModule'
+PS> Get-PowerShellCompatibility -Path 'C:\MyModule'
 ```
 
 Analyzes PowerShell files in the folder and returns a compatibility report.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails
+PS> Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails
 ```
 
 Useful when investigating why a module behaves differently in PS 5.1 vs PS 7+.
 
 ### EXAMPLE 3
 ```powershell
-PS>Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'
+PS> Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'
 ```
 
 Creates a report that can be attached to CI artifacts.
@@ -53,6 +53,7 @@ Directory names to exclude from analysis.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -68,6 +69,7 @@ Export the detailed report to a CSV file at the specified path.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -83,6 +85,7 @@ Internal mode used by build pipelines to suppress host output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -98,6 +101,7 @@ Path to the file or directory to analyze for PowerShell compatibility.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -113,6 +117,7 @@ When analyzing a directory, recursively analyze all subdirectories.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -128,6 +133,7 @@ Include detailed analysis of each file with specific compatibility issues found.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -150,4 +156,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

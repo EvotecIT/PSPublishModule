@@ -22,14 +22,14 @@ Use this when you want builds to fail fast on test failures.
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationTest -Enable -TestsPath 'Tests'
+PS> New-ConfigurationTest -Enable -TestsPath 'Tests'
 ```
 
 Runs tests from the Tests folder after the build/merge step.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationTest -Enable -TestsPath 'Tests' -Force
+PS> New-ConfigurationTest -Enable -TestsPath 'Tests' -Force
 ```
 
 Useful in CI when you always want a fresh test run.
@@ -43,6 +43,7 @@ Enable test execution in the build.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -58,6 +59,7 @@ Force running tests even if caching would skip them.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -73,6 +75,7 @@ Path to the folder containing Pester tests.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -95,4 +98,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

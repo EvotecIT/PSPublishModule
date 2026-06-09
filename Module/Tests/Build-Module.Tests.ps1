@@ -1,7 +1,7 @@
 ﻿Describe 'Build-Module' {
     BeforeAll {
         # Import the module to make sure all functions are available
-        $moduleManifest = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1'
+        $moduleManifest = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
         Import-Module $moduleManifest -Force
 
         # Set up temp directory

@@ -23,7 +23,7 @@ public sealed class ModuleTestSuiteResult
     public string ManifestPath { get; }
 
     /// <summary>Required modules extracted from the manifest.</summary>
-    public ManifestEditor.RequiredModule[] RequiredModules { get; }
+    public RequiredModuleReference[] RequiredModules { get; }
 
     /// <summary>Dependency installation results (empty when dependency installation was skipped).</summary>
     public ModuleDependencyInstallResult[] DependencyResults { get; }
@@ -85,7 +85,7 @@ public sealed class ModuleTestSuiteResult
         string moduleName,
         string? moduleVersion,
         string manifestPath,
-        ManifestEditor.RequiredModule[] requiredModules,
+        RequiredModuleReference[] requiredModules,
         ModuleDependencyInstallResult[] dependencyResults,
         bool moduleImported,
         int? exportedFunctionCount,
@@ -109,7 +109,7 @@ public sealed class ModuleTestSuiteResult
         ModuleName = moduleName;
         ModuleVersion = moduleVersion;
         ManifestPath = manifestPath;
-        RequiredModules = requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        RequiredModules = requiredModules ?? Array.Empty<RequiredModuleReference>();
         DependencyResults = dependencyResults ?? Array.Empty<ModuleDependencyInstallResult>();
         ModuleImported = moduleImported;
         ExportedFunctionCount = exportedFunctionCount;
@@ -129,4 +129,3 @@ public sealed class ModuleTestSuiteResult
         ResultsXmlPath = resultsXmlPath;
     }
 }
-

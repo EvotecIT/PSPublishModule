@@ -10,6 +10,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModuleInformationReader
 {
+    private static readonly ModuleManifestMetadataReader ManifestMetadataReader = new();
+
     /// <summary>
     /// Finds and reads the single module manifest under <paramref name="projectPath"/>.
     /// </summary>
@@ -35,36 +37,7 @@ public sealed class ModuleInformationReader
         var manifestPath = manifests.FirstOrDefault();
         if (string.IsNullOrWhiteSpace(manifestPath))
             throw new InvalidOperationException($"Unable to determine PSD1 file for '{root}'.");
-        var moduleName = Path.GetFileNameWithoutExtension(manifestPath) ?? string.Empty;
-
-        string? moduleVersion = null;
-        string? rootModule = null;
-        string? powerShellVersion = null;
-        Guid? guid = null;
-        ManifestEditor.RequiredModule[] requiredModules = Array.Empty<ManifestEditor.RequiredModule>();
         string? manifestText = null;
-
-        try
-        {
-            if (ManifestEditor.TryGetTopLevelString(manifestPath, "ModuleVersion", out var mv))
-                moduleVersion = mv;
-            if (ManifestEditor.TryGetTopLevelString(manifestPath, "RootModule", out var rm))
-                rootModule = rm;
-            if (ManifestEditor.TryGetTopLevelString(manifestPath, "PowerShellVersion", out var psv))
-                powerShellVersion = psv;
-            if (ManifestEditor.TryGetTopLevelString(manifestPath, "GUID", out var guidString))
-            {
-                if (System.Guid.TryParse(guidString, out var g))
-                    guid = g;
-            }
-
-            if (ManifestEditor.TryGetRequiredModules(manifestPath, out var req) && req is not null)
-                requiredModules = req;
-        }
-        catch
-        {
-            // Best-effort: keep partial data if some reads fail.
-        }
 
         try
         {
@@ -75,6 +48,51 @@ public sealed class ModuleInformationReader
             // ignore
         }
 
+        var moduleName = Path.GetFileNameWithoutExtension(manifestPath) ?? string.Empty;
+        string? moduleVersion = null;
+        string? rootModule = null;
+        string? powerShellVersion = null;
+        string? preRelease = null;
+        Guid? guid = null;
+        RequiredModuleReference[] requiredModules = Array.Empty<RequiredModuleReference>();
+
+        try
+        {
+            var metadata = ManifestMetadataReader.Read(manifestPath);
+            moduleName = metadata.ModuleName;
+            moduleVersion = metadata.ModuleVersion;
+            preRelease = metadata.PreRelease;
+
+            var manifestContent = manifestText ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(manifestContent))
+            {
+                if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestContent, "ModuleVersion", out var resolvedModuleVersion))
+                    moduleVersion = resolvedModuleVersion;
+
+                if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestContent, "RootModule", out var resolvedRootModule))
+                    rootModule = resolvedRootModule;
+
+                if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestContent, "PowerShellVersion", out var resolvedPowerShellVersion))
+                    powerShellVersion = resolvedPowerShellVersion;
+
+                if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestContent, "GUID", out var guidString) &&
+                    System.Guid.TryParse(guidString, out var parsedGuid))
+                {
+                    guid = parsedGuid;
+                }
+
+                if (ModuleManifestTextParser.TryGetRequiredModules(manifestContent, out RequiredModuleReference[]? resolvedRequiredModules) &&
+                    resolvedRequiredModules is not null)
+                {
+                    requiredModules = resolvedRequiredModules;
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort: keep partial data if some reads fail.
+        }
+
         return new ModuleInformation(
             moduleName: moduleName,
             manifestPath: manifestPath,
@@ -82,6 +100,7 @@ public sealed class ModuleInformationReader
             moduleVersion: moduleVersion,
             rootModule: rootModule,
             powerShellVersion: powerShellVersion,
+            preRelease: preRelease,
             guid: guid,
             requiredModules: requiredModules,
             manifestText: manifestText);

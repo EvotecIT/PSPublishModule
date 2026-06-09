@@ -16,14 +16,22 @@ public static class ProjectFileEnumerator
         var excludes = new HashSet<string>(e.ExcludeDirectories, System.StringComparer.OrdinalIgnoreCase);
         var excludeFiles = e.ExcludeFiles ?? System.Array.Empty<string>();
         var stack = new Stack<string>();
-        stack.Push(e.EnumerationRoot());
+        var root = e.EnumerationRoot();
+        stack.Push(root);
         var patterns = e.CustomExtensions ?? GetDefaultPatterns(e.Kind);
 
         while (stack.Count > 0)
         {
             var current = stack.Pop();
             string name = new DirectoryInfo(current).Name;
-            if (!string.Equals(current, e.EnumerationRoot(), System.StringComparison.OrdinalIgnoreCase) && excludes.Contains(name)) continue;
+            if (!string.Equals(current, root, System.StringComparison.OrdinalIgnoreCase))
+            {
+                if (excludes.Contains(name))
+                    continue;
+
+                if (IsNestedGitWorkingTreeRoot(current))
+                    continue;
+            }
 
             foreach (var pattern in patterns)
             {
@@ -75,6 +83,19 @@ public static class ProjectFileEnumerator
         return false;
     }
 
+    private static bool IsNestedGitWorkingTreeRoot(string path)
+    {
+        try
+        {
+            return Directory.Exists(Path.Combine(path, ".git")) ||
+                   File.Exists(Path.Combine(path, ".git"));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static string ComputeRelativePath(string baseDir, string fullPath)
     {
         try
@@ -95,4 +116,3 @@ public static class ProjectFileEnumerator
             ? path
             : path + Path.DirectorySeparatorChar;
 }
-

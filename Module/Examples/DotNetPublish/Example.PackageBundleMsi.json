@@ -1,0 +1,111 @@
+{
+  "$schema": "../../../Schemas/powerforge.dotnetpublish.schema.json",
+  "SchemaVersion": 1,
+  "DotNet": {
+    "ProjectRoot": ".",
+    "Configuration": "Release",
+    "Restore": true,
+    "Build": true,
+    "Runtimes": [
+      "win-x64"
+    ]
+  },
+  "Targets": [
+    {
+      "Name": "Service",
+      "ProjectPath": "src/Product.Service/Product.Service.csproj",
+      "Publish": {
+        "Framework": "net10.0",
+        "Styles": [
+          "PortableCompat"
+        ],
+        "Service": {
+          "ServiceName": "Product.Service",
+          "DisplayName": "Product Service"
+        }
+      }
+    },
+    {
+      "Name": "Cli",
+      "ProjectPath": "src/Product.Cli/Product.Cli.csproj",
+      "Publish": {
+        "Framework": "net10.0",
+        "Styles": [
+          "PortableCompat"
+        ]
+      }
+    }
+  ],
+  "Bundles": [
+    {
+      "Id": "package",
+      "PrepareFromTarget": "Service",
+      "PrimarySubdirectory": "Service",
+      "Zip": true,
+      "Includes": [
+        {
+          "Target": "Cli",
+          "Subdirectory": "CLI"
+        }
+      ],
+      "CopyItems": [
+        {
+          "SourcePath": "Build/README.package.md",
+          "DestinationPath": "README.md",
+          "Required": false
+        }
+      ],
+      "ModuleIncludes": [
+        {
+          "ModuleName": "PowerProduct",
+          "SourcePath": "Build/Artifacts/Modules/PowerProduct"
+        }
+      ],
+      "GeneratedScripts": [
+        {
+          "Template": "Import-Module \"$PSScriptRoot\\Modules\\{{ModuleName}}\\{{ModuleName}}.psd1\" -Force\r\n{{InstallCommand}}\r\n",
+          "OutputPath": "Scripts/Install-Service.ps1",
+          "Tokens": {
+            "ModuleName": "PowerProduct",
+            "InstallCommand": "Install-ProductService"
+          }
+        }
+      ],
+      "PostProcess": {
+        "DeletePatterns": [
+          "**/*.pdb",
+          "**/createdump.exe"
+        ],
+        "Metadata": {
+          "Path": "package.manifest.json",
+          "Properties": {
+            "moduleName": "PowerProduct",
+            "installScript": "Scripts/Install-Service.ps1"
+          }
+        }
+      }
+    }
+  ],
+  "Installers": [
+    {
+      "Id": "Product.MSI",
+      "PrepareFromTarget": "Service",
+      "PrepareFromBundleId": "package",
+      "InstallerProjectPath": "Installer/Product.Installer.wixproj",
+      "Harvest": "Auto"
+    }
+  ],
+  "Hooks": [
+    {
+      "Id": "sync-generated-sources",
+      "Phase": "BeforeBuild",
+      "Command": "pwsh",
+      "Arguments": [
+        "-NoProfile",
+        "-File",
+        "Build/Sync-GeneratedSources.ps1"
+      ],
+      "Required": false
+    }
+  ]
+}

@@ -129,8 +129,7 @@ public sealed class LineEndingConverter
 
     private static string NormalizeEndings(string text, string target)
     {
-        if (target == "\r\n") return text.Replace("\r\n", "\n").Replace("\n", "\r\n");
-        return text.Replace("\r\n", "\n");
+        if (target == "\r\n") return text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+        return text.Replace("\r\n", "\n").Replace("\r", "\n");
     }
 }
-

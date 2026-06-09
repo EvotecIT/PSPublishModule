@@ -5,15 +5,20 @@ Short, high-signal list to keep parity and stability work visible.
 ## Recently completed
 - API docs: sidebar filters + counts + reset + URL state.
 - API docs: sidebar position option + body class hook.
+- API docs: XML `inheritdoc cref` fallback + hyperlink rendering for `see/seealso href` and `<a href>`.
+- Audit: heading-order check and link-purpose consistency check (same label -> multiple URLs).
 - Audit: navRequired / navIgnorePrefixes options (CLI + pipeline).
 - Prism: auto-init highlight + local asset warnings.
-- CodeGlyphX sample: apply Prism highlighting and unified code-block styling to docs pages.
+- Sample docs site: apply Prism highlighting and unified code-block styling to docs pages.
 - Auto-generate `data/site-nav.json` when missing (navigation export).
 - Normalize Markdown code blocks to add `.code-block` on `<pre>` for consistent styling.
 - Verify: warn when custom `site-nav.json` drifts from Navigation menus.
+- Pipeline: `indexnow` step for canonical URL submission (batch/retry/dry-run/report support).
+- SEO templates: site/collection title+description tokens with `_powerforge/seo-preview.json` output.
+- Crawl policy: route-scoped robots + bot directives + `_powerforge/crawl-policy.json` diagnostics.
 
 ## Engine parity & quality
-- CodeGlyphX 1:1 coverage checklist (home, docs, benchmarks, pricing, showcase, playground, API docs).
+- Interactive docs site coverage checklist (home, docs, benchmarks, pricing, showcase, playground, API docs).
 - Docs API parity: namespace/type filters, search UX, member grouping (methods/properties/fields/events).
 - Fix markdown parser precedence: `## Heading: Text` should be heading, not definition list.
 - Syntax highlighting: verify Prism injection for all markdown code blocks and API pages.
@@ -29,6 +34,11 @@ Short, high-signal list to keep parity and stability work visible.
 - Layout parity: ensure docs, home, and API share the same base background/spacing tokens by default.
 - Sidebar options: allow left/right placement (theme-level switch), without forking templates. (done for API docs via `sidebar`)
 
+## SEO parity track (Yoast-informed)
+- Expand schema profiles beyond baseline (`FAQ`, `HowTo`, `SoftwareApplication`, `Product`, `NewsArticle`).
+- Add specialized sitemap outputs (news/image/video) and sitemap index generation.
+- Add redirect-assistant workflow (route diff -> suggested 301 map).
+
 ## Assets & performance
 - Asset policy examples for local/CDN/hybrid with rewrites and hashing.
 - Cache headers best‑practice defaults per hosting provider (Netlify/Cloudflare Pages).
@@ -40,10 +50,11 @@ Short, high-signal list to keep parity and stability work visible.
 - Optional Playwright smoke checks (config‑driven, no custom tests required).
 - Configured audit step in sample pipelines (docs + scaffolder defaults).
 - Content diagnostics: warn on missing syntax highlighter assets, missing theme files, or invalid pipeline entries.
+- Server recovery: implement `powerforge-web server inspect/capture/bootstrap/restore-secrets/deploy/verify` from `powerforge.web.serverrecovery.schema.json`.
 
 ## Documentation
 - “Theme anatomy” doc: where assets live, how `extra_css_html`/`extra_scripts_html` are used.
-- Content spec examples for multi‑site reuse and CodeGlyphX migration steps.
+- Content spec examples for multi-site reuse and project migration steps.
 - Prism local asset expectations + troubleshooting (docs/assets).
 - Docs nav rules (auto + manual), sidebar placement options, and relative link resolution.
 - Sitemap behavior (auto + manual entries) with examples.

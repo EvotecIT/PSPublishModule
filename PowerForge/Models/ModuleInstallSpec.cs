@@ -22,5 +22,20 @@ public sealed class ModuleInstallSpec
 
     /// <summary>Destination module roots. When empty, defaults are used.</summary>
     public string[] Roots { get; set; } = Array.Empty<string>();
-}
 
+    /// <summary>
+    /// Controls how legacy flat installs under &lt;root&gt;\&lt;ModuleName&gt; should be handled.
+    /// </summary>
+    public LegacyFlatModuleHandling LegacyFlatHandling { get; set; } = LegacyFlatModuleHandling.Warn;
+
+    /// <summary>
+    /// Version folder names to preserve during pruning.
+    /// </summary>
+    public string[] PreserveVersions { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// When true (default), patches the installed PSD1 ModuleVersion to the resolved install version.
+    /// When false, keeps the staged ModuleVersion.
+    /// </summary>
+    public bool UpdateManifestToResolvedVersion { get; set; } = true;
+}

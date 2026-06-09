@@ -4,7 +4,7 @@
 
 [CmdletBinding()] param(
     [switch] $JsonOnly,
-    [string] $JsonPath = (Join-Path $PSScriptRoot '..\..\powerforge.json'),
+    [string] $JsonPath = (Join-Path $PSScriptRoot '../../powerforge.json'),
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
     [switch] $NoDotnetBuild,
     [string] $ModuleVersion = '3.0.X',
@@ -14,36 +14,75 @@
     [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
     [switch] $SignIncludeBinaries,
     [switch] $SignIncludeInternals,
-    [switch] $SignIncludeExe
+    [switch] $SignIncludeExe,
+    [string] $DiagnosticsBaselinePath,
+    [switch] $GenerateDiagnosticsBaseline,
+    [switch] $UpdateDiagnosticsBaseline,
+    [switch] $FailOnNewDiagnostics,
+    [ValidateSet('Warning', 'Error')]
+    [string] $FailOnDiagnosticsSeverity
 )
 
-if (-not $JsonOnly) {
-    Remove-Item -Path (Join-Path $PSScriptRoot '..\Lib') -Recurse -Force -ErrorAction SilentlyContinue
-}
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$moduleRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$artefactsRoot = Join-Path $moduleRoot 'Artefacts'
+$csproj = Join-Path -Path $repoRoot -ChildPath 'PSPublishModule/PSPublishModule.csproj'
+$sourceManifest = Join-Path -Path $moduleRoot -ChildPath 'PSPublishModule.psd1'
+$sourceLibRoot = Join-Path -Path $moduleRoot -ChildPath 'Lib'
+$runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
+$tfm = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
+$binaryModule = Join-Path -Path $repoRoot -ChildPath ("PSPublishModule/bin/{0}/{1}/PSPublishModule.dll" -f $Configuration, $tfm)
 
 if (-not $JsonOnly -and -not $NoDotnetBuild) {
-    $csproj = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\PSPublishModule.csproj'
     if (Test-Path -LiteralPath $csproj) {
-        Write-Host "ℹ️ Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
+        $i = [char]0x2139 # ℹ
+        Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
         $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
         if ($LASTEXITCODE -ne 0) {
             $buildOutput | Out-Host
-            Write-Host "❌ dotnet build failed (exit $LASTEXITCODE). Stopping." -ForegroundColor Red
+            $x = [char]0x274C # ❌
+            Write-Host "$x dotnet build failed (exit $LASTEXITCODE). Stopping." -ForegroundColor Red
             return
         }
     }
 }
 
-Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
+# Always reload PSPublishModule from this repo for self-builds. Otherwise an older
+# installed/imported module in the caller session can shadow the current source changes.
+Get-Module -Name 'PSPublishModule' -All -ErrorAction SilentlyContinue | Remove-Module -Force -ErrorAction SilentlyContinue
 
-if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
-    $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
-    $tfm = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
-    $binaryModule = Join-Path -Path $PSScriptRoot -ChildPath ("..\..\PSPublishModule\bin\{0}\{1}\PSPublishModule.dll" -f $Configuration, $tfm)
+# Clean the repo Lib payload only after unloading the module; otherwise Windows can keep
+# stale PSPublishModule binaries locked and the delete silently fails.
+if (-not $JsonOnly) {
+    Remove-Item -Path (Join-Path $PSScriptRoot '../Lib') -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$importPath = $null
+
+# Prefer the freshly built binary module for all PSPublishModule self-builds. Falling back to
+# the source manifest is only a last resort when the binary output is unavailable.
+if (-not (Test-Path -LiteralPath $binaryModule)) {
+    if (Test-Path -LiteralPath $csproj) {
+        $i = [char]0x2139 # ℹ
+        Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
+        $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $buildOutput | Out-Host
+            throw "dotnet build failed (exit $LASTEXITCODE)."
+        }
+    }
+}
+
+if (Test-Path -LiteralPath $binaryModule) {
+    $importPath = $binaryModule
+} elseif (Test-Path -LiteralPath $sourceLibRoot) {
+    Write-Warning "Falling back to source manifest import because the compiled PSPublishModule binary was not found: $binaryModule"
+    $importPath = $sourceManifest
+} else {
     if (-not (Test-Path -LiteralPath $binaryModule)) {
-        $csproj = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\PSPublishModule.csproj'
         if (Test-Path -LiteralPath $csproj) {
-            Write-Host "ℹ️ Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
+            $i = [char]0x2139 # ℹ
+            Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
             $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
             if ($LASTEXITCODE -ne 0) {
                 $buildOutput | Out-Host
@@ -51,13 +90,22 @@ if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
             }
         }
     }
+
     if (Test-Path -LiteralPath $binaryModule) {
-        Import-Module $binaryModule -Force
+        $importPath = $binaryModule
     }
 }
 
-if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
+if (-not $importPath) {
     throw "Invoke-ModuleBuild is not available. Ensure PSPublishModule.dll built and importable."
+}
+
+Write-Verbose "Importing PSPublishModule from '$importPath'."
+Import-Module $importPath -Force
+
+$invokeModuleBuildCommand = Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue
+if (-not $invokeModuleBuildCommand -or $invokeModuleBuildCommand.Source -ne 'PSPublishModule') {
+    throw "Invoke-ModuleBuild did not load from the local PSPublishModule build."
 }
 
 $buildParams = @{
@@ -68,6 +116,11 @@ if ($JsonOnly) {
     $buildParams.JsonOnly = $true
     $buildParams.JsonPath = $JsonPath
 }
+if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildParams.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
+if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildParams.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
+if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildParams.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
+if ($PSBoundParameters.ContainsKey('FailOnNewDiagnostics')) { $buildParams.FailOnNewDiagnostics = $FailOnNewDiagnostics.IsPresent }
+if ($PSBoundParameters.ContainsKey('FailOnDiagnosticsSeverity')) { $buildParams.FailOnDiagnosticsSeverity = $FailOnDiagnosticsSeverity }
 
 Invoke-ModuleBuild @buildParams -Settings {
     # Usual defaults as per standard module
@@ -90,16 +143,13 @@ Invoke-ModuleBuild @buildParams -Settings {
     }
     New-ConfigurationManifest @Manifest
 
-    # Add standard module dependencies (directly, but can be used with loop as well)
-    New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
-    New-ConfigurationModule -Type RequiredModule -Name 'Microsoft.PowerShell.PSResourceGet' -Guid 'Auto' -Version 'Latest'
+    # Keep feature-specific tooling out of the module manifest RequiredModules list.
+    # Test workflows install/use Pester on demand, and repository/download workflows
+    # probe PSResourceGet first with PowerShellGet fallback when those features run.
 
-    # Add external module dependencies, using loop for simplicity
-    New-ConfigurationModule -Type ExternalModule -Name @(
-        'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security'
-    )
+    # Do not add inbox Microsoft.PowerShell.* modules as Required/External dependencies.
+    # They are part of the runtime and publishing them as gallery dependencies breaks
+    # Save-Module / Install-Module resolution for consumers.
 
     # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
     # And on that time only that function and dependant functions will be copied over
@@ -161,7 +211,7 @@ Invoke-ModuleBuild @buildParams -Settings {
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
 
     # configuration for documentation, at the same time it enables documentation processing
-    New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
+    New-ConfigurationDocumentation -Enable:$true -SyncExternalHelpToProjectRoot -PathReadme 'Docs\Readme.md' -Path 'Docs' -AboutTopicsSourcePath 'Help\About'
 
     # quality checks (non-blocking by default; add -FailOn* switches to hard-fail)
     $newConfigurationValidationSplat = @{
@@ -202,7 +252,7 @@ Invoke-ModuleBuild @buildParams -Settings {
 
     New-ConfigurationImportModule -ImportSelf
 
-    $signEnabled = if ($NoSign.IsPresent) { $false } elseif ($SignModule.IsPresent) { $true } else { $Env:COMPUTERNAME -eq 'EVOMONSTER' }
+    $signEnabled = if ($NoSign.IsPresent) { $false } elseif ($SignModule.IsPresent) { $true } else { $Env:COMPUTERNAME -eq 'EVOMAGIC' }
     $newConfigurationBuildSplat = @{
         Enable                         = $true
         SignModule                     = $signEnabled
@@ -215,19 +265,30 @@ Invoke-ModuleBuild @buildParams -Settings {
         SkipBuiltinReplacements        = $true
 
         # required for Cmdlet/Alias functionality
-        NETProjectPath                 = "$PSScriptRoot\..\..\PSPublishModule"
+        NETProjectPath                 = (Join-Path $repoRoot 'PSPublishModule')
         ResolveBinaryConflicts         = $true
         ResolveBinaryConflictsName     = 'PSPublishModule'
         NETProjectName                 = 'PSPublishModule'
         NETConfiguration               = 'Release'
         NETFramework                   = 'net8.0', 'net472'
         NETHandleAssemblyWithSameName  = $true
+        NETAssemblyLoadContext         = $true
+        NETAssemblyTypeAccelerators    = @(
+            'PowerForge.ModuleTestFailureAnalysis',
+            'PowerForge.ModuleTestSuiteResult',
+            'PowerForge.ModuleRepositoryProfileScope',
+            'PowerForge.PrivateGalleryBootstrapMode',
+            'PowerForge.PrivateGalleryCredentialSource',
+            'PowerForge.PublishTool',
+            'PowerForge.RepositoryRegistrationTool'
+        )
         #NETDocumentation                  = $true
         DotSourceLibraries             = $true
         DotSourceClasses               = $true
 
         VersionedInstallStrategy       = 'AutoRevision'   # or 'Exact'
         VersionedInstallKeep           = 3                # how many versions to retain
+        InstallMissingModules          = $true
         KillLockersBeforeInstall       = $true
         KillLockersForce               = $true
     }
@@ -244,20 +305,19 @@ Invoke-ModuleBuild @buildParams -Settings {
 
     New-ConfigurationBuild @newConfigurationBuildSplat
 
-    New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked\<TagModuleVersionWithPreRelease>" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\<TagModuleVersionWithPreRelease>\Modules" -AddRequiredModules -CopyFiles @{
+    New-ConfigurationArtefact -Type Unpacked -Enable -Path (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>') -RequiredModulesPath (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>/Modules') -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative
 
-    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\PackedWithModules" -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
+    New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'PackedWithModules') -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip"
 
-    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
+    New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'Packed') -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
-
-    New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'
+    #New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'
     # Disabled because PSPublishModule testing itself after build causes multiple module instances
     # which breaks InModuleScope tests. The module is tested separately via PSPublishModule.Tests.ps1
     #New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
@@ -265,7 +325,32 @@ Invoke-ModuleBuild @buildParams -Settings {
     # global options for publishing to github/psgallery
     # you can use FilePath where APIKey are saved in clear text or use APIKey directly
     #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
-    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>'
+    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>' -GenerateReleaseNotes
+
+
+    # Optional one-time maintainer preflight: installs prerequisites, registers/probes the feed, and primes cached Entra/Azure DevOps auth when needed.
+    #Initialize-ModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
+    # Private feed publish target. This registers/refreshes the Azure Artifacts PSResourceGet repository before version checks and publish.
+    #New-ConfigurationPublish -AzureDevOpsOrganization 'evotecpl' -AzureDevOpsProject 'PowerShellGallery' -AzureArtifactsFeed 'PowerShellGalleryFeed' -RepositoryName 'EvotecPowerShellGallery' -Tool PSResourceGet -Enabled:$true
+
+    <#
+    Direct PSResourceGet way:
+    Initialize-ModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
+    Install-PSResource -Name PSPublishModule -Repository EvotecPowerShellGallery -TrustRepository
+    Update-PSResource -Name PSPublishModule
+
+    PSPublishModule private module management:
+    Install-Module PSPublishModule -Scope CurrentUser
+    Initialize-ModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
+    Install-PrivateModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule -InstallPrerequisites
+    Update-PrivateModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule -InstallPrerequisites
+
+    Auth behavior:
+    If the credential provider has a valid cached Entra/Azure DevOps session, it should just use it.
+    If no token exists or the token expired, it should prompt through the Azure Artifacts Credential Provider login flow, usually browser/device-code style.
+    After successful login, the provider caches the session, so later install/update runs should not need anything fancy.
+    No PAT, username, or password should be needed for normal interactive users.
+    #>
 
 
     ### FOR TESTING PURPOSES ONLY ###

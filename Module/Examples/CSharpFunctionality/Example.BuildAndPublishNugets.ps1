@@ -1,4 +1,4 @@
-# ImagePlayground Build Script - Using Enhanced PSPublishModule Functions
+﻿# ImagePlayground Build Script - Using Enhanced PSPublishModule Functions
 # Now with proper ShouldProcess/WhatIf support!
 
 Import-Module PSPublishModule -Force -ErrorAction Stop

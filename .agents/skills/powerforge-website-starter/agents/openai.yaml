@@ -1,0 +1,10 @@
+display_name: PowerForge Website Starter
+short_description: Golden-path setup for PowerForge.Web sites (dev/CI modes, theme contracts, nav, API docs CSS, baselines).
+default_prompt: >-
+  Create or refactor a PowerForge.Web website with deterministic dev/CI behavior.
+  Apply the golden-path checklist. Make `site.json` explicit (features, nav, theme),
+  standardize `pipeline.json` modes, add/validate theme contracts (`theme.manifest.json`,
+  required partials/slots, CSS selectors), ensure apiDocs uses multi-css and site
+  chrome (api-header/api-footer), and document agent handoff so the site won't
+  regress across themes or repos.
+

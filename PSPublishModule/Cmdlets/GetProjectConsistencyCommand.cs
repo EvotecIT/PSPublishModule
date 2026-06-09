@@ -1,7 +1,5 @@
 using System;
-using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -79,36 +77,34 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var root = System.IO.Path.GetFullPath(Path.Trim().Trim('"'));
-        if (!Directory.Exists(root))
-            throw new DirectoryNotFoundException($"Project path '{root}' not found or is not a directory");
-
-        if (RecommendedEncoding == TextEncodingKind.Any)
-            throw new PSArgumentException("RecommendedEncoding cannot be Any for project consistency analysis.");
-
-        var patterns = ResolvePatterns(ProjectType, CustomExtensions);
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var service = new ProjectConsistencyWorkflowService(logger);
+        var request = new ProjectConsistencyWorkflowRequest
+        {
+            Path = Path,
+            ProjectType = ProjectType,
+            CustomExtensions = CustomExtensions,
+            ExcludeDirectories = ExcludeDirectories,
+            RecommendedEncoding = RecommendedEncoding,
+            RecommendedLineEnding = RecommendedLineEnding,
+            IncludeDetails = ShowDetails.IsPresent,
+            ExportPath = ExportPath
+        };
+        var patterns = ProjectConsistencyWorkflowService.ResolvePatterns(ProjectType, CustomExtensions);
         WriteVerbose($"Project type: {ProjectType} with patterns: {string.Join(", ", patterns)}");
 
-        HostWriteLineSafe("🔎 Analyzing project consistency...", ConsoleColor.Cyan);
-        HostWriteLineSafe($"Project: {root}");
-        HostWriteLineSafe($"Type: {ProjectType}");
+        ProjectConsistencyWorkflowResult workflow;
+        try
+        {
+            workflow = service.Analyze(request);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new PSArgumentException(ex.Message, ex);
+        }
 
-        var enumeration = new ProjectEnumeration(
-            rootPath: root,
-            kind: ResolveKind(ProjectType),
-            customExtensions: ProjectType.Equals("Custom", StringComparison.OrdinalIgnoreCase) ? patterns : null,
-            excludeDirectories: ExcludeDirectories);
-
-        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-        var analyzer = new ProjectConsistencyAnalyzer(logger);
-        var report = analyzer.Analyze(
-            enumeration: enumeration,
-            projectType: ProjectType,
-            recommendedEncoding: RecommendedEncoding,
-            recommendedLineEnding: RecommendedLineEnding,
-            includeDetails: ShowDetails.IsPresent,
-            exportPath: ExportPath,
-            encodingOverrides: null,
-            lineEndingOverrides: null);
+        var report = workflow.Report;
+        var displayService = new ProjectConsistencyDisplayService();
 
         if (report.Summary.TotalFiles == 0)
         {
@@ -116,81 +112,10 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
             return;
         }
 
-        var s = report.Summary;
-
-        HostWriteLineSafe($"Target encoding: {s.RecommendedEncoding}");
-        HostWriteLineSafe($"Target line ending: {s.RecommendedLineEnding}");
-
-        // Display summary (preserve existing UX: always prints to host).
-        HostWriteLineSafe("");
-        HostWriteLineSafe("Project Consistency Summary:", ConsoleColor.Cyan);
-        HostWriteLineSafe($"  Total files analyzed: {s.TotalFiles}");
-        HostWriteLineSafe(
-            $"  Files compliant with standards: {s.FilesCompliant} ({s.CompliancePercentage.ToString("0.0", CultureInfo.InvariantCulture)}%)",
-            s.CompliancePercentage >= 90 ? ConsoleColor.Green : s.CompliancePercentage >= 70 ? ConsoleColor.Yellow : ConsoleColor.Red);
-        HostWriteLineSafe($"  Files needing attention: {s.FilesWithIssues}", s.FilesWithIssues == 0 ? ConsoleColor.Green : ConsoleColor.Red);
-
-        HostWriteLineSafe("");
-        HostWriteLineSafe("Encoding Issues:", ConsoleColor.Cyan);
-        HostWriteLineSafe(
-            $"  Files needing encoding conversion: {s.FilesNeedingEncodingConversion}",
-            s.FilesNeedingEncodingConversion == 0 ? ConsoleColor.Green : ConsoleColor.Yellow);
-        HostWriteLineSafe($"  Target encoding: {s.RecommendedEncoding}");
-
-        HostWriteLineSafe("");
-        HostWriteLineSafe("Line Ending Issues:", ConsoleColor.Cyan);
-        HostWriteLineSafe(
-            $"  Files needing line ending conversion: {s.FilesNeedingLineEndingConversion}",
-            s.FilesNeedingLineEndingConversion == 0 ? ConsoleColor.Green : ConsoleColor.Yellow);
-        HostWriteLineSafe(
-            $"  Files with mixed line endings: {s.FilesWithMixedLineEndings}",
-            s.FilesWithMixedLineEndings == 0 ? ConsoleColor.Green : ConsoleColor.Red);
-        HostWriteLineSafe(
-            $"  Files missing final newline: {s.FilesMissingFinalNewline}",
-            s.FilesMissingFinalNewline == 0 ? ConsoleColor.Green : ConsoleColor.Yellow);
-        HostWriteLineSafe($"  Target line ending: {s.RecommendedLineEnding}");
-
-        if (s.ExtensionIssues.Length > 0)
-        {
-            HostWriteLineSafe("");
-            HostWriteLineSafe("Extensions with Issues:", ConsoleColor.Yellow);
-            foreach (var issue in s.ExtensionIssues.OrderByDescending(i => i.Total))
-                HostWriteLineSafe($"  {issue.Extension}: {issue.Total} files");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ExportPath) && File.Exists(ExportPath!))
-        {
-            HostWriteLineSafe("");
-            HostWriteLineSafe($"Detailed report exported to: {ExportPath}", ConsoleColor.Green);
-        }
+        foreach (var line in displayService.CreateAnalysisSummary(root, ProjectType, report, ExportPath))
+            HostWriteLineSafe(line.Text, line.Color);
 
         WriteObject(report);
-    }
-
-    private static string[] ResolvePatterns(string projectType, string[]? custom)
-    {
-        if (projectType.Equals("Custom", StringComparison.OrdinalIgnoreCase))
-            return (custom is null || custom.Length == 0) ? Array.Empty<string>() : custom;
-
-        return projectType switch
-        {
-            "PowerShell" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml" },
-            "CSharp" => new[] { "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml", "*.resx" },
-            "Mixed" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml" },
-            "All" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml", "*.js", "*.ts", "*.py", "*.rb", "*.java", "*.cpp", "*.h", "*.hpp", "*.sql", "*.md", "*.txt", "*.yaml", "*.yml" },
-            _ => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml" }
-        };
-    }
-
-    private static ProjectKind ResolveKind(string projectType)
-    {
-        return projectType switch
-        {
-            "PowerShell" => ProjectKind.PowerShell,
-            "CSharp" => ProjectKind.CSharp,
-            "All" => ProjectKind.All,
-            _ => ProjectKind.Mixed
-        };
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)

@@ -25,14 +25,14 @@ Use it in build scripts to avoid re-implementing manifest discovery logic.
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-ModuleInformation -Path 'C:\Git\MyModule\Module'
+PS> Get-ModuleInformation -Path 'C:\Git\MyModule\Module'
 ```
 
 Returns the parsed manifest and convenience properties such as module name and version.
 
 ### EXAMPLE 2
 ```powershell
-PS>$moduleInfo = Get-ModuleInformation -Path $PSScriptRoot; $moduleInfo.ManifestPath
+PS> $moduleInfo = Get-ModuleInformation -Path $PSScriptRoot; $moduleInfo.ManifestPath
 ```
 
 Loads the manifest from the folder where the build script resides.
@@ -46,6 +46,7 @@ The path to the directory containing the module manifest file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -68,4 +69,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

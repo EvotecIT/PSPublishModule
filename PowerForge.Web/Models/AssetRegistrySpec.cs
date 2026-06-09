@@ -11,7 +11,7 @@ public sealed class AssetRegistrySpec
     public PreloadSpec[] Preloads { get; set; } = Array.Empty<PreloadSpec>();
     /// <summary>Critical CSS files to inline.</summary>
     public CriticalCssSpec[] CriticalCss { get; set; } = Array.Empty<CriticalCssSpec>();
-    /// <summary>CSS loading strategy (e.g., async).</summary>
+    /// <summary>CSS loading strategy (blocking, preload, or async).</summary>
     public string? CssStrategy { get; set; }
 }
 

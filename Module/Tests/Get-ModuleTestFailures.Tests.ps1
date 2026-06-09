@@ -1,7 +1,7 @@
 ﻿Describe "Get-ModuleTestFailures Tests" {
     BeforeAll {
         # Import the local module from the repository (avoid using an installed copy).
-        $ModulePath = [IO.Path]::Combine($PSScriptRoot, '..', 'PSPublishModule.psd1')
+        $ModulePath = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { [IO.Path]::Combine($PSScriptRoot, '..', 'PSPublishModule.psd1') }
         Import-Module $ModulePath -Force
     }
 

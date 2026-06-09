@@ -1,0 +1,27 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ═══════ Dark Theme Palette ═══════ -->
+    <SolidColorBrush x:Key="AppShellBrush" Color="#0F1117" />
+    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#161822" />
+    <SolidColorBrush x:Key="AppSurfaceAltBrush" Color="#1C1F2E" />
+    <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#242838" />
+    <SolidColorBrush x:Key="AppBorderBrush" Color="#2A2E3F" />
+    <SolidColorBrush x:Key="AppTextStrongBrush" Color="#E8ECF4" />
+    <SolidColorBrush x:Key="AppTextBrush" Color="#B8BDD0" />
+    <SolidColorBrush x:Key="AppTextMutedBrush" Color="#6B7280" />
+    <SolidColorBrush x:Key="AppAccentBrush" Color="#3B82F6" />
+    <SolidColorBrush x:Key="AppAccentDeepBrush" Color="#2563EB" />
+    <SolidColorBrush x:Key="AppWarmBrush" Color="#F59E0B" />
+    <SolidColorBrush x:Key="AppSuccessBrush" Color="#10B981" />
+    <SolidColorBrush x:Key="AppDangerBrush" Color="#EF4444" />
+
+    <SolidColorBrush x:Key="AppScrollThumbBrush" Color="#3A3F55" />
+    <SolidColorBrush x:Key="AppTabHoverBrush" Color="#1A1D2A" />
+
+    <LinearGradientBrush x:Key="HeroBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#0F1117" Offset="0" />
+        <GradientStop Color="#161822" Offset="1" />
+    </LinearGradientBrush>
+
+</ResourceDictionary>

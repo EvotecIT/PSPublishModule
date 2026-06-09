@@ -1,0 +1,802 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using PowerForge.Web;
+
+namespace PowerForge.Web.Cli;
+
+internal static class WebCliHelpers
+{
+    private const int ErrorSchemaVersion = 1;
+
+    internal static void PrintUsage()
+    {
+        Console.WriteLine("PowerForge.Web CLI");
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
+        Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--language <code>] [--language-as-root] [--output json]");
+        Console.WriteLine("                     [--sync-sources]");
+        Console.WriteLine("  powerforge-web nav-export --config <site.json> [--out <file>] [--overwrite] [--output json]");
+        Console.WriteLine("  powerforge-web git-sync (--repo <repo> --destination <dir> | --spec <file.json>) [--output json]");
+        Console.WriteLine("  powerforge-web sources-sync --config <site.json> [--output json]");
+        Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
+        Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
+        Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
+        Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
+        Console.WriteLine("                     [--required-route <path[,path]>] [--forbidden-route <path[,path]>] [--nav-required-link <path[,path]>]");
+        Console.WriteLine("                     [--seo-meta] [--no-seo-meta]");
+        Console.WriteLine("                     [--rendered] [--rendered-contrast] [--rendered-contrast-min <ratio>] [--rendered-contrast-max-findings <n>]");
+        Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
+        Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
+        Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
+        Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--fail-on-changes] [--report-path <file>] [--summary-path <file>] [--output json]");
+        Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--fail-on-changes] [--report-path <file>] [--summary-path <file>] [--output json]");
+        Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
+        Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
+        Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");
+        Console.WriteLine("                     [--no-heading-order] [--no-link-purpose] [--no-media]");
+        Console.WriteLine("                     [--seo-meta] [--no-seo-meta]");
+        Console.WriteLine("                     [--rendered] [--rendered-engine <chromium|firefox|webkit>] [--rendered-max <n>] [--rendered-timeout <ms>]");
+        Console.WriteLine("                     [--rendered-headful] [--rendered-base-url <url>] [--rendered-host <host>] [--rendered-port <n>] [--rendered-no-serve]");
+        Console.WriteLine("                     [--rendered-no-install]");
+        Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
+        Console.WriteLine("                     [--rendered-contrast] [--rendered-no-contrast] [--rendered-contrast-min <ratio>] [--rendered-contrast-max-findings <n>]");
+        Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
+        Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
+        Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
+        Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
+        Console.WriteLine("                     [--nav-canonical <file>] [--nav-canonical-selector <css>] [--nav-canonical-required]");
+        Console.WriteLine("                     [--nav-required-link <path[,path]>]");
+        Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>] [--forbidden-route <path[,path]>]");
+        Console.WriteLine("                     [--nav-optional]");
+        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>] [--fail-issue <pattern[,pattern]>] [--max-total-files <n>]");
+        Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
+        Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
+        Console.WriteLine("                     [--no-network-hints] [--no-render-blocking] [--max-head-blocking <n>]");
+        Console.WriteLine("                     [--no-default-exclude]");
+        Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
+        Console.WriteLine("                     [--sarif] [--sarif-path <file>]");
+        Console.WriteLine("                     [--warning-preview <n>] [--error-preview <n>]");
+        Console.WriteLine("                     [--suppress-issue <code|substring|wildcard|re:...>]");
+        Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban]");
+        Console.WriteLine("                     [--maintenance-profile conservative|balanced|aggressive] [--starter-profile standard|multi-project-api-suite]");
+        Console.WriteLine("                     [--suite-project-slug <slug>] [--suite-project-name <name>] [--suite-project-surface powershell|dotnet] [--output json]");
+        Console.WriteLine("  powerforge-web engine-lock [--config <site.json>] [--path <file>] [--mode show|verify|update]");
+        Console.WriteLine("                     [--repository <owner/repo>] [--ref <sha|tag|branch>] [--channel <name>] [--use-env]");
+        Console.WriteLine("                     [--require-immutable-ref|--require-sha]");
+        Console.WriteLine("  powerforge-web website-runner --website-root <dir> --pipeline-config <file> [--engine-mode source|binary]");
+        Console.WriteLine("                     [--pipeline-mode <name>] [--powerforge-lock-path <file>] [--powerforge-web-tag <tag>] [--powerforge-tool-lock-path <file>]");
+        Console.WriteLine("                     [--powerforge-repository <owner/repo>] [--powerforge-ref <sha>] [--powerforge-repository-override <owner/repo>] [--powerforge-ref-override <sha>]");
+        Console.WriteLine("                     [--maintenance-note]");
+        Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
+        Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
+        Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
+        Console.WriteLine("                     (if the requested port is busy, serve will try the next available port)");
+        Console.WriteLine("  powerforge-web apidocs --type csharp --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>] [--docs-home <url>] [--sidebar <left|right>] [--body-class <class>]");
+        Console.WriteLine("  powerforge-web apidocs --type powershell --help-path <file|dir> --out <dir> [--title <text>] [--base-url <url>] [--docs-home <url>] [--sidebar <left|right>] [--body-class <class>]");
+        Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
+        Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
+        Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
+        Console.WriteLine("                     [--legacy-alias-mode noindex|redirect|omit]");
+        Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
+        Console.WriteLine("                     [--xref-map <file>] [--no-xref-map] [--no-member-xref] [--member-xref-kinds <list>] [--member-xref-max-per-type <n>]");
+        Console.WriteLine("                     [--ps-examples <file|dir>] [--related-content-manifest <file>] [--related-content-manifests <list>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
+        Console.WriteLine("                     [--suite-title <text>] [--suite-current-id <id>] [--suite-home-url <url>] [--suite-home-label <text>] [--suite-search-url <url>] [--suite-xref-map-url <url>] [--suite-coverage-url <url>] [--suite-entry <id|label|href|summary|order>]");
+        Console.WriteLine("                     [--validate-ps-examples] [--ps-example-validation-timeout <n>] [--fail-on-ps-example-validation]");
+        Console.WriteLine("                     [--execute-ps-examples] [--ps-example-execution-timeout <n>] [--fail-on-ps-example-execution]");
+        Console.WriteLine("                     [--git-freshness] [--git-freshness-new-days <n>] [--git-freshness-updated-days <n>]");
+        Console.WriteLine("                     [--fail-on-warnings] [--suppress-warning <pattern>]");
+        Console.WriteLine("                     [--source-root <dir>] [--source-path-prefix <prefix>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
+        Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");
+        Console.WriteLine("                     [--nav <file>] [--nav-surface <name>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
+        Console.WriteLine("                     [--quickstart-types <type[,type]>] [--display-name-mode short|namespace-suffix|full]");
+        Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
+        Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
+        Console.WriteLine("  powerforge-web release-hub --out <file> [--source auto|file|github] [--repo <owner/name>] [--repo-url <url>]");
+        Console.WriteLine("                     [--releases-path <file>] [--changelog <file>] [--token <token>] [--token-env <name>]");
+        Console.WriteLine("                     [--max <n>] [--page-size <n>] [--max-pages <n>] [--title <text>]");
+        Console.WriteLine("  powerforge-web ecosystem-stats --out <file> [--github-org <org>] [--github-token <token>] [--github-token-env <name>]");
+        Console.WriteLine("                     [--nuget-owner <name>] [--psgallery-owner <name>] [--psgallery-author <name>] [--max-items <n>] [--timeout-seconds <n>] [--title <text>] [--output json]");
+        Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
+        Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
+        Console.WriteLine("                     [--optimize-images] [--image-ext <.png,.jpg,.jpeg,.webp>] [--image-include <glob[,glob]>] [--image-exclude <glob[,glob]>]");
+        Console.WriteLine("                     [--image-quality <1-100>] [--image-keep-metadata] [--image-generate-webp] [--image-generate-avif]");
+        Console.WriteLine("                     [--image-prefer-nextgen] [--image-widths <320,640,1024>] [--image-enhance-tags]");
+        Console.WriteLine("                     [--image-max-bytes <n>] [--image-max-total-bytes <n>] [--image-fail-on-budget]");
+        Console.WriteLine("                     [--hash-assets] [--hash-ext <.css,.js>] [--hash-exclude <glob[,glob]>] [--hash-manifest <file>]");
+        Console.WriteLine("                     [--headers] [--headers-out <file>] [--headers-html <value>] [--headers-assets <value>] [--report-path <file>]");
+        Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
+        Console.WriteLine("  powerforge-web dotnet-publish --project <path> --out <dir> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--define-constants <list>]");
+        Console.WriteLine("                     [--clean]");
+        Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
+        Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
+        Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile] [--watch] [--fast] [--dev] [--mode <name>] [--only <task[,task...]>] [--skip <task[,task...]>]");
+        Console.WriteLine("  powerforge-web links validate --config <site.json> [--report-path <file>] [--duplicate-report-path <file>] [--baseline <file>] [--fail-on-new-warnings] [--output json]");
+        Console.WriteLine("  powerforge-web links export-apache --config <site.json> [--out <file>] [--include-404] [--output json]");
+        Console.WriteLine("  powerforge-web links import-wordpress --source <pretty-links.csv> --config <site.json> [--out <shortlinks.json>] [--owner <name>] [--tag <tag>] [--output json]");
+        Console.WriteLine("  powerforge-web links report-404 --site-root <dir> [--source <access.log|observations.csv>] [--out <report.json>] [--review-csv <file>] [--output json]");
+        Console.WriteLine("  powerforge-web links promote-404 --source <404-suggestions.json> --config <site.json> [--out <redirects.json>] [--review-csv <file>] [--enable] [--output json]");
+        Console.WriteLine("  powerforge-web links ignore-404 --source <404-suggestions.json> --config <site.json> (--path <url>|--without-suggestions|--all) [--reason <text>] [--review-csv <file>] [--output json]");
+        Console.WriteLine("  powerforge-web contributions validate --root <dir> [--fail-on-warnings|--strict] [--output json]");
+        Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-base /api]");
+        Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
+        Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");
+        Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");
+        Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>] [--entries-json <file>]");
+        Console.WriteLine("                     [--sitemap-json] [--sitemap-json-out <file>] [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
+        Console.WriteLine("                     [--no-html-files] [--include-noindex-html] [--exclude <glob[,glob...]>] [--no-default-excludes]");
+        Console.WriteLine("                     [--no-text-files] [--no-language-alternates] [--no-generated-sitemap-metadata] [--include-html-sitemap-route]");
+        Console.WriteLine("  powerforge-web sitemap-schemas --out <dir> [--no-overwrite] [--output json]");
+        Console.WriteLine("  powerforge-web agent-ready prepare --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
+        Console.WriteLine("  powerforge-web agent-ready verify --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
+        Console.WriteLine("  powerforge-web agent-ready scan --url <url> [--timeout-ms <n>] [--fail-on-failures] [--output json]");
+        Console.WriteLine("  powerforge-web xref-merge --out <file> --map <file|dir[,file|dir...]> [--pattern *.json] [--top-only]");
+        Console.WriteLine("                     [--prefer-last] [--fail-on-duplicates] [--max-references <n>] [--max-duplicates <n>]");
+        Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");
+        Console.WriteLine("  powerforge-web server inspect --manifest <serverrecovery.json> [--fail-on-drift] [--output json]");
+        Console.WriteLine("  powerforge-web server plan --manifest <serverrecovery.json> [--output json]");
+        Console.WriteLine("  powerforge-web server validate --manifest <serverrecovery.json> [--output json] (alias for plan)");
+        Console.WriteLine("  powerforge-web server capture --manifest <serverrecovery.json> [--out <dir>] [--dry-run] [--skip-files] [--skip-encrypted] [--encrypt-remote] [--fail-on-failure] [--output json]");
+        Console.WriteLine("  powerforge-web server deploy --manifest <serverrecovery.json> [--dry-run] [--fail-on-failure] [--output json]");
+        Console.WriteLine("  powerforge-web server verify --manifest <serverrecovery.json> [--fail-on-failure] [--url-timeout-seconds <n>] [--output json]");
+        Console.WriteLine("  powerforge-web server bootstrap-plan --manifest <serverrecovery.json> [--out <dir>] [--output json]");
+        Console.WriteLine("  powerforge-web server restore-secrets-plan --manifest <serverrecovery.json> [--out <dir>] [--archive <encrypted-secrets.tar.gz.age>] [--output json]");
+        Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>]");
+        Console.WriteLine("                     [--purge-everything] [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
+        Console.WriteLine("  powerforge-web cloudflare verify [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>]");
+        Console.WriteLine("                     [--warmup <n>] [--allow-status <HIT,REVALIDATED,EXPIRED,STALE>] [--timeout-ms <n>]");
+    }
+
+    internal static int Fail(string message, bool outputJson, WebConsoleLogger logger, string command)
+    {
+        if (outputJson)
+        {
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = ErrorSchemaVersion,
+                Command = command,
+                Success = false,
+                ExitCode = 2,
+                Error = message
+            });
+            return 2;
+        }
+
+        logger.Error(message);
+        PrintUsage();
+        return 2;
+    }
+
+    internal static string? TryGetOptionValue(string[] argv, string optionName)
+    {
+        for (var i = 0; i < argv.Length; i++)
+        {
+            if (!argv[i].Equals(optionName, StringComparison.OrdinalIgnoreCase)) continue;
+            return ++i < argv.Length ? argv[i] : null;
+        }
+
+        return null;
+    }
+
+    internal static List<string> ReadOptionList(string[] argv, params string[] optionNames)
+    {
+        var values = new List<string>();
+        foreach (var optionName in optionNames)
+            values.AddRange(GetOptionValues(argv, optionName));
+
+        var results = new List<string>();
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            var parts = value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                var trimmed = part.Trim();
+                if (!string.IsNullOrWhiteSpace(trimmed))
+                    results.Add(trimmed);
+            }
+        }
+
+        return results;
+    }
+
+    internal static List<string> GetOptionValues(string[] argv, string optionName)
+    {
+        var values = new List<string>();
+        for (var i = 0; i < argv.Length; i++)
+        {
+            if (!argv[i].Equals(optionName, StringComparison.OrdinalIgnoreCase)) continue;
+            if (++i < argv.Length && !string.IsNullOrWhiteSpace(argv[i]))
+                values.Add(argv[i]);
+        }
+
+        return values;
+    }
+
+    internal static bool HasOption(string[] argv, string optionName)
+    {
+        for (var i = 0; i < argv.Length; i++)
+        {
+            if (argv[i].Equals(optionName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    internal static int ParseIntOption(string? value, int fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        return int.TryParse(value, out var parsed) ? parsed : fallback;
+    }
+
+    internal static long ParseLongOption(string? value, long fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        return long.TryParse(value, out var parsed) ? parsed : fallback;
+    }
+
+    internal static double ParseDoubleOption(string? value, double fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        return double.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : fallback;
+    }
+
+    internal static int[] ParseIntListOption(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<int>();
+
+        var values = new List<int>();
+        foreach (var token in value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (int.TryParse(token.Trim(), out var parsed) && parsed > 0)
+                values.Add(parsed);
+        }
+
+        return values
+            .Distinct()
+            .OrderBy(v => v)
+            .ToArray();
+    }
+
+    internal static List<WebApiDocsSuiteEntry> ParseApiSuiteEntries(IEnumerable<string> values)
+    {
+        var results = new List<WebApiDocsSuiteEntry>();
+        foreach (var value in values ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            var trimmed = value.Trim();
+            if (trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))
+            {
+                using var document = JsonDocument.Parse(trimmed);
+                var root = document.RootElement;
+                if (root.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in root.EnumerateArray())
+                    {
+                        results.Add(ParseApiSuiteEntryElement(item));
+                    }
+                }
+                else
+                {
+                    results.Add(ParseApiSuiteEntryElement(root));
+                }
+
+                continue;
+            }
+
+            results.Add(ParseApiSuiteEntryPipeSyntax(trimmed));
+        }
+
+        return results
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Label) && !string.IsNullOrWhiteSpace(entry.Href))
+            .GroupBy(static entry => string.IsNullOrWhiteSpace(entry.Id) ? entry.Href : entry.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderBy(static entry => entry.Order ?? int.MaxValue)
+            .ThenBy(static entry => entry.Label, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static WebApiDocsSuiteEntry ParseApiSuiteEntryPipeSyntax(string value)
+    {
+        var parts = value.Split('|');
+        if (parts.Length < 3)
+        {
+            throw new InvalidOperationException(
+                $"Invalid --suite-entry value '{value}'. Expected 'id|label|href|summary|order' or a JSON object.");
+        }
+
+        int? order = null;
+        if (parts.Length >= 5 &&
+            int.TryParse(parts[4].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedOrder))
+        {
+            order = parsedOrder;
+        }
+
+        return new WebApiDocsSuiteEntry
+        {
+            Id = parts[0].Trim(),
+            Label = parts[1].Trim(),
+            Href = parts[2].Trim(),
+            Summary = parts.Length >= 4 && !string.IsNullOrWhiteSpace(parts[3]) ? parts[3].Trim() : null,
+            Order = order
+        };
+    }
+
+    private static WebApiDocsSuiteEntry ParseApiSuiteEntryElement(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Suite entry JSON values must be objects.");
+
+        return new WebApiDocsSuiteEntry
+        {
+            Id = GetJsonString(element, "id") ?? string.Empty,
+            Label = GetJsonString(element, "label") ?? GetJsonString(element, "name") ?? string.Empty,
+            Href = GetJsonString(element, "href") ?? GetJsonString(element, "url") ?? string.Empty,
+            Summary = GetJsonString(element, "summary") ?? GetJsonString(element, "description"),
+            Order = GetJsonInt(element, "order")
+        };
+    }
+
+    private static string? GetJsonString(JsonElement element, string name)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return property.Value.ValueKind == JsonValueKind.String
+                ? property.Value.GetString()
+                : property.Value.ToString();
+        }
+
+        return null;
+    }
+
+    private static int? GetJsonInt(JsonElement element, string name)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetInt32(out var value))
+                return value;
+            if (property.Value.ValueKind == JsonValueKind.String &&
+                int.TryParse(property.Value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+                return value;
+        }
+
+        return null;
+    }
+
+    internal static string? ResolveSummaryPath(bool summaryEnabled, string? summaryPath)
+    {
+        if (!summaryEnabled && string.IsNullOrWhiteSpace(summaryPath))
+            return null;
+
+        return string.IsNullOrWhiteSpace(summaryPath) ? "audit-summary.json" : summaryPath;
+    }
+
+    internal static string? ResolveSarifPath(bool sarifEnabled, string? sarifPath)
+    {
+        if (!sarifEnabled && string.IsNullOrWhiteSpace(sarifPath))
+            return null;
+
+        return string.IsNullOrWhiteSpace(sarifPath) ? "audit.sarif.json" : sarifPath;
+    }
+
+    internal static WebAuditNavProfile[] LoadAuditNavProfiles(string? navProfilesPath)
+    {
+        if (string.IsNullOrWhiteSpace(navProfilesPath))
+            return Array.Empty<WebAuditNavProfile>();
+
+        var fullPath = ResolveExistingFilePath(navProfilesPath);
+        using var stream = File.OpenRead(fullPath);
+        var profiles = JsonSerializer.Deserialize(stream, WebCliJson.Context.WebAuditNavProfileArray)
+                       ?? Array.Empty<WebAuditNavProfile>();
+        return profiles
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
+            .ToArray();
+    }
+
+    internal static WebAuditMediaProfile[] LoadAuditMediaProfiles(string? mediaProfilesPath)
+    {
+        if (string.IsNullOrWhiteSpace(mediaProfilesPath))
+            return Array.Empty<WebAuditMediaProfile>();
+
+        var fullPath = ResolveExistingFilePath(mediaProfilesPath);
+        using var stream = File.OpenRead(fullPath);
+        var profiles = JsonSerializer.Deserialize(stream, WebCliJson.Context.WebAuditMediaProfileArray)
+                       ?? Array.Empty<WebAuditMediaProfile>();
+        return profiles
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
+            .ToArray();
+    }
+
+    internal static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv)
+    {
+        var include = ReadOptionList(argv, "--include");
+        var exclude = ReadOptionList(argv, "--exclude");
+        var ignoreNav = ReadOptionList(argv, "--ignore-nav", "--ignore-nav-path");
+        var ignoreMedia = ReadOptionList(argv, "--ignore-media");
+        var navIgnorePrefixes = ReadOptionList(argv, "--nav-ignore-prefix", "--nav-ignore-prefixes");
+        var navRequiredLinks = ReadOptionList(argv, "--nav-required-link", "--nav-required-links");
+        var navProfilesPath = TryGetOptionValue(argv, "--nav-profiles");
+        var mediaProfilesPath = TryGetOptionValue(argv, "--media-profiles");
+        var requiredRoutes = ReadOptionList(argv, "--required-route", "--required-routes");
+        var forbiddenRoutes = ReadOptionList(argv, "--forbidden-route", "--forbidden-routes");
+        var minNavCoverageText = TryGetOptionValue(argv, "--min-nav-coverage");
+        var navSelector = TryGetOptionValue(argv, "--nav-selector") ?? "nav";
+        var navRequired = !HasOption(argv, "--nav-optional");
+        var useDefaultIgnoreNav = !HasOption(argv, "--no-default-ignore-nav");
+        var useDefaultIgnoreMedia = !HasOption(argv, "--no-default-ignore-media");
+        var useDefaultExclude = !HasOption(argv, "--no-default-exclude");
+        var summaryEnabled = HasOption(argv, "--summary");
+        var summaryPath = TryGetOptionValue(argv, "--summary-path");
+        var summaryMaxText = TryGetOptionValue(argv, "--summary-max");
+        var sarifEnabled = HasOption(argv, "--sarif");
+        var sarifPath = TryGetOptionValue(argv, "--sarif-path");
+        var navCanonical = TryGetOptionValue(argv, "--nav-canonical");
+        var navCanonicalSelector = TryGetOptionValue(argv, "--nav-canonical-selector");
+        var navCanonicalRequired = HasOption(argv, "--nav-canonical-required");
+        var checkUtf8 = !HasOption(argv, "--no-utf8");
+        var checkMetaCharset = !HasOption(argv, "--no-meta-charset");
+        var checkReplacementChars = !HasOption(argv, "--no-replacement-char-check");
+        var checkHeadingOrder = !HasOption(argv, "--no-heading-order");
+        var checkSeoMeta = HasOption(argv, "--seo-meta") || !HasOption(argv, "--no-seo-meta");
+        var checkLinkPurpose = !HasOption(argv, "--no-link-purpose");
+        var checkMediaEmbeds = !HasOption(argv, "--no-media");
+        var checkNetworkHints = !HasOption(argv, "--no-network-hints");
+        var checkRenderBlocking = !HasOption(argv, "--no-render-blocking");
+        var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
+        var maxTotalFilesText = TryGetOptionValue(argv, "--max-total-files") ?? TryGetOptionValue(argv, "--max-files-total");
+        var suppressIssues = ReadOptionList(argv, "--suppress-issue", "--suppress-issues");
+        var failIssueCodes = ReadOptionList(argv, "--fail-issue", "--fail-issues", "--fail-issue-code", "--fail-issue-codes");
+        var rendered = HasOption(argv, "--rendered");
+        var renderedHeadless = !HasOption(argv, "--rendered-headful");
+        var renderedEngine = TryGetOptionValue(argv, "--rendered-engine");
+        var renderedEnsureInstalled = !HasOption(argv, "--rendered-no-install");
+        var renderedMaxText = TryGetOptionValue(argv, "--rendered-max");
+        var renderedTimeoutText = TryGetOptionValue(argv, "--rendered-timeout");
+        var renderedBaseUrl = TryGetOptionValue(argv, "--rendered-base-url");
+        var renderedHost = TryGetOptionValue(argv, "--rendered-host");
+        var renderedPortText = TryGetOptionValue(argv, "--rendered-port");
+        var renderedNoServe = HasOption(argv, "--rendered-no-serve");
+        var renderedNoConsoleErrors = HasOption(argv, "--rendered-no-console-errors");
+        var renderedNoConsoleWarnings = HasOption(argv, "--rendered-no-console-warnings");
+        var renderedNoFailures = HasOption(argv, "--rendered-no-failures");
+        var renderedContrast = !HasOption(argv, "--rendered-no-contrast") &&
+                               (HasOption(argv, "--rendered-contrast") || rendered);
+        var renderedContrastMinText = TryGetOptionValue(argv, "--rendered-contrast-min");
+        var renderedContrastMaxFindingsText = TryGetOptionValue(argv, "--rendered-contrast-max-findings");
+        var renderedInclude = ReadOptionList(argv, "--rendered-include");
+        var renderedExclude = ReadOptionList(argv, "--rendered-exclude");
+
+        if (requiredRoutes.Count == 0)
+            requiredRoutes.Add("/404.html");
+        if (navRequiredLinks.Count == 0)
+            navRequiredLinks.Add("/");
+
+        var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
+        var ignoreMediaPatterns = BuildIgnoreMediaPatterns(ignoreMedia, useDefaultIgnoreMedia);
+        var summaryMax = ParseIntOption(summaryMaxText, 10);
+        var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
+        var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
+        var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
+        var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
+        var renderedTimeoutMs = ParseIntOption(renderedTimeoutText, 30000);
+        var renderedPort = ParseIntOption(renderedPortText, 0);
+        var renderedContrastMinRatio = ParseDoubleOption(renderedContrastMinText, 4.5d);
+        var renderedContrastMaxFindings = ParseIntOption(renderedContrastMaxFindingsText, 10);
+        var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
+        var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
+        var navProfiles = LoadAuditNavProfiles(navProfilesPath);
+        var mediaProfiles = LoadAuditMediaProfiles(mediaProfilesPath);
+
+        return WebSiteAuditor.Audit(new WebAuditOptions
+        {
+            SiteRoot = siteRoot,
+            Include = include.ToArray(),
+            Exclude = exclude.ToArray(),
+            UseDefaultExcludes = useDefaultExclude,
+            MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            SuppressIssues = suppressIssues.ToArray(),
+            FailOnIssueCodes = failIssueCodes.ToArray(),
+            IgnoreNavFor = ignoreNavPatterns,
+            IgnoreMediaFor = ignoreMediaPatterns,
+            NavSelector = navSelector,
+            NavRequired = navRequired,
+            NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
+            NavRequiredLinks = navRequiredLinks.ToArray(),
+            NavProfiles = navProfiles,
+            MediaProfiles = mediaProfiles,
+            MinNavCoveragePercent = minNavCoveragePercent,
+            RequiredRoutes = requiredRoutes.ToArray(),
+            ForbiddenRoutes = forbiddenRoutes.ToArray(),
+            CheckLinks = !HasOption(argv, "--no-links"),
+            CheckAssets = !HasOption(argv, "--no-assets"),
+            CheckNavConsistency = !HasOption(argv, "--no-nav"),
+            CheckTitles = !(HasOption(argv, "--no-titles") || HasOption(argv, "--no-title")),
+            CheckDuplicateIds = !HasOption(argv, "--no-ids"),
+            CheckHtmlStructure = !HasOption(argv, "--no-structure"),
+            SummaryPath = resolvedSummaryPath,
+            SarifPath = resolvedSarifPath,
+            SummaryMaxIssues = summaryMax,
+            NavCanonicalPath = navCanonical,
+            NavCanonicalSelector = navCanonicalSelector,
+            NavCanonicalRequired = navCanonicalRequired,
+            CheckUtf8 = checkUtf8,
+            CheckMetaCharset = checkMetaCharset,
+            CheckUnicodeReplacementChars = checkReplacementChars,
+            CheckHeadingOrder = checkHeadingOrder,
+            CheckSeoMeta = checkSeoMeta,
+            CheckLinkPurposeConsistency = checkLinkPurpose,
+            CheckMediaEmbeds = checkMediaEmbeds,
+            CheckNetworkHints = checkNetworkHints,
+            CheckRenderBlockingResources = checkRenderBlocking,
+            MaxHeadBlockingResources = maxHeadBlockingResources,
+            CheckRendered = rendered,
+            RenderedHeadless = renderedHeadless,
+            RenderedEngine = renderedEngine ?? "Chromium",
+            RenderedEnsureInstalled = renderedEnsureInstalled,
+            RenderedBaseUrl = renderedBaseUrl,
+            RenderedServe = !renderedNoServe,
+            RenderedServeHost = string.IsNullOrWhiteSpace(renderedHost) ? "localhost" : renderedHost,
+            RenderedServePort = renderedPort,
+            RenderedMaxPages = renderedMaxPages,
+            RenderedTimeoutMs = renderedTimeoutMs,
+            RenderedCheckConsoleErrors = !renderedNoConsoleErrors,
+            RenderedCheckConsoleWarnings = !renderedNoConsoleWarnings,
+            RenderedCheckFailedRequests = !renderedNoFailures,
+            RenderedCheckContrast = renderedContrast,
+            RenderedContrastMinRatio = renderedContrastMinRatio,
+            RenderedContrastMaxFindings = Math.Clamp(renderedContrastMaxFindings, 1, 200),
+            RenderedInclude = renderedInclude.ToArray(),
+            RenderedExclude = renderedExclude.ToArray()
+        });
+    }
+
+    internal static string[] BuildDoctorRecommendations(WebVerifyResult? verify, WebAuditResult? audit, string[]? policyFailures = null)
+    {
+        var recommendations = new List<string>();
+
+        static bool ContainsText(IEnumerable<string> source, string text) =>
+            source.Any(line => line.Contains(text, StringComparison.OrdinalIgnoreCase));
+
+        static bool ContainsCategory(WebAuditResult result, string category) =>
+            result.Issues.Any(issue => issue.Category.Equals(category, StringComparison.OrdinalIgnoreCase));
+
+        if (verify is not null)
+        {
+            if (verify.Errors.Length > 0)
+                recommendations.Add("Fix `verify` errors first; they indicate broken site configuration or portability contracts.");
+            if (ContainsText(verify.Warnings, "Theme contract:"))
+                recommendations.Add("Resolve theme contract warnings (schemaVersion, engine, manifest path, and portable asset paths) to keep themes reusable across repos.");
+            if (ContainsText(verify.Warnings, "Theme CSS contract:"))
+                recommendations.Add("Resolve theme CSS contract warnings (missing selectors / missing CSS entrypoints) to prevent visual regressions across sites.");
+            if (ContainsText(verify.Warnings, "schemaVersion") || ContainsText(verify.Warnings, "contractVersion"))
+                recommendations.Add("Standardize all themes on `schemaVersion: 2` and keep only one version field in theme manifests.");
+            if (ContainsText(verify.Warnings, "theme manifest"))
+                recommendations.Add("Standardize themes on `theme.manifest.json` contract v2 (including `scriptsPath`) for portable reusable themes.");
+            if (ContainsText(verify.Warnings, "Navigation lint:"))
+                recommendations.Add("Fix navigation lint findings (duplicate IDs, unknown menu references, and stale profile/path filters) before publishing.");
+            if (ContainsText(verify.Warnings, "does not match any generated route"))
+                recommendations.Add("Align navigation links and visibility/path patterns with generated routes to prevent dead menu entries.");
+            if (ContainsText(verify.Warnings, "Markdown hygiene"))
+                recommendations.Add("Convert raw HTML-heavy docs to native Markdown to reduce styling drift and simplify maintenance.");
+            if (ContainsText(verify.Warnings, "portable relative path"))
+                recommendations.Add("Replace rooted/OS-specific paths in theme mappings with portable relative paths.");
+        }
+
+        if (audit is not null)
+        {
+            if (audit.BrokenLinkCount > 0)
+                recommendations.Add("Fix broken internal links before publish (`audit` link errors).");
+            if (audit.MissingAssetCount > 0)
+                recommendations.Add("Fix missing CSS/JS/image assets to avoid runtime regressions.");
+            if (audit.MissingRequiredRouteCount > 0)
+                recommendations.Add("Ensure required routes like `/404.html` are generated and published.");
+            if (audit.PresentForbiddenRouteCount > 0)
+                recommendations.Add("Remove forbidden generated routes, such as stale language-prefixed paths in root-domain builds.");
+            if (audit.NavMismatchCount > 0 || ContainsCategory(audit, "nav"))
+                recommendations.Add("Unify navigation templates/components so all page families (docs/api/404) share a consistent nav contract.");
+            if (ContainsCategory(audit, "network-hint"))
+                recommendations.Add("Add `preconnect`/`dns-prefetch` hints for external origins (for example Google Fonts) to reduce critical path latency.");
+            if (ContainsCategory(audit, "render-blocking"))
+                recommendations.Add("Reduce render-blocking head resources: defer non-critical scripts and consolidate CSS.");
+            if (ContainsCategory(audit, "seo"))
+                recommendations.Add("Harden SEO metadata contracts: canonical/OG/Twitter tags, hreflang alternates, and keep noindex routes out of sitemap.xml.");
+            if (ContainsCategory(audit, "rendered-contrast"))
+                recommendations.Add("Improve color contrast on rendered pages (especially accent links/tabs in light mode) to meet WCAG AA.");
+            if (ContainsCategory(audit, "heading-order"))
+                recommendations.Add("Fix heading hierarchy so content does not skip levels (for example h2 -> h4) to improve accessibility.");
+            if (ContainsCategory(audit, "link-purpose"))
+                recommendations.Add("Use destination-specific link labels (avoid repeated generic labels like 'Learn more').");
+            if (ContainsCategory(audit, "media"))
+                recommendations.Add("Harden media embeds for page speed: lazy-load iframes/images, add decoding + intrinsic image dimensions, and prefer privacy-friendly embed hosts.");
+            if (ContainsCategory(audit, "utf8"))
+                recommendations.Add("Enforce UTF-8 output and meta charset declarations to avoid encoding regressions.");
+            if (ContainsCategory(audit, "duplicate-id"))
+                recommendations.Add("Remove duplicate HTML IDs to improve accessibility and scripting reliability.");
+        }
+
+        if (policyFailures is { Length: > 0 })
+            recommendations.Add($"Doctor strict verify policy failed: {string.Join(" | ", policyFailures)}");
+
+        if (recommendations.Count == 0)
+            recommendations.Add("No major engine findings detected by doctor. Keep running verify+audit in CI.");
+
+        return recommendations
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal static string[] BuildIgnoreNavPatterns(List<string> userPatterns, bool useDefaults)
+    {
+        if (!useDefaults)
+            return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+
+        var defaults = new WebAuditOptions().IgnoreNavFor;
+        if (userPatterns.Count == 0)
+            return defaults;
+
+        return defaults.Concat(userPatterns)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal static string[] BuildIgnoreMediaPatterns(List<string> userPatterns, bool useDefaults)
+    {
+        if (!useDefaults)
+            return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+
+        var defaults = new WebAuditOptions().IgnoreMediaFor;
+        if (userPatterns.Count == 0)
+            return defaults;
+
+        return defaults.Concat(userPatterns)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal static string ResolveExistingFilePath(string path)
+    {
+        var full = Path.GetFullPath(path.Trim().Trim('"'));
+        if (!File.Exists(full)) throw new FileNotFoundException($"Config file not found: {full}");
+        return full;
+    }
+
+    internal static string ResolvePathRelative(string baseDir, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        if (Path.IsPathRooted(value))
+            return Path.GetFullPath(value);
+        return Path.GetFullPath(Path.Combine(baseDir, value));
+    }
+
+    internal static string GetDefaultNavExportOutputPath(SiteSpec spec, string rootPath)
+    {
+        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
+        var relativeRoot = Path.IsPathRooted(dataRoot)
+            ? "data"
+            : dataRoot.TrimStart('/', '\\');
+        if (string.IsNullOrWhiteSpace(relativeRoot))
+            relativeRoot = "data";
+
+        return Path.Combine(rootPath, "static", relativeRoot, "site-nav.json");
+    }
+
+    internal static string ApplyArchetypeTemplate(string template, string title, string slug, string collection)
+    {
+        var date = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        return template
+            .Replace("{{title}}", title, StringComparison.OrdinalIgnoreCase)
+            .Replace("{{slug}}", slug, StringComparison.OrdinalIgnoreCase)
+            .Replace("{{date}}", date, StringComparison.OrdinalIgnoreCase)
+            .Replace("{{collection}}", collection, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static string? NormalizeApiDocsLegacyAliasMode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "noindex" => "noindex",
+            "noindex-file" => "noindex",
+            "file" => "noindex",
+            "default" => "noindex",
+            "redirect" => "redirect",
+            "redirects" => "redirect",
+            "omit" => "omit",
+            "none" => "omit",
+            "disabled" => "omit",
+            "off" => "omit",
+            _ => throw new ArgumentException($"Unsupported --legacy-alias-mode value '{value}'. Use noindex, redirect, or omit.")
+        };
+    }
+
+    internal static string Slugify(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        var lower = input.Trim().ToLowerInvariant();
+        var sb = new StringBuilder();
+        foreach (var ch in lower)
+        {
+            if (char.IsLetterOrDigit(ch)) sb.Append(ch);
+            else if (char.IsWhiteSpace(ch) || ch == '-' || ch == '_') sb.Append('-');
+        }
+
+        var slug = sb.ToString();
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        return slug.Trim('-');
+    }
+
+    internal static WebSitemapEntry[] LoadSitemapEntries(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return Array.Empty<WebSitemapEntry>();
+        var full = ResolveExistingFilePath(path);
+        var json = File.ReadAllText(full);
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            return JsonSerializer.Deserialize<WebSitemapEntry[]>(json, WebCliJson.Options) ?? Array.Empty<WebSitemapEntry>();
+
+        if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+            doc.RootElement.TryGetProperty("entries", out var entriesElement) &&
+            entriesElement.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<WebSitemapEntry[]>(entriesElement.GetRawText(), WebCliJson.Options)
+                   ?? Array.Empty<WebSitemapEntry>();
+        }
+
+        return Array.Empty<WebSitemapEntry>();
+    }
+
+    internal static bool IsJsonOutput(string[] argv)
+    {
+        foreach (var a in argv)
+        {
+            if (a.Equals("--output-json", StringComparison.OrdinalIgnoreCase) || a.Equals("--json", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        var output = TryGetOptionValue(argv, "--output");
+        return string.Equals(output, "json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static void EnsureUtf8ConsoleEncoding()
+    {
+        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        try
+        {
+            if (Console.OutputEncoding.CodePage != Encoding.UTF8.CodePage)
+                Console.OutputEncoding = utf8NoBom;
+        }
+        catch
+        {
+            // Best effort only.
+        }
+
+        try
+        {
+            if (Console.InputEncoding.CodePage != Encoding.UTF8.CodePage)
+                Console.InputEncoding = utf8NoBom;
+        }
+        catch
+        {
+            // Best effort only.
+        }
+    }
+}

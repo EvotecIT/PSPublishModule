@@ -25,6 +25,7 @@ public class ThemeLoaderTests
                 engine = "simple",
                 layoutsPath = "layouts",
                 partialsPath = "partials",
+                scriptsPath = "scripts",
                 tokens = new
                 {
                     color = new { bg = "#000" },
@@ -63,6 +64,43 @@ public class ThemeLoaderTests
             Assert.Equal("#111", color["bg"]?.ToString());
             Assert.Equal("#fff", color["accent"]?.ToString());
             Assert.True(tokens.ContainsKey("radius"));
+            Assert.Equal("scripts", manifest.ScriptsPath);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_PrefersContractManifestOverLegacyThemeJson()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-theme-manifest-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "theme.json"), JsonSerializer.Serialize(new
+            {
+                name = "legacy",
+                engine = "simple"
+            }));
+
+            File.WriteAllText(Path.Combine(root, "theme.manifest.json"), JsonSerializer.Serialize(new
+            {
+                name = "contract",
+                engine = "scriban",
+                contractVersion = 2
+            }));
+
+            var loader = new ThemeLoader();
+            var manifest = loader.Load(root);
+
+            Assert.NotNull(manifest);
+            Assert.Equal("contract", manifest!.Name);
+            Assert.Equal("scriban", manifest.Engine);
+            Assert.Equal(2, manifest.ContractVersion);
         }
         finally
         {

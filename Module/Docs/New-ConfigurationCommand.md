@@ -22,14 +22,14 @@ This helps make build scripts deterministic and explicit about their dependencie
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationCommand -ModuleName 'Pester' -CommandName 'Invoke-Pester'
+PS> New-ConfigurationCommand -ModuleName 'Pester' -CommandName 'Invoke-Pester'
 ```
 
 Declares a dependency on Invoke-Pester from the Pester module.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationCommand -ModuleName 'PSWriteColor' -CommandName 'Write-Color','Write-Text'
+PS> New-ConfigurationCommand -ModuleName 'PSWriteColor' -CommandName 'Write-Color','Write-Text'
 ```
 
 Declares multiple command references from the same module.
@@ -43,6 +43,7 @@ One or more command names to reference from the module.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -58,6 +59,7 @@ Name of the module that contains the commands.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -80,4 +82,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

@@ -7,6 +7,12 @@ namespace PowerForge.Blazor;
 /// </summary>
 public class MarkdownRenderer : IDocumentationRenderer
 {
+    private static readonly MarkdownReaderOptions GitHubLikeReaderOptions = new()
+    {
+        // GitHub-flavored markdown does not support definition lists by default.
+        DefinitionLists = false
+    };
+
     private readonly MarkdownRendererOptions _options;
 
     public IReadOnlyList<string> SupportedContentTypes { get; } = new[] { "markdown", "md" };
@@ -22,7 +28,7 @@ public class MarkdownRenderer : IDocumentationRenderer
 
         try
         {
-            var doc = MarkdownReader.Parse(content);
+            var doc = MarkdownReader.Parse(content, GitHubLikeReaderOptions);
             var htmlOptions = BuildHtmlOptions(options);
             var html = doc.ToHtmlFragment(htmlOptions);
 

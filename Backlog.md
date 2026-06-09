@@ -17,4 +17,9 @@
 - Pipeline defaults: include audit step (links/assets/nav/rendered).
 - See `Docs/PowerForge.Web.Backlog.md` for full engine parity + roadmap.
 
+## PSPublishModule / PowerForge (DotNet Publish Engine)
+
+- Cross-repo build replacement implementation plan:
+  - `Docs/PSPublishModule.DotNetPublish.ImplementationPlan.md`
+
 ## Websites

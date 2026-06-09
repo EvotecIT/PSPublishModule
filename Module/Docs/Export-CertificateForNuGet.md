@@ -27,14 +27,14 @@ This cmdlet exports the selected certificate from the local certificate store.
 
 ### EXAMPLE 1
 ```powershell
-PS>Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'
+PS> Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath (Join-Path $env:TEMP 'NuGetSigning.cer')
 ```
 
 Exports the certificate in DER format to the given path.
 
 ### EXAMPLE 2
 ```powershell
-PS>Export-CertificateForNuGet -CertificateSha256 '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
+PS> Export-CertificateForNuGet -CertificateSha256 '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
 ```
 
 Useful when you have the SHA256 fingerprint but not the Windows thumbprint.
@@ -48,6 +48,7 @@ The SHA256 hash of the certificate to export.
 Type: String
 Parameter Sets: Sha256
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -63,6 +64,7 @@ The SHA1 thumbprint of the certificate to export.
 Type: String
 Parameter Sets: Thumbprint
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -78,6 +80,7 @@ Certificate store location to use.
 Type: CertificateStoreLocation
 Parameter Sets: Thumbprint, Sha256
 Aliases: None
+Possible values: CurrentUser, LocalMachine
 
 Required: False
 Position: named
@@ -93,6 +96,7 @@ Output path for the exported .cer file.
 Type: String
 Parameter Sets: Thumbprint, Sha256
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -110,9 +114,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Object`
+- `PowerForge.NuGetCertificateExportResult`
 
 ## RELATED LINKS
 
 - None
-

@@ -24,21 +24,21 @@ For fixing issues during builds, use New-ConfigurationFileConsistency with -Auto
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell
+PS> Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell
 ```
 
 Reports encoding and line ending consistency using PowerShell-friendly defaults.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType Mixed -RecommendedEncoding UTF8BOM -RecommendedLineEnding LF -ShowDetails
+PS> Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType Mixed -RecommendedEncoding UTF8BOM -RecommendedLineEnding LF -ShowDetails
 ```
 
 Useful when you want to enforce a policy (e.g. UTF-8 BOM for PS 5.1 compatibility and LF for cross-platform repos).
 
 ### EXAMPLE 3
 ```powershell
-PS>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType CSharp -RecommendedEncoding UTF8 -ExportPath 'C:\Reports\consistency-report.csv'
+PS> Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType CSharp -RecommendedEncoding UTF8 -ExportPath 'C:\Reports\consistency-report.csv'
 ```
 
 Exports the per-file details so you can review issues outside the console.
@@ -52,6 +52,7 @@ Custom file extensions to analyze when ProjectType is Custom (e.g., *.ps1, *.cs)
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -67,6 +68,7 @@ Directory names to exclude from analysis (e.g., .git, bin, obj).
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -82,6 +84,7 @@ Export the detailed report to a CSV file at the specified path.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -97,6 +100,7 @@ Path to the project directory to analyze.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: True
 Position: named
@@ -112,6 +116,7 @@ Type of project to analyze. Determines which file extensions are included.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: PowerShell, CSharp, Mixed, All, Custom
 
 Required: False
 Position: named
@@ -127,6 +132,7 @@ The encoding standard you want to achieve (optional).
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -142,6 +148,7 @@ The line ending standard you want to achieve (optional).
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -157,6 +164,7 @@ Include detailed file-by-file analysis in the output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -179,4 +187,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
-

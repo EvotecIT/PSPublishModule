@@ -59,6 +59,9 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>When true, runs dotnet pack.</summary>
     public bool Pack { get; set; } = true;
 
+    /// <summary>Strategy used for packing selected projects.</summary>
+    public DotNetRepositoryPackStrategy PackStrategy { get; set; } = DotNetRepositoryPackStrategy.PerProject;
+
     /// <summary>When true, create a release zip from the build output.</summary>
     public bool CreateReleaseZip { get; set; }
 

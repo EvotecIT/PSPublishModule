@@ -1,4 +1,4 @@
-# Self-build script for PSPublishModule.
+﻿# Self-build script for PSPublishModule.
 # Builds PowerForge.Cli and runs `powerforge pipeline` using the same configuration as Build-Module.ps1.
 [CmdletBinding()]
 param(
@@ -13,8 +13,40 @@ param(
     [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
     [switch] $SignIncludeBinaries,
     [switch] $SignIncludeInternals,
-    [switch] $SignIncludeExe
+    [switch] $SignIncludeExe,
+    [string] $DiagnosticsBaselinePath,
+    [switch] $GenerateDiagnosticsBaseline,
+    [switch] $UpdateDiagnosticsBaseline,
+    [switch] $FailOnNewDiagnostics,
+    [ValidateSet('Warning', 'Error')]
+    [string] $FailOnDiagnosticsSeverity
 )
+
+$oldConsoleOutputEncoding = $null
+$oldConsoleInputEncoding = $null
+$oldConsoleCodePage = $null
+
+$i = [char]0x2139    # ℹ
+$ok = [char]0x2705   # ✅
+
+try {
+    # When PowerForge.Cli.exe is invoked from Windows PowerShell, native stdout decoding frequently
+    # breaks for Unicode unless the console is switched to UTF-8. Keep this local to self-build.
+    if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected) {
+        $oldConsoleOutputEncoding = [Console]::OutputEncoding
+        $oldConsoleInputEncoding = [Console]::InputEncoding
+        $oldConsoleCodePage = $oldConsoleOutputEncoding.CodePage
+
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        [Console]::OutputEncoding = $utf8
+        [Console]::InputEncoding = $utf8
+
+        # Switch the console codepage too (PowerShell native output decoding depends on it).
+        & cmd /c "chcp 65001 > nul" | Out-Null
+    }
+} catch {
+    # best effort only
+}
 
 $repoRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, '..', '..')))).Path
 $cliProject = Join-Path -Path $repoRoot -ChildPath 'PowerForge.Cli\PowerForge.Cli.csproj'
@@ -29,7 +61,7 @@ if ($Framework -eq 'auto') {
 }
 
 if (-not $NoBuild) {
-    Write-Host "ℹ️ Building PowerForge CLI ($Framework, $Configuration)" -ForegroundColor DarkGray
+    Write-Host "$i Building PowerForge CLI ($Framework, $Configuration)" -ForegroundColor DarkGray
 
     $buildArgs = @('build', $cliProject, '-c', $Configuration, '-f', $Framework, '--nologo')
     if ($PSBoundParameters.ContainsKey('Verbose')) {
@@ -40,10 +72,10 @@ if (-not $NoBuild) {
         $buildArgs += @('--verbosity', 'quiet')
         $buildOutput = & dotnet @buildArgs 2>&1
         if ($LASTEXITCODE -ne 0) { $buildOutput | Out-Host; exit $LASTEXITCODE }
-        Write-Host "✅ Built PowerForge CLI ($Framework, $Configuration)" -ForegroundColor Green
+        Write-Host "$ok Built PowerForge CLI ($Framework, $Configuration)" -ForegroundColor Green
     }
 
-    Write-Host "ℹ️ Building PSPublishModule ($Framework, $Configuration)" -ForegroundColor DarkGray
+    Write-Host "$i Building PSPublishModule ($Framework, $Configuration)" -ForegroundColor DarkGray
     $moduleArgs = @('build', $moduleProject, '-c', $Configuration, '-f', $Framework, '--nologo')
     if ($PSBoundParameters.ContainsKey('Verbose')) {
         $moduleArgs += @('--verbosity', 'minimal')
@@ -53,7 +85,7 @@ if (-not $NoBuild) {
         $moduleArgs += @('--verbosity', 'quiet')
         $moduleOutput = & dotnet @moduleArgs 2>&1
         if ($LASTEXITCODE -ne 0) { $moduleOutput | Out-Host; exit $LASTEXITCODE }
-        Write-Host "✅ Built PSPublishModule ($Framework, $Configuration)" -ForegroundColor Green
+        Write-Host "$ok Built PSPublishModule ($Framework, $Configuration)" -ForegroundColor Green
     }
 }
 
@@ -81,6 +113,11 @@ try {
     if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $buildArgs.SignIncludeBinaries = $SignIncludeBinaries.IsPresent }
     if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $buildArgs.SignIncludeInternals = $SignIncludeInternals.IsPresent }
     if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $buildArgs.SignIncludeExe = $SignIncludeExe.IsPresent }
+    if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildArgs.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
+    if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildArgs.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
+    if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildArgs.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
+    if ($PSBoundParameters.ContainsKey('FailOnNewDiagnostics')) { $buildArgs.FailOnNewDiagnostics = $FailOnNewDiagnostics.IsPresent }
+    if ($PSBoundParameters.ContainsKey('FailOnDiagnosticsSeverity')) { $buildArgs.FailOnDiagnosticsSeverity = $FailOnDiagnosticsSeverity }
 
     & $buildScript @buildArgs
     if (-not (Test-Path -LiteralPath $configPath)) {
@@ -103,4 +140,11 @@ try {
     if ($configPath -and (Test-Path -LiteralPath $configPath)) {
         try { Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue } catch { }
     }
+
+    # Restore console settings (best-effort).
+    try {
+        if ($oldConsoleOutputEncoding) { [Console]::OutputEncoding = $oldConsoleOutputEncoding }
+        if ($oldConsoleInputEncoding) { [Console]::InputEncoding = $oldConsoleInputEncoding }
+        if ($oldConsoleCodePage) { & cmd /c ("chcp {0} > nul" -f $oldConsoleCodePage) | Out-Null }
+    } catch { }
 }

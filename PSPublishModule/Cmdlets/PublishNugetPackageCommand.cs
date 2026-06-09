@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Text;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -31,22 +30,46 @@ namespace PSPublishModule;
 /// <code>Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'</code>
 /// <para>Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).</para>
 /// </example>
-[Cmdlet(VerbsData.Publish, "NugetPackage", SupportsShouldProcess = true)]
+/// <example>
+/// <summary>Publish to a saved Azure Artifacts profile</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -InstallPrerequisites -SkipDuplicate</code>
+/// <para>Resolves the Azure Artifacts NuGet v3 source from the saved profile, installs missing credential-provider prerequisites when requested, and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.</para>
+/// </example>
+[Cmdlet(VerbsData.Publish, "NugetPackage", DefaultParameterSetName = ParameterSetSource, SupportsShouldProcess = true)]
 public sealed class PublishNugetPackageCommand : PSCmdlet
 {
+    private const string ParameterSetSource = "Source";
+    private const string ParameterSetProfile = "Profile";
+    private const string AzureArtifactsApiKeyPlaceholder = "AzureArtifacts";
+    private const string GitHubTokenEnvironmentVariable = "GITHUB_TOKEN";
+    private const string GitHubCliTokenEnvironmentVariable = "GH_TOKEN";
+
     /// <summary>Directory to search for NuGet packages.</summary>
-    [Parameter(Mandatory = true)]
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetSource)]
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetProfile)]
     [ValidateNotNullOrEmpty]
     public string[] Path { get; set; } = Array.Empty<string>();
 
-    /// <summary>API key used to authenticate against the NuGet feed.</summary>
-    [Parameter(Mandatory = true)]
+    /// <summary>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetSource)]
+    [Parameter(ParameterSetName = ParameterSetProfile)]
     [ValidateNotNullOrEmpty]
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>NuGet feed URL.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetSource)]
     public string Source { get; set; } = "https://api.nuget.org/v3/index.json";
+
+    /// <summary>Saved private gallery profile name for Azure Artifacts package publishing.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetProfile)]
+    [Alias("Profile")]
+    [ValidateNotNullOrEmpty]
+    public string ProfileName { get; set; } = string.Empty;
+
+    /// <summary>Installs missing private-gallery prerequisites before profile-backed Azure Artifacts package publishing.</summary>
+    [Parameter(ParameterSetName = ParameterSetProfile)]
+    public SwitchParameter InstallPrerequisites { get; set; }
 
     /// <summary>
     /// When set, passes <c>--skip-duplicate</c> to <c>dotnet nuget push</c>.
@@ -58,176 +81,119 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     /// <summary>Executes publishing.</summary>
     protected override void ProcessRecord()
     {
-        var result = new PublishNugetPackageResult();
-
         try
         {
-            var resolvedRoots = new List<string>();
-            foreach (var raw in Path ?? Array.Empty<string>())
+            var source = Source;
+            var apiKey = ApiKey;
+            string? profileName = null;
+            string? repositoryName = null;
+
+            if (ParameterSetName == ParameterSetProfile)
             {
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                var root = SessionState.Path.GetUnresolvedProviderPathFromPSPath(raw);
-                if (!Directory.Exists(root))
+                var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+                var host = new CmdletPrivateGalleryHost(this);
+                var privateGallery = new PrivateGalleryService(host);
+                privateGallery.EnsureProviderSupported(profile.Provider);
+
+                var prerequisites = privateGallery.EnsureBootstrapPrerequisites(
+                    InstallPrerequisites.IsPresent,
+                    profile.BootstrapMode,
+                    includeAzureArtifactsCredentialProvider: profile.Provider == PrivateGalleryProvider.AzureArtifacts);
+                foreach (var message in prerequisites.Messages)
+                    WriteVerbose(message);
+
+                var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+                    profile.Provider,
+                    profile.AzureDevOpsOrganization,
+                    profile.AzureDevOpsProject,
+                    profile.AzureArtifactsFeed,
+                    profile.RepositoryName,
+                    profile.Repository,
+                    profile.RepositoryUri,
+                    profile.RepositorySourceUri,
+                    profile.RepositoryPublishUri,
+                    profile.JFrogBaseUri,
+                    profile.JFrogRepository,
+                    profile.GitHubOwner);
+
+                source = endpoint.PSResourceGetUri;
+                repositoryName = endpoint.RepositoryName;
+                profileName = profile.Name;
+                if (string.IsNullOrWhiteSpace(apiKey) && endpoint.Provider == PrivateGalleryProvider.AzureArtifacts)
                 {
-                    result.Success = false;
-                    result.ErrorMessage = $"Path '{raw}' not found.";
-                    WriteObject(result);
-                    return;
+                    apiKey = AzureArtifactsApiKeyPlaceholder;
                 }
-                resolvedRoots.Add(root);
-            }
-
-            if (resolvedRoots.Count == 0)
-            {
-                result.Success = false;
-                result.ErrorMessage = "No paths were provided.";
-                WriteObject(result);
-                return;
-            }
-
-            var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var packages = resolvedRoots
-                .SelectMany(r => Directory.EnumerateFiles(r, "*.nupkg", SearchOption.AllDirectories))
-                .Where(p => unique.Add(p))
-                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var foundAny = false;
-
-            foreach (var pkg in packages)
-            {
-                foundAny = true;
-                if (ShouldProcess(pkg, $"Publish NuGet package to {Source}"))
+                else if (string.IsNullOrWhiteSpace(apiKey) && endpoint.Provider == PrivateGalleryProvider.GitHubPackages)
                 {
-                    var exitCode = RunDotnetNugetPush(pkg, ApiKey, Source, SkipDuplicate.IsPresent, out var stdErr, out var stdOut);
-                    if (exitCode == 0)
-                    {
-                        result.Pushed.Add(pkg);
-                    }
-                    else
-                    {
-                        result.Failed.Add(pkg);
-                        result.Success = false;
-                        WriteVerbose($"dotnet nuget push failed for {pkg} (exit {exitCode}).");
-                        if (!string.IsNullOrWhiteSpace(stdErr))
-                            WriteVerbose(stdErr.Trim());
-                        if (!string.IsNullOrWhiteSpace(stdOut))
-                            WriteVerbose(stdOut.Trim());
-                    }
+                    apiKey = ResolveGitHubPackagesApiKey();
                 }
-                else
+                else if (string.IsNullOrWhiteSpace(apiKey))
                 {
-                    // WhatIf mode in legacy function simulated success by adding to Pushed.
-                    result.Pushed.Add(pkg);
+                    throw new ArgumentException($"ApiKey is required when publishing NuGet packages to a {endpoint.Provider} profile.", nameof(ApiKey));
                 }
             }
 
-            if (!foundAny)
+            var logger = new CmdletLogger(this, MyInvocation?.BoundParameters.ContainsKey("Verbose") == true);
+            var service = new NuGetPackagePublishService(logger);
+            var resolvedRoots = ResolveRoots(Path);
+            var serviceResult = service.Execute(new NuGetPackagePublishRequest
             {
-                result.Success = false;
-                var display = string.Join(", ", (Path ?? Array.Empty<string>()).Where(p => !string.IsNullOrWhiteSpace(p)));
-                result.ErrorMessage = $"No packages found in {display}";
-            }
+                Roots = resolvedRoots,
+                ApiKey = apiKey,
+                Source = source,
+                SkipDuplicate = SkipDuplicate.IsPresent
+            }, package => ShouldProcess(package, $"Publish NuGet package to {source}"));
 
-            WriteObject(result);
+            WriteObject(ToCmdletResult(serviceResult, source, profileName, repositoryName));
         }
         catch (Exception ex)
         {
-            result.Success = false;
-            result.ErrorMessage = ex.Message;
-            WriteObject(result);
+            WriteObject(new PublishNugetPackageResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message
+            });
         }
     }
 
-    private static int RunDotnetNugetPush(string packagePath, string apiKey, string source, bool skipDuplicate, out string stdErr, out string stdOut)
+    private string[] ResolveRoots(IEnumerable<string>? rawPaths)
+        => (rawPaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path!))
+        .ToArray();
+
+    private static string ResolveGitHubPackagesApiKey()
     {
-        stdErr = string.Empty;
-        stdOut = string.Empty;
+        var token = Environment.GetEnvironmentVariable(GitHubTokenEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(token))
+            return token!;
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-#if NET472
-        var args = new List<string>
-        {
-            "nuget", "push", packagePath,
-            "--api-key", apiKey,
-            "--source", source
-        };
-        if (skipDuplicate) args.Add("--skip-duplicate");
-        psi.Arguments = BuildWindowsArgumentString(args);
-#else
-        psi.ArgumentList.Add("nuget");
-        psi.ArgumentList.Add("push");
-        psi.ArgumentList.Add(packagePath);
-        psi.ArgumentList.Add("--api-key");
-        psi.ArgumentList.Add(apiKey);
-        psi.ArgumentList.Add("--source");
-        psi.ArgumentList.Add(source);
-        if (skipDuplicate) psi.ArgumentList.Add("--skip-duplicate");
-#endif
+        token = Environment.GetEnvironmentVariable(GitHubCliTokenEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(token))
+            return token!;
 
-        using var p = Process.Start(psi);
-        if (p is null) return 1;
-        stdOut = p.StandardOutput.ReadToEnd();
-        stdErr = p.StandardError.ReadToEnd();
-        p.WaitForExit();
-        return p.ExitCode;
+        throw new ArgumentException("ApiKey is required for GitHub Packages profiles unless GITHUB_TOKEN or GH_TOKEN is set.", nameof(ApiKey));
     }
 
-#if NET472
-    private static string BuildWindowsArgumentString(IEnumerable<string> arguments)
-        => string.Join(" ", arguments.Select(EscapeWindowsArgument));
-
-    // Based on .NET's internal ProcessStartInfo quoting behavior for Windows CreateProcess.
-    private static string EscapeWindowsArgument(string arg)
+    private static PublishNugetPackageResult ToCmdletResult(
+        PowerForge.NuGetPackagePublishResult result,
+        string source,
+        string? profileName,
+        string? repositoryName)
     {
-        if (arg is null) return "\"\"";
-        if (arg.Length == 0) return "\"\"";
-
-        bool needsQuotes = arg.Any(ch => char.IsWhiteSpace(ch) || ch == '"');
-        if (!needsQuotes) return arg;
-
-        var sb = new StringBuilder();
-        sb.Append('"');
-
-        int backslashCount = 0;
-        foreach (var ch in arg)
+        var mapped = new PublishNugetPackageResult
         {
-            if (ch == '\\')
-            {
-                backslashCount++;
-                continue;
-            }
+            Success = result.Success,
+            ErrorMessage = result.ErrorMessage,
+            Source = source,
+            ProfileName = profileName,
+            RepositoryName = repositoryName
+        };
 
-            if (ch == '"')
-            {
-                sb.Append('\\', backslashCount * 2 + 1);
-                sb.Append('"');
-                backslashCount = 0;
-                continue;
-            }
-
-            if (backslashCount > 0)
-            {
-                sb.Append('\\', backslashCount);
-                backslashCount = 0;
-            }
-
-            sb.Append(ch);
-        }
-
-        if (backslashCount > 0)
-            sb.Append('\\', backslashCount * 2);
-
-        sb.Append('"');
-        return sb.ToString();
+        mapped.Pushed.AddRange(result.PublishedItems);
+        mapped.Failed.AddRange(result.FailedItems);
+        return mapped;
     }
-#endif
 
     /// <summary>Result returned by <c>Publish-NugetPackage</c>.</summary>
     public sealed class PublishNugetPackageResult
@@ -243,5 +209,14 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
 
         /// <summary>Optional error message for overall failure (e.g., path not found).</summary>
         public string? ErrorMessage { get; set; }
+
+        /// <summary>NuGet feed URL used for the push operation.</summary>
+        public string Source { get; set; } = string.Empty;
+
+        /// <summary>Saved profile name used to resolve the feed, when applicable.</summary>
+        public string? ProfileName { get; set; }
+
+        /// <summary>Local repository name resolved from the saved profile, when applicable.</summary>
+        public string? RepositoryName { get; set; }
     }
 }

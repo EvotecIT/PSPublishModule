@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -12,11 +15,22 @@ namespace PowerForge;
 public sealed class ModuleBuilder
 {
     private readonly ILogger _logger;
+    private readonly IModuleManifestMutator _manifestMutator;
+    private readonly IScriptFunctionExportDetector _scriptFunctionExportDetector;
 
     /// <summary>
-    /// Creates a new module builder that logs progress via <paramref name="logger"/>.
+    /// Creates a new module builder that logs progress via <paramref name="logger"/> and mutates manifests via
+    /// <paramref name="manifestMutator"/> while detecting script exports via <paramref name="scriptFunctionExportDetector"/>.
     /// </summary>
-    public ModuleBuilder(ILogger logger) => _logger = logger;
+    public ModuleBuilder(
+        ILogger logger,
+        IModuleManifestMutator manifestMutator,
+        IScriptFunctionExportDetector scriptFunctionExportDetector)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _manifestMutator = manifestMutator ?? throw new ArgumentNullException(nameof(manifestMutator));
+        _scriptFunctionExportDetector = scriptFunctionExportDetector ?? throw new ArgumentNullException(nameof(scriptFunctionExportDetector));
+    }
 
     /// <summary>
     /// Options controlling module build behavior.
@@ -67,13 +81,45 @@ public sealed class ModuleBuilder
         /// When true, skips binary cmdlet/alias scanning and keeps existing manifest <c>CmdletsToExport</c>/<c>AliasesToExport</c> values.
         /// </summary>
         public bool DisableBinaryCmdletScan { get; set; }
+
+        /// <summary>
+        /// Optional module roots to scan for binary conflict advisories during build.
+        /// When empty, the builder uses default local PowerShell module roots for warning-only checks.
+        /// </summary>
+        public IReadOnlyList<string> BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// Declared module names that should be treated as higher-priority during binary conflict analysis.
+        /// </summary>
+        public IReadOnlyList<string> BinaryConflictPriorityModuleNames { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// Optional project-root path used for writing human-readable binary conflict reports.
+        /// </summary>
+        public string? BinaryConflictReportRoot { get; set; }
+
+        /// <summary>
+        /// Optional filters used to exclude copied binary libraries by package id, target key, relative path, or file name.
+        /// </summary>
+        public IReadOnlyList<string> ExcludeLibraryFilter { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// When true, copies only top-level published binaries and skips recursive runtime/native payload folders.
+        /// </summary>
+        public bool DoNotCopyLibrariesRecursively { get; set; }
+
+        /// <summary>
+        /// Explicit binary-build settings that require a resolvable .csproj path for this build.
+        /// When populated and <see cref="CsprojPath"/> is empty, the builder fails instead of reusing an existing Lib payload.
+        /// </summary>
+        public IReadOnlyList<string> CsprojRequiredReasons { get; set; } = Array.Empty<string>();
     }
 
     /// <summary>
     /// Builds the module layout in-place under <see cref="Options.ProjectRoot"/> without installing it.
     /// </summary>
     /// <param name="opts">Build options.</param>
-    public void BuildInPlace(Options opts)
+    public ModuleOwnerNote[] BuildInPlace(Options opts)
     {
         if (string.IsNullOrWhiteSpace(opts.ProjectRoot) || !Directory.Exists(opts.ProjectRoot))
             throw new DirectoryNotFoundException($"Project root not found: {opts.ProjectRoot}");
@@ -128,7 +174,12 @@ public sealed class ModuleBuilder
                         Directory.CreateDirectory(target);
                     }
 
-                    CopyPublishOutputBinaries(src, target, tfm, exportAssemblyFileNames);
+                    CopyPublishOutputBinaries(
+                        src,
+                        target,
+                        tfm,
+                        exportAssemblyFileNames,
+                        new PublishCopyOptions(opts.ExcludeLibraryFilter, opts.DoNotCopyLibrariesRecursively));
                 }
             }
             finally
@@ -146,8 +197,34 @@ public sealed class ModuleBuilder
         }
         else
         {
-            _logger.Verbose($"No CsprojPath specified for {opts.ModuleName}; skipping binary publish step.");
+            var csprojRequiredReasons = (opts.CsprojRequiredReasons ?? Array.Empty<string>())
+                .Where(static reason => !string.IsNullOrWhiteSpace(reason))
+                .Select(static reason => reason.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (csprojRequiredReasons.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"No CsprojPath could be resolved for '{opts.ModuleName}', but the build explicitly configured binary module settings that require a .NET project: {string.Join(", ", csprojRequiredReasons)}. " +
+                    "Configure Build.CsprojPath or NETProjectPath, or remove those binary build settings if this module intentionally ships a prebuilt Lib payload.");
+            }
+
+            var existingLibRoot = Path.Combine(opts.ProjectRoot, "Lib");
+            var hasExistingBinaryPayload = Directory.Exists(existingLibRoot) &&
+                                           Directory.EnumerateFiles(existingLibRoot, "*.dll", SearchOption.AllDirectories).Any();
+
+            if (hasExistingBinaryPayload)
+            {
+                _logger.Warn($"No CsprojPath specified for {opts.ModuleName}; using the existing Lib payload without rebuilding binaries.");
+            }
+            else
+            {
+                _logger.Verbose($"No CsprojPath specified for {opts.ModuleName}; skipping binary publish step.");
+            }
         }
+
+        var buildNotes = WarnOnInstalledBinaryConflicts(opts);
 
         // 2) Manifest generation
         var psd1 = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1");
@@ -156,13 +233,13 @@ public sealed class ModuleBuilder
         if (File.Exists(psd1))
         {
             // Preserve existing manifest metadata (GUID, RequiredModules, etc.) and patch only the key fields.
-            ManifestEditor.TrySetTopLevelModuleVersion(psd1, opts.ModuleVersion);
-            ManifestEditor.TrySetTopLevelString(psd1, "RootModule", rootModule);
-            if (!string.IsNullOrWhiteSpace(opts.Author)) ManifestEditor.TrySetTopLevelString(psd1, "Author", opts.Author!);
-            if (!string.IsNullOrWhiteSpace(opts.CompanyName)) ManifestEditor.TrySetTopLevelString(psd1, "CompanyName", opts.CompanyName!);
-            if (!string.IsNullOrWhiteSpace(opts.Description)) ManifestEditor.TrySetTopLevelString(psd1, "Description", opts.Description!);
+            _manifestMutator.TrySetTopLevelModuleVersion(psd1, opts.ModuleVersion);
+            _manifestMutator.TrySetTopLevelString(psd1, "RootModule", rootModule);
+            if (!string.IsNullOrWhiteSpace(opts.Author)) _manifestMutator.TrySetTopLevelString(psd1, "Author", opts.Author!);
+            if (!string.IsNullOrWhiteSpace(opts.CompanyName)) _manifestMutator.TrySetTopLevelString(psd1, "CompanyName", opts.CompanyName!);
+            if (!string.IsNullOrWhiteSpace(opts.Description)) _manifestMutator.TrySetTopLevelString(psd1, "Description", opts.Description!);
             if (opts.CompatiblePSEditions.Count > 0)
-                ManifestEditor.TrySetTopLevelStringArray(psd1, "CompatiblePSEditions", opts.CompatiblePSEditions.ToArray());
+                _manifestMutator.TrySetTopLevelStringArray(psd1, "CompatiblePSEditions", opts.CompatiblePSEditions.ToArray());
         }
         else
         {
@@ -178,9 +255,9 @@ public sealed class ModuleBuilder
                 scriptsToProcess: Array.Empty<string>());
         }
 
-        if (opts.Tags.Count > 0) BuildServices.SetPsDataStringArray(psd1, "Tags", opts.Tags.ToArray());
-        if (!string.IsNullOrWhiteSpace(opts.IconUri)) BuildServices.SetPsDataString(psd1, "IconUri", opts.IconUri!);
-        if (!string.IsNullOrWhiteSpace(opts.ProjectUri)) BuildServices.SetPsDataString(psd1, "ProjectUri", opts.ProjectUri!);
+        if (opts.Tags.Count > 0) _manifestMutator.TrySetPsDataStringArray(psd1, "Tags", opts.Tags.ToArray());
+        if (!string.IsNullOrWhiteSpace(opts.IconUri)) _manifestMutator.TrySetPsDataString(psd1, "IconUri", opts.IconUri!);
+        if (!string.IsNullOrWhiteSpace(opts.ProjectUri)) _manifestMutator.TrySetPsDataString(psd1, "ProjectUri", opts.ProjectUri!);
 
         // 3) Exports
         IEnumerable<string>? functionsToSet = null;
@@ -200,7 +277,7 @@ public sealed class ModuleBuilder
         }
 
         if (scripts.Length > 0)
-            functionsToSet = ExportDetector.DetectScriptFunctions(scripts);
+            functionsToSet = _scriptFunctionExportDetector.DetectScriptFunctions(scripts);
 
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;
@@ -213,8 +290,8 @@ public sealed class ModuleBuilder
             }
             else
             {
-                var detectedCmdlets = ExportDetector.DetectBinaryCmdlets(exportDlls);
-                var detectedAliases = ExportDetector.DetectBinaryAliases(exportDlls);
+                var detectedCmdlets = BinaryExportDetector.DetectBinaryCmdlets(exportDlls);
+                var detectedAliases = BinaryExportDetector.DetectBinaryAliases(exportDlls);
 
                 if (detectedCmdlets.Count == 0 && detectedAliases.Count == 0)
                 {
@@ -228,7 +305,8 @@ public sealed class ModuleBuilder
             }
         }
 
-        BuildServices.SetManifestExports(psd1, functions: functionsToSet, cmdlets: cmdletsToSet, aliases: aliasesToSet);
+        SetManifestExports(psd1, functions: functionsToSet, cmdlets: cmdletsToSet, aliases: aliasesToSet);
+        return buildNotes;
     }
 
     /// <summary>
@@ -238,15 +316,32 @@ public sealed class ModuleBuilder
     /// <returns>Installation result including resolved version and installed paths.</returns>
     public ModuleInstallerResult Build(Options opts)
     {
-        BuildInPlace(opts);
-        return BuildServices.InstallVersioned(
-            stagingPath: opts.ProjectRoot,
-            moduleName: opts.ModuleName,
-            moduleVersion: opts.ModuleVersion,
-            strategy: opts.Strategy,
-            keepVersions: opts.KeepVersions,
-            roots: opts.InstallRoots,
-            updateManifestToResolvedVersion: true);
+        _ = BuildInPlace(opts);
+        var resolved = ModuleInstaller.ResolveTargetVersion(opts.InstallRoots, opts.ModuleName, opts.ModuleVersion, opts.Strategy);
+        try
+        {
+            _manifestMutator.TrySetTopLevelModuleVersion(Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1"), resolved);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Manifest version patch failed before install: {ex.Message}");
+        }
+
+        var installer = new ModuleInstaller(_logger);
+        var installOptions = new ModuleInstallerOptions(opts.InstallRoots, InstallationStrategy.Exact, opts.KeepVersions);
+        return installer.InstallFromStaging(opts.ProjectRoot, opts.ModuleName, resolved, installOptions);
+    }
+
+    private bool SetManifestExports(string psd1Path, IEnumerable<string>? functions, IEnumerable<string>? cmdlets, IEnumerable<string>? aliases)
+    {
+        var changed = false;
+        if (functions is not null)
+            changed |= _manifestMutator.TrySetTopLevelStringArray(psd1Path, "FunctionsToExport", functions.ToArray());
+        if (cmdlets is not null)
+            changed |= _manifestMutator.TrySetTopLevelStringArray(psd1Path, "CmdletsToExport", cmdlets.ToArray());
+        if (aliases is not null)
+            changed |= _manifestMutator.TrySetTopLevelStringArray(psd1Path, "AliasesToExport", aliases.ToArray());
+        return changed;
     }
 
     private static bool IsCore(string tfm)
@@ -275,6 +370,19 @@ public sealed class ModuleBuilder
     {
         public HashSet<string> RootFileNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> RuntimeTargetRelativePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> DeclaredTopLevelBinaryFileNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class PublishCopyOptions
+    {
+        public IReadOnlyList<string> ExcludeLibraryFilters { get; }
+        public bool DoNotCopyLibrariesRecursively { get; }
+
+        public PublishCopyOptions(IReadOnlyList<string>? excludeLibraryFilters, bool doNotCopyLibrariesRecursively)
+        {
+            ExcludeLibraryFilters = excludeLibraryFilters ?? Array.Empty<string>();
+            DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursively;
+        }
     }
 
     private static readonly HashSet<string> AlwaysExcludedRootFiles = new(StringComparer.OrdinalIgnoreCase)
@@ -283,9 +391,24 @@ public sealed class ModuleBuilder
         "System.Management.dll",
     };
 
-    private void CopyPublishOutputBinaries(string publishDir, string targetDir, string tfm, ISet<string> exportAssemblyFileNames)
+    private static readonly string[] DefaultExcludedLibraryRootPatterns =
     {
-        var plan = CreateCopyPlan(publishDir, tfm);
+        "Microsoft.PowerShell.SDK",
+        "Microsoft.PowerShell.*",
+        "Microsoft.Management.Infrastructure*",
+        "Microsoft.WSMan*",
+        "Microsoft.Windows.Compatibility"
+    };
+
+    private void CopyPublishOutputBinaries(
+        string publishDir,
+        string targetDir,
+        string tfm,
+        ISet<string> exportAssemblyFileNames,
+        PublishCopyOptions? options = null)
+    {
+        options ??= new PublishCopyOptions(Array.Empty<string>(), false);
+        var plan = CreateCopyPlan(publishDir, tfm, options);
         var copied = 0;
 
         foreach (var fileName in plan.RootFileNames)
@@ -324,7 +447,67 @@ public sealed class ModuleBuilder
             copied++;
         }
 
+        copied += CopyReferencedTopLevelAssemblies(publishDir, targetDir, options);
+
         _logger.Verbose($"Copied {copied} binaries for {tfm} from '{publishDir}' to '{targetDir}'.");
+    }
+
+    private static int CopyReferencedTopLevelAssemblies(string publishDir, string targetDir, PublishCopyOptions options)
+    {
+        var copied = 0;
+        var initialAssemblies = Directory.EnumerateFiles(targetDir, "*.dll", SearchOption.TopDirectoryOnly).ToArray();
+
+        foreach (var assemblyPath in initialAssemblies)
+        {
+            string[] references;
+            try
+            {
+                references = ReadReferencedAssemblyNames(assemblyPath);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var referenceName in references)
+            {
+                if (string.IsNullOrWhiteSpace(referenceName)) continue;
+                if (IsPowerShellRuntimeLibraryId(referenceName)) continue;
+
+                var fileName = referenceName + ".dll";
+                if (AlwaysExcludedRootFiles.Contains(fileName)) continue;
+                if (MatchesAnyFilter(fileName, referenceName, options.ExcludeLibraryFilters)) continue;
+
+                var destination = Path.Combine(targetDir, fileName);
+                if (File.Exists(destination)) continue;
+
+                var source = Path.Combine(publishDir, fileName);
+                if (!File.Exists(source)) continue;
+
+                File.Copy(source, destination, overwrite: true);
+                copied++;
+            }
+        }
+
+        return copied;
+    }
+
+    private static string[] ReadReferencedAssemblyNames(string assemblyPath)
+    {
+        using var stream = File.OpenRead(assemblyPath);
+        using var peReader = new PEReader(stream);
+        var metadataReader = peReader.GetMetadataReader();
+        var references = new List<string>();
+
+        foreach (var handle in metadataReader.AssemblyReferences)
+        {
+            var reference = metadataReader.GetAssemblyReference(handle);
+            var name = metadataReader.GetString(reference.Name);
+            if (!string.IsNullOrWhiteSpace(name))
+                references.Add(name);
+        }
+
+        return references.ToArray();
     }
 
     private static string? TryResolveXmlDocPath(string publishDir, string xmlFileName)
@@ -394,25 +577,409 @@ public sealed class ModuleBuilder
         return fileNames;
     }
 
-    private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm)
+    private ModuleOwnerNote[] WarnOnInstalledBinaryConflicts(Options opts)
     {
-        var plan = TryCreateCopyPlanFromDeps(publishDir, tfm);
-        if (plan is not null) return plan;
+        var compatiblePSEditions = (opts.CompatiblePSEditions ?? Array.Empty<string>())
+            .Where(static s => !string.IsNullOrWhiteSpace(s))
+            .Select(static s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var priorityModuleNames = (opts.BinaryConflictPriorityModuleNames ?? Array.Empty<string>())
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        // Fallback: copy only top-level binaries, excluding PowerShell host assemblies.
-        var fallback = new PublishCopyPlan();
-        foreach (var file in Directory.EnumerateFiles(publishDir, "*", SearchOption.TopDirectoryOnly))
+        if (compatiblePSEditions.Length == 0)
+            compatiblePSEditions = new[] { "Core" };
+
+        var detector = new BinaryConflictDetectionService(_logger);
+        var notes = new List<ModuleOwnerNote>();
+        var editionStatuses = new List<(string Edition, bool HasConflicts)>();
+        var advisories = new List<(BinaryConflictDetectionResult Result, BinaryConflictAdvisorySummary Advisory, string? ReportPath)>();
+        foreach (var edition in compatiblePSEditions)
         {
-            var fileName = Path.GetFileName(file);
-            if (!IsBinaryFileName(fileName)) continue;
-            if (AlwaysExcludedRootFiles.Contains(fileName)) continue;
-            fallback.RootFileNames.Add(fileName);
+            var result = detector.Analyze(
+                opts.ProjectRoot,
+                edition,
+                currentModuleName: opts.ModuleName,
+                searchRoots: opts.BinaryConflictSearchRoots);
+            if (!result.HasConflicts)
+            {
+                editionStatuses.Add((result.PowerShellEdition, false));
+                continue;
+            }
+
+            var advisory = BuildBinaryConflictAdvisorySummary(result, priorityModuleNames);
+            editionStatuses.Add((result.PowerShellEdition, true));
+            var reportPath = WriteBinaryConflictReport(opts.BinaryConflictReportRoot, advisory, result);
+            _logger.Warn($"Binary conflict advisory ({result.PowerShellEdition}): {result.Summary}.");
+            _logger.Warn($"  Scope: {BuildDeclaredDependencyModulesText(advisory)}");
+
+            foreach (var module in advisory.AllModules)
+            {
+                _logger.Warn("  " + BuildBinaryConflictModuleSummaryLine(module, includeModuleLabel: true));
+            }
+
+            if (!string.IsNullOrWhiteSpace(advisory.Actionability))
+                _logger.Warn($"  Check: {advisory.Actionability}");
+            if (!string.IsNullOrWhiteSpace(reportPath))
+                _logger.Warn($"  Report: {reportPath}");
+
+            advisories.Add((result, advisory, reportPath));
         }
 
+        if (advisories.Count == 0)
+        {
+            if (editionStatuses.Count > 0)
+            {
+                notes.Add(new ModuleOwnerNote(
+                    "Binary Conflicts",
+                    ModuleOwnerNoteSeverity.Info,
+                    summary: BuildBinaryConflictEditionStatusText(editionStatuses),
+                    details: Array.Empty<string>()));
+            }
+
+            return notes.ToArray();
+        }
+
+        var editionStatusText = BuildBinaryConflictEditionStatusText(editionStatuses);
+        foreach (var entry in advisories)
+        {
+            notes.Add(new ModuleOwnerNote(
+                $"Binary Conflicts ({entry.Result.PowerShellEdition})",
+                ModuleOwnerNoteSeverity.Warning,
+                summary: editionStatusText,
+                whyItMatters: BuildBinaryConflictWhyItMatters(entry.Advisory),
+                nextStep: BuildBinaryConflictNextStep(entry.Advisory, entry.ReportPath),
+                details: BuildBinaryConflictOwnerDetails(entry.Advisory, entry.ReportPath)));
+        }
+
+        return notes.ToArray();
+    }
+
+    private static string BuildBinaryConflictEditionStatusText(IReadOnlyList<(string Edition, bool HasConflicts)> statuses)
+    {
+        if (statuses is null || statuses.Count == 0)
+            return string.Empty;
+
+        return string.Join("; ", statuses.Select(static entry =>
+            $"{entry.Edition}: {(entry.HasConflicts ? "conflicts found" : "no conflicts")}"));
+    }
+
+    private static string BuildDeclaredDependencyModulesText(BinaryConflictAdvisorySummary advisory)
+    {
+        if (advisory.PriorityModuleLabels.Length > 0)
+            return "Declared dependency modules involved: " + string.Join(", ", advisory.PriorityModuleLabels) + ".";
+
+        return "Declared dependency modules involved: none.";
+    }
+
+    internal static BinaryConflictAdvisorySummary BuildBinaryConflictAdvisorySummary(
+        BinaryConflictDetectionResult result,
+        IReadOnlyList<string>? priorityModuleNames = null)
+    {
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
+
+        var issues = result.Issues ?? Array.Empty<BinaryConflictDetectionIssue>();
+        var priorityNames = (priorityModuleNames ?? Array.Empty<string>())
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var payloadNewer = issues.Count(static issue => issue.VersionComparison > 0);
+        var payloadOlder = issues.Count(static issue => issue.VersionComparison < 0);
+
+        var latestModuleIssues = issues
+            .GroupBy(static issue => issue.InstalledModuleName, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(group =>
+            {
+                var selectedVersionGroup = group
+                    .GroupBy(static issue => issue.InstalledModuleVersion, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(static versionGroup => ParseModuleVersionOrNull(versionGroup.Key), VersionComparer.Instance)
+                    .ThenByDescending(static versionGroup => versionGroup.Key ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .First();
+                return selectedVersionGroup;
+            })
+            .ToArray();
+
+        var topModules = latestModuleIssues
+            .GroupBy(
+                static issue => new
+                {
+                    issue.InstalledModuleName,
+                    issue.InstalledModuleVersion
+                })
+            .Select(group =>
+            {
+                var moduleName = group.Key.InstalledModuleName;
+                var moduleVersion = group.Key.InstalledModuleVersion;
+                var label = string.IsNullOrWhiteSpace(moduleVersion)
+                    ? moduleName
+                    : moduleName + " " + moduleVersion;
+                return new BinaryConflictModuleSummary(
+                    moduleLabel: label,
+                    conflictCount: group.Count(),
+                    distinctAssemblies: group
+                        .Select(static issue => issue.AssemblyName)
+                        .Where(static name => !string.IsNullOrWhiteSpace(name))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Count(),
+                    mismatches: group
+                        .GroupBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
+                        .Select(static assemblyGroup => assemblyGroup
+                            .OrderBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
+                            .First())
+                        .OrderBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
+                        .Select(static issue => new BinaryConflictExampleSummary(
+                            issue.AssemblyName,
+                            issue.PayloadAssemblyVersion,
+                            issue.InstalledAssemblyVersion))
+                        .ToArray(),
+                    payloadNewerCount: group.Count(static issue => issue.VersionComparison > 0),
+                    payloadOlderCount: group.Count(static issue => issue.VersionComparison < 0));
+            })
+            .OrderByDescending(static item => item.ConflictCount)
+            .ThenByDescending(static item => item.DistinctAssemblies)
+            .ThenBy(static item => item.ModuleLabel, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var topAssemblies = latestModuleIssues
+            .GroupBy(
+                static issue => new
+                {
+                    issue.AssemblyName,
+                    issue.PayloadAssemblyVersion
+                })
+            .Select(group => new BinaryConflictAssemblySummary(
+                assemblyLabel: $"{group.Key.AssemblyName} {group.Key.PayloadAssemblyVersion}",
+                conflictCount: group.Count(),
+                distinctModules: group
+                    .Select(static issue => string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                        ? issue.InstalledModuleName
+                        : issue.InstalledModuleName + " " + issue.InstalledModuleVersion)
+                    .Where(static label => !string.IsNullOrWhiteSpace(label))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count()))
+            .OrderByDescending(static item => item.ConflictCount)
+            .ThenByDescending(static item => item.DistinctModules)
+            .ThenBy(static item => item.AssemblyLabel, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var actionability = BuildBinaryConflictActionability(
+            payloadNewer,
+            payloadOlder,
+            topModules.Length > 0 ? topModules[0].ModuleLabel : null);
+
+        return new BinaryConflictAdvisorySummary(
+            powerShellEdition: result.PowerShellEdition,
+            distinctPayloadAssemblies: issues
+                .Select(static issue => issue.AssemblyName)
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            distinctInstalledModules: latestModuleIssues
+                .Select(static issue => string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                    ? issue.InstalledModuleName
+                    : issue.InstalledModuleName + " " + issue.InstalledModuleVersion)
+                .Where(static label => !string.IsNullOrWhiteSpace(label))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            payloadNewerConflicts: payloadNewer,
+            payloadOlderConflicts: payloadOlder,
+            allModules: topModules,
+            topModules: topModules.Take(3).ToArray(),
+            remainingModuleCount: Math.Max(0, topModules.Length - 3),
+            topAssemblies: topAssemblies.Take(3).ToArray(),
+            remainingAssemblyCount: Math.Max(0, topAssemblies.Length - 3),
+            priorityModuleLabels: latestModuleIssues
+                .Where(issue => priorityNames.Contains(issue.InstalledModuleName, StringComparer.OrdinalIgnoreCase))
+                .Select(static issue => string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                    ? issue.InstalledModuleName
+                    : issue.InstalledModuleName + " " + issue.InstalledModuleVersion)
+                .Where(static label => !string.IsNullOrWhiteSpace(label))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static label => label, StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            actionability: actionability);
+    }
+
+    private static string BuildBinaryConflictActionability(int payloadNewer, int payloadOlder, string? primaryModuleLabel)
+    {
+        if (payloadNewer == 0 && payloadOlder == 0)
+            return "Only matters when the listed modules are imported into the same session.";
+
+        return string.IsNullOrWhiteSpace(primaryModuleLabel)
+            ? "Ignore unless you use this module together with one of the listed installed modules."
+            : $"Ignore unless you use this module together with {primaryModuleLabel} or one of the other listed installed modules.";
+    }
+
+    private static Version? ParseModuleVersionOrNull(string? value)
+        => Version.TryParse(value, out var parsed) ? parsed : null;
+
+    private static string BuildBinaryConflictWhyItMatters(BinaryConflictAdvisorySummary advisory)
+    {
+        var sessionLabel = BuildBinaryConflictSessionLabel(advisory.PowerShellEdition);
+
+        if (advisory.PriorityModuleLabels.Length > 0)
+        {
+            return $"Only matters if this module and one of those declared modules are loaded into the same {sessionLabel} session.";
+        }
+
+        return $"Only matters if this module and one of the modules below are loaded into the same {sessionLabel} session.";
+    }
+
+    private static string BuildBinaryConflictNextStep(BinaryConflictAdvisorySummary advisory, string? reportPath)
+    {
+        if (advisory.PriorityModuleLabels.Length > 0)
+        {
+            return string.IsNullOrWhiteSpace(reportPath)
+                ? $"If you use those declared modules together, check the exact assembly/version pairs first: {string.Join(", ", advisory.PriorityModuleLabels)}."
+                : $"If you use those declared modules together, open the full report first. It shows the exact assembly/version pairs for: {string.Join(", ", advisory.PriorityModuleLabels)}.";
+        }
+
+        return string.IsNullOrWhiteSpace(reportPath)
+            ? "Ignore if you never load those modules together. Otherwise check the exact assembly/version pairs before testing import order."
+            : "Ignore if you never load those modules together. Otherwise open the full report for the exact assembly/version pairs, then test import order only for the modules you actually use together.";
+    }
+
+    private static string[] BuildBinaryConflictOwnerDetails(BinaryConflictAdvisorySummary advisory, string? reportPath)
+    {
+        var details = new List<string>();
+        details.Add(BuildDeclaredDependencyModulesText(advisory));
+        details.Add("Installed modules below already keep only the newest installed version per module name.");
+
+        if (advisory.AllModules.Length > 0)
+        {
+            foreach (var module in advisory.AllModules)
+                details.Add(BuildBinaryConflictModuleSummaryLine(module, includeModuleLabel: true));
+        }
+
+        if (!string.IsNullOrWhiteSpace(reportPath))
+            details.Add("Full report: " + reportPath!.Trim());
+
+        return details.ToArray();
+    }
+
+    internal string? WriteBinaryConflictReport(
+        string? reportRoot,
+        BinaryConflictAdvisorySummary advisory,
+        BinaryConflictDetectionResult result)
+    {
+        if (string.IsNullOrWhiteSpace(reportRoot))
+            return null;
+
+        try
+        {
+            var root = Path.GetFullPath(reportRoot);
+            var reportsDirectory = Path.Combine(root, "Artefacts", "Reports");
+            Directory.CreateDirectory(reportsDirectory);
+            var fileName = $"BinaryConflicts.{result.PowerShellEdition}.txt";
+            var path = Path.Combine(reportsDirectory, fileName);
+
+            var lines = new List<string>
+            {
+                $"Binary conflict report for {result.PowerShellEdition}",
+                $"Summary: {result.Issues.Length} assembly-version mismatches across {advisory.AllModules.Length} installed module(s).",
+                BuildDeclaredDependencyModulesText(advisory),
+                "Installed modules below already keep only the newest installed version per module name.",
+                $"Why this matters: {BuildBinaryConflictWhyItMatters(advisory)}",
+                string.Empty
+            };
+
+            foreach (var module in advisory.AllModules)
+            {
+                lines.Add(module.ModuleLabel);
+                lines.Add($"  Shared assemblies: {module.DistinctAssemblies}");
+                lines.Add($"  Version direction: {BuildBinaryConflictVersionDirectionText(module)}");
+                lines.Add($"  Suggested check: {BuildBinaryConflictModuleCheckText(module)}");
+                lines.Add("  Mismatches:");
+                foreach (var mismatch in module.Mismatches)
+                    lines.Add($"  - {mismatch.AssemblyName}: ours {mismatch.PayloadAssemblyVersion}, theirs {mismatch.InstalledAssemblyVersion} ({BuildBinaryConflictMismatchDirectionText(mismatch)})");
+                lines.Add(string.Empty);
+            }
+
+            File.WriteAllLines(path, lines);
+            return path;
+        }
+        catch (Exception ex)
+        {
+            _logger.Verbose($"Failed to write binary conflict report. {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string BuildBinaryConflictSessionLabel(string? powerShellEdition)
+    {
+        if (string.Equals(powerShellEdition, "Desktop", StringComparison.OrdinalIgnoreCase))
+            return "Windows PowerShell/Desktop";
+        if (string.Equals(powerShellEdition, "Core", StringComparison.OrdinalIgnoreCase))
+            return "PowerShell/Core";
+
+        return string.IsNullOrWhiteSpace(powerShellEdition) ? "PowerShell" : powerShellEdition!;
+    }
+
+    private static string BuildBinaryConflictVersionDirectionText(BinaryConflictModuleSummary module)
+    {
+        return module.PayloadNewerCount > 0 && module.PayloadOlderCount > 0
+            ? "mixed newer/older versions on different assemblies"
+            : module.PayloadNewerCount > 0
+                ? "our module is newer on every listed assembly"
+                : module.PayloadOlderCount > 0
+                    ? "the installed module is newer on every listed assembly"
+                    : "different versions";
+    }
+
+    private static string BuildBinaryConflictModuleCheckText(BinaryConflictModuleSummary module)
+    {
+        return module.PayloadNewerCount > 0 && module.PayloadOlderCount > 0
+            ? "If you use both modules together, test both import orders."
+            : module.PayloadNewerCount > 0
+                ? "If you use both modules together, import that module first, then this one."
+                : module.PayloadOlderCount > 0
+                    ? "If you use both modules together, import this module first, then that module."
+                    : "If you use both modules together, test both import orders.";
+    }
+
+    private static string BuildBinaryConflictMismatchDirectionText(BinaryConflictExampleSummary mismatch)
+    {
+        var payload = ParseModuleVersionOrNull(mismatch.PayloadAssemblyVersion);
+        var installed = ParseModuleVersionOrNull(mismatch.InstalledAssemblyVersion);
+        if (payload is null || installed is null)
+            return "versions differ";
+
+        var comparison = payload.CompareTo(installed);
+        if (comparison > 0)
+            return "ours newer";
+        if (comparison < 0)
+            return "theirs newer";
+
+        return "versions differ";
+    }
+
+    private static string BuildBinaryConflictModuleSummaryLine(BinaryConflictModuleSummary module, bool includeModuleLabel)
+    {
+        var prefix = includeModuleLabel ? module.ModuleLabel + ": " : string.Empty;
+        return $"{prefix}{module.DistinctAssemblies} shared assemblies differ; {BuildBinaryConflictVersionDirectionText(module)}.";
+    }
+
+    private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm, PublishCopyOptions options)
+    {
+        var plan = TryCreateCopyPlanFromDeps(publishDir, tfm, options);
+        if (plan is not null)
+        {
+            IncludeTopLevelBinaryFiles(plan.RootFileNames, publishDir, options, plan.DeclaredTopLevelBinaryFileNames);
+            return plan;
+        }
+
+        // Fallback: copy top-level binaries, excluding known PowerShell host assemblies.
+        var fallback = new PublishCopyPlan();
+        IncludeTopLevelBinaryFiles(fallback.RootFileNames, publishDir, options);
         return fallback;
     }
 
-    private PublishCopyPlan? TryCreateCopyPlanFromDeps(string publishDir, string tfm)
+    private PublishCopyPlan? TryCreateCopyPlanFromDeps(string publishDir, string tfm, PublishCopyOptions options)
     {
         string? depsPath = null;
         try
@@ -433,7 +1000,8 @@ public sealed class ModuleBuilder
             if (!root.TryGetProperty("targets", out var targets) || targets.ValueKind != JsonValueKind.Object)
                 return plan;
 
-            var excluded = ComputeExcludedLibraries(targets);
+            var appAssemblyName = Path.GetFileNameWithoutExtension(depsPath);
+            var excluded = ComputeExcludedLibraries(targets, appAssemblyName, options.ExcludeLibraryFilters);
 
             foreach (var target in targets.EnumerateObject())
             {
@@ -441,11 +1009,16 @@ public sealed class ModuleBuilder
 
                 foreach (var lib in target.Value.EnumerateObject())
                 {
+                    AddDeclaredBinaryFileNames(plan.DeclaredTopLevelBinaryFileNames, lib.Value, "runtime");
+                    AddDeclaredBinaryFileNames(plan.DeclaredTopLevelBinaryFileNames, lib.Value, "native");
+                    AddDeclaredBinaryFileNames(plan.DeclaredTopLevelBinaryFileNames, lib.Value, "runtimeTargets");
+
                     if (excluded.Contains(lib.Name)) continue;
 
-                    AddRuntimeAssetFileNames(plan.RootFileNames, lib.Value, "runtime");
-                    AddRuntimeAssetFileNames(plan.RootFileNames, lib.Value, "native");
-                    AddRuntimeTargetPaths(plan.RuntimeTargetRelativePaths, lib.Value);
+                    AddRuntimeAssetFileNames(plan.RootFileNames, lib.Name, lib.Value, "runtime", options.ExcludeLibraryFilters);
+                    AddRuntimeAssetFileNames(plan.RootFileNames, lib.Name, lib.Value, "native", options.ExcludeLibraryFilters);
+                    if (!options.DoNotCopyLibrariesRecursively)
+                        AddRuntimeTargetPaths(plan.RuntimeTargetRelativePaths, lib.Name, lib.Value, options.ExcludeLibraryFilters);
                 }
             }
 
@@ -467,17 +1040,22 @@ public sealed class ModuleBuilder
     private static bool IsPowerShellRuntimeLibraryId(string id)
     {
         if (string.IsNullOrWhiteSpace(id)) return false;
-        return id.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase) ||
-               id.Equals("Microsoft.PowerShell.5.ReferenceAssemblies", StringComparison.OrdinalIgnoreCase) ||
-               id.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase) ||
-               id.StartsWith("Microsoft.Management.Infrastructure", StringComparison.OrdinalIgnoreCase) ||
-               id.StartsWith("Microsoft.WSMan", StringComparison.OrdinalIgnoreCase);
+        return MatchesAnyPattern(id, DefaultExcludedLibraryRootPatterns);
     }
 
-    private static HashSet<string> ComputeExcludedLibraries(JsonElement targets)
+    private static string GetLibraryIdFromTargetKey(string key)
     {
-        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(key)) return key;
+        var slash = key.IndexOf('/');
+        return slash > 0 ? key.Substring(0, slash) : key;
+    }
+
+    private static HashSet<string> ComputeExcludedLibraries(JsonElement targets, string? appAssemblyName, IReadOnlyCollection<string>? customFilters)
+    {
         var dependencyMap = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        var appRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var excludedRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var filters = NormalizeFilters(customFilters);
 
         foreach (var target in targets.EnumerateObject())
         {
@@ -486,10 +1064,11 @@ public sealed class ModuleBuilder
             foreach (var lib in target.Value.EnumerateObject())
             {
                 var key = lib.Name;
-                var slash = key.IndexOf('/');
-                var id = slash > 0 ? key.Substring(0, slash) : key;
-                if (IsPowerShellRuntimeLibraryId(id))
-                    roots.Add(key);
+                var id = GetLibraryIdFromTargetKey(key);
+                if (IsExcludedLibraryKey(key, id, filters))
+                    excludedRoots.Add(key);
+                if (IsApplicationRootLibrary(lib.Value, id, appAssemblyName))
+                    appRoots.Add(key);
 
                 if (dependencyMap.ContainsKey(key)) continue;
                 if (!lib.Value.TryGetProperty("dependencies", out var depsObj) || depsObj.ValueKind != JsonValueKind.Object)
@@ -511,8 +1090,44 @@ public sealed class ModuleBuilder
             }
         }
 
-        var excluded = new HashSet<string>(roots, StringComparer.OrdinalIgnoreCase);
-        var queue = new Queue<string>(roots);
+        if (appRoots.Count == 0 && !string.IsNullOrWhiteSpace(appAssemblyName))
+        {
+            foreach (var key in dependencyMap.Keys)
+            {
+                var id = GetLibraryIdFromTargetKey(key);
+                if (id.Equals(appAssemblyName, StringComparison.OrdinalIgnoreCase))
+                    appRoots.Add(key);
+            }
+        }
+
+        var preserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var preserveQueue = new Queue<string>();
+        foreach (var appRoot in appRoots)
+        {
+            if (!dependencyMap.TryGetValue(appRoot, out var deps)) continue;
+            foreach (var depKey in deps)
+            {
+                if (excludedRoots.Contains(depKey)) continue;
+                if (!preserved.Add(depKey)) continue;
+                preserveQueue.Enqueue(depKey);
+            }
+        }
+
+        while (preserveQueue.Count > 0)
+        {
+            var current = preserveQueue.Dequeue();
+            if (!dependencyMap.TryGetValue(current, out var deps)) continue;
+
+            foreach (var depKey in deps)
+            {
+                if (excludedRoots.Contains(depKey)) continue;
+                if (!preserved.Add(depKey)) continue;
+                preserveQueue.Enqueue(depKey);
+            }
+        }
+
+        var excluded = new HashSet<string>(excludedRoots, StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<string>(excludedRoots);
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
@@ -520,14 +1135,40 @@ public sealed class ModuleBuilder
 
             foreach (var depKey in deps)
             {
+                if (preserved.Contains(depKey)) continue;
                 if (excluded.Add(depKey)) queue.Enqueue(depKey);
             }
         }
 
+        foreach (var keep in preserved)
+            excluded.Remove(keep);
+
         return excluded;
     }
 
-    private static void AddRuntimeAssetFileNames(HashSet<string> rootFileNames, JsonElement libEntry, string propertyName)
+    private static void IncludeTopLevelBinaryFiles(
+        HashSet<string> rootFileNames,
+        string publishDir,
+        PublishCopyOptions options,
+        IReadOnlyCollection<string>? declaredTopLevelBinaryFileNames = null)
+    {
+        foreach (var file in Directory.EnumerateFiles(publishDir, "*", SearchOption.TopDirectoryOnly))
+        {
+            var fileName = Path.GetFileName(file);
+            if (!IsBinaryFileName(fileName)) continue;
+            if (AlwaysExcludedRootFiles.Contains(fileName)) continue;
+            if (declaredTopLevelBinaryFileNames is not null && declaredTopLevelBinaryFileNames.Contains(fileName)) continue;
+            if (MatchesAnyFilter(fileName, fileName, options.ExcludeLibraryFilters)) continue;
+            rootFileNames.Add(fileName);
+        }
+    }
+
+    private static void AddRuntimeAssetFileNames(
+        HashSet<string> rootFileNames,
+        string libraryKey,
+        JsonElement libEntry,
+        string propertyName,
+        IReadOnlyCollection<string> filters)
     {
         if (!libEntry.TryGetProperty(propertyName, out var assets) || assets.ValueKind != JsonValueKind.Object)
             return;
@@ -536,11 +1177,34 @@ public sealed class ModuleBuilder
         {
             var fileName = Path.GetFileName(asset.Name);
             if (!IsBinaryFileName(fileName)) continue;
+            if (MatchesAnyFilter(libraryKey, asset.Name, filters)) continue;
             rootFileNames.Add(fileName);
         }
     }
 
-    private static void AddRuntimeTargetPaths(HashSet<string> relativePaths, JsonElement libEntry)
+    private static void AddDeclaredBinaryFileNames(
+        HashSet<string> declaredFileNames,
+        JsonElement libEntry,
+        string propertyName)
+    {
+        if (!libEntry.TryGetProperty(propertyName, out var assets) || assets.ValueKind != JsonValueKind.Object)
+            return;
+
+        foreach (var asset in assets.EnumerateObject())
+        {
+            var fileName = Path.GetFileName(asset.Name);
+            if (!IsBinaryFileName(fileName))
+                continue;
+
+            declaredFileNames.Add(fileName);
+        }
+    }
+
+    private static void AddRuntimeTargetPaths(
+        HashSet<string> relativePaths,
+        string libraryKey,
+        JsonElement libEntry,
+        IReadOnlyCollection<string> filters)
     {
         if (!libEntry.TryGetProperty("runtimeTargets", out var assets) || assets.ValueKind != JsonValueKind.Object)
             return;
@@ -550,8 +1214,82 @@ public sealed class ModuleBuilder
             var relative = asset.Name.Replace('/', Path.DirectorySeparatorChar);
             var fileName = Path.GetFileName(relative);
             if (!IsBinaryFileName(fileName)) continue;
+            if (MatchesAnyFilter(libraryKey, asset.Name, filters) || MatchesAnyFilter(libraryKey, relative, filters)) continue;
             relativePaths.Add(relative);
         }
+    }
+
+    private static bool IsApplicationRootLibrary(JsonElement libEntry, string libraryId, string? appAssemblyName)
+    {
+        if (string.IsNullOrWhiteSpace(appAssemblyName))
+            return false;
+
+        if (!libraryId.Equals(appAssemblyName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!libEntry.TryGetProperty("runtime", out var runtime) || runtime.ValueKind != JsonValueKind.Object)
+            return true;
+
+        foreach (var asset in runtime.EnumerateObject())
+        {
+            var fileName = Path.GetFileNameWithoutExtension(asset.Name);
+            if (fileName.Equals(appAssemblyName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsExcludedLibraryKey(string key, string libraryId, IReadOnlyCollection<string> customFilters)
+    {
+        if (IsPowerShellRuntimeLibraryId(libraryId))
+            return true;
+
+        return MatchesAnyFilter(key, libraryId, customFilters);
+    }
+
+    private static string[] NormalizeFilters(IReadOnlyCollection<string>? filters)
+        => (filters ?? Array.Empty<string>())
+            .Where(static filter => !string.IsNullOrWhiteSpace(filter))
+            .Select(static filter => filter.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static bool MatchesAnyFilter(string primary, string secondary, IReadOnlyCollection<string>? filters)
+    {
+        if (filters is null || filters.Count == 0) return false;
+        foreach (var filter in filters)
+        {
+            if (string.IsNullOrWhiteSpace(filter)) continue;
+            if (MatchesFilter(primary, filter) || MatchesFilter(secondary, filter)) return true;
+        }
+        return false;
+    }
+
+    private static bool MatchesAnyPattern(string value, IReadOnlyCollection<string> patterns)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (MatchesFilter(value, pattern))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool MatchesFilter(string value, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        if (pattern.IndexOfAny(new[] { '*', '?' }) < 0)
+            return value.Equals(pattern, StringComparison.OrdinalIgnoreCase);
+
+        var regexPattern = "^" + Regex.Escape(pattern)
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".") + "$";
+
+        return Regex.IsMatch(value, regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private static bool IsBinaryFileName(string fileNameOrPath)
@@ -600,5 +1338,122 @@ public sealed class ModuleBuilder
         }
 
         return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    internal sealed class BinaryConflictAdvisorySummary
+    {
+        internal string PowerShellEdition { get; }
+        internal int DistinctPayloadAssemblies { get; }
+        internal int DistinctInstalledModules { get; }
+        internal int PayloadNewerConflicts { get; }
+        internal int PayloadOlderConflicts { get; }
+        internal BinaryConflictModuleSummary[] AllModules { get; }
+        internal BinaryConflictModuleSummary[] TopModules { get; }
+        internal int RemainingModuleCount { get; }
+        internal BinaryConflictAssemblySummary[] TopAssemblies { get; }
+        internal int RemainingAssemblyCount { get; }
+        internal string[] PriorityModuleLabels { get; }
+        internal string Actionability { get; }
+
+        internal BinaryConflictAdvisorySummary(
+            string powerShellEdition,
+            int distinctPayloadAssemblies,
+            int distinctInstalledModules,
+            int payloadNewerConflicts,
+            int payloadOlderConflicts,
+            BinaryConflictModuleSummary[] allModules,
+            BinaryConflictModuleSummary[] topModules,
+            int remainingModuleCount,
+            BinaryConflictAssemblySummary[] topAssemblies,
+            int remainingAssemblyCount,
+            string[] priorityModuleLabels,
+            string actionability)
+        {
+            PowerShellEdition = powerShellEdition ?? string.Empty;
+            DistinctPayloadAssemblies = distinctPayloadAssemblies;
+            DistinctInstalledModules = distinctInstalledModules;
+            PayloadNewerConflicts = payloadNewerConflicts;
+            PayloadOlderConflicts = payloadOlderConflicts;
+            AllModules = allModules ?? Array.Empty<BinaryConflictModuleSummary>();
+            TopModules = topModules ?? Array.Empty<BinaryConflictModuleSummary>();
+            RemainingModuleCount = remainingModuleCount;
+            TopAssemblies = topAssemblies ?? Array.Empty<BinaryConflictAssemblySummary>();
+            RemainingAssemblyCount = remainingAssemblyCount;
+            PriorityModuleLabels = priorityModuleLabels ?? Array.Empty<string>();
+            Actionability = actionability ?? string.Empty;
+        }
+    }
+
+    internal sealed class BinaryConflictModuleSummary
+    {
+        internal string ModuleLabel { get; }
+        internal int ConflictCount { get; }
+        internal int DistinctAssemblies { get; }
+        internal BinaryConflictExampleSummary[] Mismatches { get; }
+        internal int PayloadNewerCount { get; }
+        internal int PayloadOlderCount { get; }
+
+        internal BinaryConflictModuleSummary(
+            string moduleLabel,
+            int conflictCount,
+            int distinctAssemblies,
+            BinaryConflictExampleSummary[] mismatches,
+            int payloadNewerCount,
+            int payloadOlderCount)
+        {
+            ModuleLabel = moduleLabel ?? string.Empty;
+            ConflictCount = conflictCount;
+            DistinctAssemblies = distinctAssemblies;
+            Mismatches = mismatches ?? Array.Empty<BinaryConflictExampleSummary>();
+            PayloadNewerCount = payloadNewerCount;
+            PayloadOlderCount = payloadOlderCount;
+        }
+    }
+
+    private sealed class VersionComparer : IComparer<Version?>
+    {
+        internal static VersionComparer Instance { get; } = new();
+
+        public int Compare(Version? x, Version? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+            return x.CompareTo(y);
+        }
+    }
+
+    internal sealed class BinaryConflictExampleSummary
+    {
+        internal string AssemblyName { get; }
+        internal string PayloadAssemblyVersion { get; }
+        internal string InstalledAssemblyVersion { get; }
+
+        internal BinaryConflictExampleSummary(
+            string assemblyName,
+            string payloadAssemblyVersion,
+            string installedAssemblyVersion)
+        {
+            AssemblyName = assemblyName ?? string.Empty;
+            PayloadAssemblyVersion = payloadAssemblyVersion ?? string.Empty;
+            InstalledAssemblyVersion = installedAssemblyVersion ?? string.Empty;
+        }
+    }
+
+    internal sealed class BinaryConflictAssemblySummary
+    {
+        internal string AssemblyLabel { get; }
+        internal int ConflictCount { get; }
+        internal int DistinctModules { get; }
+
+        internal BinaryConflictAssemblySummary(
+            string assemblyLabel,
+            int conflictCount,
+            int distinctModules)
+        {
+            AssemblyLabel = assemblyLabel ?? string.Empty;
+            ConflictCount = conflictCount;
+            DistinctModules = distinctModules;
+        }
     }
 }

@@ -165,186 +165,49 @@ public sealed class NewConfigurationFormatCommand : PSCmdlet
     /// <summary>Emits formatting configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var settingsCount = 0;
-
-        var options = new FormattingOptions();
-
-        foreach (var apply in ApplyTo)
+        var factory = new FormatConfigurationFactory();
+        var configuration = factory.Create(new FormatConfigurationRequest
         {
-            var hasFormattingSettings = false;
-            var formatting = new FormatCodeOptions
-            {
-                Sort = Sort
-            };
-            if (!string.IsNullOrWhiteSpace(Sort))
-                hasFormattingSettings = true;
+            ApplyTo = ApplyTo,
+            EnableFormatting = EnableFormatting.IsPresent,
+            Sort = Sort,
+            RemoveCommentsSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RemoveComments)),
+            RemoveComments = RemoveComments.IsPresent,
+            RemoveEmptyLinesSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RemoveEmptyLines)),
+            RemoveEmptyLines = RemoveEmptyLines.IsPresent,
+            RemoveAllEmptyLinesSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RemoveAllEmptyLines)),
+            RemoveAllEmptyLines = RemoveAllEmptyLines.IsPresent,
+            RemoveCommentsInParamBlockSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RemoveCommentsInParamBlock)),
+            RemoveCommentsInParamBlock = RemoveCommentsInParamBlock.IsPresent,
+            RemoveCommentsBeforeParamBlockSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RemoveCommentsBeforeParamBlock)),
+            RemoveCommentsBeforeParamBlock = RemoveCommentsBeforeParamBlock.IsPresent,
+            UpdateProjectRoot = UpdateProjectRoot.IsPresent,
+            PlaceOpenBraceEnable = PlaceOpenBraceEnable.IsPresent,
+            PlaceOpenBraceOnSameLine = PlaceOpenBraceOnSameLine.IsPresent,
+            PlaceOpenBraceNewLineAfter = PlaceOpenBraceNewLineAfter.IsPresent,
+            PlaceOpenBraceIgnoreOneLineBlock = PlaceOpenBraceIgnoreOneLineBlock.IsPresent,
+            PlaceCloseBraceEnable = PlaceCloseBraceEnable.IsPresent,
+            PlaceCloseBraceNewLineAfter = PlaceCloseBraceNewLineAfter.IsPresent,
+            PlaceCloseBraceIgnoreOneLineBlock = PlaceCloseBraceIgnoreOneLineBlock.IsPresent,
+            PlaceCloseBraceNoEmptyLineBefore = PlaceCloseBraceNoEmptyLineBefore.IsPresent,
+            UseConsistentIndentationEnable = UseConsistentIndentationEnable.IsPresent,
+            UseConsistentIndentationKind = UseConsistentIndentationKind,
+            UseConsistentIndentationPipelineIndentation = UseConsistentIndentationPipelineIndentation,
+            UseConsistentIndentationIndentationSize = UseConsistentIndentationIndentationSize,
+            UseConsistentWhitespaceEnable = UseConsistentWhitespaceEnable.IsPresent,
+            UseConsistentWhitespaceCheckInnerBrace = UseConsistentWhitespaceCheckInnerBrace.IsPresent,
+            UseConsistentWhitespaceCheckOpenBrace = UseConsistentWhitespaceCheckOpenBrace.IsPresent,
+            UseConsistentWhitespaceCheckOpenParen = UseConsistentWhitespaceCheckOpenParen.IsPresent,
+            UseConsistentWhitespaceCheckOperator = UseConsistentWhitespaceCheckOperator.IsPresent,
+            UseConsistentWhitespaceCheckPipe = UseConsistentWhitespaceCheckPipe.IsPresent,
+            UseConsistentWhitespaceCheckSeparator = UseConsistentWhitespaceCheckSeparator.IsPresent,
+            AlignAssignmentStatementEnable = AlignAssignmentStatementEnable.IsPresent,
+            AlignAssignmentStatementCheckHashtable = AlignAssignmentStatementCheckHashtable.IsPresent,
+            UseCorrectCasingEnable = UseCorrectCasingEnable.IsPresent,
+            PSD1Style = PSD1Style
+        });
 
-            if (MyInvocation.BoundParameters.ContainsKey(nameof(RemoveComments)))
-            {
-                formatting.RemoveComments = RemoveComments.IsPresent;
-                hasFormattingSettings = true;
-            }
-            if (MyInvocation.BoundParameters.ContainsKey(nameof(RemoveEmptyLines)))
-            {
-                formatting.RemoveEmptyLines = RemoveEmptyLines.IsPresent;
-                hasFormattingSettings = true;
-            }
-            if (MyInvocation.BoundParameters.ContainsKey(nameof(RemoveAllEmptyLines)))
-            {
-                formatting.RemoveAllEmptyLines = RemoveAllEmptyLines.IsPresent;
-                hasFormattingSettings = true;
-            }
-            if (MyInvocation.BoundParameters.ContainsKey(nameof(RemoveCommentsInParamBlock)))
-            {
-                formatting.RemoveCommentsInParamBlock = RemoveCommentsInParamBlock.IsPresent;
-                hasFormattingSettings = true;
-            }
-            if (MyInvocation.BoundParameters.ContainsKey(nameof(RemoveCommentsBeforeParamBlock)))
-            {
-                formatting.RemoveCommentsBeforeParamBlock = RemoveCommentsBeforeParamBlock.IsPresent;
-                hasFormattingSettings = true;
-            }
-
-            var includeRules = new List<string>();
-            var rules = new FormatterRulesOptions();
-
-            if (PlaceOpenBraceEnable.IsPresent)
-            {
-                includeRules.Add("PSPlaceOpenBrace");
-                rules.PSPlaceOpenBrace = new BraceRuleOptions
-                {
-                    Enable = true,
-                    OnSameLine = PlaceOpenBraceOnSameLine.IsPresent,
-                    NewLineAfter = PlaceOpenBraceNewLineAfter.IsPresent,
-                    IgnoreOneLineBlock = PlaceOpenBraceIgnoreOneLineBlock.IsPresent
-                };
-                hasFormattingSettings = true;
-            }
-
-            if (PlaceCloseBraceEnable.IsPresent)
-            {
-                includeRules.Add("PSPlaceCloseBrace");
-                rules.PSPlaceCloseBrace = new CloseBraceRuleOptions
-                {
-                    Enable = true,
-                    NewLineAfter = PlaceCloseBraceNewLineAfter.IsPresent,
-                    IgnoreOneLineBlock = PlaceCloseBraceIgnoreOneLineBlock.IsPresent,
-                    NoEmptyLineBefore = PlaceCloseBraceNoEmptyLineBefore.IsPresent
-                };
-                hasFormattingSettings = true;
-            }
-
-            if (UseConsistentIndentationEnable.IsPresent)
-            {
-                includeRules.Add("PSUseConsistentIndentation");
-                rules.PSUseConsistentIndentation = new IndentationRuleOptions
-                {
-                    Enable = true,
-                    Kind = UseConsistentIndentationKind,
-                    PipelineIndentation = UseConsistentIndentationPipelineIndentation,
-                    IndentationSize = UseConsistentIndentationIndentationSize
-                };
-                hasFormattingSettings = true;
-            }
-
-            if (UseConsistentWhitespaceEnable.IsPresent)
-            {
-                includeRules.Add("PSUseConsistentWhitespace");
-                rules.PSUseConsistentWhitespace = new WhitespaceRuleOptions
-                {
-                    Enable = true,
-                    CheckInnerBrace = UseConsistentWhitespaceCheckInnerBrace.IsPresent,
-                    CheckOpenBrace = UseConsistentWhitespaceCheckOpenBrace.IsPresent,
-                    CheckOpenParen = UseConsistentWhitespaceCheckOpenParen.IsPresent,
-                    CheckOperator = UseConsistentWhitespaceCheckOperator.IsPresent,
-                    CheckPipe = UseConsistentWhitespaceCheckPipe.IsPresent,
-                    CheckSeparator = UseConsistentWhitespaceCheckSeparator.IsPresent
-                };
-                hasFormattingSettings = true;
-            }
-
-            if (AlignAssignmentStatementEnable.IsPresent)
-            {
-                includeRules.Add("PSAlignAssignmentStatement");
-                rules.PSAlignAssignmentStatement = new AlignAssignmentRuleOptions
-                {
-                    Enable = true,
-                    CheckHashtable = AlignAssignmentStatementCheckHashtable.IsPresent
-                };
-                hasFormattingSettings = true;
-            }
-
-            if (UseCorrectCasingEnable.IsPresent)
-            {
-                includeRules.Add("PSUseCorrectCasing");
-                rules.PSUseCorrectCasing = new EnableOnlyRuleOptions
-                {
-                    Enable = true
-                };
-                hasFormattingSettings = true;
-            }
-
-            if (includeRules.Count > 0)
-            {
-                formatting.FormatterSettings = new FormatterSettingsOptions
-                {
-                    IncludeRules = includeRules.ToArray(),
-                    Rules = rules
-                };
-                hasFormattingSettings = true;
-            }
-
-            if (hasFormattingSettings || EnableFormatting.IsPresent)
-            {
-                settingsCount++;
-                formatting.Enabled = true;
-
-                switch (apply)
-                {
-                    case "OnMergePSM1":
-                        options.Merge.FormatCodePSM1 = formatting;
-                        break;
-                    case "OnMergePSD1":
-                        options.Merge.FormatCodePSD1 = formatting;
-                        break;
-                    case "DefaultPSM1":
-                        options.Standard.FormatCodePSM1 = formatting;
-                        break;
-                    case "DefaultPS1":
-                        options.Standard.FormatCodePS1 = formatting;
-                        break;
-                    case "DefaultPSD1":
-                        options.Standard.FormatCodePSD1 = formatting;
-                        break;
-                    default:
-                        throw new PSArgumentException($"Unknown ApplyTo: {apply}");
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(PSD1Style))
-            {
-                if (apply == "OnMergePSD1")
-                {
-                    settingsCount++;
-                    options.Merge.Style = new FormattingStyleOptions { PSD1 = PSD1Style };
-                }
-                else if (apply == "DefaultPSD1")
-                {
-                    settingsCount++;
-                    options.Standard.Style = new FormattingStyleOptions { PSD1 = PSD1Style };
-                }
-            }
-        }
-
-        if (UpdateProjectRoot.IsPresent)
-        {
-            options.UpdateProjectRoot = true;
-            settingsCount++;
-        }
-
-        if (settingsCount > 0)
-        {
-            WriteObject(new ConfigurationFormattingSegment { Options = options });
-        }
+        if (configuration is not null)
+            WriteObject(configuration);
     }
 }
