@@ -86,6 +86,16 @@ public sealed class ModulePipelineResult
     public FormatterResult[] FormattingProjectResults { get; }
 
     /// <summary>
+    /// Xcode project version update results produced before staging.
+    /// </summary>
+    public XcodeProjectVersionUpdateResult[] XcodeProjectVersionResults { get; }
+
+    /// <summary>
+    /// Apple app release preparation results produced before staging.
+    /// </summary>
+    public AppleAppReleasePreparationResult[] AppleAppResults { get; }
+
+    /// <summary>
     /// Publish results produced during the run.
     /// </summary>
     public ModulePublishResult[] PublishResults { get; }
@@ -122,7 +132,9 @@ public sealed class ModulePipelineResult
         CheckStatus? projectRootFileConsistencyStatus = null,
         ProjectConversionResult? projectRootFileConsistencyEncodingFix = null,  
         ProjectConversionResult? projectRootFileConsistencyLineEndingFix = null,
-        ModuleSigningResult? signingResult = null)
+        ModuleSigningResult? signingResult = null,
+        XcodeProjectVersionUpdateResult[]? xcodeProjectVersionResults = null,
+        AppleAppReleasePreparationResult[]? appleAppResults = null)
     {
         Plan = plan;
         BuildResult = buildResult;
@@ -140,6 +152,8 @@ public sealed class ModulePipelineResult
         ValidationReport = validationReport;
         FormattingStagingResults = formattingStagingResults ?? Array.Empty<FormatterResult>();
         FormattingProjectResults = formattingProjectResults ?? Array.Empty<FormatterResult>();
+        XcodeProjectVersionResults = xcodeProjectVersionResults ?? Array.Empty<XcodeProjectVersionUpdateResult>();
+        AppleAppResults = appleAppResults ?? Array.Empty<AppleAppReleasePreparationResult>();
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
         SigningResult = signingResult;

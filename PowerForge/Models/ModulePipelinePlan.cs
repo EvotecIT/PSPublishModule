@@ -123,6 +123,16 @@ public sealed class ModulePipelinePlan
     public TestConfiguration[] TestsAfterMerge { get; }
 
     /// <summary>
+    /// Apple app release targets to prepare before staging the build.
+    /// </summary>
+    public ConfigurationAppleAppSegment[] AppleApps { get; }
+
+    /// <summary>
+    /// Xcode project version updates to apply before staging the build.
+    /// </summary>
+    public ConfigurationXcodeProjectVersionSegment[] XcodeProjectVersions { get; }
+
+    /// <summary>
     /// When true, module sources should be merged into a single PSM1 (legacy: BuildModule.Merge).
     /// </summary>
     public bool MergeModule { get; }
@@ -244,6 +254,8 @@ public sealed class ModulePipelinePlan
         PlaceHolderOptionConfiguration? placeHolderOption,
         IReadOnlyDictionary<string, string[]> commandModuleDependencies,
         TestConfiguration[] testsAfterMerge,
+        ConfigurationAppleAppSegment[] appleApps,
+        ConfigurationXcodeProjectVersionSegment[] xcodeProjectVersions,
         bool mergeModule,
         bool mergeMissing,
         string[] approvedModules,
@@ -287,6 +299,8 @@ public sealed class ModulePipelinePlan
         PlaceHolderOption = placeHolderOption;
         CommandModuleDependencies = commandModuleDependencies ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         TestsAfterMerge = testsAfterMerge ?? Array.Empty<TestConfiguration>();
+        AppleApps = appleApps ?? Array.Empty<ConfigurationAppleAppSegment>();
+        XcodeProjectVersions = xcodeProjectVersions ?? Array.Empty<ConfigurationXcodeProjectVersionSegment>();
         MergeModule = mergeModule;
         MergeMissing = mergeMissing;
         ApprovedModules = approvedModules ?? Array.Empty<string>();

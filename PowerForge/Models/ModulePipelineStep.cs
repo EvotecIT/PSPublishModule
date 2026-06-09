@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public enum ModulePipelineStepKind
 {
+    /// <summary>Prepare release or project version metadata.</summary>
+    Versioning = 10,
     /// <summary>Build module into staging.</summary>
     Build = 0,
     /// <summary>Generate documentation (markdown + external help).</summary>
@@ -49,18 +51,28 @@ public sealed class ModulePipelineStep
     /// <summary>Optional publish segment associated with the step.</summary>
     public ConfigurationPublishSegment? PublishSegment { get; }
 
+    /// <summary>Optional Xcode project version segment associated with the step.</summary>
+    public ConfigurationXcodeProjectVersionSegment? XcodeProjectVersionSegment { get; }
+
+    /// <summary>Optional Apple app segment associated with the step.</summary>
+    public ConfigurationAppleAppSegment? AppleAppSegment { get; }
+
     private ModulePipelineStep(
         ModulePipelineStepKind kind,
         string key,
         string title,
         ConfigurationArtefactSegment? artefactSegment = null,
-        ConfigurationPublishSegment? publishSegment = null)
+        ConfigurationPublishSegment? publishSegment = null,
+        ConfigurationXcodeProjectVersionSegment? xcodeProjectVersionSegment = null,
+        ConfigurationAppleAppSegment? appleAppSegment = null)
     {
         Kind = kind;
         Key = key ?? string.Empty;
         Title = title ?? string.Empty;
         ArtefactSegment = artefactSegment;
         PublishSegment = publishSegment;
+        XcodeProjectVersionSegment = xcodeProjectVersionSegment;
+        AppleAppSegment = appleAppSegment;
     }
 
     /// <summary>
@@ -71,6 +83,48 @@ public sealed class ModulePipelineStep
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
         var steps = new List<ModulePipelineStep>();
+
+        if (plan.AppleApps is { Length: > 0 })
+        {
+            for (int i = 0; i < plan.AppleApps.Length; i++)
+            {
+                var app = plan.AppleApps[i];
+                if (app is null) continue;
+
+                var cfg = app.Configuration ?? new AppleAppConfiguration();
+                var label = "Prepare Apple app";
+                if (!string.IsNullOrWhiteSpace(cfg.Name))
+                    label += $" ({cfg.Name})";
+                else if (!string.IsNullOrWhiteSpace(cfg.ProjectPath))
+                    label += $" ({Path.GetFileName(cfg.ProjectPath)})";
+
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Versioning,
+                    key: $"version:apple:{i + 1:00}",
+                    title: label,
+                    appleAppSegment: app));
+            }
+        }
+
+        if (plan.XcodeProjectVersions is { Length: > 0 })
+        {
+            for (int i = 0; i < plan.XcodeProjectVersions.Length; i++)
+            {
+                var x = plan.XcodeProjectVersions[i];
+                if (x is null) continue;
+
+                var path = x.Configuration?.Path;
+                var label = "Update Xcode project version";
+                if (!string.IsNullOrWhiteSpace(path)) label += $" ({Path.GetFileName(path)})";
+
+                var key = $"version:xcode:{i + 1:00}";
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Versioning,
+                    key: key,
+                    title: label,
+                    xcodeProjectVersionSegment: x));
+            }
+        }
 
         // 1) Build (always) - split into sub-steps for better progress visibility.
         steps.Add(new ModulePipelineStep(

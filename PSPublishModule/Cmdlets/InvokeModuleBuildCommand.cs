@@ -508,6 +508,20 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         spec.Build.SourcePath = MakeRelativeForConfig(baseDir, spec.Build.SourcePath);
         spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = MakeRelativeForConfigNullable(baseDir, spec.Build.CsprojPath);
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationAppleAppSegment>() ?? Enumerable.Empty<ConfigurationAppleAppSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null || string.IsNullOrWhiteSpace(cfg.ProjectPath)) continue;
+            cfg.ProjectPath = MakeRelativeForConfig(baseDir, cfg.ProjectPath);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationXcodeProjectVersionSegment>() ?? Enumerable.Empty<ConfigurationXcodeProjectVersionSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null || string.IsNullOrWhiteSpace(cfg.Path)) continue;
+            cfg.Path = MakeRelativeForConfig(baseDir, cfg.Path);
+        }
     }
 
     private static string MakeRelativeForConfig(string baseDir, string path)

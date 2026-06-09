@@ -167,6 +167,38 @@
       }
     },
 
+    "XcodeProjectVersionConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Path": { "type": "string", "minLength": 1 },
+        "MarketingVersion": { "type": ["string", "null"] },
+        "UseResolvedVersion": { "type": "boolean" },
+        "BuildNumber": { "type": ["string", "null"] }
+      },
+      "required": ["Path"]
+    },
+
+    "AppleAppConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Name": { "type": ["string", "null"] },
+        "BundleId": { "type": ["string", "null"] },
+        "Platform": { "$ref": "powerforge.common.schema.json#/$defs/ApplePlatform" },
+        "ProjectPath": { "type": "string", "minLength": 1 },
+        "Scheme": { "type": ["string", "null"] },
+        "AppStoreConnectAppId": { "type": ["string", "null"] },
+        "MarketingVersion": { "type": ["string", "null"] },
+        "UseResolvedVersion": { "type": "boolean" },
+        "BuildNumber": { "type": ["string", "null"] },
+        "BuildNumberPolicy": { "$ref": "powerforge.common.schema.json#/$defs/AppleBuildNumberPolicy" }
+      },
+      "required": ["ProjectPath"]
+    },
+
     "IncludeToArrayEntry": {
       "type": "object",
       "additionalProperties": false,
@@ -784,6 +816,26 @@
       "required": ["Type"]
     },
 
+    "XcodeProjectVersionSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "XcodeProjectVersion" },
+        "Configuration": { "$ref": "#/$defs/XcodeProjectVersionConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "AppleAppSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "AppleApp" },
+        "Configuration": { "$ref": "#/$defs/AppleAppConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
     "PlaceHolderSegment": {
       "type": "object",
       "additionalProperties": false,
@@ -889,6 +941,8 @@
         { "$ref": "#/$defs/ImportModulesSegment" },
         { "$ref": "#/$defs/ModuleSkipSegment" },
         { "$ref": "#/$defs/CommandSegment" },
+        { "$ref": "#/$defs/XcodeProjectVersionSegment" },
+        { "$ref": "#/$defs/AppleAppSegment" },
         { "$ref": "#/$defs/PlaceHolderSegment" },
         { "$ref": "#/$defs/PlaceHolderOptionSegment" },
         { "$ref": "#/$defs/CompatibilitySegment" },

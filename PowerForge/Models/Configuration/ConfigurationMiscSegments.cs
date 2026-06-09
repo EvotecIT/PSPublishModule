@@ -127,6 +127,90 @@ public sealed class CommandConfiguration
 }
 
 /// <summary>
+/// Configuration segment that updates version values in an Xcode project.
+/// </summary>
+public sealed class ConfigurationXcodeProjectVersionSegment : IConfigurationSegment
+{
+    /// <inheritdoc />
+    public string Type => "XcodeProjectVersion";
+
+    /// <summary>Xcode project version configuration payload.</summary>
+    public XcodeProjectVersionConfiguration Configuration { get; set; } = new();
+}
+
+/// <summary>
+/// Xcode project version payload for <see cref="ConfigurationXcodeProjectVersionSegment"/>.
+/// </summary>
+public sealed class XcodeProjectVersionConfiguration
+{
+    /// <summary>Enable the project version update.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Path to a .xcodeproj directory or project.pbxproj file. Relative paths resolve from the pipeline project root.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Marketing version to assign to MARKETING_VERSION entries.</summary>
+    public string? MarketingVersion { get; set; }
+
+    /// <summary>Use the pipeline resolved version as MARKETING_VERSION.</summary>
+    public bool UseResolvedVersion { get; set; }
+
+    /// <summary>Optional build number to assign to CURRENT_PROJECT_VERSION entries.</summary>
+    public string? BuildNumber { get; set; }
+}
+
+/// <summary>
+/// Configuration segment that describes a local Apple app release target.
+/// </summary>
+public sealed class ConfigurationAppleAppSegment : IConfigurationSegment
+{
+    /// <inheritdoc />
+    public string Type => "AppleApp";
+
+    /// <summary>Apple app configuration payload.</summary>
+    public AppleAppConfiguration Configuration { get; set; } = new();
+}
+
+/// <summary>
+/// Apple app release configuration payload for <see cref="ConfigurationAppleAppSegment"/>.
+/// </summary>
+public sealed class AppleAppConfiguration
+{
+    /// <summary>Enable the app release preparation entry.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Friendly app name used in logs and reports.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Bundle identifier, e.g. com.example.Tactra.</summary>
+    public string? BundleId { get; set; }
+
+    /// <summary>Apple platform for this app target.</summary>
+    public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
+
+    /// <summary>Path to a .xcodeproj directory or project.pbxproj file. Relative paths resolve from the pipeline project root.</summary>
+    public string ProjectPath { get; set; } = string.Empty;
+
+    /// <summary>Xcode scheme name for future archive/export automation.</summary>
+    public string? Scheme { get; set; }
+
+    /// <summary>Optional App Store Connect app id for future remote metadata checks.</summary>
+    public string? AppStoreConnectAppId { get; set; }
+
+    /// <summary>Marketing version to assign to MARKETING_VERSION entries.</summary>
+    public string? MarketingVersion { get; set; }
+
+    /// <summary>Use the pipeline resolved version as MARKETING_VERSION.</summary>
+    public bool UseResolvedVersion { get; set; }
+
+    /// <summary>Optional explicit build number.</summary>
+    public string? BuildNumber { get; set; }
+
+    /// <summary>Build number policy used when preparing the local Xcode project.</summary>
+    public AppleBuildNumberPolicy BuildNumberPolicy { get; set; } = AppleBuildNumberPolicy.KeepExisting;
+}
+
+/// <summary>
 /// Configuration segment that describes general build information (include/exclude patterns).
 /// </summary>
 public sealed class ConfigurationInformationSegment : IConfigurationSegment

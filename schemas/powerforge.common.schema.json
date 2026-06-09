@@ -71,6 +71,14 @@
     "ValidationSeverity": {
       "type": "string",
       "enum": ["Off", "Warning", "Error"]
+    },
+    "ApplePlatform": {
+      "type": "string",
+      "enum": ["iOS", "iPadOS", "macOS", "tvOS", "watchOS", "visionOS"]
+    },
+    "AppleBuildNumberPolicy": {
+      "type": "string",
+      "enum": ["Explicit", "KeepExisting", "IncrementExisting"]
     }
   }
 }

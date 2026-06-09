@@ -42,6 +42,103 @@ public sealed class ModulePipelineStepTests
     }
 
     [Fact]
+    public void Create_IncludesXcodeProjectVersionStep_WhenConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationXcodeProjectVersionSegment
+                    {
+                        Configuration = new XcodeProjectVersionConfiguration
+                        {
+                            Path = "Tactra.xcodeproj",
+                            MarketingVersion = "1.0.0"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            var idxXcode = Array.FindIndex(steps, s => s.Key == "version:xcode:01");
+            var idxStage = Array.FindIndex(steps, s => s.Key == "build:stage");
+
+            Assert.True(idxXcode >= 0);
+            Assert.True(idxStage >= 0);
+            Assert.True(idxXcode < idxStage);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Create_IncludesAppleAppStep_WhenConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationAppleAppSegment
+                    {
+                        Configuration = new AppleAppConfiguration
+                        {
+                            Name = "Tactra",
+                            ProjectPath = "Tactra.xcodeproj",
+                            UseResolvedVersion = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            var idxApple = Array.FindIndex(steps, s => s.Key == "version:apple:01");
+            var idxStage = Array.FindIndex(steps, s => s.Key == "build:stage");
+
+            Assert.True(idxApple >= 0);
+            Assert.True(idxStage >= 0);
+            Assert.True(idxApple < idxStage);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Create_IncludesDocsSubsteps_WhenDocsEnabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
