@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -69,6 +70,40 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
             Assert.True(result.Succeeded);
             Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
             Assert.Contains(result.Messages, message => message.Contains("configured URI", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void InstallForCurrentUser_PublicNetCoreFallbackUsesSelfContainedWindowsPackage()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagePath = Path.Combine(root, "public-package.zip");
+            CreateCredentialProviderPackage(packagePath, "netcore", "CredentialProvider.Microsoft.exe");
+            var profile = Path.Combine(root, "profile");
+            var runner = new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, "Repository unavailable.", "pwsh.exe"));
+            var expectedPackageName = GetExpectedSelfContainedPackageName();
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>(),
+                downloadPackage: (uri, destination, _) =>
+                {
+                    Assert.EndsWith(expectedPackageName, uri.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
+                    File.Copy(packagePath, destination, overwrite: true);
+                    return destination;
+                },
+                runner: runner);
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.exe")));
         }
         finally
         {
@@ -407,6 +442,15 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(modulePath));
         return $"PFARTEFACTS::PSMODULEPATH::{encoded}";
     }
+
+    private static string GetExpectedSelfContainedPackageName()
+        => RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.Arm64 => "Microsoft.win-arm64.NuGet.CredentialProvider.zip",
+            Architecture.X86 => "Microsoft.win-x86.NuGet.CredentialProvider.zip",
+            Architecture.X64 => "Microsoft.win-x64.NuGet.CredentialProvider.zip",
+            _ => "Microsoft.Net8.NuGet.CredentialProvider.zip"
+        };
 
     private static string CredentialProviderRelativePath(string runtime, string fileName)
         => Path.Combine(runtime, "CredentialProvider.Microsoft", fileName);

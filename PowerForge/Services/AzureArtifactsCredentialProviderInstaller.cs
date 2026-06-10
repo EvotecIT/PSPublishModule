@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -46,6 +47,9 @@ public sealed class AzureArtifactsCredentialProviderInstaller
     private const string ArtefactsManifestRelativePath = "Artefacts/AzureArtifactsCredentialProvider/manifest.json";
 
     private const string PublicNetCorePackageUri = "https://github.com/microsoft/artifacts-credprovider/releases/latest/download/Microsoft.Net8.NuGet.CredentialProvider.zip";
+    private const string PublicWinX64PackageUri = "https://github.com/microsoft/artifacts-credprovider/releases/latest/download/Microsoft.win-x64.NuGet.CredentialProvider.zip";
+    private const string PublicWinArm64PackageUri = "https://github.com/microsoft/artifacts-credprovider/releases/latest/download/Microsoft.win-arm64.NuGet.CredentialProvider.zip";
+    private const string PublicWinX86PackageUri = "https://github.com/microsoft/artifacts-credprovider/releases/latest/download/Microsoft.win-x86.NuGet.CredentialProvider.zip";
     private const string PublicNetFxPackageUri = "https://github.com/microsoft/artifacts-credprovider/releases/latest/download/Microsoft.NetFx48.NuGet.CredentialProvider.zip";
 
     private readonly IPowerShellRunner _runner;
@@ -193,9 +197,18 @@ public sealed class AzureArtifactsCredentialProviderInstaller
 
         var publicUri = packageKind == CredentialProviderPackageKind.NetFx
             ? PublicNetFxPackageUri
-            : PublicNetCorePackageUri;
+            : GetPublicNetCorePackageUri();
         return CredentialProviderPackageSource.FromPublicFallback(publicUri);
     }
+
+    private static string GetPublicNetCorePackageUri()
+        => RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.Arm64 => PublicWinArm64PackageUri,
+            Architecture.X86 => PublicWinX86PackageUri,
+            Architecture.X64 => PublicWinX64PackageUri,
+            _ => PublicNetCorePackageUri
+        };
 
     private CredentialProviderPackageSource? TryResolveArtefactsModulePackageSource(
         CredentialProviderPackageKind packageKind,

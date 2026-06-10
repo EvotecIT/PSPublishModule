@@ -96,6 +96,33 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void EnsureVersionIsGreaterThanRepository_TreatsMissingRepositoryPackageAsFirstPublish()
+    {
+        var error = "Find-PSResource failed (exit 1). Package with name 'EntraIDConfig' could not be found in repository 'CompanyGallery'.";
+        var publisher = new ModulePublisher(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(1, string.Empty, error, "pwsh.exe")));
+
+        var exception = Record.Exception(() => publisher.EnsureVersionIsGreaterThanRepository(
+            PublishTool.PSResourceGet,
+            moduleName: "EntraIDConfig",
+            moduleVersion: "2.4.0",
+            preRelease: null,
+            repositoryName: "CompanyGallery",
+            credential: null));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void IsRepositoryPackageNotFound_DoesNotHideRepositoryFailuresForOtherPackages()
+    {
+        var exception = new InvalidOperationException("Package with name 'OtherModule' could not be found in repository 'CompanyGallery'.");
+
+        Assert.False(ModulePublisher.IsRepositoryPackageNotFound("EntraIDConfig", exception));
+    }
+
+    [Fact]
     public void Publish_RegistersConfiguredRepositoryBeforeVersionCheck()
     {
         var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));

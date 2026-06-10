@@ -450,7 +450,7 @@ shares, internal HTTP artifact caches, or emergency pinning. Configure these
 machine or user environment variables before running `-InstallPrerequisites`:
 
 ```powershell
-$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE = '\\fileserver\packages\Microsoft.Net8.NuGet.CredentialProvider.zip'
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE = '\\fileserver\packages\Microsoft.win-x64.NuGet.CredentialProvider.zip'
 $env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE = '\\fileserver\packages\Microsoft.NetFx48.NuGet.CredentialProvider.zip'
 $env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_SHA256 = '<sha256>'
 $env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_SHA256 = '<sha256>'
@@ -460,7 +460,10 @@ The package variables may also point at internal HTTPS mirror URLs. Use
 `POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_PACKAGE` only when the same ZIP
 contains every requested runtime folder. The runtime-specific variables are the
 preferred enterprise shape because Microsoft publishes the .NET and .NET
-Framework credential-provider packages as separate release assets.
+Framework credential-provider packages as separate release assets. On Windows,
+prefer Microsoft's self-contained `Microsoft.win-*.NuGet.CredentialProvider.zip`
+packages over `Microsoft.Net8.NuGet.CredentialProvider.zip`; the latter requires
+a separately installed .NET runtime.
 
 ## Managed Profile Deployment
 

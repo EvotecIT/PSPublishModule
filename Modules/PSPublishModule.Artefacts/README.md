@@ -7,7 +7,10 @@ private-gallery onboarding.
 
 The first artefact set is the Microsoft Azure Artifacts Credential Provider. The
 module stores the official Microsoft release ZIPs plus a hash manifest generated
-by `Build/Build-Module.ps1`.
+by `Build/Build-Module.ps1`. Windows netcore delivery uses Microsoft's
+self-contained `Microsoft.win-x64.NuGet.CredentialProvider.zip` package so
+workstations do not need a separately installed .NET runtime just to launch the
+credential provider.
 
 The module intentionally does not install the credential provider itself.
 PSPublishModule/PowerForge owns installation and uses this module as a trusted

@@ -11,6 +11,7 @@ internal sealed class PrivateGalleryService
     private const string MinimumPSResourceGetExistingSessionVersion = "1.2.0";
     private const string CredentialProviderTimeoutMinutesEnvironmentVariable = "POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES";
     private const string JFrogCliTimeoutMinutesEnvironmentVariable = "POWERFORGE_JFROG_CLI_LOGIN_TIMEOUT_MINUTES";
+    private const int MissingDotNetRuntimeExitCode = -2147450749;
 
     private readonly IPrivateGalleryHost _host;
     private readonly IProcessRunner _processRunner;
@@ -724,8 +725,8 @@ internal sealed class PrivateGalleryService
                 message: "Azure Artifacts Credential Provider session priming was skipped because the current process appears to be CI/headless. Use a pre-cached provider session or configure ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS / ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS for unattended validation.");
         }
 
-        var providerPath = SelectCredentialProviderPath(registration.AzureArtifactsCredentialProviderPaths);
-        if (string.IsNullOrWhiteSpace(providerPath))
+        var providerPaths = SelectCredentialProviderPaths(registration.AzureArtifactsCredentialProviderPaths);
+        if (providerPaths.Length == 0)
         {
             return new CredentialProviderSessionPrimeResult(
                 attempted: false,
@@ -741,26 +742,11 @@ internal sealed class PrivateGalleryService
                 attempted: false,
                 succeeded: false,
                 skipped: true,
-                providerPath: providerPath,
+                providerPath: providerPaths[0],
                 message: "Azure Artifacts Credential Provider session priming was skipped by ShouldProcess.");
         }
 
         _host.WriteWarning("The Azure Artifacts access probe failed without an explicit credential. PSPublishModule will invoke the Azure Artifacts Credential Provider so you can complete the Entra/MFA sign-in and cache a session token for this feed.");
-
-        var providerExecutablePath = providerPath!;
-        var runner = new ProcessRunner();
-        var fileName = providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? "dotnet" : providerExecutablePath;
-        var arguments = new List<string>();
-        if (providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            arguments.Add(providerExecutablePath);
-
-        arguments.Add("-I");
-        arguments.Add("-U");
-        arguments.Add(registration.PSResourceGetUri);
-        arguments.Add("-F");
-        arguments.Add("Json");
-        arguments.Add("-C");
-        arguments.Add("True");
 
         var effectiveTimeout = timeout ?? GetCredentialProviderSessionPrimeTimeout();
         var previousDeviceFlowTimeout = Environment.GetEnvironmentVariable("NUGET_CREDENTIALPROVIDER_VSTS_DEVICEFLOWTIMEOUTSECONDS");
@@ -771,17 +757,37 @@ internal sealed class PrivateGalleryService
                 Math.Ceiling(effectiveTimeout.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
-        ProcessRunResult result;
+        ProcessRunResult? lastResult = null;
+        string? lastProviderPath = null;
         try
         {
-            result = runner.RunAsync(
-                new ProcessRunRequest(
-                    fileName,
-                    Environment.CurrentDirectory,
-                    arguments,
-                    effectiveTimeout,
-                    captureOutput: false,
-                    captureError: false)).GetAwaiter().GetResult();
+            foreach (var providerExecutablePath in providerPaths)
+            {
+                lastProviderPath = providerExecutablePath;
+                var result = RunCredentialProviderSessionPrime(
+                    providerExecutablePath,
+                    registration.PSResourceGetUri!,
+                    effectiveTimeout);
+                lastResult = result;
+
+                if (result.Succeeded)
+                {
+                    return new CredentialProviderSessionPrimeResult(
+                        attempted: true,
+                        succeeded: true,
+                        skipped: false,
+                        providerPath: providerExecutablePath,
+                        message: "Azure Artifacts Credential Provider session priming completed successfully.");
+                }
+
+                if (IsMissingDotNetRuntimeFailure(result) && !string.Equals(providerExecutablePath, providerPaths[providerPaths.Length - 1], StringComparison.OrdinalIgnoreCase))
+                {
+                    _host.WriteWarning($"Azure Artifacts Credential Provider '{providerExecutablePath}' requires a missing .NET runtime. Trying another detected provider.");
+                    continue;
+                }
+
+                break;
+            }
         }
         finally
         {
@@ -789,25 +795,47 @@ internal sealed class PrivateGalleryService
                 Environment.SetEnvironmentVariable("NUGET_CREDENTIALPROVIDER_VSTS_DEVICEFLOWTIMEOUTSECONDS", null);
         }
 
-        if (result.Succeeded)
-        {
-            return new CredentialProviderSessionPrimeResult(
-                attempted: true,
-                succeeded: true,
-                skipped: false,
-                providerPath: providerExecutablePath,
-                message: "Azure Artifacts Credential Provider session priming completed successfully.");
-        }
-
-        var failure = result.TimedOut
+        var failure = lastResult is null
+            ? "Azure Artifacts Credential Provider session priming did not run."
+            : lastResult.TimedOut
             ? "Azure Artifacts Credential Provider session priming timed out."
-            : $"Azure Artifacts Credential Provider session priming failed with exit code {result.ExitCode}.";
+            : IsMissingDotNetRuntimeFailure(lastResult)
+                ? $"Azure Artifacts Credential Provider session priming failed because '{lastProviderPath}' requires a .NET runtime that is not installed. Reinstall prerequisites so PSPublishModule can use the self-contained Microsoft credential-provider package, or install the required .NET runtime."
+                : $"Azure Artifacts Credential Provider session priming failed with exit code {lastResult.ExitCode}.";
         return new CredentialProviderSessionPrimeResult(
             attempted: true,
             succeeded: false,
             skipped: false,
-            providerPath: providerExecutablePath,
+            providerPath: lastProviderPath,
             message: failure);
+    }
+
+    private ProcessRunResult RunCredentialProviderSessionPrime(
+        string providerExecutablePath,
+        string feedUri,
+        TimeSpan timeout)
+    {
+        var fileName = providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? "dotnet" : providerExecutablePath;
+        var arguments = new List<string>();
+        if (providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            arguments.Add(providerExecutablePath);
+
+        arguments.Add("-I");
+        arguments.Add("-U");
+        arguments.Add(feedUri);
+        arguments.Add("-F");
+        arguments.Add("Json");
+        arguments.Add("-C");
+        arguments.Add("True");
+
+        return _processRunner.RunAsync(
+            new ProcessRunRequest(
+                fileName,
+                Environment.CurrentDirectory,
+                arguments,
+                timeout,
+                captureOutput: false,
+                captureError: false)).GetAwaiter().GetResult();
     }
 
     internal static bool IsMissingProbePackageMessage(string? message, string probeName)
@@ -1124,15 +1152,57 @@ internal sealed class PrivateGalleryService
             .Trim();
     }
 
-    private static string? SelectCredentialProviderPath(IEnumerable<string>? paths)
+    internal static bool IsMissingDotNetRuntimeFailure(ProcessRunResult result)
+    {
+        if (result is null || result.Succeeded || result.TimedOut)
+            return false;
+
+        if (result.ExitCode == MissingDotNetRuntimeExitCode)
+            return true;
+
+        var message = $"{result.StdOut} {result.StdErr}";
+        return message.IndexOf("You must install .NET to run this application", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("apphost_version", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("missing_runtime=true", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    internal static string[] SelectCredentialProviderPaths(IEnumerable<string>? paths)
     {
         var candidates = (paths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(GetCredentialProviderPathRank)
+            .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return candidates.FirstOrDefault(static path => path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase)) ??
-               candidates.FirstOrDefault(static path => path.EndsWith("CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase));
+        return candidates;
     }
+
+    private static int GetCredentialProviderPathRank(string path)
+    {
+        if (path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase) &&
+            HasPathSegment(path, "netcore"))
+        {
+            return 0;
+        }
+
+        if (path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase) &&
+            HasPathSegment(path, "netfx"))
+        {
+            return 1;
+        }
+
+        if (path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase))
+            return 2;
+
+        if (path.EndsWith("CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase))
+            return 3;
+
+        return 4;
+    }
+
+    private static bool HasPathSegment(string path, string segment)
+        => path.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(part => string.Equals(part, segment, StringComparison.OrdinalIgnoreCase));
 }

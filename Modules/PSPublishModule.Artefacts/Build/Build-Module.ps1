@@ -88,7 +88,7 @@ function Write-CredentialProviderManifest {
 New-Item -ItemType Directory -Path $artefactRoot -Force | Out-Null
 
 if (-not $JsonOnly) {
-    $netCorePackage = Save-CredentialProviderPackage -Runtime 'netcore' -FileName 'Microsoft.Net8.NuGet.CredentialProvider.zip'
+    $netCorePackage = Save-CredentialProviderPackage -Runtime 'netcore' -FileName 'Microsoft.win-x64.NuGet.CredentialProvider.zip'
     $netFxPackage = Save-CredentialProviderPackage -Runtime 'netfx' -FileName 'Microsoft.NetFx48.NuGet.CredentialProvider.zip'
     Write-CredentialProviderManifest -NetCorePackagePath $netCorePackage -NetFxPackagePath $netFxPackage
 }
