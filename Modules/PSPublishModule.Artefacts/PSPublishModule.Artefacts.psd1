@@ -8,8 +8,7 @@
     Description       = 'Offline artefact carrier for PSPublishModule-managed workstation prerequisites.'
     PowerShellVersion = '5.1'
     FunctionsToExport = @(
-        'Get-PSPublishModuleArtefact',
-        'Install-PSPublishModuleArtefact'
+        'Get-PSPublishModuleArtefact'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()

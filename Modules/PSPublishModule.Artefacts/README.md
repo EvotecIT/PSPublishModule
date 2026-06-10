@@ -9,6 +9,11 @@ The first artefact set is the Microsoft Azure Artifacts Credential Provider. The
 module stores the official Microsoft release ZIPs plus a hash manifest generated
 by `Build/Build-Module.ps1`.
 
+The module intentionally does not install the credential provider itself.
+PSPublishModule/PowerForge owns installation and uses this module as a trusted
+package source. `Get-PSPublishModuleArtefact` is provided only for operator
+inventory and hash inspection.
+
 Typical managed flow:
 
 ```powershell

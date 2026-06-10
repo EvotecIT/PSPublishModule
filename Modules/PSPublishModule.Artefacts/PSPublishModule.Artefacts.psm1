@@ -4,4 +4,4 @@ foreach ($publicFunction in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 
     . $publicFunction.FullName
 }
 
-Export-ModuleMember -Function 'Get-PSPublishModuleArtefact', 'Install-PSPublishModuleArtefact'
+Export-ModuleMember -Function 'Get-PSPublishModuleArtefact'
