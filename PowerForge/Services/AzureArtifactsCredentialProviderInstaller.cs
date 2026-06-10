@@ -292,7 +292,7 @@ public sealed class AzureArtifactsCredentialProviderInstaller
                 continue;
             }
 
-            foreach (var versionDirectory in versionDirectories.OrderByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            foreach (var versionDirectory in OrderArtefactsModuleVersionDirectories(versionDirectories))
             {
                 var manifestPath = Path.Combine(versionDirectory, ArtefactsManifestRelativePath.Replace('/', Path.DirectorySeparatorChar));
                 if (File.Exists(manifestPath))
@@ -328,6 +328,13 @@ throw 'Install-PSResource and Install-Module are not available.'
         messages.Add($"{ArtefactsModuleName} could not be installed from the configured PowerShell gallery. {failure}".Trim());
         return false;
     }
+
+    private static IEnumerable<string> OrderArtefactsModuleVersionDirectories(IEnumerable<string> versionDirectories)
+        => versionDirectories
+            .OrderByDescending(
+                static directory => ArtefactsModuleVersionKey.Parse(Path.GetFileName(directory) ?? string.Empty),
+                ArtefactsModuleVersionKeyComparer.Instance)
+            .ThenByDescending(static directory => Path.GetFileName(directory), StringComparer.OrdinalIgnoreCase);
 
     private string? ResolveExpectedSha256(CredentialProviderPackageKind packageKind)
     {
@@ -526,5 +533,115 @@ throw 'Install-PSResource and Install-Module are not available.'
 
         internal static CredentialProviderPackageSource FromPublicFallback(string uri)
             => new(uri, isLocalPath: false, description: $"public fallback '{uri}'");
+    }
+
+    private readonly struct ArtefactsModuleVersionKey
+    {
+        private ArtefactsModuleVersionKey(string original, bool parsed, int[] parts, string[] preRelease)
+        {
+            Original = original;
+            Parsed = parsed;
+            Parts = parts;
+            PreRelease = preRelease;
+        }
+
+        internal string Original { get; }
+
+        internal bool Parsed { get; }
+
+        internal int[] Parts { get; }
+
+        internal string[] PreRelease { get; }
+
+        internal static ArtefactsModuleVersionKey Parse(string value)
+        {
+            var original = value?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(original))
+                return new ArtefactsModuleVersionKey(original, parsed: false, Array.Empty<int>(), Array.Empty<string>());
+
+            var versionParts = original.Split(new[] { '-' }, 2);
+            var mainParts = versionParts[0].Split('.');
+            if (mainParts.Length is < 2 or > 4)
+                return new ArtefactsModuleVersionKey(original, parsed: false, Array.Empty<int>(), Array.Empty<string>());
+
+            var parsedParts = new int[4];
+            for (var i = 0; i < mainParts.Length; i++)
+            {
+                if (!int.TryParse(mainParts[i], out var part) || part < 0)
+                    return new ArtefactsModuleVersionKey(original, parsed: false, Array.Empty<int>(), Array.Empty<string>());
+
+                parsedParts[i] = part;
+            }
+
+            var preRelease = versionParts.Length == 2 && !string.IsNullOrWhiteSpace(versionParts[1])
+                ? versionParts[1].Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
+                : Array.Empty<string>();
+
+            return new ArtefactsModuleVersionKey(original, parsed: true, parsedParts, preRelease);
+        }
+    }
+
+    private sealed class ArtefactsModuleVersionKeyComparer : IComparer<ArtefactsModuleVersionKey>
+    {
+        internal static readonly ArtefactsModuleVersionKeyComparer Instance = new();
+
+        public int Compare(ArtefactsModuleVersionKey left, ArtefactsModuleVersionKey right)
+        {
+            if (left.Parsed && !right.Parsed)
+                return 1;
+            if (!left.Parsed && right.Parsed)
+                return -1;
+            if (!left.Parsed && !right.Parsed)
+                return StringComparer.OrdinalIgnoreCase.Compare(left.Original, right.Original);
+
+            for (var i = 0; i < 4; i++)
+            {
+                var partCompare = left.Parts[i].CompareTo(right.Parts[i]);
+                if (partCompare != 0)
+                    return partCompare;
+            }
+
+            return ComparePreRelease(left.PreRelease, right.PreRelease);
+        }
+
+        private static int ComparePreRelease(string[] left, string[] right)
+        {
+            if (left.Length == 0 && right.Length == 0)
+                return 0;
+            if (left.Length == 0)
+                return 1;
+            if (right.Length == 0)
+                return -1;
+
+            var count = Math.Max(left.Length, right.Length);
+            for (var i = 0; i < count; i++)
+            {
+                if (i >= left.Length)
+                    return -1;
+                if (i >= right.Length)
+                    return 1;
+
+                var leftIsNumber = int.TryParse(left[i], out var leftNumber);
+                var rightIsNumber = int.TryParse(right[i], out var rightNumber);
+                if (leftIsNumber && rightIsNumber)
+                {
+                    var numberCompare = leftNumber.CompareTo(rightNumber);
+                    if (numberCompare != 0)
+                        return numberCompare;
+                    continue;
+                }
+
+                if (leftIsNumber)
+                    return -1;
+                if (rightIsNumber)
+                    return 1;
+
+                var textCompare = StringComparer.OrdinalIgnoreCase.Compare(left[i], right[i]);
+                if (textCompare != 0)
+                    return textCompare;
+            }
+
+            return 0;
+        }
     }
 }

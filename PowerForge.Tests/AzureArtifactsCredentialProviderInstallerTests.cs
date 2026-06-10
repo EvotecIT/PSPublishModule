@@ -199,6 +199,36 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
     }
 
     [Fact]
+    public void InstallForCurrentUser_UsesNewestArtefactsModuleVersion()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var profile = Path.Combine(root, "profile");
+            var modulePath = Path.Combine(root, "Modules");
+            var olderPackagePath = CreateArtefactsModulePackage(modulePath, "netcore", "CredentialProvider.Microsoft.dll", moduleVersion: "1.0.9");
+            var newerPackagePath = CreateArtefactsModulePackage(modulePath, "netcore", "CredentialProvider.Microsoft.dll", moduleVersion: "1.0.10");
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = modulePath
+                });
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.Contains(result.Messages, message => message.Contains(newerPackagePath, StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Messages, message => message.Contains(olderPackagePath, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
     public void InstallForCurrentUser_RepairsIncompleteProviderDirectory()
     {
         var root = CreateTempRoot();
@@ -255,12 +285,16 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
         writer.Write("test credential provider");
     }
 
-    private static string CreateArtefactsModulePackage(string modulePath, string runtimeFolder, string providerFileName)
+    private static string CreateArtefactsModulePackage(
+        string modulePath,
+        string runtimeFolder,
+        string providerFileName,
+        string moduleVersion = "1.0.0")
     {
         var artefactRoot = Path.Combine(
             modulePath,
             "PSPublishModule.Artefacts",
-            "1.0.0",
+            moduleVersion,
             "Artefacts",
             "AzureArtifactsCredentialProvider");
         Directory.CreateDirectory(artefactRoot);
