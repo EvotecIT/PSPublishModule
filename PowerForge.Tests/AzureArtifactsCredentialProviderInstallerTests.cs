@@ -174,6 +174,7 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
             var runner = new StubPowerShellRunner(request =>
             {
                 Assert.Contains("Install-PSResource", request.CommandText, StringComparison.Ordinal);
+                Assert.Contains("Falling back to Install-Module", request.CommandText, StringComparison.Ordinal);
                 CreateArtefactsModulePackage(modulePath, "netcore", "CredentialProvider.Microsoft.dll");
                 return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
             });

@@ -307,8 +307,16 @@ public sealed class AzureArtifactsCredentialProviderInstaller
 $ErrorActionPreference = 'Stop'
 if (Get-Module -ListAvailable -Name 'PSPublishModule.Artefacts' | Select-Object -First 1) { return }
 if (Get-Command -Name Install-PSResource -ErrorAction SilentlyContinue) {
-    Install-PSResource -Name 'PSPublishModule.Artefacts' -Scope CurrentUser -TrustRepository -ErrorAction Stop
-    return
+    try {
+        Install-PSResource -Name 'PSPublishModule.Artefacts' -Scope CurrentUser -TrustRepository -ErrorAction Stop
+        return
+    } catch {
+        $psResourceError = $_
+        if (-not (Get-Command -Name Install-Module -ErrorAction SilentlyContinue)) {
+            throw
+        }
+        Write-Verbose 'Install-PSResource failed for PSPublishModule.Artefacts. Falling back to Install-Module.'
+    }
 }
 if (Get-Command -Name Install-Module -ErrorAction SilentlyContinue) {
     Install-Module -Name 'PSPublishModule.Artefacts' -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
