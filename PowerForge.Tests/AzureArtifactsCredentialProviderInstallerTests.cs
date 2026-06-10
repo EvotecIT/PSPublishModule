@@ -433,11 +433,87 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
         }
     }
 
+    [Fact]
+    public void InstallForCurrentUser_TreatsSelfContainedNetCoreExeAsComplete()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var profile = Path.Combine(root, "profile");
+            var targetProvider = CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(targetProvider)!);
+            File.WriteAllText(targetProvider, "already installed");
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>(),
+                downloadPackage: (_, _, _) => throw new InvalidOperationException("Download was not expected."),
+                runner: new StubPowerShellRunner(_ => throw new InvalidOperationException("PowerShell execution was not expected.")));
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.False(result.Changed);
+            Assert.Contains(result.Messages, message => message.Contains("already installed", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void InstallForCurrentUser_PassesPreferredRepositoryWhenInstallingArtefactsModule()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var profile = Path.Combine(root, "profile");
+            var modulePath = Path.Combine(root, "Modules");
+            var repositoryName = "CompanyGallery";
+            var psResourceGetUri = "https://pkgs.dev.azure.com/contoso/_packaging/Modules/nuget/v3/index.json";
+            var powerShellGetSourceUri = "https://pkgs.dev.azure.com/contoso/_packaging/Modules/nuget/v2";
+            var runner = new StubPowerShellRunner(request =>
+            {
+                Assert.Contains("Register-PSResourceRepository", request.CommandText, StringComparison.Ordinal);
+                Assert.Contains("Register-PSRepository", request.CommandText, StringComparison.Ordinal);
+                Assert.Contains(Convert.ToBase64String(Encoding.UTF8.GetBytes(repositoryName)), request.CommandText, StringComparison.Ordinal);
+                Assert.Contains(Convert.ToBase64String(Encoding.UTF8.GetBytes(psResourceGetUri)), request.CommandText, StringComparison.Ordinal);
+                Assert.Contains(Convert.ToBase64String(Encoding.UTF8.GetBytes(powerShellGetSourceUri)), request.CommandText, StringComparison.Ordinal);
+                CreateArtefactsModulePackage(modulePath, "netcore", "CredentialProvider.Microsoft.dll");
+                return new PowerShellRunResult(0, CreateModulePathMarker(modulePath), string.Empty, "pwsh.exe");
+            });
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = modulePath
+                },
+                runner: runner,
+                preferredRepositoryName: repositoryName,
+                preferredPSResourceGetUri: psResourceGetUri,
+                preferredPowerShellGetSourceUri: powerShellGetSourceUri);
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(1, runner.CallCount);
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
     private static AzureArtifactsCredentialProviderInstaller CreateInstaller(
         string profile,
         IReadOnlyDictionary<string, string?> environment,
         Func<Uri, string, TimeSpan, string>? downloadPackage = null,
-        IPowerShellRunner? runner = null)
+        IPowerShellRunner? runner = null,
+        string? preferredRepositoryName = null,
+        string? preferredPSResourceGetUri = null,
+        string? preferredPowerShellGetSourceUri = null)
     {
         return new AzureArtifactsCredentialProviderInstaller(
             runner ?? new StubPowerShellRunner(_ => throw new InvalidOperationException("PowerShell execution was not expected.")),
@@ -445,7 +521,10 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
             name => environment.TryGetValue(name, out var value) ? value : null,
             () => profile,
             downloadPackage ?? ((_, _, _) => throw new InvalidOperationException("Download was not expected.")),
-            isWindows: () => true);
+            isWindows: () => true,
+            preferredRepositoryName: preferredRepositoryName,
+            preferredPSResourceGetUri: preferredPSResourceGetUri,
+            preferredPowerShellGetSourceUri: preferredPowerShellGetSourceUri);
     }
 
     private static void CreateCredentialProviderPackage(string packagePath, string runtimeFolder, string providerFileName)

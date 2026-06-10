@@ -301,10 +301,6 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     {
         service.EnsureProviderSupported(profile.Provider);
 
-        var prerequisiteInstall = service.EnsureBootstrapPrerequisites(
-            InstallPrerequisites.IsPresent,
-            profile.BootstrapMode,
-            includeAzureArtifactsCredentialProvider: profile.Provider == PrivateGalleryProvider.AzureArtifacts);
         var endpoint = PrivateGalleryRepositoryEndpoints.Create(
             profile.Provider,
             profile.AzureDevOpsOrganization,
@@ -317,6 +313,13 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             profile.RepositoryPublishUri,
             profile.JFrogBaseUri,
             profile.JFrogRepository);
+        var prerequisiteInstall = service.EnsureBootstrapPrerequisites(
+            InstallPrerequisites.IsPresent,
+            profile.BootstrapMode,
+            includeAzureArtifactsCredentialProvider: profile.Provider == PrivateGalleryProvider.AzureArtifacts,
+            artefactsRepositoryName: endpoint.RepositoryName,
+            artefactsPSResourceGetUri: endpoint.PSResourceGetUri,
+            artefactsPowerShellGetSourceUri: endpoint.PowerShellGetSourceUri);
         var credentialResolution = service.ResolveCredential(
             endpoint.RepositoryName,
             profile.BootstrapMode,

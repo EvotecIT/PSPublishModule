@@ -15,7 +15,6 @@ internal sealed class PrivateGalleryService
     private const string CredentialProviderTimeoutMinutesEnvironmentVariable = "POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES";
     private const string JFrogCliTimeoutMinutesEnvironmentVariable = "POWERFORGE_JFROG_CLI_LOGIN_TIMEOUT_MINUTES";
     private const int MissingDotNetRuntimeExitCode = -2147450749;
-    private const int NetFramework481MinimumRelease = 533320;
     private const string NetFrameworkReleaseKey = @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full";
 
     private readonly IPrivateGalleryHost _host;
@@ -491,7 +490,10 @@ internal sealed class PrivateGalleryService
         bool installPrerequisites,
         PrivateGalleryBootstrapMode bootstrapMode = PrivateGalleryBootstrapMode.Auto,
         bool forceInstall = false,
-        bool includeAzureArtifactsCredentialProvider = true)
+        bool includeAzureArtifactsCredentialProvider = true,
+        string? artefactsRepositoryName = null,
+        string? artefactsPSResourceGetUri = null,
+        string? artefactsPowerShellGetSourceUri = null)
     {
         var initialStatus = GetBootstrapPrerequisiteStatus();
         if (!installPrerequisites)
@@ -546,7 +548,12 @@ internal sealed class PrivateGalleryService
             {
                 if (_host.ShouldProcess("Azure Artifacts Credential Provider", "Install private-gallery prerequisite"))
                 {
-                    var installer = new AzureArtifactsCredentialProviderInstaller(runner, logger);
+                    var installer = new AzureArtifactsCredentialProviderInstaller(
+                        runner,
+                        logger,
+                        preferredRepositoryName: artefactsRepositoryName,
+                        preferredPSResourceGetUri: artefactsPSResourceGetUri,
+                        preferredPowerShellGetSourceUri: artefactsPowerShellGetSourceUri);
                     var result = installer.InstallForCurrentUser(includeNetFx: true, installNet8: true, force: forceInstall);
                     if (!result.Succeeded)
                         throw new InvalidOperationException("Azure Artifacts Credential Provider installation did not succeed.");
@@ -875,14 +882,15 @@ internal sealed class PrivateGalleryService
             return null;
 
         var targetFramework = TryReadNetFxTargetFramework(providerExecutablePath);
+        var requiredRelease = GetNetFrameworkMinimumRelease(targetFramework);
         if (!installedRelease.HasValue)
         {
-            return $"Azure Artifacts Credential Provider '{providerExecutablePath}' requires {targetFramework}, but .NET Framework 4.5+ was not detected in the registry. Install .NET Framework 4.8.1 or use the self-contained Microsoft.win-* credential-provider package.";
+            return $"Azure Artifacts Credential Provider '{providerExecutablePath}' requires {targetFramework}, but .NET Framework 4.5+ was not detected in the registry. Install {targetFramework} or use the self-contained Microsoft.win-* credential-provider package.";
         }
 
-        if (installedRelease.Value < NetFramework481MinimumRelease)
+        if (requiredRelease.HasValue && installedRelease.Value < requiredRelease.Value)
         {
-            return $"Azure Artifacts Credential Provider '{providerExecutablePath}' requires {targetFramework}, but the installed .NET Framework Release DWORD is {installedRelease.Value}. Install .NET Framework 4.8.1 or use the self-contained Microsoft.win-* credential-provider package.";
+            return $"Azure Artifacts Credential Provider '{providerExecutablePath}' requires {targetFramework}, but the installed .NET Framework Release DWORD is {installedRelease.Value}. Install {targetFramework} or use the self-contained Microsoft.win-* credential-provider package.";
         }
 
         return null;
@@ -944,6 +952,44 @@ internal sealed class PrivateGalleryService
             return ".NET Framework " + value.Substring(netFrameworkPrefix.Length);
 
         return value.Replace(".NETFramework", ".NET Framework");
+    }
+
+    private static int? GetNetFrameworkMinimumRelease(string targetFramework)
+    {
+        var version = ParseNetFrameworkVersion(targetFramework);
+        if (version is null)
+            return 533320;
+
+        if (version >= new Version(4, 8, 1))
+            return 533320;
+        if (version >= new Version(4, 8))
+            return 528040;
+        if (version >= new Version(4, 7, 2))
+            return 461808;
+        if (version >= new Version(4, 7, 1))
+            return 461308;
+        if (version >= new Version(4, 7))
+            return 460798;
+        if (version >= new Version(4, 6, 2))
+            return 394802;
+
+        return null;
+    }
+
+    private static Version? ParseNetFrameworkVersion(string targetFramework)
+    {
+        if (string.IsNullOrWhiteSpace(targetFramework))
+            return null;
+
+        var markerIndex = targetFramework.IndexOf("4.", StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+            return null;
+
+        var versionText = new string(targetFramework
+            .Substring(markerIndex)
+            .TakeWhile(static c => char.IsDigit(c) || c == '.')
+            .ToArray());
+        return Version.TryParse(versionText, out var version) ? version : null;
     }
 
     internal static bool IsMissingProbePackageMessage(string? message, string probeName)

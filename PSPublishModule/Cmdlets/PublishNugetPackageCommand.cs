@@ -95,13 +95,6 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                 var privateGallery = new PrivateGalleryService(host);
                 privateGallery.EnsureProviderSupported(profile.Provider);
 
-                var prerequisites = privateGallery.EnsureBootstrapPrerequisites(
-                    InstallPrerequisites.IsPresent,
-                    profile.BootstrapMode,
-                    includeAzureArtifactsCredentialProvider: profile.Provider == PrivateGalleryProvider.AzureArtifacts);
-                foreach (var message in prerequisites.Messages)
-                    WriteVerbose(message);
-
                 var endpoint = PrivateGalleryRepositoryEndpoints.Create(
                     profile.Provider,
                     profile.AzureDevOpsOrganization,
@@ -115,6 +108,15 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                     profile.JFrogBaseUri,
                     profile.JFrogRepository,
                     profile.GitHubOwner);
+                var prerequisites = privateGallery.EnsureBootstrapPrerequisites(
+                    InstallPrerequisites.IsPresent,
+                    profile.BootstrapMode,
+                    includeAzureArtifactsCredentialProvider: profile.Provider == PrivateGalleryProvider.AzureArtifacts,
+                    artefactsRepositoryName: endpoint.RepositoryName,
+                    artefactsPSResourceGetUri: endpoint.PSResourceGetUri,
+                    artefactsPowerShellGetSourceUri: endpoint.PowerShellGetSourceUri);
+                foreach (var message in prerequisites.Messages)
+                    WriteVerbose(message);
 
                 source = endpoint.PSResourceGetUri;
                 repositoryName = endpoint.RepositoryName;

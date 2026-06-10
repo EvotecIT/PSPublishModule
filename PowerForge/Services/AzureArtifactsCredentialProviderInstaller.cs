@@ -58,6 +58,9 @@ public sealed class AzureArtifactsCredentialProviderInstaller
     private readonly Func<string> _getUserProfilePath;
     private readonly Func<Uri, string, TimeSpan, string> _downloadPackage;
     private readonly Func<bool> _isWindows;
+    private readonly string? _preferredRepositoryName;
+    private readonly string? _preferredPSResourceGetUri;
+    private readonly string? _preferredPowerShellGetSourceUri;
 
     /// <summary>
     /// Creates a new installer.
@@ -67,13 +70,38 @@ public sealed class AzureArtifactsCredentialProviderInstaller
     {
     }
 
+    /// <summary>
+    /// Creates a new installer with an optional preferred PowerShell repository used to acquire <c>PSPublishModule.Artefacts</c>.
+    /// </summary>
+    public AzureArtifactsCredentialProviderInstaller(
+        IPowerShellRunner runner,
+        ILogger logger,
+        string? preferredRepositoryName,
+        string? preferredPSResourceGetUri,
+        string? preferredPowerShellGetSourceUri)
+        : this(
+            runner,
+            logger,
+            Environment.GetEnvironmentVariable,
+            GetDefaultUserProfilePath,
+            DownloadPackage,
+            IsCurrentPlatformWindows,
+            preferredRepositoryName,
+            preferredPSResourceGetUri,
+            preferredPowerShellGetSourceUri)
+    {
+    }
+
     internal AzureArtifactsCredentialProviderInstaller(
         IPowerShellRunner runner,
         ILogger logger,
         Func<string, string?> getEnvironmentVariable,
         Func<string> getUserProfilePath,
         Func<Uri, string, TimeSpan, string> downloadPackage,
-        Func<bool>? isWindows = null)
+        Func<bool>? isWindows = null,
+        string? preferredRepositoryName = null,
+        string? preferredPSResourceGetUri = null,
+        string? preferredPowerShellGetSourceUri = null)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -81,6 +109,9 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         _getUserProfilePath = getUserProfilePath ?? throw new ArgumentNullException(nameof(getUserProfilePath));
         _downloadPackage = downloadPackage ?? throw new ArgumentNullException(nameof(downloadPackage));
         _isWindows = isWindows ?? IsCurrentPlatformWindows;
+        _preferredRepositoryName = NormalizeOptionalValue(preferredRepositoryName);
+        _preferredPSResourceGetUri = NormalizeOptionalValue(preferredPSResourceGetUri);
+        _preferredPowerShellGetSourceUri = NormalizeOptionalValue(preferredPowerShellGetSourceUri);
     }
 
     /// <summary>
@@ -414,18 +445,61 @@ public sealed class AzureArtifactsCredentialProviderInstaller
     {
         var command = @"
 $ErrorActionPreference = 'Stop'
+function Convert-PowerForgeString {
+    param([string] $Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+    [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Value))
+}
 function Write-PowerForgeModulePath {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes([string] $env:PSModulePath)
     [Console]::Out.WriteLine('PFARTEFACTS::PSMODULEPATH::' + [Convert]::ToBase64String($bytes))
 }
+$preferredRepositoryName = Convert-PowerForgeString '__PF_REPOSITORY_NAME__'
+$preferredPSResourceGetUri = Convert-PowerForgeString '__PF_PSRESOURCEGET_URI__'
+$preferredPowerShellGetSourceUri = Convert-PowerForgeString '__PF_POWERSHELLGET_SOURCE_URI__'
+
+function Ensure-PowerForgePSResourceRepository {
+    if ([string]::IsNullOrWhiteSpace($preferredRepositoryName) -or [string]::IsNullOrWhiteSpace($preferredPSResourceGetUri)) {
+        return
+    }
+
+    if (-not (Get-Command -Name Register-PSResourceRepository -ErrorAction SilentlyContinue)) {
+        return
+    }
+
+    $existing = Get-PSResourceRepository -Name $preferredRepositoryName -ErrorAction SilentlyContinue
+    if (-not $existing) {
+        Register-PSResourceRepository -Name $preferredRepositoryName -Uri $preferredPSResourceGetUri -Trusted -ErrorAction Stop
+    }
+}
+
+function Ensure-PowerForgePSRepository {
+    if ([string]::IsNullOrWhiteSpace($preferredRepositoryName) -or [string]::IsNullOrWhiteSpace($preferredPowerShellGetSourceUri)) {
+        return
+    }
+
+    if (-not (Get-Command -Name Register-PSRepository -ErrorAction SilentlyContinue)) {
+        return
+    }
+
+    $existing = Get-PSRepository -Name $preferredRepositoryName -ErrorAction SilentlyContinue
+    if (-not $existing) {
+        Register-PSRepository -Name $preferredRepositoryName -SourceLocation $preferredPowerShellGetSourceUri -InstallationPolicy Trusted -ErrorAction Stop
+    }
+}
+
 $installPSResource = Get-Command -Name Install-PSResource -ErrorAction SilentlyContinue
 if ($installPSResource) {
     try {
+        Ensure-PowerForgePSResourceRepository
         $parameters = @{
             Name = 'PSPublishModule.Artefacts'
             Scope = 'CurrentUser'
             TrustRepository = $true
             ErrorAction = 'Stop'
+        }
+        if (-not [string]::IsNullOrWhiteSpace($preferredRepositoryName)) {
+            $parameters['Repository'] = $preferredRepositoryName
         }
         if ($installPSResource.Parameters.ContainsKey('Reinstall')) {
             $parameters['Reinstall'] = $true
@@ -442,12 +516,27 @@ if ($installPSResource) {
     }
 }
 if (Get-Command -Name Install-Module -ErrorAction SilentlyContinue) {
-    Install-Module -Name 'PSPublishModule.Artefacts' -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+    Ensure-PowerForgePSRepository
+    $parameters = @{
+        Name = 'PSPublishModule.Artefacts'
+        Scope = 'CurrentUser'
+        Force = $true
+        AllowClobber = $true
+        ErrorAction = 'Stop'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($preferredRepositoryName)) {
+        $parameters['Repository'] = $preferredRepositoryName
+    }
+    Install-Module @parameters
     Write-PowerForgeModulePath
     return
 }
 throw 'Install-PSResource and Install-Module are not available.'
 ";
+        command = command
+            .Replace("__PF_REPOSITORY_NAME__", EncodePowerShellString(_preferredRepositoryName))
+            .Replace("__PF_PSRESOURCEGET_URI__", EncodePowerShellString(_preferredPSResourceGetUri))
+            .Replace("__PF_POWERSHELLGET_SOURCE_URI__", EncodePowerShellString(_preferredPowerShellGetSourceUri));
 
         var result = _runner.Run(PowerShellRunRequest.ForCommand(command, timeout, preferPwsh: true));
         if (result.ExitCode == 0)
@@ -460,6 +549,11 @@ throw 'Install-PSResource and Install-Module are not available.'
         messages.Add($"{ArtefactsModuleName} could not be installed from the configured PowerShell gallery. {failure}".Trim());
         return new ArtefactsModuleInstallResult(false, Array.Empty<string>());
     }
+
+    private static string EncodePowerShellString(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 
     private static string[] ParsePowerShellModulePaths(string? stdOut)
     {
@@ -578,15 +672,17 @@ throw 'Install-PSResource and Install-Module are not available.'
         var fileName = Path.GetFileName(path);
         return packageKind == CredentialProviderPackageKind.NetFx
             ? string.Equals(fileName, "CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase)
-            : string.Equals(fileName, "CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase);
+            : string.Equals(fileName, "CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(fileName, "CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsCredentialProviderRuntimeComplete(string targetDirectory, CredentialProviderPackageKind packageKind)
     {
-        var providerFile = packageKind == CredentialProviderPackageKind.NetFx
-            ? "CredentialProvider.Microsoft.exe"
-            : "CredentialProvider.Microsoft.dll";
-        return File.Exists(Path.Combine(targetDirectory, providerFile));
+        if (packageKind == CredentialProviderPackageKind.NetFx)
+            return File.Exists(Path.Combine(targetDirectory, "CredentialProvider.Microsoft.exe"));
+
+        return File.Exists(Path.Combine(targetDirectory, "CredentialProvider.Microsoft.dll")) ||
+               File.Exists(Path.Combine(targetDirectory, "CredentialProvider.Microsoft.exe"));
     }
 
     private static void CopyDirectory(string sourceDirectory, string targetDirectory)
@@ -656,6 +752,12 @@ throw 'Install-PSResource and Install-Module are not available.'
         => value.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
             ? value.Substring("sha256:".Length).Trim()
             : value.Trim();
+
+    private static string? NormalizeOptionalValue(string? value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        return trimmed.Length == 0 ? null : trimmed;
+    }
 
     private enum CredentialProviderPackageKind
     {

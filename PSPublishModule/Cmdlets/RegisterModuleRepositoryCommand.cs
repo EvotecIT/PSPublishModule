@@ -223,7 +223,10 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
         var prerequisiteInstall = service.EnsureBootstrapPrerequisites(
             InstallPrerequisites.IsPresent,
             bootstrapMode,
-            includeAzureArtifactsCredentialProvider: provider == PrivateGalleryProvider.AzureArtifacts);
+            includeAzureArtifactsCredentialProvider: provider == PrivateGalleryProvider.AzureArtifacts,
+            artefactsRepositoryName: endpoint.RepositoryName,
+            artefactsPSResourceGetUri: endpoint.PSResourceGetUri,
+            artefactsPowerShellGetSourceUri: endpoint.PowerShellGetSourceUri);
         var allowInteractivePrompt = !host.IsWhatIfRequested;
 
         var credentialResolution = service.ResolveCredential(

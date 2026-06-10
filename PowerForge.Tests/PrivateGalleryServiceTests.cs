@@ -241,6 +241,34 @@ public sealed class PrivateGalleryServiceTests
     }
 
     [Fact]
+    public void GetNetFxCredentialProviderPrerequisiteFailure_UsesProviderTargetFramework()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var provider = CreateCredentialProviderFile(root, "netfx");
+            File.WriteAllText(
+                provider + ".config",
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <configuration>
+                  <startup>
+                    <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" />
+                  </startup>
+                </configuration>
+                """);
+
+            var failure = PrivateGalleryService.GetNetFxCredentialProviderPrerequisiteFailure(provider, installedRelease: 528449);
+
+            Assert.Null(failure);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void EnsureMicrosoftArtifactRegistryRegistered_ReturnsWhatIfResultWithoutAzureCredentialProvider()
     {
         var service = new PrivateGalleryService(new FakePrivateGalleryHost(shouldProcess: false));
