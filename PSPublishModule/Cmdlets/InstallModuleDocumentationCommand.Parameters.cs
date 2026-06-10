@@ -21,26 +21,26 @@ public sealed partial class InstallModuleDocumentationCommand
     [Parameter]
     public Version? RequiredVersion { get; set; }
 
-    /// <summary>Destination folder where documentation will be written.</summary>
+    /// <summary>Base destination folder where documentation will be written. The final folder also depends on <see cref="Layout"/>.</summary>
     [Parameter(Mandatory = true)]
     public string Path { get; set; } = string.Empty;
 
-    /// <summary>Output folder structure strategy. Default is ModuleAndVersion.</summary>
+    /// <summary>Output folder structure strategy. The default, <see cref="DocumentationLayout.ModuleAndVersion"/>, keeps each module version in its own subfolder.</summary>
     [Parameter]
     public DocumentationLayout Layout { get; set; } = DocumentationLayout.ModuleAndVersion;
 
-    /// <summary>Behavior when the destination folder already exists. Default is Merge.</summary>
+    /// <summary>Behavior when the destination folder already exists. The default, <see cref="OnExistsOption.Merge"/>, adds missing files and preserves existing files unless <c>-Force</c> is used.</summary>
     [Parameter]
     public OnExistsOption OnExists { get; set; } = OnExistsOption.Merge;
 
     /// <summary>Legacy toggle equivalent to selecting ModuleAndVersion when set; Direct when not set.</summary>
     [Parameter] public SwitchParameter CreateVersionSubfolder { get; set; }
-    /// <summary>Overwrite files during merge or overwrite operations.</summary>
+    /// <summary>Allow replacement of existing files during merge, and clear read-only attributes when overwrite needs to delete an existing destination.</summary>
     [Parameter] public SwitchParameter Force { get; set; }
-    /// <summary>Plan only; output the resolved destination without copying files.</summary>
+    /// <summary>Plan only; output the resolved destination path without copying files or changing the destination.</summary>
     [Parameter] public SwitchParameter ListOnly { get; set; }
     /// <summary>Open the resulting folder or README after installation.</summary>
     [Parameter] public SwitchParameter Open { get; set; }
-    /// <summary>Suppress IntroText display during installation.</summary>
+    /// <summary>Suppress delivery IntroText or IntroFile output during installation.</summary>
     [Parameter] public SwitchParameter NoIntro { get; set; }
 }

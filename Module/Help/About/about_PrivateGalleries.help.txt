@@ -70,6 +70,8 @@ LONG DESCRIPTION
            the credential provider on non-Windows systems with Microsoft's installer. On Windows, prefer Microsoft's
            self-contained Microsoft.win-*.NuGet.CredentialProvider.zip packages over Microsoft.Net8.NuGet.CredentialProvider.zip
            when mirroring packages manually, because the Net8 package requires a separately installed .NET runtime.
+           The netfx package is kept for Windows PowerShell 5.1/.NET Framework compatibility, but it is not
+           self-contained either; it requires a supported .NET Framework runtime.
         4. Create the feed profile once with Set-ModuleRepositoryProfile. Use -Scope Machine from an elevated/admin
            deployment when the same non-secret feed definition should be visible to all users on the workstation.
         5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and ask users or

@@ -107,7 +107,10 @@ public sealed class PrivateGalleryServiceTests
 
                 return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
             });
-            var service = new PrivateGalleryService(new FakePrivateGalleryHost(), runner);
+            var service = new PrivateGalleryService(
+                new FakePrivateGalleryHost(),
+                runner,
+                netFrameworkReleaseProvider: () => 533320);
             var registration = new ModuleRepositoryRegistrationResult
             {
                 RepositoryName = "Company",
@@ -139,6 +142,54 @@ public sealed class PrivateGalleryServiceTests
             timedOut: false);
 
         Assert.True(PrivateGalleryService.IsMissingDotNetRuntimeFailure(result));
+    }
+
+    [Fact]
+    public void GetNetFxCredentialProviderPrerequisiteFailure_RequiresNetFramework481()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var provider = CreateCredentialProviderFile(root, "netfx");
+            File.WriteAllText(
+                provider + ".config",
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <configuration>
+                  <startup>
+                    <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8.1" />
+                  </startup>
+                </configuration>
+                """);
+
+            var failure = PrivateGalleryService.GetNetFxCredentialProviderPrerequisiteFailure(provider, installedRelease: 528449);
+
+            Assert.NotNull(failure);
+            Assert.Contains(".NET Framework 4.8.1", failure, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.win-*", failure, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void GetNetFxCredentialProviderPrerequisiteFailure_AllowsNetFramework481()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var provider = CreateCredentialProviderFile(root, "netfx");
+
+            var failure = PrivateGalleryService.GetNetFxCredentialProviderPrerequisiteFailure(provider, installedRelease: 533320);
+
+            Assert.Null(failure);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
     }
 
     [Fact]

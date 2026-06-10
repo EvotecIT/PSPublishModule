@@ -6,19 +6,21 @@ namespace PowerForge;
 public enum OnExistsOption
 {
     /// <summary>
-    /// Merge new files into the existing folder (default). Existing files are preserved unless <c>-Force</c> is used.
+    /// Merge documentation into the existing folder. This is the default update mode: new files are added,
+    /// unmentioned local files remain in place, and existing files are preserved unless <c>-Force</c> is used.
     /// </summary>
     Merge,
     /// <summary>
-    /// Delete the destination folder and copy fresh files.
+    /// Delete the destination folder before copying a fresh documentation set. Use <c>-Force</c> when read-only
+    /// files may need to be cleared before the delete.
     /// </summary>
     Overwrite,
     /// <summary>
-    /// Do nothing if the destination exists and return the path.
+    /// Do nothing when the destination exists and return the resolved destination path.
     /// </summary>
     Skip,
     /// <summary>
-    /// Throw an error if destination exists.
+    /// Throw an error when the destination exists.
     /// </summary>
     Stop
 }

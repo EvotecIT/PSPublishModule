@@ -463,7 +463,11 @@ preferred enterprise shape because Microsoft publishes the .NET and .NET
 Framework credential-provider packages as separate release assets. On Windows,
 prefer Microsoft's self-contained `Microsoft.win-*.NuGet.CredentialProvider.zip`
 packages over `Microsoft.Net8.NuGet.CredentialProvider.zip`; the latter requires
-a separately installed .NET runtime.
+a separately installed .NET runtime. The `netfx` package is kept for Windows
+PowerShell 5.1/.NET Framework compatibility, but it is not self-contained
+either; it requires a supported .NET Framework runtime. PSPublishModule
+preflights the `netfx` provider and reports the runtime requirement before
+trying another detected provider when one is available.
 
 ## Managed Profile Deployment
 
