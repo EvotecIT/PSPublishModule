@@ -139,6 +139,62 @@ public sealed class ModulePipelineStepTests
     }
 
     [Fact]
+    public void Create_SkipsDisabledAppleAndXcodeVersioningSteps()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationAppleAppSegment
+                    {
+                        Configuration = new AppleAppConfiguration
+                        {
+                            Enabled = false,
+                            ProjectPath = "Tactra.xcodeproj",
+                            UseResolvedVersion = true
+                        }
+                    },
+                    new ConfigurationXcodeProjectVersionSegment
+                    {
+                        Configuration = new XcodeProjectVersionConfiguration
+                        {
+                            Enabled = false,
+                            Path = "Tactra.xcodeproj",
+                            UseResolvedVersion = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            Assert.Empty(plan.AppleApps);
+            Assert.Empty(plan.XcodeProjectVersions);
+            Assert.DoesNotContain(steps, s => s.Key.StartsWith("version:apple:", StringComparison.Ordinal));
+            Assert.DoesNotContain(steps, s => s.Key.StartsWith("version:xcode:", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Create_IncludesDocsSubsteps_WhenDocsEnabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

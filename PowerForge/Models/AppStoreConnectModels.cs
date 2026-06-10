@@ -64,6 +64,12 @@ public sealed class AppStoreConnectBuildInfo
 
     /// <summary>Minimum OS version when available.</summary>
     public string? MinOsVersion { get; set; }
+
+    /// <summary>Marketing version from the related pre-release version when included.</summary>
+    public string? MarketingVersion { get; set; }
+
+    /// <summary>Platform from the related pre-release version when included.</summary>
+    public string? Platform { get; set; }
 }
 
 /// <summary>

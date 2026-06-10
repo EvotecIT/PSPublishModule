@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PowerForge;
 
 namespace PowerForge.Cli;
@@ -23,6 +24,7 @@ internal static class CliJson
         };
 
         // Polymorphic segments in ModulePipelineSpec (IConfigurationSegment[]).
+        Options.Converters.Add(new JsonStringEnumConverter());
         Options.Converters.Add(new ConfigurationSegmentJsonConverter());
 
         // Encapsulates the options with the source-generated context (also makes Options read-only).

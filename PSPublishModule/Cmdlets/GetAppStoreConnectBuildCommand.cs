@@ -31,15 +31,27 @@ public sealed class GetAppStoreConnectBuildCommand : PSCmdlet
     /// <summary>Build number filter.</summary>
     [Parameter] public string? BuildNumber { get; set; }
 
+    /// <summary>Marketing version filter from the related pre-release version.</summary>
+    [Parameter] public string? MarketingVersion { get; set; }
+
+    /// <summary>Platform filter from the related pre-release version.</summary>
+    [Parameter] public ApplePlatform? Platform { get; set; }
+
     /// <summary>Maximum result count.</summary>
     [Parameter] public int Limit { get; set; } = 20;
 
     /// <summary>Reads build information from App Store Connect.</summary>
     protected override void ProcessRecord()
     {
-        var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, PrivateKeyPath, TokenLifetimeMinutes);
+        var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
+        var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
-        var builds = client.GetBuildsAsync(AppId, BuildNumber, Limit).GetAwaiter().GetResult();
+        var builds = client.GetBuildsAsync(
+            AppId,
+            BuildNumber,
+            Limit,
+            MarketingVersion,
+            Platform).GetAwaiter().GetResult();
         WriteObject(builds, enumerateCollection: true);
     }
 }

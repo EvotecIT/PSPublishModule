@@ -43,7 +43,8 @@ public sealed class GetAppStoreConnectAppCommand : PSCmdlet
     /// <summary>Reads app information from App Store Connect.</summary>
     protected override void ProcessRecord()
     {
-        var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, PrivateKeyPath, TokenLifetimeMinutes);
+        var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
+        var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
 
         if (ParameterSetName == "ById")

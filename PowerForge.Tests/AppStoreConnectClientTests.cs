@@ -53,8 +53,21 @@ public sealed class AppStoreConnectClientTests
         Assert.Equal("Tactra", app.Name);
         Assert.Contains("apps?", handler.RequestUris[0].ToString(), StringComparison.Ordinal);
         Assert.Contains("filter%5BbundleId%5D=com.example.Tactra", handler.RequestUris[0].Query, StringComparison.Ordinal);
-        Assert.Contains("filter%5Bplatform%5D=IOS", handler.RequestUris[0].Query, StringComparison.Ordinal);
+        Assert.Contains("filter%5BappStoreVersions.platform%5D=IOS", handler.RequestUris[0].Query, StringComparison.Ordinal);
         Assert.Equal("Bearer", handler.AuthorizationSchemes[0]);
+    }
+
+    [Fact]
+    public async Task GetAppAsync_ReturnsNullForMissingApp()
+    {
+        var handler = new RecordingHandler("{}", HttpStatusCode.NotFound);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var app = await client.GetAppAsync("missing-app");
+
+        Assert.Null(app);
+        Assert.Contains("apps/missing-app", handler.RequestUris[0].ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -92,6 +105,61 @@ public sealed class AppStoreConnectClientTests
         Assert.Contains("filter%5Bversion%5D=9", handler.RequestUris[0].Query, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task GetBuildsAsync_FiltersIncludedPreReleaseVersionByMarketingVersionAndPlatform()
+    {
+        var handler = new RecordingHandler(
+            """
+            {
+              "data": [
+                {
+                  "id": "build-old",
+                  "type": "builds",
+                  "attributes": { "version": "9", "processingState": "VALID" },
+                  "relationships": {
+                    "preReleaseVersion": {
+                      "data": { "id": "pre-old", "type": "preReleaseVersions" }
+                    }
+                  }
+                },
+                {
+                  "id": "build-current",
+                  "type": "builds",
+                  "attributes": { "version": "9", "processingState": "VALID" },
+                  "relationships": {
+                    "preReleaseVersion": {
+                      "data": { "id": "pre-current", "type": "preReleaseVersions" }
+                    }
+                  }
+                }
+              ],
+              "included": [
+                {
+                  "id": "pre-old",
+                  "type": "preReleaseVersions",
+                  "attributes": { "version": "1.9.0", "platform": "IOS" }
+                },
+                {
+                  "id": "pre-current",
+                  "type": "preReleaseVersions",
+                  "attributes": { "version": "2.0.0", "platform": "IOS" }
+                }
+              ]
+            }
+            """);
+
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var builds = await client.GetBuildsAsync("123", buildNumber: "9", marketingVersion: "2.0.0", platform: ApplePlatform.iOS);
+
+        var build = Assert.Single(builds);
+        Assert.Equal("build-current", build.Id);
+        Assert.Equal("2.0.0", build.MarketingVersion);
+        Assert.Equal("IOS", build.Platform);
+        Assert.Contains("include=preReleaseVersion", handler.RequestUris[0].Query, StringComparison.Ordinal);
+    }
+
     private static AppStoreConnectApiCredential CreateCredential()
     {
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -112,14 +180,20 @@ public sealed class AppStoreConnectClientTests
 
         public List<string?> AuthorizationSchemes { get; } = new();
 
-        public RecordingHandler(string json) => _json = json;
+        private readonly HttpStatusCode _statusCode;
+
+        public RecordingHandler(string json, HttpStatusCode statusCode = HttpStatusCode.OK)
+        {
+            _json = json;
+            _statusCode = statusCode;
+        }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestUris.Add(request.RequestUri!);
             AuthorizationSchemes.Add(request.Headers.Authorization?.Scheme);
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(_statusCode)
             {
                 Content = new StringContent(_json)
             });

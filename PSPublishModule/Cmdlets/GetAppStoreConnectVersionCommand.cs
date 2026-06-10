@@ -40,7 +40,8 @@ public sealed class GetAppStoreConnectVersionCommand : PSCmdlet
     /// <summary>Reads App Store version information from App Store Connect.</summary>
     protected override void ProcessRecord()
     {
-        var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, PrivateKeyPath, TokenLifetimeMinutes);
+        var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
+        var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var versions = client.GetVersionsAsync(AppId, VersionString, Platform, Limit).GetAwaiter().GetResult();
         WriteObject(versions, enumerateCollection: true);

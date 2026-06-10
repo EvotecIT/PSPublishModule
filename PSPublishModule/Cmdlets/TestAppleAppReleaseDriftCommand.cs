@@ -50,7 +50,8 @@ public sealed class TestAppleAppReleaseDriftCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var resolvedPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
-        var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, PrivateKeyPath, TokenLifetimeMinutes);
+        var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
+        var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
 
         var report = client.TestReleaseDriftAsync(resolvedPath, AppId, BundleId, Platform).GetAwaiter().GetResult();

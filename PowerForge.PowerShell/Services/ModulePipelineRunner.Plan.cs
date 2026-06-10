@@ -816,8 +816,12 @@ public sealed partial class ModulePipelineRunner
             placeHolderOption: placeHolderOption,
             commandModuleDependencies: commandDeps,
             testsAfterMerge: testsAfterMerge.ToArray(),
-            appleApps: appleApps.ToArray(),
-            xcodeProjectVersions: xcodeProjectVersions.ToArray(),
+            appleApps: appleApps
+                .Where(static app => app?.Configuration?.Enabled != false)
+                .ToArray(),
+            xcodeProjectVersions: xcodeProjectVersions
+                .Where(static project => project?.Configuration?.Enabled != false)
+                .ToArray(),
             mergeModule: mergeModule,
             mergeMissing: mergeMissing,
             doNotAttemptToFixRelativePaths: doNotAttemptToFixRelativePaths,

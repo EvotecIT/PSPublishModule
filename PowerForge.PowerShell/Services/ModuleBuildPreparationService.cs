@@ -174,6 +174,7 @@ internal sealed class ModuleBuildPreparationService
         var baseDir = Path.GetDirectoryName(configFullPath) ?? Directory.GetCurrentDirectory();
 
         spec.Build.SourcePath = ResolveConfigPath(baseDir, spec.Build.SourcePath);
+        var projectRoot = string.IsNullOrWhiteSpace(spec.Build.SourcePath) ? baseDir : spec.Build.SourcePath;
         spec.Build.StagingPath = ResolveConfigPathNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = ResolveConfigPathNullable(baseDir, spec.Build.CsprojPath);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
@@ -183,14 +184,14 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.ProjectPath)) continue;
-            cfg.ProjectPath = ResolveConfigPath(baseDir, cfg.ProjectPath);
+            cfg.ProjectPath = ResolveConfigPath(projectRoot, cfg.ProjectPath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationXcodeProjectVersionSegment>() ?? Enumerable.Empty<ConfigurationXcodeProjectVersionSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.Path)) continue;
-            cfg.Path = ResolveConfigPath(baseDir, cfg.Path);
+            cfg.Path = ResolveConfigPath(projectRoot, cfg.Path);
         }
     }
 
@@ -305,6 +306,7 @@ internal sealed class ModuleBuildPreparationService
 
         var baseDir = Path.GetDirectoryName(jsonFullPath);
         if (string.IsNullOrWhiteSpace(baseDir)) return;
+        var projectRoot = ResolveConfigPath(baseDir, spec.Build.SourcePath);
 
         spec.Build.SourcePath = MakeRelativeForConfig(baseDir, spec.Build.SourcePath);
         spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
@@ -316,14 +318,14 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.ProjectPath)) continue;
-            cfg.ProjectPath = MakeRelativeForConfig(baseDir, cfg.ProjectPath);
+            cfg.ProjectPath = MakeRelativeForConfig(projectRoot, cfg.ProjectPath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationXcodeProjectVersionSegment>() ?? Enumerable.Empty<ConfigurationXcodeProjectVersionSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.Path)) continue;
-            cfg.Path = MakeRelativeForConfig(baseDir, cfg.Path);
+            cfg.Path = MakeRelativeForConfig(projectRoot, cfg.Path);
         }
     }
 

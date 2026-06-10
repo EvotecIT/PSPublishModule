@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -57,7 +58,7 @@ public sealed class AppStoreConnectClient : IDisposable
         var query = new Dictionary<string, string?>();
         if (!string.IsNullOrWhiteSpace(bundleId)) query["filter[bundleId]"] = bundleId!.Trim();
         if (!string.IsNullOrWhiteSpace(name)) query["filter[name]"] = name!.Trim();
-        if (platform.HasValue) query["filter[platform]"] = ToAppStoreConnectPlatform(platform.Value);
+        if (platform.HasValue) query["filter[appStoreVersions.platform]"] = ToAppStoreConnectPlatform(platform.Value);
         query["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture);
 
         return GetArrayAsync("apps" + BuildQuery(query), ParseApp, cancellationToken);
@@ -94,6 +95,8 @@ public sealed class AppStoreConnectClient : IDisposable
         string appId,
         string? buildNumber = null,
         int limit = 20,
+        string? marketingVersion = null,
+        ApplePlatform? platform = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(appId))
@@ -105,8 +108,9 @@ public sealed class AppStoreConnectClient : IDisposable
             ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
         };
         if (!string.IsNullOrWhiteSpace(buildNumber)) query["filter[version]"] = buildNumber!.Trim();
+        if (!string.IsNullOrWhiteSpace(marketingVersion) || platform.HasValue) query["include"] = "preReleaseVersion";
 
-        return GetArrayAsync("builds" + BuildQuery(query), ParseBuild, cancellationToken);
+        return GetBuildArrayAsync("builds" + BuildQuery(query), marketingVersion, platform, cancellationToken);
     }
 
     /// <summary>
@@ -156,7 +160,13 @@ public sealed class AppStoreConnectClient : IDisposable
                 messages.Add("Local CURRENT_PROJECT_VERSION is missing or inconsistent.");
             else
             {
-                remoteBuild = (await GetBuildsAsync(app.Id, local.BuildNumber, limit: 10, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+                remoteBuild = (await GetBuildsAsync(
+                    app.Id,
+                    local.BuildNumber,
+                    limit: 10,
+                    marketingVersion: local.MarketingVersion,
+                    platform: platform,
+                    cancellationToken: cancellationToken).ConfigureAwait(false)).FirstOrDefault();
                 if (remoteBuild is null)
                     messages.Add($"Remote build '{local.BuildNumber}' was not found.");
             }
@@ -184,7 +194,10 @@ public sealed class AppStoreConnectClient : IDisposable
 
     private async Task<T?> GetSingleAsync<T>(string relativeUrl, Func<JsonElement, T> parse, CancellationToken cancellationToken)
     {
-        using var doc = await GetJsonAsync(relativeUrl, cancellationToken).ConfigureAwait(false);
+        using var doc = await GetJsonAsync(relativeUrl, cancellationToken, returnNullOnNotFound: true).ConfigureAwait(false);
+        if (doc is null)
+            return default;
+
         if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
             return default;
         return parse(data);
@@ -192,7 +205,8 @@ public sealed class AppStoreConnectClient : IDisposable
 
     private async Task<T[]> GetArrayAsync<T>(string relativeUrl, Func<JsonElement, T> parse, CancellationToken cancellationToken)
     {
-        using var doc = await GetJsonAsync(relativeUrl, cancellationToken).ConfigureAwait(false);
+        using var doc = await GetJsonAsync(relativeUrl, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
         if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
             return Array.Empty<T>();
 
@@ -202,7 +216,30 @@ public sealed class AppStoreConnectClient : IDisposable
         return list.ToArray();
     }
 
-    private async Task<JsonDocument> GetJsonAsync(string relativeUrl, CancellationToken cancellationToken)
+    private async Task<AppStoreConnectBuildInfo[]> GetBuildArrayAsync(
+        string relativeUrl,
+        string? marketingVersion,
+        ApplePlatform? platform,
+        CancellationToken cancellationToken)
+    {
+        using var doc = await GetJsonAsync(relativeUrl, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            return Array.Empty<AppStoreConnectBuildInfo>();
+
+        var preReleaseVersions = ReadIncludedPreReleaseVersions(doc.RootElement);
+        var list = new List<AppStoreConnectBuildInfo>();
+        foreach (var item in data.EnumerateArray())
+        {
+            var build = ParseBuild(item, preReleaseVersions);
+            if (BuildMatches(build, marketingVersion, platform))
+                list.Add(build);
+        }
+
+        return list.ToArray();
+    }
+
+    private async Task<JsonDocument?> GetJsonAsync(string relativeUrl, CancellationToken cancellationToken, bool returnNullOnNotFound = false)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, relativeUrl);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _tokenGenerator.CreateToken(_credential));
@@ -210,6 +247,9 @@ public sealed class AppStoreConnectClient : IDisposable
 
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        if (returnNullOnNotFound && response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
 
@@ -256,6 +296,57 @@ public sealed class AppStoreConnectClient : IDisposable
         };
     }
 
+    private static AppStoreConnectBuildInfo ParseBuild(JsonElement item, IReadOnlyDictionary<string, BuildPreReleaseVersion> preReleaseVersions)
+    {
+        var build = ParseBuild(item);
+        var preReleaseVersionId = GetRelationshipDataId(item, "preReleaseVersion");
+        if (!string.IsNullOrWhiteSpace(preReleaseVersionId) &&
+            preReleaseVersions.TryGetValue(preReleaseVersionId!, out var preReleaseVersion))
+        {
+            build.MarketingVersion = preReleaseVersion.Version;
+            build.Platform = preReleaseVersion.Platform;
+        }
+
+        return build;
+    }
+
+    private static bool BuildMatches(AppStoreConnectBuildInfo build, string? marketingVersion, ApplePlatform? platform)
+    {
+        if (!string.IsNullOrWhiteSpace(marketingVersion) &&
+            !string.Equals(build.MarketingVersion, marketingVersion.Trim(), StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (platform.HasValue &&
+            !string.Equals(build.Platform, ToAppStoreConnectPlatform(platform.Value), StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
+    }
+
+    private static Dictionary<string, BuildPreReleaseVersion> ReadIncludedPreReleaseVersions(JsonElement root)
+    {
+        var result = new Dictionary<string, BuildPreReleaseVersion>(StringComparer.OrdinalIgnoreCase);
+        if (!root.TryGetProperty("included", out var included) || included.ValueKind != JsonValueKind.Array)
+            return result;
+
+        foreach (var item in included.EnumerateArray())
+        {
+            if (!string.Equals(GetString(item, "type"), "preReleaseVersions", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var id = GetString(item, "id");
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            var attrs = GetAttributes(item);
+            result[id!] = new BuildPreReleaseVersion(
+                Version: GetString(attrs, "version"),
+                Platform: GetString(attrs, "platform"));
+        }
+
+        return result;
+    }
+
     private static JsonElement GetAttributes(JsonElement item)
         => item.TryGetProperty("attributes", out var attrs) ? attrs : default;
 
@@ -271,6 +362,20 @@ public sealed class AppStoreConnectClient : IDisposable
         if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(propertyName, out var prop))
             return null;
         return prop.ValueKind == JsonValueKind.True ? true : prop.ValueKind == JsonValueKind.False ? false : null;
+    }
+
+    private static string? GetRelationshipDataId(JsonElement item, string relationshipName)
+    {
+        if (item.ValueKind != JsonValueKind.Object ||
+            !item.TryGetProperty("relationships", out var relationships) ||
+            relationships.ValueKind != JsonValueKind.Object ||
+            !relationships.TryGetProperty(relationshipName, out var relationship) ||
+            relationship.ValueKind != JsonValueKind.Object ||
+            !relationship.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Object)
+            return null;
+
+        return GetString(data, "id");
     }
 
     private static DateTimeOffset? GetDateTimeOffset(JsonElement element, string propertyName)
@@ -308,4 +413,6 @@ public sealed class AppStoreConnectClient : IDisposable
         if (limit > 200) return 200;
         return limit;
     }
+
+    private sealed record BuildPreReleaseVersion(string? Version, string? Platform);
 }
