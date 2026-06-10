@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace PowerForge.Tests;
 
@@ -200,6 +201,81 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
     }
 
     [Fact]
+    public void InstallForCurrentUser_RefreshesStaleArtefactsModuleBeforePublicFallback()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var profile = Path.Combine(root, "profile");
+            var modulePath = Path.Combine(root, "Modules");
+            CreateArtefactsModulePackage(modulePath, "netfx", "CredentialProvider.Microsoft.exe");
+            var runner = new StubPowerShellRunner(request =>
+            {
+                Assert.Contains("Reinstall", request.CommandText, StringComparison.Ordinal);
+                CreateArtefactsModulePackage(modulePath, "netcore", "CredentialProvider.Microsoft.dll");
+                return new PowerShellRunResult(0, CreateModulePathMarker(modulePath), string.Empty, "pwsh.exe");
+            });
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = modulePath
+                },
+                runner: runner);
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(1, runner.CallCount);
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
+            Assert.Contains(result.Messages, message => message.Contains("installed or refreshed", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void InstallForCurrentUser_UsesArtefactsModulePathFromChildPowerShell()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var profile = Path.Combine(root, "profile");
+            var parentModulePath = Path.Combine(root, "WindowsPowerShellModules");
+            var childModulePath = Path.Combine(root, "PowerShellModules");
+            Directory.CreateDirectory(parentModulePath);
+            Directory.CreateDirectory(childModulePath);
+            var runner = new StubPowerShellRunner(_ =>
+            {
+                CreateArtefactsModulePackage(childModulePath, "netcore", "CredentialProvider.Microsoft.dll");
+                return new PowerShellRunResult(0, CreateModulePathMarker(childModulePath), string.Empty, "pwsh.exe");
+            });
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = parentModulePath
+                },
+                runner: runner);
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(1, runner.CallCount);
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
+            Assert.Contains(result.Messages, message => message.Contains(childModulePath, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
     public void InstallForCurrentUser_UsesNewestArtefactsModuleVersion()
     {
         var root = CreateTempRoot();
@@ -324,6 +400,12 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
         using var stream = File.OpenRead(path);
         using var sha256 = SHA256.Create();
         return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string CreateModulePathMarker(string modulePath)
+    {
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(modulePath));
+        return $"PFARTEFACTS::PSMODULEPATH::{encoded}";
     }
 
     private static string CredentialProviderRelativePath(string runtime, string fileName)

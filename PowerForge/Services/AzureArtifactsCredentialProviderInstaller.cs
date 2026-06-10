@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace PowerForge;
@@ -182,9 +183,10 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         if (artefactsSource is not null)
             return artefactsSource;
 
-        if (TryInstallArtefactsModule(timeout, messages))
+        var artefactsInstallResult = TryInstallArtefactsModule(timeout, messages);
+        if (artefactsInstallResult.Succeeded)
         {
-            artefactsSource = TryResolveArtefactsModulePackageSource(packageKind, messages);
+            artefactsSource = TryResolveArtefactsModulePackageSource(packageKind, messages, artefactsInstallResult.ModulePaths);
             if (artefactsSource is not null)
                 return artefactsSource;
         }
@@ -197,9 +199,10 @@ public sealed class AzureArtifactsCredentialProviderInstaller
 
     private CredentialProviderPackageSource? TryResolveArtefactsModulePackageSource(
         CredentialProviderPackageKind packageKind,
-        List<string> messages)
+        List<string> messages,
+        IEnumerable<string>? additionalModulePaths = null)
     {
-        foreach (var manifestPath in EnumerateArtefactsManifests())
+        foreach (var manifestPath in EnumerateArtefactsManifests(additionalModulePaths))
         {
             var source = TryReadArtefactsPackageSource(manifestPath, packageKind);
             if (source is null)
@@ -262,15 +265,15 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         return null;
     }
 
-    private IEnumerable<string> EnumerateArtefactsManifests()
+    private IEnumerable<string> EnumerateArtefactsManifests(IEnumerable<string>? additionalModulePaths = null)
     {
-        var psModulePath = _getEnvironmentVariable("PSModulePath") ?? string.Empty;
-        foreach (var root in psModulePath.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in EnumerateModulePathRoots(additionalModulePaths))
         {
-            if (string.IsNullOrWhiteSpace(root))
+            if (!seen.Add(root))
                 continue;
 
-            var moduleRoot = Path.Combine(root.Trim().Trim('"'), ArtefactsModuleName);
+            var moduleRoot = Path.Combine(root, ArtefactsModuleName);
             if (!Directory.Exists(moduleRoot))
                 continue;
 
@@ -301,14 +304,56 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         }
     }
 
-    private bool TryInstallArtefactsModule(TimeSpan timeout, List<string> messages)
+    private IEnumerable<string> EnumerateModulePathRoots(IEnumerable<string>? additionalModulePaths)
+    {
+        foreach (var root in SplitModulePath(_getEnvironmentVariable("PSModulePath")))
+            yield return root;
+
+        if (additionalModulePaths is null)
+            yield break;
+
+        foreach (var modulePath in additionalModulePaths)
+        {
+            foreach (var root in SplitModulePath(modulePath))
+                yield return root;
+        }
+    }
+
+    private static IEnumerable<string> SplitModulePath(string? modulePath)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            yield break;
+
+        foreach (var root in modulePath!.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var normalized = root.Trim().Trim('"');
+            if (!string.IsNullOrWhiteSpace(normalized))
+                yield return normalized;
+        }
+    }
+
+    private ArtefactsModuleInstallResult TryInstallArtefactsModule(TimeSpan timeout, List<string> messages)
     {
         var command = @"
 $ErrorActionPreference = 'Stop'
-if (Get-Module -ListAvailable -Name 'PSPublishModule.Artefacts' | Select-Object -First 1) { return }
-if (Get-Command -Name Install-PSResource -ErrorAction SilentlyContinue) {
+function Write-PowerForgeModulePath {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes([string] $env:PSModulePath)
+    [Console]::Out.WriteLine('PFARTEFACTS::PSMODULEPATH::' + [Convert]::ToBase64String($bytes))
+}
+$installPSResource = Get-Command -Name Install-PSResource -ErrorAction SilentlyContinue
+if ($installPSResource) {
     try {
-        Install-PSResource -Name 'PSPublishModule.Artefacts' -Scope CurrentUser -TrustRepository -ErrorAction Stop
+        $parameters = @{
+            Name = 'PSPublishModule.Artefacts'
+            Scope = 'CurrentUser'
+            TrustRepository = $true
+            ErrorAction = 'Stop'
+        }
+        if ($installPSResource.Parameters.ContainsKey('Reinstall')) {
+            $parameters['Reinstall'] = $true
+        }
+        Install-PSResource @parameters
+        Write-PowerForgeModulePath
         return
     } catch {
         $psResourceError = $_
@@ -320,6 +365,7 @@ if (Get-Command -Name Install-PSResource -ErrorAction SilentlyContinue) {
 }
 if (Get-Command -Name Install-Module -ErrorAction SilentlyContinue) {
     Install-Module -Name 'PSPublishModule.Artefacts' -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+    Write-PowerForgeModulePath
     return
 }
 throw 'Install-PSResource and Install-Module are not available.'
@@ -328,13 +374,45 @@ throw 'Install-PSResource and Install-Module are not available.'
         var result = _runner.Run(PowerShellRunRequest.ForCommand(command, timeout, preferPwsh: true));
         if (result.ExitCode == 0)
         {
-            messages.Add($"{ArtefactsModuleName} was installed or already available from the configured PowerShell gallery.");
-            return true;
+            messages.Add($"{ArtefactsModuleName} was installed or refreshed from the configured PowerShell gallery.");
+            return new ArtefactsModuleInstallResult(true, ParsePowerShellModulePaths(result.StdOut));
         }
 
         var failure = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
         messages.Add($"{ArtefactsModuleName} could not be installed from the configured PowerShell gallery. {failure}".Trim());
-        return false;
+        return new ArtefactsModuleInstallResult(false, Array.Empty<string>());
+    }
+
+    private static string[] ParsePowerShellModulePaths(string? stdOut)
+    {
+        const string marker = "PFARTEFACTS::PSMODULEPATH::";
+        if (string.IsNullOrWhiteSpace(stdOut))
+            return Array.Empty<string>();
+
+        var paths = new List<string>();
+        using var reader = new StringReader(stdOut);
+        while (reader.ReadLine() is { } line)
+        {
+            if (!line.StartsWith(marker, StringComparison.Ordinal))
+                continue;
+
+            var encoded = line.Substring(marker.Length).Trim();
+            if (string.IsNullOrWhiteSpace(encoded))
+                continue;
+
+            try
+            {
+                var modulePath = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+                if (!string.IsNullOrWhiteSpace(modulePath))
+                    paths.Add(modulePath);
+            }
+            catch (FormatException)
+            {
+                // Ignore unrelated or malformed host output.
+            }
+        }
+
+        return paths.ToArray();
     }
 
     private static IEnumerable<string> OrderArtefactsModuleVersionDirectories(IEnumerable<string> versionDirectories)
@@ -505,6 +583,19 @@ throw 'Install-PSResource and Install-Module are not available.'
     {
         NetCore,
         NetFx
+    }
+
+    private sealed class ArtefactsModuleInstallResult
+    {
+        public ArtefactsModuleInstallResult(bool succeeded, string[] modulePaths)
+        {
+            Succeeded = succeeded;
+            ModulePaths = modulePaths ?? Array.Empty<string>();
+        }
+
+        public bool Succeeded { get; }
+
+        public string[] ModulePaths { get; }
     }
 
     private sealed class CredentialProviderPackageSource
