@@ -816,10 +816,14 @@ public sealed partial class ModulePipelineRunner
             placeHolderOption: placeHolderOption,
             commandModuleDependencies: commandDeps,
             testsAfterMerge: testsAfterMerge.ToArray(),
-            appleApps: appleApps
+            appleApps: refreshPsd1Only
+                ? Array.Empty<ConfigurationAppleAppSegment>()
+                : appleApps
                 .Where(static app => app?.Configuration?.Enabled != false)
                 .ToArray(),
-            xcodeProjectVersions: xcodeProjectVersions
+            xcodeProjectVersions: refreshPsd1Only
+                ? Array.Empty<ConfigurationXcodeProjectVersionSegment>()
+                : xcodeProjectVersions
                 .Where(static project => project?.Configuration?.Enabled != false)
                 .ToArray(),
             mergeModule: mergeModule,

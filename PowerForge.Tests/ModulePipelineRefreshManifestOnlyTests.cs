@@ -36,6 +36,22 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
                             SignMerged = true,
                             InstallMissingModules = true
                         }
+                    },
+                    new ConfigurationAppleAppSegment
+                    {
+                        Configuration = new AppleAppConfiguration
+                        {
+                            ProjectPath = "Tactra.xcodeproj",
+                            UseResolvedVersion = true
+                        }
+                    },
+                    new ConfigurationXcodeProjectVersionSegment
+                    {
+                        Configuration = new XcodeProjectVersionConfiguration
+                        {
+                            Path = "Tactra.xcodeproj",
+                            UseResolvedVersion = true
+                        }
                     }
                 }
             };
@@ -49,6 +65,8 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.False(plan.SignModule);
             Assert.False(plan.InstallEnabled);
             Assert.False(plan.InstallMissingModules);
+            Assert.Empty(plan.AppleApps);
+            Assert.Empty(plan.XcodeProjectVersions);
         }
         finally
         {

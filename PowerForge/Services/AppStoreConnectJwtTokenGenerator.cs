@@ -51,12 +51,35 @@ public sealed class AppStoreConnectJwtTokenGenerator
     private static byte[] Sign(string signingInput, string privateKey)
     {
 #if NET472
-        throw new PlatformNotSupportedException("App Store Connect JWT signing requires .NET 8 or newer.");
+        var keyBytes = DecodePem(privateKey, "PRIVATE KEY");
+        using var key = CngKey.Import(keyBytes, CngKeyBlobFormat.Pkcs8PrivateBlob);
+        using var ecdsa = new ECDsaCng(key) { HashAlgorithm = CngAlgorithm.Sha256 };
+        return ecdsa.SignData(Encoding.ASCII.GetBytes(signingInput));
 #else
         using var ecdsa = ECDsa.Create();
         ecdsa.ImportFromPem(privateKey.AsSpan());
         return ecdsa.SignData(Encoding.ASCII.GetBytes(signingInput), HashAlgorithmName.SHA256);
 #endif
+    }
+
+    private static byte[] DecodePem(string pem, string label)
+    {
+        var begin = "-----BEGIN " + label + "-----";
+        var end = "-----END " + label + "-----";
+        var startIndex = pem.IndexOf(begin, StringComparison.Ordinal);
+        if (startIndex < 0)
+            throw new ArgumentException("PrivateKey must be a PEM encoded " + label + ".", nameof(pem));
+
+        startIndex += begin.Length;
+        var endIndex = pem.IndexOf(end, startIndex, StringComparison.Ordinal);
+        if (endIndex < 0)
+            throw new ArgumentException("PrivateKey must be a PEM encoded " + label + ".", nameof(pem));
+
+        var base64 = pem.Substring(startIndex, endIndex - startIndex)
+            .Replace("\r", string.Empty)
+            .Replace("\n", string.Empty)
+            .Trim();
+        return Convert.FromBase64String(base64);
     }
 
     private static string Base64Url(byte[] bytes)

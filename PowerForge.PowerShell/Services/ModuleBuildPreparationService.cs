@@ -318,14 +318,14 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.ProjectPath)) continue;
-            cfg.ProjectPath = MakeRelativeForConfig(projectRoot, cfg.ProjectPath);
+            cfg.ProjectPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.ProjectPath));
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationXcodeProjectVersionSegment>() ?? Enumerable.Empty<ConfigurationXcodeProjectVersionSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.Path)) continue;
-            cfg.Path = MakeRelativeForConfig(projectRoot, cfg.Path);
+            cfg.Path = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.Path));
         }
     }
 

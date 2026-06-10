@@ -194,7 +194,7 @@ public sealed class ModuleBuildPreparationServiceTests
                     {
                         Configuration = new AppleAppConfiguration
                         {
-                            ProjectPath = appProject,
+                            ProjectPath = "Tactra.xcodeproj",
                             UseResolvedVersion = true
                         }
                     },
@@ -202,7 +202,7 @@ public sealed class ModuleBuildPreparationServiceTests
                     {
                         Configuration = new XcodeProjectVersionConfiguration
                         {
-                            Path = macProject,
+                            Path = Path.Combine("Mac", "TactraMac.xcodeproj"),
                             UseResolvedVersion = true
                         }
                     }
