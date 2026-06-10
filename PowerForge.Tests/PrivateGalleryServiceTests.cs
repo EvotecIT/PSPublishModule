@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -76,6 +80,192 @@ public sealed class PrivateGalleryServiceTests
         Assert.False(PrivateGalleryService.IsMissingProbePackageMessage(
             message,
             "__PowerForgePrivateGalleryConnectionProbe__"));
+    }
+
+    [Fact]
+    public void PrimeAzureArtifactsCredentialProviderSession_FallsBackWhenFirstProviderRequiresMissingDotNetRuntime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var netCoreProvider = CreateCredentialProviderFile(root, "netcore");
+            var netFxProvider = CreateCredentialProviderFile(root, "netfx");
+            var calls = new List<string>();
+            var runner = new StubProcessRunner(request =>
+            {
+                calls.Add(request.FileName);
+                if (string.Equals(request.FileName, netCoreProvider, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new ProcessRunResult(
+                        -2147450749,
+                        string.Empty,
+                        "You must install .NET to run this application.",
+                        request.FileName,
+                        TimeSpan.Zero,
+                        timedOut: false);
+                }
+
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var service = new PrivateGalleryService(
+                new FakePrivateGalleryHost(),
+                runner,
+                netFrameworkReleaseProvider: () => 533320);
+            var registration = new ModuleRepositoryRegistrationResult
+            {
+                RepositoryName = "Company",
+                PSResourceGetUri = "https://pkgs.dev.azure.com/contoso/_packaging/Modules/nuget/v3/index.json",
+                AzureArtifactsCredentialProviderPaths = new[] { netFxProvider, netCoreProvider }
+            };
+
+            var result = service.PrimeAzureArtifactsCredentialProviderSession(registration, TimeSpan.FromSeconds(1));
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(netFxProvider, result.ProviderPath);
+            Assert.Equal(new[] { netCoreProvider, netFxProvider }, calls);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void PrimeAzureArtifactsCredentialProviderSession_FallsBackWhenFirstProviderFailsWithoutTimingOut()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var netCoreProvider = CreateCredentialProviderFile(root, "netcore");
+            var netFxProvider = CreateCredentialProviderFile(root, "netfx");
+            var calls = new List<string>();
+            var runner = new StubProcessRunner(request =>
+            {
+                calls.Add(request.FileName);
+                if (string.Equals(request.FileName, netCoreProvider, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new ProcessRunResult(
+                        1,
+                        string.Empty,
+                        string.Empty,
+                        request.FileName,
+                        TimeSpan.Zero,
+                        timedOut: false);
+                }
+
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var service = new PrivateGalleryService(
+                new FakePrivateGalleryHost(),
+                runner,
+                netFrameworkReleaseProvider: () => 533320);
+            var registration = new ModuleRepositoryRegistrationResult
+            {
+                RepositoryName = "Company",
+                PSResourceGetUri = "https://pkgs.dev.azure.com/contoso/_packaging/Modules/nuget/v3/index.json",
+                AzureArtifactsCredentialProviderPaths = new[] { netFxProvider, netCoreProvider }
+            };
+
+            var result = service.PrimeAzureArtifactsCredentialProviderSession(registration, TimeSpan.FromSeconds(1));
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(netFxProvider, result.ProviderPath);
+            Assert.Equal(new[] { netCoreProvider, netFxProvider }, calls);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void IsMissingDotNetRuntimeFailure_DetectsCredentialProviderAppHostFailure()
+    {
+        var result = new ProcessRunResult(
+            1,
+            string.Empty,
+            "App: CredentialProvider.Microsoft.exe apphost_version=8.0.26 missing_runtime=true",
+            "CredentialProvider.Microsoft.exe",
+            TimeSpan.Zero,
+            timedOut: false);
+
+        Assert.True(PrivateGalleryService.IsMissingDotNetRuntimeFailure(result));
+    }
+
+    [Fact]
+    public void GetNetFxCredentialProviderPrerequisiteFailure_RequiresNetFramework481()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var provider = CreateCredentialProviderFile(root, "netfx");
+            File.WriteAllText(
+                provider + ".config",
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <configuration>
+                  <startup>
+                    <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8.1" />
+                  </startup>
+                </configuration>
+                """);
+
+            var failure = PrivateGalleryService.GetNetFxCredentialProviderPrerequisiteFailure(provider, installedRelease: 528449);
+
+            Assert.NotNull(failure);
+            Assert.Contains(".NET Framework 4.8.1", failure, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.win-*", failure, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void GetNetFxCredentialProviderPrerequisiteFailure_AllowsNetFramework481()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var provider = CreateCredentialProviderFile(root, "netfx");
+
+            var failure = PrivateGalleryService.GetNetFxCredentialProviderPrerequisiteFailure(provider, installedRelease: 533320);
+
+            Assert.Null(failure);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void GetNetFxCredentialProviderPrerequisiteFailure_UsesProviderTargetFramework()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var provider = CreateCredentialProviderFile(root, "netfx");
+            File.WriteAllText(
+                provider + ".config",
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <configuration>
+                  <startup>
+                    <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" />
+                  </startup>
+                </configuration>
+                """);
+
+            var failure = PrivateGalleryService.GetNetFxCredentialProviderPrerequisiteFailure(provider, installedRelease: 528449);
+
+            Assert.Null(failure);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
     }
 
     [Fact]
@@ -279,5 +469,26 @@ public sealed class PrivateGalleryServiceTests
         public void WriteWarning(string message)
         {
         }
+    }
+
+    private static string CreateCredentialProviderFile(string root, string runtime)
+    {
+        var path = Path.Combine(root, "plugins", runtime, "CredentialProvider.Microsoft", "CredentialProvider.Microsoft.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, string.Empty);
+        return path;
+    }
+
+    private sealed class StubProcessRunner : IProcessRunner
+    {
+        private readonly Func<ProcessRunRequest, ProcessRunResult> _execute;
+
+        public StubProcessRunner(Func<ProcessRunRequest, ProcessRunResult> execute)
+        {
+            _execute = execute;
+        }
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(_execute(request));
     }
 }

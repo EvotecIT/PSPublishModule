@@ -466,6 +466,11 @@ public sealed class ModulePublisher
         {
             current = TryGetLatestRepositoryVersion(tool, moduleName, repositoryName, credential);
         }
+        catch (Exception ex) when (IsRepositoryPackageNotFound(moduleName, ex))
+        {
+            _logger.Verbose($"No existing repository version was found for {moduleName} on '{repositoryName}'. Treating this as a first publish.");
+            return;
+        }
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to query repository version for {moduleName} on '{repositoryName}'. Use -Force to publish without version check. {ex.Message}");
@@ -475,6 +480,19 @@ public sealed class ModulePublisher
 
         if (publishVersion.CompareTo(current.Value) <= 0)
             throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(current.Value.Version.ToString(), current.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+    }
+
+    internal static bool IsRepositoryPackageNotFound(string moduleName, Exception exception)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName) || exception is null)
+            return false;
+
+        var message = exception.ToString();
+        return message.IndexOf(moduleName, StringComparison.OrdinalIgnoreCase) >= 0 &&
+               (message.IndexOf("could not be found in repository", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                message.IndexOf("no match was found", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                message.IndexOf("no packages found", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                message.IndexOf("no results", StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     private SemVer? TryGetLatestRepositoryVersion(PublishTool tool, string moduleName, string repositoryName, RepositoryCredential? credential)

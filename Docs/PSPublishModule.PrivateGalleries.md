@@ -62,8 +62,11 @@ wrapper and leave identity/session ownership with Microsoft tooling:
 3. Let `Initialize-ModuleRepository -InstallPrerequisites` install or refresh
    `Microsoft.PowerShell.PSResourceGet` at the version required by the selected
    bootstrap mode and install the Azure Artifacts Credential Provider on Windows
-   workstations. On non-Windows systems, pre-install the credential provider
-   with the official Microsoft installer before onboarding.
+   workstations. For locked-down estates, mirror `PSPublishModule.Artefacts`
+   into the same private gallery as PSPublishModule so the provider ZIPs are
+   delivered as a normal PowerShell module dependency. On non-Windows systems,
+   pre-install the credential provider with the official Microsoft installer
+   before onboarding.
 4. Create the profile once with `Set-ModuleRepositoryProfile`. Use the default
    user scope for one-user machines, or `-Scope Machine` from an elevated/admin
    deployment when the same non-secret feed definition should be visible to all
@@ -413,6 +416,61 @@ Artifacts, prefer the default profile settings:
 `-InstallPrerequisites` honors these Entra-first defaults by upgrading
 PSResourceGet to the ExistingSession-capable line before it installs or refreshes
 the Azure Artifacts Credential Provider.
+
+### Credential Provider Package Source
+
+PowerForge installs the Azure Artifacts Credential Provider from package ZIPs. It
+does not download and execute Microsoft's installer script at runtime.
+
+The preferred enterprise source is `PSPublishModule.Artefacts`, a companion
+package-carrier module that can be published to PSGallery or mirrored into a
+private PowerShell gallery. During `-InstallPrerequisites`, PSPublishModule looks
+for the module locally first, then tries to install it from the configured
+PowerShell repositories, and only then falls back to Microsoft's public release
+package URLs. This lets isolated networks approve and promote one PowerShell
+module instead of managing separate script downloads from `github.com`.
+The carrier manifest includes architecture-specific Windows netcore packages,
+and PSPublishModule selects the package matching the current Windows process
+architecture.
+
+Build and publish the carrier module from this repository:
+
+```powershell
+.\Modules\PSPublishModule.Artefacts\Build\Build-Module.ps1
+```
+
+Then publish the packed module to PSGallery or to the private gallery users
+already trust. Workstations can pre-install it, or PSPublishModule can install it
+on demand from the configured repository when `-InstallPrerequisites` runs:
+
+```powershell
+Install-Module PSPublishModule.Artefacts -Repository CompanyGallery
+Initialize-ModuleRepository -ProfileName Company -InstallPrerequisites
+```
+
+Explicit package variables remain available as the override path for file
+shares, internal HTTP artifact caches, or emergency pinning. Configure these
+machine or user environment variables before running `-InstallPrerequisites`:
+
+```powershell
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE = '\\fileserver\packages\Microsoft.win-x64.NuGet.CredentialProvider.zip'
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE = '\\fileserver\packages\Microsoft.NetFx48.NuGet.CredentialProvider.zip'
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_SHA256 = '<sha256>'
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_SHA256 = '<sha256>'
+```
+
+The package variables may also point at internal HTTPS mirror URLs. Use
+`POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_PACKAGE` only when the same ZIP
+contains every requested runtime folder. The runtime-specific variables are the
+preferred enterprise shape because Microsoft publishes the .NET and .NET
+Framework credential-provider packages as separate release assets. On Windows,
+prefer Microsoft's self-contained `Microsoft.win-*.NuGet.CredentialProvider.zip`
+packages over `Microsoft.Net8.NuGet.CredentialProvider.zip`; the latter requires
+a separately installed .NET runtime. The `netfx` package is kept for Windows
+PowerShell 5.1/.NET Framework compatibility, but it is not self-contained
+either; it requires a supported .NET Framework runtime. PSPublishModule
+preflights the `netfx` provider and reports the runtime requirement before
+trying another detected provider when one is available.
 
 ## Managed Profile Deployment
 

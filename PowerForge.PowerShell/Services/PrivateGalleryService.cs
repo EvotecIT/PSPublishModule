@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Xml.Linq;
+using Microsoft.Win32;
 
 namespace PowerForge;
 
@@ -11,14 +14,18 @@ internal sealed class PrivateGalleryService
     private const string MinimumPSResourceGetExistingSessionVersion = "1.2.0";
     private const string CredentialProviderTimeoutMinutesEnvironmentVariable = "POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES";
     private const string JFrogCliTimeoutMinutesEnvironmentVariable = "POWERFORGE_JFROG_CLI_LOGIN_TIMEOUT_MINUTES";
+    private const int MissingDotNetRuntimeExitCode = -2147450749;
+    private const string NetFrameworkReleaseKey = @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full";
 
     private readonly IPrivateGalleryHost _host;
     private readonly IProcessRunner _processRunner;
+    private readonly Func<int?> _netFrameworkReleaseProvider;
 
-    public PrivateGalleryService(IPrivateGalleryHost host, IProcessRunner? processRunner = null)
+    public PrivateGalleryService(IPrivateGalleryHost host, IProcessRunner? processRunner = null, Func<int?>? netFrameworkReleaseProvider = null)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _processRunner = processRunner ?? new ProcessRunner();
+        _netFrameworkReleaseProvider = netFrameworkReleaseProvider ?? GetNetFrameworkRelease;
     }
 
     public void EnsureProviderSupported(PrivateGalleryProvider provider)
@@ -483,7 +490,10 @@ internal sealed class PrivateGalleryService
         bool installPrerequisites,
         PrivateGalleryBootstrapMode bootstrapMode = PrivateGalleryBootstrapMode.Auto,
         bool forceInstall = false,
-        bool includeAzureArtifactsCredentialProvider = true)
+        bool includeAzureArtifactsCredentialProvider = true,
+        string? artefactsRepositoryName = null,
+        string? artefactsPSResourceGetUri = null,
+        string? artefactsPowerShellGetSourceUri = null)
     {
         var initialStatus = GetBootstrapPrerequisiteStatus();
         if (!installPrerequisites)
@@ -538,7 +548,12 @@ internal sealed class PrivateGalleryService
             {
                 if (_host.ShouldProcess("Azure Artifacts Credential Provider", "Install private-gallery prerequisite"))
                 {
-                    var installer = new AzureArtifactsCredentialProviderInstaller(runner, logger);
+                    var installer = new AzureArtifactsCredentialProviderInstaller(
+                        runner,
+                        logger,
+                        preferredRepositoryName: artefactsRepositoryName,
+                        preferredPSResourceGetUri: artefactsPSResourceGetUri,
+                        preferredPowerShellGetSourceUri: artefactsPowerShellGetSourceUri);
                     var result = installer.InstallForCurrentUser(includeNetFx: true, installNet8: true, force: forceInstall);
                     if (!result.Succeeded)
                         throw new InvalidOperationException("Azure Artifacts Credential Provider installation did not succeed.");
@@ -724,8 +739,8 @@ internal sealed class PrivateGalleryService
                 message: "Azure Artifacts Credential Provider session priming was skipped because the current process appears to be CI/headless. Use a pre-cached provider session or configure ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS / ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS for unattended validation.");
         }
 
-        var providerPath = SelectCredentialProviderPath(registration.AzureArtifactsCredentialProviderPaths);
-        if (string.IsNullOrWhiteSpace(providerPath))
+        var providerPaths = SelectCredentialProviderPaths(registration.AzureArtifactsCredentialProviderPaths);
+        if (providerPaths.Length == 0)
         {
             return new CredentialProviderSessionPrimeResult(
                 attempted: false,
@@ -741,26 +756,11 @@ internal sealed class PrivateGalleryService
                 attempted: false,
                 succeeded: false,
                 skipped: true,
-                providerPath: providerPath,
+                providerPath: providerPaths[0],
                 message: "Azure Artifacts Credential Provider session priming was skipped by ShouldProcess.");
         }
 
         _host.WriteWarning("The Azure Artifacts access probe failed without an explicit credential. PSPublishModule will invoke the Azure Artifacts Credential Provider so you can complete the Entra/MFA sign-in and cache a session token for this feed.");
-
-        var providerExecutablePath = providerPath!;
-        var runner = new ProcessRunner();
-        var fileName = providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? "dotnet" : providerExecutablePath;
-        var arguments = new List<string>();
-        if (providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            arguments.Add(providerExecutablePath);
-
-        arguments.Add("-I");
-        arguments.Add("-U");
-        arguments.Add(registration.PSResourceGetUri);
-        arguments.Add("-F");
-        arguments.Add("Json");
-        arguments.Add("-C");
-        arguments.Add("True");
 
         var effectiveTimeout = timeout ?? GetCredentialProviderSessionPrimeTimeout();
         var previousDeviceFlowTimeout = Environment.GetEnvironmentVariable("NUGET_CREDENTIALPROVIDER_VSTS_DEVICEFLOWTIMEOUTSECONDS");
@@ -771,17 +771,56 @@ internal sealed class PrivateGalleryService
                 Math.Ceiling(effectiveTimeout.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
-        ProcessRunResult result;
+        ProcessRunResult? lastResult = null;
+        string? lastProviderPath = null;
+        string? lastFailure = null;
         try
         {
-            result = runner.RunAsync(
-                new ProcessRunRequest(
-                    fileName,
-                    Environment.CurrentDirectory,
-                    arguments,
-                    effectiveTimeout,
-                    captureOutput: false,
-                    captureError: false)).GetAwaiter().GetResult();
+            foreach (var providerExecutablePath in providerPaths)
+            {
+                lastProviderPath = providerExecutablePath;
+                var prerequisiteFailure = GetCredentialProviderRuntimePrerequisiteFailure(providerExecutablePath);
+                if (!string.IsNullOrWhiteSpace(prerequisiteFailure))
+                {
+                    if (!string.Equals(providerExecutablePath, providerPaths[providerPaths.Length - 1], StringComparison.OrdinalIgnoreCase))
+                    {
+                        _host.WriteWarning(prerequisiteFailure! + " Trying another detected provider.");
+                        continue;
+                    }
+
+                    lastFailure = prerequisiteFailure;
+                    break;
+                }
+
+                var result = RunCredentialProviderSessionPrime(
+                    providerExecutablePath,
+                    registration.PSResourceGetUri!,
+                    effectiveTimeout);
+                lastResult = result;
+
+                if (result.Succeeded)
+                {
+                    return new CredentialProviderSessionPrimeResult(
+                        attempted: true,
+                        succeeded: true,
+                        skipped: false,
+                        providerPath: providerExecutablePath,
+                        message: "Azure Artifacts Credential Provider session priming completed successfully.");
+                }
+
+                if (!result.TimedOut &&
+                    !result.Succeeded &&
+                    !string.Equals(providerExecutablePath, providerPaths[providerPaths.Length - 1], StringComparison.OrdinalIgnoreCase))
+                {
+                    var reason = IsMissingDotNetRuntimeFailure(result)
+                        ? "requires a missing .NET runtime"
+                        : $"failed with exit code {result.ExitCode}";
+                    _host.WriteWarning($"Azure Artifacts Credential Provider '{providerExecutablePath}' {reason}. Trying another detected provider.");
+                    continue;
+                }
+
+                break;
+            }
         }
         finally
         {
@@ -789,25 +828,168 @@ internal sealed class PrivateGalleryService
                 Environment.SetEnvironmentVariable("NUGET_CREDENTIALPROVIDER_VSTS_DEVICEFLOWTIMEOUTSECONDS", null);
         }
 
-        if (result.Succeeded)
-        {
-            return new CredentialProviderSessionPrimeResult(
-                attempted: true,
-                succeeded: true,
-                skipped: false,
-                providerPath: providerExecutablePath,
-                message: "Azure Artifacts Credential Provider session priming completed successfully.");
-        }
-
-        var failure = result.TimedOut
+        var failure = lastResult is null
+            ? lastFailure ?? "Azure Artifacts Credential Provider session priming did not run."
+            : lastResult.TimedOut
             ? "Azure Artifacts Credential Provider session priming timed out."
-            : $"Azure Artifacts Credential Provider session priming failed with exit code {result.ExitCode}.";
+            : IsMissingDotNetRuntimeFailure(lastResult)
+                ? $"Azure Artifacts Credential Provider session priming failed because '{lastProviderPath}' requires a .NET runtime that is not installed. Reinstall prerequisites so PSPublishModule can use the self-contained Microsoft credential-provider package, or install the required .NET runtime."
+                : $"Azure Artifacts Credential Provider session priming failed with exit code {lastResult.ExitCode}.";
         return new CredentialProviderSessionPrimeResult(
             attempted: true,
             succeeded: false,
             skipped: false,
-            providerPath: providerExecutablePath,
+            providerPath: lastProviderPath,
             message: failure);
+    }
+
+    private ProcessRunResult RunCredentialProviderSessionPrime(
+        string providerExecutablePath,
+        string feedUri,
+        TimeSpan timeout)
+    {
+        var fileName = providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? "dotnet" : providerExecutablePath;
+        var arguments = new List<string>();
+        if (providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            arguments.Add(providerExecutablePath);
+
+        arguments.Add("-I");
+        arguments.Add("-U");
+        arguments.Add(feedUri);
+        arguments.Add("-F");
+        arguments.Add("Json");
+        arguments.Add("-C");
+        arguments.Add("True");
+
+        return _processRunner.RunAsync(
+            new ProcessRunRequest(
+                fileName,
+                Environment.CurrentDirectory,
+                arguments,
+                timeout,
+                captureOutput: false,
+                captureError: false)).GetAwaiter().GetResult();
+    }
+
+    private string? GetCredentialProviderRuntimePrerequisiteFailure(string providerExecutablePath)
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? GetNetFxCredentialProviderPrerequisiteFailure(providerExecutablePath, _netFrameworkReleaseProvider())
+            : null;
+
+    internal static string? GetNetFxCredentialProviderPrerequisiteFailure(string providerExecutablePath, int? installedRelease)
+    {
+        if (!IsNetFxCredentialProviderPath(providerExecutablePath))
+            return null;
+
+        var targetFramework = TryReadNetFxTargetFramework(providerExecutablePath);
+        var requiredRelease = GetNetFrameworkMinimumRelease(targetFramework);
+        if (!installedRelease.HasValue)
+        {
+            return $"Azure Artifacts Credential Provider '{providerExecutablePath}' requires {targetFramework}, but .NET Framework 4.5+ was not detected in the registry. Install {targetFramework} or use the self-contained Microsoft.win-* credential-provider package.";
+        }
+
+        if (requiredRelease.HasValue && installedRelease.Value < requiredRelease.Value)
+        {
+            return $"Azure Artifacts Credential Provider '{providerExecutablePath}' requires {targetFramework}, but the installed .NET Framework Release DWORD is {installedRelease.Value}. Install {targetFramework} or use the self-contained Microsoft.win-* credential-provider package.";
+        }
+
+        return null;
+    }
+
+    private static int? GetNetFrameworkRelease()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return null;
+
+        try
+        {
+            var value = Registry.GetValue(NetFrameworkReleaseKey, "Release", null);
+            if (value is int release)
+                return release;
+
+            return value is string text && int.TryParse(text, out var parsed) ? parsed : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsNetFxCredentialProviderPath(string providerExecutablePath)
+        => providerExecutablePath.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase) &&
+           HasPathSegment(providerExecutablePath, "netfx");
+
+    private static string TryReadNetFxTargetFramework(string providerExecutablePath)
+    {
+        var configPath = providerExecutablePath + ".config";
+        if (!File.Exists(configPath))
+            return ".NET Framework 4.8.1";
+
+        try
+        {
+            var document = XDocument.Load(configPath);
+            var sku = document.Descendants()
+                .FirstOrDefault(static element => string.Equals(element.Name.LocalName, "supportedRuntime", StringComparison.OrdinalIgnoreCase))
+                ?.Attribute("sku")
+                ?.Value;
+
+            return FormatTargetFrameworkSku(sku);
+        }
+        catch
+        {
+            return ".NET Framework 4.8.1";
+        }
+    }
+
+    private static string FormatTargetFrameworkSku(string? sku)
+    {
+        var value = (sku ?? string.Empty).Trim();
+        if (value.Length == 0)
+            return ".NET Framework 4.8.1";
+
+        const string netFrameworkPrefix = ".NETFramework,Version=v";
+        if (value.StartsWith(netFrameworkPrefix, StringComparison.OrdinalIgnoreCase))
+            return ".NET Framework " + value.Substring(netFrameworkPrefix.Length);
+
+        return value.Replace(".NETFramework", ".NET Framework");
+    }
+
+    private static int? GetNetFrameworkMinimumRelease(string targetFramework)
+    {
+        var version = ParseNetFrameworkVersion(targetFramework);
+        if (version is null)
+            return 533320;
+
+        if (version >= new Version(4, 8, 1))
+            return 533320;
+        if (version >= new Version(4, 8))
+            return 528040;
+        if (version >= new Version(4, 7, 2))
+            return 461808;
+        if (version >= new Version(4, 7, 1))
+            return 461308;
+        if (version >= new Version(4, 7))
+            return 460798;
+        if (version >= new Version(4, 6, 2))
+            return 394802;
+
+        return null;
+    }
+
+    private static Version? ParseNetFrameworkVersion(string targetFramework)
+    {
+        if (string.IsNullOrWhiteSpace(targetFramework))
+            return null;
+
+        var markerIndex = targetFramework.IndexOf("4.", StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+            return null;
+
+        var versionText = new string(targetFramework
+            .Substring(markerIndex)
+            .TakeWhile(static c => char.IsDigit(c) || c == '.')
+            .ToArray());
+        return Version.TryParse(versionText, out var version) ? version : null;
     }
 
     internal static bool IsMissingProbePackageMessage(string? message, string probeName)
@@ -1124,15 +1306,57 @@ internal sealed class PrivateGalleryService
             .Trim();
     }
 
-    private static string? SelectCredentialProviderPath(IEnumerable<string>? paths)
+    internal static bool IsMissingDotNetRuntimeFailure(ProcessRunResult result)
+    {
+        if (result is null || result.Succeeded || result.TimedOut)
+            return false;
+
+        if (result.ExitCode == MissingDotNetRuntimeExitCode)
+            return true;
+
+        var message = $"{result.StdOut} {result.StdErr}";
+        return message.IndexOf("You must install .NET to run this application", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("apphost_version", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("missing_runtime=true", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    internal static string[] SelectCredentialProviderPaths(IEnumerable<string>? paths)
     {
         var candidates = (paths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(GetCredentialProviderPathRank)
+            .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return candidates.FirstOrDefault(static path => path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase)) ??
-               candidates.FirstOrDefault(static path => path.EndsWith("CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase));
+        return candidates;
     }
+
+    private static int GetCredentialProviderPathRank(string path)
+    {
+        if (path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase) &&
+            HasPathSegment(path, "netcore"))
+        {
+            return 0;
+        }
+
+        if (path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase) &&
+            HasPathSegment(path, "netfx"))
+        {
+            return 1;
+        }
+
+        if (path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase))
+            return 2;
+
+        if (path.EndsWith("CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase))
+            return 3;
+
+        return 4;
+    }
+
+    private static bool HasPathSegment(string path, string segment)
+        => path.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(part => string.Equals(part, segment, StringComparison.OrdinalIgnoreCase));
 }
