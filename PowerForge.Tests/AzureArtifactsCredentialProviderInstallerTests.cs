@@ -199,6 +199,37 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
     }
 
     [Fact]
+    public void InstallForCurrentUser_UsesArtefactsModulePackageForCurrentArchitecture()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var profile = Path.Combine(root, "profile");
+            var modulePath = Path.Combine(root, "Modules");
+            var expectedArchitecture = GetCurrentPackageArchitecture();
+            var otherArchitecture = string.Equals(expectedArchitecture, "x64", StringComparison.OrdinalIgnoreCase) ? "x86" : "x64";
+            var selectedPackagePath = CreateArtefactsModulePackageWithArchitectures(modulePath, expectedArchitecture, otherArchitecture);
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = modulePath
+                });
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
+            Assert.Contains(result.Messages, message => message.Contains(selectedPackagePath, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
     public void InstallForCurrentUser_AutoInstallsArtefactsModuleBeforePublicFallback()
     {
         var root = CreateTempRoot();
@@ -373,6 +404,35 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
         }
     }
 
+    [Fact]
+    public void InstallForCurrentUser_SkipsCompleteRuntimeBeforeResolvingPackage()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var profile = Path.Combine(root, "profile");
+            var targetProvider = CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(targetProvider)!);
+            File.WriteAllText(targetProvider, "already installed");
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>(),
+                downloadPackage: (_, _, _) => throw new InvalidOperationException("Download was not expected."),
+                runner: new StubPowerShellRunner(_ => throw new InvalidOperationException("PowerShell execution was not expected.")));
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.False(result.Changed);
+            Assert.Contains(result.Messages, message => message.Contains("already installed", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
     private static AzureArtifactsCredentialProviderInstaller CreateInstaller(
         string profile,
         IReadOnlyDictionary<string, string?> environment,
@@ -430,6 +490,47 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
         return packagePath;
     }
 
+    private static string CreateArtefactsModulePackageWithArchitectures(
+        string modulePath,
+        string expectedArchitecture,
+        string otherArchitecture)
+    {
+        var artefactRoot = Path.Combine(
+            modulePath,
+            "PSPublishModule.Artefacts",
+            "1.0.0",
+            "Artefacts",
+            "AzureArtifactsCredentialProvider");
+        Directory.CreateDirectory(artefactRoot);
+
+        var otherPackage = Path.Combine(artefactRoot, $"Microsoft.win-{otherArchitecture}.NuGet.CredentialProvider.zip");
+        var selectedPackage = Path.Combine(artefactRoot, $"Microsoft.win-{expectedArchitecture}.NuGet.CredentialProvider.zip");
+        CreateCredentialProviderPackage(otherPackage, "netcore", "CredentialProvider.Microsoft.dll");
+        CreateCredentialProviderPackage(selectedPackage, "netcore", "CredentialProvider.Microsoft.dll");
+        var manifest = $$"""
+{
+  "name": "AzureArtifactsCredentialProvider",
+  "version": "test",
+  "files": [
+    {
+      "runtime": "netcore",
+      "architecture": "{{otherArchitecture}}",
+      "path": "{{Path.GetFileName(otherPackage)}}",
+      "sha256": "{{ComputeSha256(otherPackage)}}"
+    },
+    {
+      "runtime": "netcore",
+      "architecture": "{{expectedArchitecture}}",
+      "path": "{{Path.GetFileName(selectedPackage)}}",
+      "sha256": "{{ComputeSha256(selectedPackage)}}"
+    }
+  ]
+}
+""";
+        File.WriteAllText(Path.Combine(artefactRoot, "manifest.json"), manifest);
+        return selectedPackage;
+    }
+
     private static string ComputeSha256(string path)
     {
         using var stream = File.OpenRead(path);
@@ -450,6 +551,14 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
             Architecture.X86 => "Microsoft.win-x86.NuGet.CredentialProvider.zip",
             Architecture.X64 => "Microsoft.win-x64.NuGet.CredentialProvider.zip",
             _ => "Microsoft.Net8.NuGet.CredentialProvider.zip"
+        };
+
+    private static string GetCurrentPackageArchitecture()
+        => RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.Arm64 => "arm64",
+            Architecture.X86 => "x86",
+            _ => "x64"
         };
 
     private static string CredentialProviderRelativePath(string runtime, string fileName)

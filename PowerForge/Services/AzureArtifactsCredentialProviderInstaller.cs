@@ -143,6 +143,15 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         TimeSpan timeout,
         List<string> messages)
     {
+        var targetDirectory = GetTargetCredentialProviderDirectory(packageKind);
+        if (Directory.Exists(targetDirectory) &&
+            !force &&
+            IsCredentialProviderRuntimeComplete(targetDirectory, packageKind))
+        {
+            messages.Add($"Azure Artifacts Credential Provider {packageKind} package is already installed at '{targetDirectory}'. Use the force prerequisite mode to overwrite it.");
+            return;
+        }
+
         var source = ResolvePackageSource(packageKind, timeout, messages);
         var packagePath = MaterializePackage(source, packageKind, tempRoot, timeout);
         ValidateSha256(packagePath, FirstNonEmpty(ResolveExpectedSha256(packageKind), source.ExpectedSha256));
@@ -152,15 +161,8 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         ZipFile.ExtractToDirectory(packagePath, extractRoot);
 
         var sourceDirectory = FindCredentialProviderDirectory(extractRoot, packageKind);
-        var targetDirectory = GetTargetCredentialProviderDirectory(packageKind);
         if (Directory.Exists(targetDirectory))
         {
-            if (!force && IsCredentialProviderRuntimeComplete(targetDirectory, packageKind))
-            {
-                messages.Add($"Azure Artifacts Credential Provider {packageKind} package is already installed at '{targetDirectory}'. Use the force prerequisite mode to overwrite it.");
-                return;
-            }
-
             if (!force)
                 messages.Add($"Azure Artifacts Credential Provider {packageKind} target '{targetDirectory}' is incomplete and will be repaired.");
 
@@ -256,6 +258,12 @@ public sealed class AzureArtifactsCredentialProviderInstaller
                 if (string.IsNullOrWhiteSpace(relativePath))
                     continue;
 
+                if (packageKind == CredentialProviderPackageKind.NetCore &&
+                    !ArtefactsPackageMatchesCurrentArchitecture(file, relativePath!))
+                {
+                    continue;
+                }
+
                 var packagePath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(manifestPath)!, relativePath!));
                 var sha256 = file.TryGetProperty("sha256", out var shaProperty) ? shaProperty.GetString() : null;
                 if (File.Exists(packagePath))
@@ -276,6 +284,63 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         }
 
         return null;
+    }
+
+    private static bool ArtefactsPackageMatchesCurrentArchitecture(JsonElement file, string relativePath)
+    {
+        var packageArchitecture = TryGetJsonString(file, "architecture") ?? InferPackageArchitecture(relativePath);
+        if (string.IsNullOrWhiteSpace(packageArchitecture))
+            return true;
+
+        var currentArchitecture = GetCurrentWindowsPackageArchitecture();
+        return !string.IsNullOrWhiteSpace(currentArchitecture) &&
+               string.Equals(NormalizePackageArchitecture(packageArchitecture), currentArchitecture, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryGetJsonString(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+
+    private static string? InferPackageArchitecture(string packagePath)
+    {
+        var fileName = Path.GetFileName(packagePath);
+        if (fileName.IndexOf("win-arm64", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "arm64";
+        if (fileName.IndexOf("win-x86", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "x86";
+        if (fileName.IndexOf("win-x64", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "x64";
+
+        return null;
+    }
+
+    private static string? GetCurrentWindowsPackageArchitecture()
+        => RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.Arm64 => "arm64",
+            Architecture.X86 => "x86",
+            Architecture.X64 => "x64",
+            _ => null
+        };
+
+    private static string? NormalizePackageArchitecture(string? architecture)
+    {
+        var normalized = (architecture ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+            return null;
+
+        return normalized.ToLowerInvariant() switch
+        {
+            "amd64" => "x64",
+            "x64" => "x64",
+            "i386" => "x86",
+            "win32" => "x86",
+            "x86" => "x86",
+            "aarch64" => "arm64",
+            "arm64" => "arm64",
+            _ => normalized
+        };
     }
 
     private IEnumerable<string> EnumerateArtefactsManifests(IEnumerable<string>? additionalModulePaths = null)

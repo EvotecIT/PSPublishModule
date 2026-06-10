@@ -801,9 +801,14 @@ internal sealed class PrivateGalleryService
                         message: "Azure Artifacts Credential Provider session priming completed successfully.");
                 }
 
-                if (IsMissingDotNetRuntimeFailure(result) && !string.Equals(providerExecutablePath, providerPaths[providerPaths.Length - 1], StringComparison.OrdinalIgnoreCase))
+                if (!result.TimedOut &&
+                    !result.Succeeded &&
+                    !string.Equals(providerExecutablePath, providerPaths[providerPaths.Length - 1], StringComparison.OrdinalIgnoreCase))
                 {
-                    _host.WriteWarning($"Azure Artifacts Credential Provider '{providerExecutablePath}' requires a missing .NET runtime. Trying another detected provider.");
+                    var reason = IsMissingDotNetRuntimeFailure(result)
+                        ? "requires a missing .NET runtime"
+                        : $"failed with exit code {result.ExitCode}";
+                    _host.WriteWarning($"Azure Artifacts Credential Provider '{providerExecutablePath}' {reason}. Trying another detected provider.");
                     continue;
                 }
 

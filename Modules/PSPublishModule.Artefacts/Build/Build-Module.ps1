@@ -53,31 +53,52 @@ function Save-CredentialProviderPackage {
     $target
 }
 
+function Get-NetCorePackageArchitecture {
+    param(
+        [Parameter(Mandatory)]
+        [string] $FileName
+    )
+
+    if ($FileName -like '*win-arm64*') { return 'arm64' }
+    if ($FileName -like '*win-x86*') { return 'x86' }
+    if ($FileName -like '*win-x64*') { return 'x64' }
+    return $null
+}
+
 function Write-CredentialProviderManifest {
     param(
         [Parameter(Mandatory)]
-        [string] $NetCorePackagePath,
+        [string[]] $NetCorePackagePath,
         [Parameter(Mandatory)]
         [string] $NetFxPackagePath
     )
+
+    $files = foreach ($path in $NetCorePackagePath) {
+        $fileName = [System.IO.Path]::GetFileName($path)
+        $entry = [ordered] @{
+            runtime = 'netcore'
+            path    = $fileName
+            sha256  = Get-FileSha256 -Path $path
+        }
+        $architecture = Get-NetCorePackageArchitecture -FileName $fileName
+        if (-not [string]::IsNullOrWhiteSpace($architecture)) {
+            $entry.architecture = $architecture
+        }
+        $entry
+    }
+
+    $files += [ordered] @{
+        runtime = 'netfx'
+        path    = [System.IO.Path]::GetFileName($NetFxPackagePath)
+        sha256  = Get-FileSha256 -Path $NetFxPackagePath
+    }
 
     $manifest = [ordered] @{
         name    = 'AzureArtifactsCredentialProvider'
         version = $CredentialProviderVersion
         source  = "https://github.com/microsoft/artifacts-credprovider/releases/tag/v$CredentialProviderVersion"
         license = 'MIT'
-        files   = @(
-            [ordered] @{
-                runtime = 'netcore'
-                path    = [System.IO.Path]::GetFileName($NetCorePackagePath)
-                sha256  = Get-FileSha256 -Path $NetCorePackagePath
-            }
-            [ordered] @{
-                runtime = 'netfx'
-                path    = [System.IO.Path]::GetFileName($NetFxPackagePath)
-                sha256  = Get-FileSha256 -Path $NetFxPackagePath
-            }
-        )
+        files   = @($files)
     }
 
     $manifest |
@@ -88,9 +109,13 @@ function Write-CredentialProviderManifest {
 New-Item -ItemType Directory -Path $artefactRoot -Force | Out-Null
 
 if (-not $JsonOnly) {
-    $netCorePackage = Save-CredentialProviderPackage -Runtime 'netcore' -FileName 'Microsoft.win-x64.NuGet.CredentialProvider.zip'
+    $netCorePackages = @(
+        Save-CredentialProviderPackage -Runtime 'netcore-x64' -FileName 'Microsoft.win-x64.NuGet.CredentialProvider.zip'
+        Save-CredentialProviderPackage -Runtime 'netcore-x86' -FileName 'Microsoft.win-x86.NuGet.CredentialProvider.zip'
+        Save-CredentialProviderPackage -Runtime 'netcore-arm64' -FileName 'Microsoft.win-arm64.NuGet.CredentialProvider.zip'
+    )
     $netFxPackage = Save-CredentialProviderPackage -Runtime 'netfx' -FileName 'Microsoft.NetFx48.NuGet.CredentialProvider.zip'
-    Write-CredentialProviderManifest -NetCorePackagePath $netCorePackage -NetFxPackagePath $netFxPackage
+    Write-CredentialProviderManifest -NetCorePackagePath $netCorePackages -NetFxPackagePath $netFxPackage
 }
 
 if (-not (Test-Path -LiteralPath $binaryModule -PathType Leaf)) {

@@ -429,6 +429,9 @@ for the module locally first, then tries to install it from the configured
 PowerShell repositories, and only then falls back to Microsoft's public release
 package URLs. This lets isolated networks approve and promote one PowerShell
 module instead of managing separate script downloads from `github.com`.
+The carrier manifest includes architecture-specific Windows netcore packages,
+and PSPublishModule selects the package matching the current Windows process
+architecture.
 
 Build and publish the carrier module from this repository:
 
