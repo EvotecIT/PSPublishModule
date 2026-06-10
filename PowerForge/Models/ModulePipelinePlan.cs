@@ -138,6 +138,16 @@ public sealed class ModulePipelinePlan
     public TestConfiguration[] TestsAfterMerge { get; }
 
     /// <summary>
+    /// Apple app release targets to prepare before staging the build.
+    /// </summary>
+    public ConfigurationAppleAppSegment[] AppleApps { get; }
+
+    /// <summary>
+    /// Xcode project version updates to apply before staging the build.
+    /// </summary>
+    public ConfigurationXcodeProjectVersionSegment[] XcodeProjectVersions { get; }
+
+    /// <summary>
     /// When true, module sources should be merged into a single PSM1 (legacy: BuildModule.Merge).
     /// </summary>
     public bool MergeModule { get; }
@@ -299,6 +309,114 @@ public sealed class ModulePipelinePlan
         RepositoryCredential? installMissingModulesCredential,
         bool stagingWasGenerated,
         bool deleteGeneratedStagingAfterRun)
+        : this(
+            moduleName,
+            projectRoot,
+            expectedVersion,
+            resolvedVersion,
+            preRelease,
+            manifest,
+            buildSpec,
+            resolvedCsprojPath,
+            syncNETProjectVersion,
+            compatiblePSEditions,
+            requiredModules,
+            externalModuleDependencies,
+            requiredModulesForPackaging,
+            information,
+            documentation,
+            delivery,
+            documentationBuild,
+            compatibilitySettings,
+            fileConsistencySettings,
+            validationSettings,
+            formatting,
+            importModules,
+            placeHolders,
+            placeHolderOption,
+            commandModuleDependencies,
+            testsAfterMerge,
+            Array.Empty<ConfigurationAppleAppSegment>(),
+            Array.Empty<ConfigurationXcodeProjectVersionSegment>(),
+            mergeModule,
+            mergeMissing,
+            doNotAttemptToFixRelativePaths,
+            approvedModules,
+            moduleSkip,
+            signModule,
+            signing,
+            publishes,
+            artefacts,
+            installEnabled,
+            installStrategy,
+            installKeepVersions,
+            installRoots,
+            installLegacyFlatHandling,
+            installPreserveVersions,
+            installMissingModules,
+            installMissingModulesForce,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            stagingWasGenerated,
+            deleteGeneratedStagingAfterRun)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new plan instance.
+    /// </summary>
+    public ModulePipelinePlan(
+        string moduleName,
+        string projectRoot,
+        string expectedVersion,
+        string resolvedVersion,
+        string? preRelease,
+        ManifestConfiguration? manifest,
+        ModuleBuildSpec buildSpec,
+        string? resolvedCsprojPath,
+        bool syncNETProjectVersion,
+        string[] compatiblePSEditions,
+        RequiredModuleReference[] requiredModules,
+        string[] externalModuleDependencies,
+        RequiredModuleReference[] requiredModulesForPackaging,
+        InformationConfiguration? information,
+        DocumentationConfiguration? documentation,
+        DeliveryOptionsConfiguration? delivery,
+        BuildDocumentationConfiguration? documentationBuild,
+        CompatibilitySettings? compatibilitySettings,
+        FileConsistencySettings? fileConsistencySettings,
+        ModuleValidationSettings? validationSettings,
+        ConfigurationFormattingSegment? formatting,
+        ImportModulesConfiguration? importModules,
+        PlaceHolderReplacement[] placeHolders,
+        PlaceHolderOptionConfiguration? placeHolderOption,
+        IReadOnlyDictionary<string, string[]> commandModuleDependencies,
+        TestConfiguration[] testsAfterMerge,
+        ConfigurationAppleAppSegment[] appleApps,
+        ConfigurationXcodeProjectVersionSegment[] xcodeProjectVersions,
+        bool mergeModule,
+        bool mergeMissing,
+        bool doNotAttemptToFixRelativePaths,
+        string[] approvedModules,
+        ModuleSkipConfiguration? moduleSkip,
+        bool signModule,
+        SigningOptionsConfiguration? signing,
+        ConfigurationPublishSegment[] publishes,
+        ConfigurationArtefactSegment[] artefacts,
+        bool installEnabled,
+        InstallationStrategy installStrategy,
+        int installKeepVersions,
+        string[] installRoots,
+        LegacyFlatModuleHandling installLegacyFlatHandling,
+        string[] installPreserveVersions,
+        bool installMissingModules,
+        bool installMissingModulesForce,
+        bool installMissingModulesPrerelease,
+        string? installMissingModulesRepository,
+        RepositoryCredential? installMissingModulesCredential,
+        bool stagingWasGenerated,
+        bool deleteGeneratedStagingAfterRun)
     {
         ModuleName = moduleName;
         ProjectRoot = projectRoot;
@@ -326,6 +444,8 @@ public sealed class ModulePipelinePlan
         PlaceHolderOption = placeHolderOption;
         CommandModuleDependencies = commandModuleDependencies ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         TestsAfterMerge = testsAfterMerge ?? Array.Empty<TestConfiguration>();
+        AppleApps = appleApps ?? Array.Empty<ConfigurationAppleAppSegment>();
+        XcodeProjectVersions = xcodeProjectVersions ?? Array.Empty<ConfigurationXcodeProjectVersionSegment>();
         MergeModule = mergeModule;
         MergeMissing = mergeMissing;
         DoNotAttemptToFixRelativePaths = doNotAttemptToFixRelativePaths;

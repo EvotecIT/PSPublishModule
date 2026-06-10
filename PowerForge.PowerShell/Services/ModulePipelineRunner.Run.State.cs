@@ -34,6 +34,8 @@ public sealed partial class ModulePipelineRunner
         public BuildDiagnostic[] AutomaticBinaryConflictDiagnostics { get; set; } = Array.Empty<BuildDiagnostic>();
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
         public List<ModulePublishResult> PublishResults { get; } = new();
+        public List<XcodeProjectVersionUpdateResult> XcodeProjectVersionResults { get; } = new();
+        public List<AppleAppReleasePreparationResult> AppleAppResults { get; } = new();
         public ModuleInstallerResult? InstallResult { get; set; }
         public string? ProjectManifestSyncMessage { get; set; }
         public bool PackageWithoutScriptFolders =>

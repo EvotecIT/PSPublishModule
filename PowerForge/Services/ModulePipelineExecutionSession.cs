@@ -10,6 +10,8 @@ internal sealed class ModulePipelineExecutionSession
     private readonly Dictionary<string, ModulePipelineStep> _stepsByKey;
     private readonly Dictionary<ConfigurationArtefactSegment, ModulePipelineStep> _artefactSteps;
     private readonly Dictionary<ConfigurationPublishSegment, ModulePipelineStep> _publishSteps;
+    private readonly Dictionary<ConfigurationAppleAppSegment, ModulePipelineStep> _appleAppSteps;
+    private readonly Dictionary<ConfigurationXcodeProjectVersionSegment, ModulePipelineStep> _xcodeProjectVersionSteps;
 
     private ModulePipelineExecutionSession(ModulePipelineStep[] steps, IModulePipelineProgressReporter reporter)
     {
@@ -26,6 +28,12 @@ internal sealed class ModulePipelineExecutionSession
         _publishSteps = Steps
             .Where(static step => step.PublishSegment is not null)
             .ToDictionary(static step => step.PublishSegment!, static step => step);
+        _appleAppSteps = Steps
+            .Where(static step => step.AppleAppSegment is not null)
+            .ToDictionary(static step => step.AppleAppSegment!, static step => step);
+        _xcodeProjectVersionSteps = Steps
+            .Where(static step => step.XcodeProjectVersionSegment is not null)
+            .ToDictionary(static step => step.XcodeProjectVersionSegment!, static step => step);
 
         TestSteps = Steps
             .Where(static step => step.Kind == ModulePipelineStepKind.Tests &&
@@ -76,6 +84,18 @@ internal sealed class ModulePipelineExecutionSession
     {
         if (publish is null) return null;
         return _publishSteps.TryGetValue(publish, out var step) ? step : null;
+    }
+
+    internal ModulePipelineStep? GetAppleAppStep(ConfigurationAppleAppSegment appleApp)
+    {
+        if (appleApp is null) return null;
+        return _appleAppSteps.TryGetValue(appleApp, out var step) ? step : null;
+    }
+
+    internal ModulePipelineStep? GetXcodeProjectVersionStep(ConfigurationXcodeProjectVersionSegment xcodeProjectVersion)
+    {
+        if (xcodeProjectVersion is null) return null;
+        return _xcodeProjectVersionSteps.TryGetValue(xcodeProjectVersion, out var step) ? step : null;
     }
 
     internal void Start(ModulePipelineStep? step)

@@ -16,6 +16,7 @@ public sealed partial class ModulePipelineRunner
     {
         state.DependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
         SyncSourceProjectVersionIfRequested(plan);
+        ExecuteAppleVersioningPhase(plan, session, state);
 
         ModuleBuildPipeline.StagingResult staged;
         session.Start(session.StageStep);

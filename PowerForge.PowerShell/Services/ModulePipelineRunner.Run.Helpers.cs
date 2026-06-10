@@ -71,8 +71,10 @@ public sealed partial class ModulePipelineRunner
             state.ProjectFileConsistencyStatus,
             state.ProjectFileConsistencyEncodingFix,
             state.ProjectFileConsistencyLineEndingFix,
-            state.SigningResult,
-            BuildOwnerNotes(
+            signingResult: state.SigningResult,
+            xcodeProjectVersionResults: state.XcodeProjectVersionResults.ToArray(),
+            appleAppResults: state.AppleAppResults.ToArray(),
+            ownerNotes: BuildOwnerNotes(
                 plan,
                 buildResult,
                 state.DocumentationResult,

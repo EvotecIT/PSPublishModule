@@ -94,6 +94,8 @@ public sealed partial class ModulePipelineRunner
         var testsAfterMerge = new List<TestConfiguration>();
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
+        var appleApps = new List<ConfigurationAppleAppSegment>();
+        var xcodeProjectVersions = new List<ConfigurationXcodeProjectVersionSegment>();
         var approvedModules = new List<string>();
         var moduleSkipIgnoreModules = new List<string>();
         var moduleSkipIgnoreFunctions = new List<string>();
@@ -482,6 +484,22 @@ public sealed partial class ModulePipelineRunner
                     artefacts.Add(artefact);
                     break;
                 }
+                case ConfigurationAppleAppSegment appleApp:
+                {
+                    appleApps.Add(appleApp);
+                    var cfg = appleApp.Configuration ?? new AppleAppConfiguration();
+                    if (cfg.UseResolvedVersion && string.IsNullOrWhiteSpace(expectedVersion))
+                        expectedVersion = spec.Build.Version;
+                    break;
+                }
+                case ConfigurationXcodeProjectVersionSegment xcode:
+                {
+                    xcodeProjectVersions.Add(xcode);
+                    var cfg = xcode.Configuration ?? new XcodeProjectVersionConfiguration();
+                    if (cfg.UseResolvedVersion && string.IsNullOrWhiteSpace(expectedVersion))
+                        expectedVersion = spec.Build.Version;
+                    break;
+                }
             }
         }
 
@@ -798,6 +816,16 @@ public sealed partial class ModulePipelineRunner
             placeHolderOption: placeHolderOption,
             commandModuleDependencies: commandDeps,
             testsAfterMerge: testsAfterMerge.ToArray(),
+            appleApps: refreshPsd1Only
+                ? Array.Empty<ConfigurationAppleAppSegment>()
+                : appleApps
+                .Where(static app => app?.Configuration?.Enabled != false)
+                .ToArray(),
+            xcodeProjectVersions: refreshPsd1Only
+                ? Array.Empty<ConfigurationXcodeProjectVersionSegment>()
+                : xcodeProjectVersions
+                .Where(static project => project?.Configuration?.Enabled != false)
+                .ToArray(),
             mergeModule: mergeModule,
             mergeMissing: mergeMissing,
             doNotAttemptToFixRelativePaths: doNotAttemptToFixRelativePaths,

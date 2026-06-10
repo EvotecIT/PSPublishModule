@@ -172,6 +172,68 @@ public sealed class ModuleBuildPreparationServiceTests
     }
 
     [Fact]
+    public void WritePipelineSpecJson_keeps_apple_and_xcode_paths_relative_to_project_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-apple-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
+            var appProject = Path.Combine(root.FullName, "Tactra.xcodeproj");
+            var macProject = Path.Combine(root.FullName, "Mac", "TactraMac.xcodeproj");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = root.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationAppleAppSegment
+                    {
+                        Configuration = new AppleAppConfiguration
+                        {
+                            ProjectPath = "Tactra.xcodeproj",
+                            UseResolvedVersion = true
+                        }
+                    },
+                    new ConfigurationXcodeProjectVersionSegment
+                    {
+                        Configuration = new XcodeProjectVersionConfiguration
+                        {
+                            Path = Path.Combine("Mac", "TactraMac.xcodeproj"),
+                            UseResolvedVersion = true
+                        }
+                    }
+                }
+            };
+
+            var service = new ModuleBuildPreparationService();
+            service.WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"SourcePath\": \"..\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"ProjectPath\": \"Tactra.xcodeproj\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Path\": \"Mac/TactraMac.xcodeproj\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"ProjectPath\": \"../Tactra.xcodeproj\"", json, StringComparison.Ordinal);
+
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            Assert.NotNull(jsonSpec);
+
+            service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
+            var apple = Assert.IsType<ConfigurationAppleAppSegment>(jsonSpec!.Segments[0]);
+            var xcode = Assert.IsType<ConfigurationXcodeProjectVersionSegment>(jsonSpec.Segments[1]);
+            Assert.Equal(appProject, apple.Configuration.ProjectPath);
+            Assert.Equal(macProject, xcode.Configuration.Path);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void WritePipelineSpecJson_preserves_configured_manifest_version_in_build_spec()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-version-" + Guid.NewGuid().ToString("N")));

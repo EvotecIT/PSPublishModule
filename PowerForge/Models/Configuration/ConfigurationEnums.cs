@@ -273,3 +273,35 @@ public enum TestExecutionWhen
     /// <summary>Execute tests after merge/build has produced the final module output.</summary>
     AfterMerge
 }
+
+/// <summary>
+/// Apple platform targeted by an app release configuration.
+/// </summary>
+public enum ApplePlatform
+{
+    /// <summary>iOS app.</summary>
+    iOS,
+    /// <summary>iPadOS app.</summary>
+    iPadOS,
+    /// <summary>macOS app.</summary>
+    macOS,
+    /// <summary>tvOS app.</summary>
+    tvOS,
+    /// <summary>watchOS app.</summary>
+    watchOS,
+    /// <summary>visionOS app.</summary>
+    visionOS
+}
+
+/// <summary>
+/// Build number policy for Apple app local project preparation.
+/// </summary>
+public enum AppleBuildNumberPolicy
+{
+    /// <summary>Use the explicitly provided build number.</summary>
+    Explicit,
+    /// <summary>Leave CURRENT_PROJECT_VERSION unchanged.</summary>
+    KeepExisting,
+    /// <summary>Read CURRENT_PROJECT_VERSION and increment it by one.</summary>
+    IncrementExisting
+}
