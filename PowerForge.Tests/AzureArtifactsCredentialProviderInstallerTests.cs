@@ -29,8 +29,8 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
 
             Assert.True(result.Succeeded);
             Assert.True(result.Changed);
-            Assert.Contains(result.Paths, path => path.EndsWith(@"netcore\CredentialProvider.Microsoft\CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase));
-            Assert.True(File.Exists(Path.Combine(profile, ".nuget", "plugins", "netcore", "CredentialProvider.Microsoft", "CredentialProvider.Microsoft.dll")));
+            Assert.Contains(result.Paths, path => path.EndsWith(CredentialProviderRelativePath("netcore", "CredentialProvider.Microsoft.dll"), StringComparison.OrdinalIgnoreCase));
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
             Assert.Contains(result.Messages, message => message.Contains("configured local package", StringComparison.OrdinalIgnoreCase));
         }
         finally
@@ -66,7 +66,7 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
             var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
 
             Assert.True(result.Succeeded);
-            Assert.True(File.Exists(Path.Combine(profile, ".nuget", "plugins", "netcore", "CredentialProvider.Microsoft", "CredentialProvider.Microsoft.dll")));
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
             Assert.Contains(result.Messages, message => message.Contains("configured URI", StringComparison.OrdinalIgnoreCase));
         }
         finally
@@ -123,8 +123,8 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
             var result = installer.InstallForCurrentUser(includeNetFx: true, installNet8: false);
 
             Assert.True(result.Succeeded);
-            Assert.True(File.Exists(Path.Combine(profile, ".nuget", "plugins", "netfx", "CredentialProvider.Microsoft", "CredentialProvider.Microsoft.exe")));
-            Assert.Contains(result.Paths, path => path.EndsWith(@"netfx\CredentialProvider.Microsoft\CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase));
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netfx", "CredentialProvider.Microsoft.exe")));
+            Assert.Contains(result.Paths, path => path.EndsWith(CredentialProviderRelativePath("netfx", "CredentialProvider.Microsoft.exe"), StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -152,7 +152,7 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
             var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
 
             Assert.True(result.Succeeded);
-            Assert.True(File.Exists(Path.Combine(profile, ".nuget", "plugins", "netcore", "CredentialProvider.Microsoft", "CredentialProvider.Microsoft.dll")));
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
             Assert.Contains(result.Messages, message => message.Contains("PSPublishModule.Artefacts", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(result.Messages, message => message.Contains(packagePath, StringComparison.OrdinalIgnoreCase));
         }
@@ -190,7 +190,40 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
 
             Assert.True(result.Succeeded);
             Assert.Equal(1, runner.CallCount);
-            Assert.True(File.Exists(Path.Combine(profile, ".nuget", "plugins", "netcore", "CredentialProvider.Microsoft", "CredentialProvider.Microsoft.dll")));
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void InstallForCurrentUser_RepairsIncompleteProviderDirectory()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagePath = Path.Combine(root, "Microsoft.Net8.NuGet.CredentialProvider.zip");
+            CreateCredentialProviderPackage(packagePath, "netcore", "CredentialProvider.Microsoft.dll");
+            var profile = Path.Combine(root, "profile");
+            var incompleteDirectory = Path.Combine(profile, ".nuget", "plugins", "netcore", "CredentialProvider.Microsoft");
+            Directory.CreateDirectory(incompleteDirectory);
+            File.WriteAllText(Path.Combine(incompleteDirectory, "leftover.txt"), "old");
+
+            var installer = CreateInstaller(
+                profile,
+                new Dictionary<string, string?>
+                {
+                    ["POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE"] = packagePath
+                });
+
+            var result = installer.InstallForCurrentUser(includeNetFx: false, installNet8: true);
+
+            Assert.True(result.Succeeded);
+            Assert.True(File.Exists(CredentialProviderPath(profile, "netcore", "CredentialProvider.Microsoft.dll")));
+            Assert.False(File.Exists(Path.Combine(incompleteDirectory, "leftover.txt")));
+            Assert.Contains(result.Messages, message => message.Contains("incomplete", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -209,7 +242,8 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
             new NullLogger(),
             name => environment.TryGetValue(name, out var value) ? value : null,
             () => profile,
-            downloadPackage ?? ((_, _, _) => throw new InvalidOperationException("Download was not expected.")));
+            downloadPackage ?? ((_, _, _) => throw new InvalidOperationException("Download was not expected.")),
+            isWindows: () => true);
     }
 
     private static void CreateCredentialProviderPackage(string packagePath, string runtimeFolder, string providerFileName)
@@ -256,6 +290,12 @@ public sealed class AzureArtifactsCredentialProviderInstallerTests
         using var sha256 = SHA256.Create();
         return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
     }
+
+    private static string CredentialProviderRelativePath(string runtime, string fileName)
+        => Path.Combine(runtime, "CredentialProvider.Microsoft", fileName);
+
+    private static string CredentialProviderPath(string profile, string runtime, string fileName)
+        => Path.Combine(profile, ".nuget", "plugins", runtime, "CredentialProvider.Microsoft", fileName);
 
     private static string CreateTempRoot()
     {

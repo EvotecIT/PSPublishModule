@@ -52,12 +52,13 @@ public sealed class AzureArtifactsCredentialProviderInstaller
     private readonly Func<string, string?> _getEnvironmentVariable;
     private readonly Func<string> _getUserProfilePath;
     private readonly Func<Uri, string, TimeSpan, string> _downloadPackage;
+    private readonly Func<bool> _isWindows;
 
     /// <summary>
     /// Creates a new installer.
     /// </summary>
     public AzureArtifactsCredentialProviderInstaller(IPowerShellRunner runner, ILogger logger)
-        : this(runner, logger, Environment.GetEnvironmentVariable, GetDefaultUserProfilePath, DownloadPackage)
+        : this(runner, logger, Environment.GetEnvironmentVariable, GetDefaultUserProfilePath, DownloadPackage, IsCurrentPlatformWindows)
     {
     }
 
@@ -66,13 +67,15 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         ILogger logger,
         Func<string, string?> getEnvironmentVariable,
         Func<string> getUserProfilePath,
-        Func<Uri, string, TimeSpan, string> downloadPackage)
+        Func<Uri, string, TimeSpan, string> downloadPackage,
+        Func<bool>? isWindows = null)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _getEnvironmentVariable = getEnvironmentVariable ?? throw new ArgumentNullException(nameof(getEnvironmentVariable));
         _getUserProfilePath = getUserProfilePath ?? throw new ArgumentNullException(nameof(getUserProfilePath));
         _downloadPackage = downloadPackage ?? throw new ArgumentNullException(nameof(downloadPackage));
+        _isWindows = isWindows ?? IsCurrentPlatformWindows;
     }
 
     /// <summary>
@@ -84,7 +87,7 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         bool force = false,
         TimeSpan? timeout = null)
     {
-        if (Path.DirectorySeparatorChar != '\\')
+        if (!_isWindows())
             throw new InvalidOperationException("Automatic Azure Artifacts Credential Provider installation is currently supported on Windows only.");
 
         if (!includeNetFx && !installNet8)
@@ -147,11 +150,14 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         var targetDirectory = GetTargetCredentialProviderDirectory(packageKind);
         if (Directory.Exists(targetDirectory))
         {
-            if (!force)
+            if (!force && IsCredentialProviderRuntimeComplete(targetDirectory, packageKind))
             {
                 messages.Add($"Azure Artifacts Credential Provider {packageKind} package is already installed at '{targetDirectory}'. Use the force prerequisite mode to overwrite it.");
                 return;
             }
+
+            if (!force)
+                messages.Add($"Azure Artifacts Credential Provider {packageKind} target '{targetDirectory}' is incomplete and will be repaired.");
 
             Directory.Delete(targetDirectory, recursive: true);
         }
@@ -404,6 +410,14 @@ throw 'Install-PSResource and Install-Module are not available.'
             : string.Equals(fileName, "CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsCredentialProviderRuntimeComplete(string targetDirectory, CredentialProviderPackageKind packageKind)
+    {
+        var providerFile = packageKind == CredentialProviderPackageKind.NetFx
+            ? "CredentialProvider.Microsoft.exe"
+            : "CredentialProvider.Microsoft.dll";
+        return File.Exists(Path.Combine(targetDirectory, providerFile));
+    }
+
     private static void CopyDirectory(string sourceDirectory, string targetDirectory)
     {
         Directory.CreateDirectory(targetDirectory);
@@ -437,6 +451,9 @@ throw 'Install-PSResource and Install-Module are not available.'
 
         return Environment.GetEnvironmentVariable("USERPROFILE") ?? string.Empty;
     }
+
+    private static bool IsCurrentPlatformWindows()
+        => Path.DirectorySeparatorChar == '\\';
 
     private AzureArtifactsCredentialProviderDetectionResult DetectCredentialProvider()
         => AzureArtifactsCredentialProviderLocator.Detect(
