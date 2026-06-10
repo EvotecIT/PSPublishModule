@@ -2,12 +2,14 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text;
 
 namespace PowerForge;
 
 /// <summary>
-/// Read-only App Store Connect API client.
+/// App Store Connect API client.
 /// </summary>
 public sealed class AppStoreConnectClient : IDisposable
 {
@@ -19,7 +21,7 @@ public sealed class AppStoreConnectClient : IDisposable
     private readonly bool _disposeClient;
 
     /// <summary>
-    /// Creates a read-only App Store Connect API client.
+    /// Creates an App Store Connect API client.
     /// </summary>
     public AppStoreConnectClient(
         AppStoreConnectApiCredential credential,
@@ -111,6 +113,199 @@ public sealed class AppStoreConnectClient : IDisposable
         if (!string.IsNullOrWhiteSpace(marketingVersion) || platform.HasValue) query["include"] = "preReleaseVersion";
 
         return GetBuildArrayAsync("builds" + BuildQuery(query), marketingVersion, platform, cancellationToken);
+    }
+
+    /// <summary>
+    /// Lists App Store version localizations for an App Store version.
+    /// </summary>
+    public Task<AppStoreConnectVersionLocalizationInfo[]> GetVersionLocalizationsAsync(
+        string versionId,
+        string? locale = null,
+        int limit = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(versionId))
+            throw new ArgumentException("Version id is required.", nameof(versionId));
+
+        var query = new Dictionary<string, string?>
+        {
+            ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
+        };
+        if (!string.IsNullOrWhiteSpace(locale)) query["filter[locale]"] = locale!.Trim();
+
+        return GetArrayAsync(
+            $"appStoreVersions/{Uri.EscapeDataString(versionId.Trim())}/appStoreVersionLocalizations" + BuildQuery(query),
+            ParseVersionLocalization,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Lists screenshot sets for an App Store version localization.
+    /// </summary>
+    public Task<AppStoreConnectScreenshotSetInfo[]> GetScreenshotSetsAsync(
+        string versionLocalizationId,
+        int limit = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(versionLocalizationId))
+            throw new ArgumentException("Version localization id is required.", nameof(versionLocalizationId));
+
+        var query = new Dictionary<string, string?>
+        {
+            ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
+        };
+
+        return GetArrayAsync(
+            $"appStoreVersionLocalizations/{Uri.EscapeDataString(versionLocalizationId.Trim())}/appScreenshotSets" + BuildQuery(query),
+            ParseScreenshotSet,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Lists screenshots for an App Store Connect screenshot set.
+    /// </summary>
+    public Task<AppStoreConnectScreenshotInfo[]> GetScreenshotsAsync(
+        string screenshotSetId,
+        int limit = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(screenshotSetId))
+            throw new ArgumentException("Screenshot set id is required.", nameof(screenshotSetId));
+
+        var query = new Dictionary<string, string?>
+        {
+            ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
+        };
+
+        return GetArrayAsync(
+            $"appScreenshotSets/{Uri.EscapeDataString(screenshotSetId.Trim())}/appScreenshots" + BuildQuery(query),
+            ParseScreenshot,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates a screenshot set for an App Store version localization.
+    /// </summary>
+    public Task<AppStoreConnectScreenshotSetInfo> CreateScreenshotSetAsync(
+        string versionLocalizationId,
+        string screenshotDisplayType,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(versionLocalizationId))
+            throw new ArgumentException("Version localization id is required.", nameof(versionLocalizationId));
+        if (string.IsNullOrWhiteSpace(screenshotDisplayType))
+            throw new ArgumentException("Screenshot display type is required.", nameof(screenshotDisplayType));
+
+        var body = new
+        {
+            data = new
+            {
+                type = "appScreenshotSets",
+                attributes = new { screenshotDisplayType = screenshotDisplayType.Trim() },
+                relationships = new
+                {
+                    appStoreVersionLocalization = new
+                    {
+                        data = new { type = "appStoreVersionLocalizations", id = versionLocalizationId.Trim() }
+                    }
+                }
+            }
+        };
+
+        return PostSingleAsync("appScreenshotSets", body, ParseScreenshotSet, cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates an App Store screenshot asset reservation.
+    /// </summary>
+    public Task<AppStoreConnectScreenshotInfo> CreateScreenshotReservationAsync(
+        string screenshotSetId,
+        string fileName,
+        long fileSize,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(screenshotSetId))
+            throw new ArgumentException("Screenshot set id is required.", nameof(screenshotSetId));
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new ArgumentException("File name is required.", nameof(fileName));
+        if (fileSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(fileSize), "File size must be greater than zero.");
+
+        var body = new
+        {
+            data = new
+            {
+                type = "appScreenshots",
+                attributes = new { fileName = fileName.Trim(), fileSize },
+                relationships = new
+                {
+                    appScreenshotSet = new
+                    {
+                        data = new { type = "appScreenshotSets", id = screenshotSetId.Trim() }
+                    }
+                }
+            }
+        };
+
+        return PostSingleAsync("appScreenshots", body, ParseScreenshot, cancellationToken);
+    }
+
+    /// <summary>
+    /// Uploads and commits a screenshot file to an existing screenshot set.
+    /// </summary>
+    public async Task<AppStoreConnectScreenshotUploadResult> UploadScreenshotAsync(
+        string screenshotSetId,
+        string filePath,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path is required.", nameof(filePath));
+
+        var fullPath = Path.GetFullPath(filePath);
+        var file = new FileInfo(fullPath);
+        if (!file.Exists)
+            throw new FileNotFoundException("Screenshot file was not found.", fullPath);
+
+        var reservation = await CreateScreenshotReservationAsync(
+            screenshotSetId,
+            file.Name,
+            file.Length,
+            cancellationToken).ConfigureAwait(false);
+
+        foreach (var operation in reservation.UploadOperations)
+            await ExecuteUploadOperationAsync(fullPath, operation, cancellationToken).ConfigureAwait(false);
+
+        var checksum = ComputeMd5Checksum(fullPath);
+        var committed = await CommitScreenshotUploadAsync(reservation.Id, checksum, cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(committed.SourceFileChecksum))
+            reservation.SourceFileChecksum = committed.SourceFileChecksum;
+        if (!string.IsNullOrWhiteSpace(committed.AssetDeliveryState))
+            reservation.AssetDeliveryState = committed.AssetDeliveryState;
+
+        return new AppStoreConnectScreenshotUploadResult
+        {
+            Screenshot = reservation,
+            FilePath = fullPath,
+            SourceFileChecksum = checksum,
+            UploadOperationCount = reservation.UploadOperations.Length
+        };
+    }
+
+    /// <summary>
+    /// Deletes an App Store Connect screenshot.
+    /// </summary>
+    public async Task DeleteScreenshotAsync(string screenshotId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(screenshotId))
+            throw new ArgumentException("Screenshot id is required.", nameof(screenshotId));
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"appScreenshots/{Uri.EscapeDataString(screenshotId.Trim())}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _tokenGenerator.CreateToken(_credential));
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
     }
 
     /// <summary>
@@ -216,6 +411,41 @@ public sealed class AppStoreConnectClient : IDisposable
         return list.ToArray();
     }
 
+    private async Task<T> PostSingleAsync<T>(string relativeUrl, object body, Func<JsonElement, T> parse, CancellationToken cancellationToken)
+    {
+        using var doc = await SendJsonAsync(HttpMethod.Post, relativeUrl, body, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+            throw new InvalidOperationException("App Store Connect API request returned no data.");
+        return parse(data);
+    }
+
+    private async Task<AppStoreConnectScreenshotInfo> CommitScreenshotUploadAsync(
+        string screenshotId,
+        string sourceFileChecksum,
+        CancellationToken cancellationToken)
+    {
+        var body = new
+        {
+            data = new
+            {
+                type = "appScreenshots",
+                id = screenshotId,
+                attributes = new { uploaded = true, sourceFileChecksum }
+            }
+        };
+
+        using var doc = await SendJsonAsync(
+            new HttpMethod("PATCH"),
+            $"appScreenshots/{Uri.EscapeDataString(screenshotId)}",
+            body,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+            throw new InvalidOperationException("App Store Connect API request returned no data.");
+        return ParseScreenshot(data);
+    }
+
     private async Task<AppStoreConnectBuildInfo[]> GetBuildArrayAsync(
         string relativeUrl,
         string? marketingVersion,
@@ -254,6 +484,64 @@ public sealed class AppStoreConnectClient : IDisposable
             throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
 
         return JsonDocument.Parse(content);
+    }
+
+    private async Task<JsonDocument?> SendJsonAsync(HttpMethod method, string relativeUrl, object body, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(method, relativeUrl);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _tokenGenerator.CreateToken(_credential));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        var json = JsonSerializer.Serialize(body);
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
+
+        return string.IsNullOrWhiteSpace(content) ? null : JsonDocument.Parse(content);
+    }
+
+    private async Task ExecuteUploadOperationAsync(
+        string filePath,
+        AppStoreConnectUploadOperation operation,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(operation.Url))
+            throw new InvalidOperationException("Upload operation URL is missing.");
+        if (operation.Length < 0)
+            throw new InvalidOperationException("Upload operation length cannot be negative.");
+        if (operation.Length > int.MaxValue)
+            throw new InvalidOperationException("Upload operation is too large for the current uploader.");
+
+        var bytes = new byte[(int)operation.Length];
+        using (var stream = File.OpenRead(filePath))
+        {
+            stream.Seek(operation.Offset, SeekOrigin.Begin);
+            var read = 0;
+            while (read < bytes.Length)
+            {
+                var count = await stream.ReadAsync(bytes, read, bytes.Length - read, cancellationToken).ConfigureAwait(false);
+                if (count == 0)
+                    throw new EndOfStreamException("Screenshot file ended before upload operation bytes were read.");
+                read += count;
+            }
+        }
+
+        using var request = new HttpRequestMessage(new HttpMethod(string.IsNullOrWhiteSpace(operation.Method) ? "PUT" : operation.Method), operation.Url);
+        request.Content = new ByteArrayContent(bytes);
+        foreach (var header in operation.RequestHeaders)
+        {
+            if (string.Equals(header.Key, "Content-Length", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!request.Content.Headers.TryAddWithoutValidation(header.Key, header.Value))
+                request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"App Store Connect asset upload failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
     }
 
     private static AppStoreConnectAppInfo ParseApp(JsonElement item)
@@ -308,6 +596,42 @@ public sealed class AppStoreConnectClient : IDisposable
         }
 
         return build;
+    }
+
+    private static AppStoreConnectVersionLocalizationInfo ParseVersionLocalization(JsonElement item)
+    {
+        var attrs = GetAttributes(item);
+        return new AppStoreConnectVersionLocalizationInfo
+        {
+            Id = GetString(item, "id") ?? string.Empty,
+            Locale = GetString(attrs, "locale"),
+            Name = GetString(attrs, "name")
+        };
+    }
+
+    private static AppStoreConnectScreenshotSetInfo ParseScreenshotSet(JsonElement item)
+    {
+        var attrs = GetAttributes(item);
+        return new AppStoreConnectScreenshotSetInfo
+        {
+            Id = GetString(item, "id") ?? string.Empty,
+            ScreenshotDisplayType = GetString(attrs, "screenshotDisplayType")
+        };
+    }
+
+    private static AppStoreConnectScreenshotInfo ParseScreenshot(JsonElement item)
+    {
+        var attrs = GetAttributes(item);
+        return new AppStoreConnectScreenshotInfo
+        {
+            Id = GetString(item, "id") ?? string.Empty,
+            FileName = GetString(attrs, "fileName"),
+            FileSize = GetInt64(attrs, "fileSize"),
+            SourceFileChecksum = GetString(attrs, "sourceFileChecksum"),
+            AssetToken = GetString(attrs, "assetToken"),
+            AssetDeliveryState = GetNestedString(attrs, "assetDeliveryState", "state"),
+            UploadOperations = GetUploadOperations(attrs, "uploadOperations")
+        };
     }
 
     private static bool BuildMatches(AppStoreConnectBuildInfo build, string? marketingVersion, ApplePlatform? platform)
@@ -367,6 +691,63 @@ public sealed class AppStoreConnectClient : IDisposable
         return prop.ValueKind == JsonValueKind.True ? true : prop.ValueKind == JsonValueKind.False ? false : null;
     }
 
+    private static long? GetInt64(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(propertyName, out var prop))
+            return null;
+        if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt64(out var value))
+            return value;
+        return long.TryParse(prop.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static string? GetNestedString(JsonElement element, string objectName, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(objectName, out var nested) ||
+            nested.ValueKind != JsonValueKind.Object)
+            return null;
+
+        return GetString(nested, propertyName);
+    }
+
+    private static AppStoreConnectUploadOperation[] GetUploadOperations(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var operations) ||
+            operations.ValueKind != JsonValueKind.Array)
+            return Array.Empty<AppStoreConnectUploadOperation>();
+
+        var list = new List<AppStoreConnectUploadOperation>();
+        foreach (var operation in operations.EnumerateArray())
+        {
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (operation.TryGetProperty("requestHeaders", out var requestHeaders) &&
+                requestHeaders.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var header in requestHeaders.EnumerateArray())
+                {
+                    var name = GetString(header, "name");
+                    var value = GetString(header, "value");
+                    if (!string.IsNullOrWhiteSpace(name) && value is not null)
+                        headers[name!] = value;
+                }
+            }
+
+            list.Add(new AppStoreConnectUploadOperation
+            {
+                Method = GetString(operation, "method") ?? "PUT",
+                Url = GetString(operation, "url") ?? string.Empty,
+                Offset = GetInt64(operation, "offset") ?? 0,
+                Length = GetInt64(operation, "length") ?? 0,
+                RequestHeaders = headers
+            });
+        }
+
+        return list.ToArray();
+    }
+
     private static string? GetRelationshipDataId(JsonElement item, string relationshipName)
     {
         if (item.ValueKind != JsonValueKind.Object ||
@@ -415,6 +796,14 @@ public sealed class AppStoreConnectClient : IDisposable
         if (limit < 1) return 1;
         if (limit > 200) return 200;
         return limit;
+    }
+
+    private static string ComputeMd5Checksum(string filePath)
+    {
+        using var md5 = MD5.Create();
+        using var stream = File.OpenRead(filePath);
+        var bytes = md5.ComputeHash(stream);
+        return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private sealed class BuildPreReleaseVersion
