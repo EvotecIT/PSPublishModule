@@ -151,6 +151,24 @@ LONG DESCRIPTION
     session for the feed URI. PSResourceGet calls the provider non-interactively after that, so the explicit priming
     step is what gives managed workstation onboarding a real Entra/MFA prompt/cache path.
 
+    CREDENTIAL PROVIDER PACKAGE SOURCE
+
+    PowerForge installs the Azure Artifacts Credential Provider from local package logic. It does not download and
+    execute Microsoft's installer script at runtime. When no package source is configured, Windows workstation
+    onboarding falls back to Microsoft's public release package URLs. In organizations where github.com is blocked,
+    mirror the official ZIP files into an internal software distribution share, package repository, or HTTP artifact
+    cache and configure these machine or user environment variables before running -InstallPrerequisites:
+
+        POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE
+        POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE
+        POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_SHA256
+        POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_SHA256
+
+    The package variables may point at local paths, UNC paths, or internal HTTPS mirror URLs. Use
+    POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_PACKAGE only when the same ZIP contains every requested runtime
+    folder. The runtime-specific variables are the preferred enterprise shape because Microsoft publishes the .NET
+    and .NET Framework credential-provider packages as separate release assets.
+
     Install-PrivateModule -ProfileName <name> and Update-PrivateModule -ProfileName <name> also perform this access
     probe/session-prime step before installing or updating modules. If the cached session expired after onboarding,
     or a different user receives the same non-secret profile, the first normal install/update command can invoke the

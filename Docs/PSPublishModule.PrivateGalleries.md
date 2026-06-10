@@ -414,6 +414,29 @@ Artifacts, prefer the default profile settings:
 PSResourceGet to the ExistingSession-capable line before it installs or refreshes
 the Azure Artifacts Credential Provider.
 
+### Credential Provider Package Source
+
+PowerForge installs the Azure Artifacts Credential Provider from local package
+logic. It does not download and execute Microsoft's installer script at runtime.
+When no package source is configured, Windows workstation onboarding falls back
+to Microsoft's public release package URLs. In organizations where `github.com`
+is blocked, mirror the official ZIP files into an internal software distribution
+share, package repository, or HTTP artifact cache and configure these machine or
+user environment variables before running `-InstallPrerequisites`:
+
+```powershell
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE = '\\fileserver\packages\Microsoft.Net8.NuGet.CredentialProvider.zip'
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE = '\\fileserver\packages\Microsoft.NetFx48.NuGet.CredentialProvider.zip'
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_SHA256 = '<sha256>'
+$env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_SHA256 = '<sha256>'
+```
+
+The package variables may also point at internal HTTPS mirror URLs. Use
+`POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_PACKAGE` only when the same ZIP
+contains every requested runtime folder. The runtime-specific variables are the
+preferred enterprise shape because Microsoft publishes the .NET and .NET
+Framework credential-provider packages as separate release assets.
+
 ## Managed Profile Deployment
 
 Profile files are safe to treat as configuration, not credentials. An
