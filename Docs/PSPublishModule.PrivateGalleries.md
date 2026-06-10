@@ -62,8 +62,11 @@ wrapper and leave identity/session ownership with Microsoft tooling:
 3. Let `Initialize-ModuleRepository -InstallPrerequisites` install or refresh
    `Microsoft.PowerShell.PSResourceGet` at the version required by the selected
    bootstrap mode and install the Azure Artifacts Credential Provider on Windows
-   workstations. On non-Windows systems, pre-install the credential provider
-   with the official Microsoft installer before onboarding.
+   workstations. For locked-down estates, mirror `PSPublishModule.Artefacts`
+   into the same private gallery as PSPublishModule so the provider ZIPs are
+   delivered as a normal PowerShell module dependency. On non-Windows systems,
+   pre-install the credential provider with the official Microsoft installer
+   before onboarding.
 4. Create the profile once with `Set-ModuleRepositoryProfile`. Use the default
    user scope for one-user machines, or `-Scope Machine` from an elevated/admin
    deployment when the same non-secret feed definition should be visible to all
@@ -416,13 +419,35 @@ the Azure Artifacts Credential Provider.
 
 ### Credential Provider Package Source
 
-PowerForge installs the Azure Artifacts Credential Provider from local package
-logic. It does not download and execute Microsoft's installer script at runtime.
-When no package source is configured, Windows workstation onboarding falls back
-to Microsoft's public release package URLs. In organizations where `github.com`
-is blocked, mirror the official ZIP files into an internal software distribution
-share, package repository, or HTTP artifact cache and configure these machine or
-user environment variables before running `-InstallPrerequisites`:
+PowerForge installs the Azure Artifacts Credential Provider from package ZIPs. It
+does not download and execute Microsoft's installer script at runtime.
+
+The preferred enterprise source is `PSPublishModule.Artefacts`, a companion
+package-carrier module that can be published to PSGallery or mirrored into a
+private PowerShell gallery. During `-InstallPrerequisites`, PSPublishModule looks
+for the module locally first, then tries to install it from the configured
+PowerShell repositories, and only then falls back to Microsoft's public release
+package URLs. This lets isolated networks approve and promote one PowerShell
+module instead of managing separate script downloads from `github.com`.
+
+Build and publish the carrier module from this repository:
+
+```powershell
+.\Modules\PSPublishModule.Artefacts\Build\Build-Module.ps1
+```
+
+Then publish the packed module to PSGallery or to the private gallery users
+already trust. Workstations can pre-install it, or PSPublishModule can install it
+on demand from the configured repository when `-InstallPrerequisites` runs:
+
+```powershell
+Install-Module PSPublishModule.Artefacts -Repository CompanyGallery
+Initialize-ModuleRepository -ProfileName Company -InstallPrerequisites
+```
+
+Explicit package variables remain available as the override path for file
+shares, internal HTTP artifact caches, or emergency pinning. Configure these
+machine or user environment variables before running `-InstallPrerequisites`:
 
 ```powershell
 $env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE = '\\fileserver\packages\Microsoft.Net8.NuGet.CredentialProvider.zip'

@@ -65,7 +65,9 @@ LONG DESCRIPTION
         2. Grant Azure DevOps feed access through Entra ID groups. Do not create PATs by default.
         3. Use Initialize-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet at the version
            required by the selected bootstrap mode and install the Azure Artifacts Credential Provider on Windows
-           workstations. Pre-install the credential provider on non-Windows systems with Microsoft's installer.
+           workstations. For locked-down estates, mirror PSPublishModule.Artefacts into the same private gallery as
+           PSPublishModule so the provider ZIPs are delivered as a normal PowerShell module dependency. Pre-install
+           the credential provider on non-Windows systems with Microsoft's installer.
         4. Create the feed profile once with Set-ModuleRepositoryProfile. Use -Scope Machine from an elevated/admin
            deployment when the same non-secret feed definition should be visible to all users on the workstation.
         5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and ask users or
@@ -153,11 +155,21 @@ LONG DESCRIPTION
 
     CREDENTIAL PROVIDER PACKAGE SOURCE
 
-    PowerForge installs the Azure Artifacts Credential Provider from local package logic. It does not download and
-    execute Microsoft's installer script at runtime. When no package source is configured, Windows workstation
-    onboarding falls back to Microsoft's public release package URLs. In organizations where github.com is blocked,
-    mirror the official ZIP files into an internal software distribution share, package repository, or HTTP artifact
-    cache and configure these machine or user environment variables before running -InstallPrerequisites:
+    PowerForge installs the Azure Artifacts Credential Provider from package ZIPs. It does not download and execute
+    Microsoft's installer script at runtime.
+
+    The preferred enterprise source is PSPublishModule.Artefacts, a companion package-carrier module that can be
+    published to PSGallery or mirrored into a private PowerShell gallery. During -InstallPrerequisites,
+    PSPublishModule looks for the module locally first, then tries to install it from the configured PowerShell
+    repositories, and only then falls back to Microsoft's public release package URLs. This lets isolated networks
+    approve and promote one PowerShell module instead of managing separate script downloads from github.com.
+
+        .\Modules\PSPublishModule.Artefacts\Build\Build-Module.ps1
+        Install-Module PSPublishModule.Artefacts -Repository CompanyGallery
+        Initialize-ModuleRepository -ProfileName Company -InstallPrerequisites
+
+    Explicit package variables remain available as the override path for file shares, internal HTTP artifact caches,
+    or emergency pinning. Configure these machine or user environment variables before running -InstallPrerequisites:
 
         POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE
         POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE

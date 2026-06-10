@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -40,10 +41,13 @@ public sealed class AzureArtifactsCredentialProviderInstaller
     private const string Sha256EnvironmentVariable = "POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_SHA256";
     private const string NetCoreSha256EnvironmentVariable = "POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_SHA256";
     private const string NetFxSha256EnvironmentVariable = "POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_SHA256";
+    private const string ArtefactsModuleName = "PSPublishModule.Artefacts";
+    private const string ArtefactsManifestRelativePath = "Artefacts/AzureArtifactsCredentialProvider/manifest.json";
 
     private const string PublicNetCorePackageUri = "https://github.com/microsoft/artifacts-credprovider/releases/latest/download/Microsoft.Net8.NuGet.CredentialProvider.zip";
     private const string PublicNetFxPackageUri = "https://github.com/microsoft/artifacts-credprovider/releases/latest/download/Microsoft.NetFx48.NuGet.CredentialProvider.zip";
 
+    private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
     private readonly Func<string, string?> _getEnvironmentVariable;
     private readonly Func<string> _getUserProfilePath;
@@ -53,17 +57,18 @@ public sealed class AzureArtifactsCredentialProviderInstaller
     /// Creates a new installer.
     /// </summary>
     public AzureArtifactsCredentialProviderInstaller(IPowerShellRunner runner, ILogger logger)
-        : this(logger, Environment.GetEnvironmentVariable, GetDefaultUserProfilePath, DownloadPackage)
+        : this(runner, logger, Environment.GetEnvironmentVariable, GetDefaultUserProfilePath, DownloadPackage)
     {
-        _ = runner ?? throw new ArgumentNullException(nameof(runner));
     }
 
     internal AzureArtifactsCredentialProviderInstaller(
+        IPowerShellRunner runner,
         ILogger logger,
         Func<string, string?> getEnvironmentVariable,
         Func<string> getUserProfilePath,
         Func<Uri, string, TimeSpan, string> downloadPackage)
     {
+        _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _getEnvironmentVariable = getEnvironmentVariable ?? throw new ArgumentNullException(nameof(getEnvironmentVariable));
         _getUserProfilePath = getUserProfilePath ?? throw new ArgumentNullException(nameof(getUserProfilePath));
@@ -130,9 +135,9 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         TimeSpan timeout,
         List<string> messages)
     {
-        var source = ResolvePackageSource(packageKind);
+        var source = ResolvePackageSource(packageKind, timeout, messages);
         var packagePath = MaterializePackage(source, packageKind, tempRoot, timeout);
-        ValidateSha256(packagePath, ResolveExpectedSha256(packageKind));
+        ValidateSha256(packagePath, FirstNonEmpty(ResolveExpectedSha256(packageKind), source.ExpectedSha256));
 
         var extractRoot = Path.Combine(tempRoot, packageKind.ToString());
         Directory.CreateDirectory(extractRoot);
@@ -155,7 +160,10 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         messages.Add($"Azure Artifacts Credential Provider {packageKind} package installed from {source.Description}.");
     }
 
-    private CredentialProviderPackageSource ResolvePackageSource(CredentialProviderPackageKind packageKind)
+    private CredentialProviderPackageSource ResolvePackageSource(
+        CredentialProviderPackageKind packageKind,
+        TimeSpan timeout,
+        List<string> messages)
     {
         var specific = packageKind == CredentialProviderPackageKind.NetFx
             ? _getEnvironmentVariable(NetFxPackageEnvironmentVariable)
@@ -164,10 +172,155 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         if (!string.IsNullOrWhiteSpace(configured))
             return CredentialProviderPackageSource.FromConfiguredValue(configured!);
 
+        var artefactsSource = TryResolveArtefactsModulePackageSource(packageKind, messages);
+        if (artefactsSource is not null)
+            return artefactsSource;
+
+        if (TryInstallArtefactsModule(timeout, messages))
+        {
+            artefactsSource = TryResolveArtefactsModulePackageSource(packageKind, messages);
+            if (artefactsSource is not null)
+                return artefactsSource;
+        }
+
         var publicUri = packageKind == CredentialProviderPackageKind.NetFx
             ? PublicNetFxPackageUri
             : PublicNetCorePackageUri;
         return CredentialProviderPackageSource.FromPublicFallback(publicUri);
+    }
+
+    private CredentialProviderPackageSource? TryResolveArtefactsModulePackageSource(
+        CredentialProviderPackageKind packageKind,
+        List<string> messages)
+    {
+        foreach (var manifestPath in EnumerateArtefactsManifests())
+        {
+            var source = TryReadArtefactsPackageSource(manifestPath, packageKind);
+            if (source is null)
+                continue;
+
+            messages.Add($"{ArtefactsModuleName} supplied Azure Artifacts Credential Provider {packageKind} package '{source.Value}'.");
+            return source;
+        }
+
+        return null;
+    }
+
+    private CredentialProviderPackageSource? TryReadArtefactsPackageSource(
+        string manifestPath,
+        CredentialProviderPackageKind packageKind)
+    {
+        try
+        {
+            using var stream = File.OpenRead(manifestPath);
+            using var document = JsonDocument.Parse(stream);
+            if (!document.RootElement.TryGetProperty("files", out var files) ||
+                files.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var runtime = packageKind == CredentialProviderPackageKind.NetFx ? "netfx" : "netcore";
+            foreach (var file in files.EnumerateArray())
+            {
+                if (!file.TryGetProperty("runtime", out var runtimeProperty) ||
+                    !string.Equals(runtimeProperty.GetString(), runtime, StringComparison.OrdinalIgnoreCase) ||
+                    !file.TryGetProperty("path", out var pathProperty))
+                {
+                    continue;
+                }
+
+                var relativePath = pathProperty.GetString();
+                if (string.IsNullOrWhiteSpace(relativePath))
+                    continue;
+
+                var packagePath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(manifestPath)!, relativePath!));
+                var sha256 = file.TryGetProperty("sha256", out var shaProperty) ? shaProperty.GetString() : null;
+                if (File.Exists(packagePath))
+                    return CredentialProviderPackageSource.FromArtefactsModule(packagePath, sha256);
+            }
+        }
+        catch (IOException)
+        {
+            // Best effort discovery only.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Best effort discovery only.
+        }
+        catch (JsonException)
+        {
+            // Ignore malformed artefact manifests and continue to other sources.
+        }
+
+        return null;
+    }
+
+    private IEnumerable<string> EnumerateArtefactsManifests()
+    {
+        var psModulePath = _getEnvironmentVariable("PSModulePath") ?? string.Empty;
+        foreach (var root in psModulePath.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                continue;
+
+            var moduleRoot = Path.Combine(root.Trim().Trim('"'), ArtefactsModuleName);
+            if (!Directory.Exists(moduleRoot))
+                continue;
+
+            var direct = Path.Combine(moduleRoot, ArtefactsManifestRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(direct))
+                yield return direct;
+
+            IEnumerable<string> versionDirectories;
+            try
+            {
+                versionDirectories = Directory.EnumerateDirectories(moduleRoot).ToArray();
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var versionDirectory in versionDirectories.OrderByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            {
+                var manifestPath = Path.Combine(versionDirectory, ArtefactsManifestRelativePath.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(manifestPath))
+                    yield return manifestPath;
+            }
+        }
+    }
+
+    private bool TryInstallArtefactsModule(TimeSpan timeout, List<string> messages)
+    {
+        var command = @"
+$ErrorActionPreference = 'Stop'
+if (Get-Module -ListAvailable -Name 'PSPublishModule.Artefacts' | Select-Object -First 1) { return }
+if (Get-Command -Name Install-PSResource -ErrorAction SilentlyContinue) {
+    Install-PSResource -Name 'PSPublishModule.Artefacts' -Scope CurrentUser -TrustRepository -ErrorAction Stop
+    return
+}
+if (Get-Command -Name Install-Module -ErrorAction SilentlyContinue) {
+    Install-Module -Name 'PSPublishModule.Artefacts' -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+    return
+}
+throw 'Install-PSResource and Install-Module are not available.'
+";
+
+        var result = _runner.Run(PowerShellRunRequest.ForCommand(command, timeout, preferPwsh: true));
+        if (result.ExitCode == 0)
+        {
+            messages.Add($"{ArtefactsModuleName} was installed or already available from the configured PowerShell gallery.");
+            return true;
+        }
+
+        var failure = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+        messages.Add($"{ArtefactsModuleName} could not be installed from the configured PowerShell gallery. {failure}".Trim());
+        return false;
     }
 
     private string? ResolveExpectedSha256(CredentialProviderPackageKind packageKind)
@@ -324,11 +477,12 @@ public sealed class AzureArtifactsCredentialProviderInstaller
 
     private sealed class CredentialProviderPackageSource
     {
-        private CredentialProviderPackageSource(string value, bool isLocalPath, string description)
+        private CredentialProviderPackageSource(string value, bool isLocalPath, string description, string? expectedSha256 = null)
         {
             Value = value;
             IsLocalPath = isLocalPath;
             Description = description;
+            ExpectedSha256 = expectedSha256;
         }
 
         internal string Value { get; }
@@ -336,6 +490,8 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         internal bool IsLocalPath { get; }
 
         internal string Description { get; }
+
+        internal string? ExpectedSha256 { get; }
 
         internal static CredentialProviderPackageSource FromConfiguredValue(string value)
         {
@@ -347,6 +503,9 @@ public sealed class AzureArtifactsCredentialProviderInstaller
                 !isUri,
                 isUri ? $"configured URI '{trimmed}'" : $"configured local package '{trimmed}'");
         }
+
+        internal static CredentialProviderPackageSource FromArtefactsModule(string packagePath, string? expectedSha256)
+            => new(packagePath, isLocalPath: true, description: $"{ArtefactsModuleName} package '{packagePath}'", expectedSha256);
 
         internal static CredentialProviderPackageSource FromPublicFallback(string uri)
             => new(uri, isLocalPath: false, description: $"public fallback '{uri}'");
