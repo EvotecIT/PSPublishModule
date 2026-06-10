@@ -312,9 +312,12 @@ public sealed class AppStoreConnectClient : IDisposable
 
     private static bool BuildMatches(AppStoreConnectBuildInfo build, string? marketingVersion, ApplePlatform? platform)
     {
-        if (!string.IsNullOrWhiteSpace(marketingVersion) &&
-            !string.Equals(build.MarketingVersion, marketingVersion.Trim(), StringComparison.OrdinalIgnoreCase))
-            return false;
+        if (!string.IsNullOrWhiteSpace(marketingVersion))
+        {
+            var trimmedMarketingVersion = marketingVersion!.Trim();
+            if (!string.Equals(build.MarketingVersion, trimmedMarketingVersion, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
 
         if (platform.HasValue &&
             !string.Equals(build.Platform, ToAppStoreConnectPlatform(platform.Value), StringComparison.OrdinalIgnoreCase))
@@ -340,8 +343,8 @@ public sealed class AppStoreConnectClient : IDisposable
 
             var attrs = GetAttributes(item);
             result[id!] = new BuildPreReleaseVersion(
-                Version: GetString(attrs, "version"),
-                Platform: GetString(attrs, "platform"));
+                GetString(attrs, "version"),
+                GetString(attrs, "platform"));
         }
 
         return result;
@@ -414,5 +417,16 @@ public sealed class AppStoreConnectClient : IDisposable
         return limit;
     }
 
-    private sealed record BuildPreReleaseVersion(string? Version, string? Platform);
+    private sealed class BuildPreReleaseVersion
+    {
+        public BuildPreReleaseVersion(string? version, string? platform)
+        {
+            Version = version;
+            Platform = platform;
+        }
+
+        public string? Version { get; }
+
+        public string? Platform { get; }
+    }
 }
