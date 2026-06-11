@@ -34,8 +34,18 @@ public sealed class AppStoreConnectScreenshotSyncService
             throw new ArgumentException("Spec.AppId is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(spec.VersionString) && string.IsNullOrWhiteSpace(spec.VersionId))
             throw new ArgumentException("Spec.VersionString or Spec.VersionId is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(spec.Locale))
+            throw new ArgumentException("Spec.Locale is required.", nameof(request));
         if (spec.ScreenshotSets.Length == 0)
             throw new ArgumentException("At least one screenshot set mapping is required.", nameof(request));
+        var duplicateDisplayTypes = spec.ScreenshotSets
+            .Where(static set => !string.IsNullOrWhiteSpace(set.ScreenshotDisplayType))
+            .GroupBy(static set => set.ScreenshotDisplayType.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() > 1)
+            .Select(static group => group.Key)
+            .ToArray();
+        if (duplicateDisplayTypes.Length > 0)
+            throw new ArgumentException($"Duplicate screenshot display type mapping: {string.Join(", ", duplicateDisplayTypes)}", nameof(request));
 
         var version = !string.IsNullOrWhiteSpace(spec.VersionId)
             ? new AppStoreConnectVersionInfo
@@ -71,6 +81,9 @@ public sealed class AppStoreConnectScreenshotSyncService
                 throw new InvalidOperationException("ScreenshotDisplayType is required for every screenshot set mapping.");
             if (string.IsNullOrWhiteSpace(setSpec.Path))
                 throw new InvalidOperationException($"Path is required for screenshot display type '{setSpec.ScreenshotDisplayType}'.");
+            var maxCount = setSpec.MaxCount <= 0 ? 10 : setSpec.MaxCount;
+            if (maxCount > 10)
+                throw new InvalidOperationException($"MaxCount cannot exceed Apple's 10 screenshots per set limit for '{setSpec.ScreenshotDisplayType}'.");
 
             var folder = ResolvePath(request.BaseDirectory, setSpec.Path);
             if (!Directory.Exists(folder))
@@ -78,7 +91,7 @@ public sealed class AppStoreConnectScreenshotSyncService
 
             var files = Directory.GetFiles(folder, string.IsNullOrWhiteSpace(setSpec.Filter) ? "*.png" : setSpec.Filter)
                 .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-                .Take(setSpec.MaxCount <= 0 ? 10 : setSpec.MaxCount)
+                .Take(maxCount)
                 .ToArray();
 
             if (files.Length == 0)

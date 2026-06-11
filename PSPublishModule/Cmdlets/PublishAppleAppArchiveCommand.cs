@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -84,6 +85,24 @@ public sealed class PublishAppleAppArchiveCommand : PSCmdlet
             .GetAwaiter()
             .GetResult();
 
+        if (!result.Succeeded)
+            ThrowTerminatingError(CreateProcessError(result.ProcessResult, "AppleAppArchiveUploadFailed", "xcodebuild archive upload failed."));
+
         WriteObject(result);
+    }
+
+    private static ErrorRecord CreateProcessError(ProcessRunResult result, string errorId, string message)
+    {
+        var detail = string.Join(Environment.NewLine, new[] { result.StdErr, result.StdOut }
+            .Where(static value => !string.IsNullOrWhiteSpace(value)));
+        var errorMessage = string.IsNullOrWhiteSpace(detail)
+            ? $"{message} ExitCode={result.ExitCode}. TimedOut={result.TimedOut}."
+            : $"{message} ExitCode={result.ExitCode}. TimedOut={result.TimedOut}.{Environment.NewLine}{detail}";
+
+        return new ErrorRecord(
+            new InvalidOperationException(errorMessage),
+            errorId,
+            ErrorCategory.OperationStopped,
+            result);
     }
 }

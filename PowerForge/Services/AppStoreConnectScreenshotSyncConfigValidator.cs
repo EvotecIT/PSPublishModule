@@ -63,6 +63,8 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         var filter = string.IsNullOrWhiteSpace(set.Filter) ? "*.png" : set.Filter.Trim();
         var maxCount = set.MaxCount <= 0 ? 10 : set.MaxCount;
         var files = Array.Empty<string>();
+        if (maxCount > 10)
+            messages.Add("MaxCount cannot exceed Apple's 10 screenshots per set limit.");
 
         if (!string.IsNullOrWhiteSpace(folder))
         {
@@ -78,8 +80,6 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
                     .ToArray();
                 if (files.Length == 0)
                     messages.Add($"No screenshots matched '{filter}' in '{folder}'.");
-                if (files.Length > 10)
-                    messages.Add($"Apple accepts at most 10 screenshots per screenshot set; {files.Length} files would be selected.");
             }
         }
 
