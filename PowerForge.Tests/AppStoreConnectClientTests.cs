@@ -358,7 +358,7 @@ public sealed class AppStoreConnectClientTests
             Assert.Equal("APP_IPHONE_65", setResult.ScreenshotDisplayType);
             Assert.Single(setResult.Uploaded);
             Assert.Equal(new byte[] { 9, 8, 7 }, handler.RequestBodyBytes[5]);
-            Assert.Contains("appStoreVersions?", handler.RequestUris[0].ToString(), StringComparison.Ordinal);
+            Assert.Contains("apps/app-1/appStoreVersions?", handler.RequestUris[0].ToString(), StringComparison.Ordinal);
             Assert.Contains("appStoreVersions/version-1/appStoreVersionLocalizations", handler.RequestUris[1].ToString(), StringComparison.Ordinal);
             Assert.Contains("appStoreVersionLocalizations/loc-1/appScreenshotSets", handler.RequestUris[2].ToString(), StringComparison.Ordinal);
             Assert.Equal("https://api.appstoreconnect.apple.com/v1/appScreenshotSets", handler.RequestUris[3].ToString());

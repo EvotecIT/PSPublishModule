@@ -81,13 +81,15 @@ public sealed class AppStoreConnectClient : IDisposable
 
         var query = new Dictionary<string, string?>
         {
-            ["filter[app]"] = appId.Trim(),
             ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
         };
         if (!string.IsNullOrWhiteSpace(versionString)) query["filter[versionString]"] = versionString!.Trim();
         if (platform.HasValue) query["filter[platform]"] = ToAppStoreConnectPlatform(platform.Value);
 
-        return GetArrayAsync("appStoreVersions" + BuildQuery(query), ParseVersion, cancellationToken);
+        return GetArrayAsync(
+            $"apps/{Uri.EscapeDataString(appId.Trim())}/appStoreVersions" + BuildQuery(query),
+            ParseVersion,
+            cancellationToken);
     }
 
     /// <summary>
