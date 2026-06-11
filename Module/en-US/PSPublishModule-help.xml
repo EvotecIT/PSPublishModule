@@ -29810,16 +29810,18 @@ without hardcoding them into source files.</maml:para>
       <command:verb>New</command:verb>
       <command:noun>ConfigurationPublish</command:noun>
       <maml:description>
-        <maml:para>Provides a way to configure publishing to PowerShell Gallery, GitHub, or private galleries such as Azure Artifacts.</maml:para>
+        <maml:para>Provides a way to configure publishing to PowerShell Gallery, GitHub, JFrog Artifactory, or other private PowerShell module repositories.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
       <maml:para>This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.&#xD;
 Use -Type to choose a destination. For repository publishing, -Tool selects the provider&#xD;
 (PowerShellGet/PSResourceGet/Auto).</maml:para>
-      <maml:para>For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs&#xD;
-and (optionally) credentials, or use the Azure Artifacts preset parameters to resolve those URIs automatically.&#xD;
+      <maml:para>For private repositories (for example Azure DevOps Artifacts, JFrog Artifactory, GitHub Packages, or private NuGet v3 feeds), provide repository URIs&#xD;
+and (optionally) credentials, or use provider-specific preset parameters to resolve those URIs automatically.&#xD;
 To avoid secrets in source control, pass API keys/tokens via -FilePath or environment-specific tooling.</maml:para>
+      <maml:para>JFrog Artifactory can be configured directly with -JFrogBaseUri and -JFrogRepository.&#xD;
+For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -ApiKey only when the feed requires a separate NuGet API key for package push.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="ApiFromFile">
@@ -29863,7 +29865,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FilePath</maml:name>
           <maml:description>
-            <maml:para>API key to be used for publishing in clear text in a file.</maml:para>
+            <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -29908,6 +29910,30 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogBaseUri</maml:name>
+          <maml:description>
+            <maml:para>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogRepository</maml:name>
+          <maml:description>
+            <maml:para>JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoints, for example powershell-virtual.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>OverwriteTagName</maml:name>
           <maml:description>
@@ -29941,7 +29967,19 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialSecret</maml:name>
           <maml:description>
-            <maml:para>Repository credential secret (password/token) in clear text.</maml:para>
+            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -29953,7 +29991,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialSecretFilePath</maml:name>
           <maml:description>
-            <maml:para>Repository credential secret (password/token) in a clear-text file.</maml:para>
+            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -29965,7 +30003,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialUserName</maml:name>
           <maml:description>
-            <maml:para>Repository credential username (basic auth).</maml:para>
+            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30121,7 +30159,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
-            <maml:para>API key to be used for publishing in clear text.</maml:para>
+            <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30202,6 +30240,30 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogBaseUri</maml:name>
+          <maml:description>
+            <maml:para>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogRepository</maml:name>
+          <maml:description>
+            <maml:para>JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoints, for example powershell-virtual.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>OverwriteTagName</maml:name>
           <maml:description>
@@ -30235,7 +30297,19 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialSecret</maml:name>
           <maml:description>
-            <maml:para>Repository credential secret (password/token) in clear text.</maml:para>
+            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30247,7 +30321,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialSecretFilePath</maml:name>
           <maml:description>
-            <maml:para>Repository credential secret (password/token) in a clear-text file.</maml:para>
+            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30259,7 +30333,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialUserName</maml:name>
           <maml:description>
-            <maml:para>Repository credential username (basic auth).</maml:para>
+            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30517,7 +30591,19 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialSecret</maml:name>
           <maml:description>
-            <maml:para>Repository credential secret (password/token) in clear text.</maml:para>
+            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30529,7 +30615,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialSecretFilePath</maml:name>
           <maml:description>
-            <maml:para>Repository credential secret (password/token) in a clear-text file.</maml:para>
+            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30541,7 +30627,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialUserName</maml:name>
           <maml:description>
-            <maml:para>Repository credential username (basic auth).</maml:para>
+            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30633,7 +30719,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
-            <maml:para>API key to be used for publishing in clear text.</maml:para>
+            <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30657,7 +30743,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FilePath</maml:name>
           <maml:description>
-            <maml:para>API key to be used for publishing in clear text in a file.</maml:para>
+            <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30705,7 +30791,19 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialSecret</maml:name>
           <maml:description>
-            <maml:para>Repository credential secret (password/token) in clear text.</maml:para>
+            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30717,7 +30815,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialSecretFilePath</maml:name>
           <maml:description>
-            <maml:para>Repository credential secret (password/token) in a clear-text file.</maml:para>
+            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -30729,11 +30827,318 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryCredentialUserName</maml:name>
           <maml:description>
-            <maml:para>Repository credential username (basic auth).</maml:para>
+            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="JFrog">
+        <maml:name>New-ConfigurationPublish</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ApiKey</maml:name>
+          <maml:description>
+            <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enabled</maml:name>
+          <maml:description>
+            <maml:para>Enable publishing to the chosen destination.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EnsureRepositoryRegistered</maml:name>
+          <maml:description>
+            <maml:para>When true, registers/updates the repository before publishing. Default: true.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FilePath</maml:name>
+          <maml:description>
+            <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Allow publishing lower version of a module on a PowerShell repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ID</maml:name>
+          <maml:description>
+            <maml:para>Optional ID of the artefact used for publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogBaseUri</maml:name>
+          <maml:description>
+            <maml:para>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogOidcProvider</maml:name>
+          <maml:description>
+            <maml:para>JFrog OIDC provider name configured in Artifactory. Enables runtime token exchange through JFrog CLI.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogOidcProviderType</maml:name>
+          <maml:description>
+            <maml:para>JFrog OIDC provider implementation passed to JFrog CLI. Use Azure for Azure DevOps or Entra-backed OIDC mappings.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">JFrogOidcProviderType</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GenericOidc</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>JFrogOidcProviderType</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogOidcTokenId</maml:name>
+          <maml:description>
+            <maml:para>CI-issued OIDC token value used by JFrog CLI token exchange. Prefer JFrogOidcTokenIdEnvironmentVariable in CI.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogOidcTokenIdEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the CI-issued OIDC token value used by JFrog CLI token exchange.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogPlatformUri</maml:name>
+          <maml:description>
+            <maml:para>JFrog Platform URL used for JFrog CLI OIDC token exchange. Defaults from JFrogBaseUri when omitted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JFrogRepository</maml:name>
+          <maml:description>
+            <maml:para>JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoints, for example powershell-virtual.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryApiVersion</maml:name>
+          <maml:description>
+            <maml:para>Repository API version for PSResourceGet registration (v2/v3).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">RepositoryApiVersion</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">V2</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">V3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ContainerRegistry</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>RepositoryApiVersion</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Repository name override (GitHub or PowerShell repository name).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryPriority</maml:name>
+          <maml:description>
+            <maml:para>Repository priority for PSResourceGet (lower is higher priority).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryTrusted</maml:name>
+          <maml:description>
+            <maml:para>Whether to mark the repository as trusted (avoids prompts). Default: true.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PublishTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PublishTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UnregisterRepositoryAfterPublish</maml:name>
+          <maml:description>
+            <maml:para>When set, unregisters the repository after publish if it was created by this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseAsDependencyVersionSource</maml:name>
+          <maml:description>
+            <maml:para>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -30744,7 +31149,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ApiKey</maml:name>
         <maml:description>
-          <maml:para>API key to be used for publishing in clear text.</maml:para>
+          <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -30828,7 +31233,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>FilePath</maml:name>
         <maml:description>
-          <maml:para>API key to be used for publishing in clear text in a file.</maml:para>
+          <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -30867,6 +31272,95 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <maml:para>Optional ID of the artefact used for publishing.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JFrogBaseUri</maml:name>
+        <maml:description>
+          <maml:para>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JFrogOidcProvider</maml:name>
+        <maml:description>
+          <maml:para>JFrog OIDC provider name configured in Artifactory. Enables runtime token exchange through JFrog CLI.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JFrogOidcProviderType</maml:name>
+        <maml:description>
+          <maml:para>JFrog OIDC provider implementation passed to JFrog CLI. Use Azure for Azure DevOps or Entra-backed OIDC mappings.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">JFrogOidcProviderType</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Azure</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GenericOidc</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>JFrogOidcProviderType</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JFrogOidcTokenId</maml:name>
+        <maml:description>
+          <maml:para>CI-issued OIDC token value used by JFrog CLI token exchange. Prefer JFrogOidcTokenIdEnvironmentVariable in CI.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JFrogOidcTokenIdEnvironmentVariable</maml:name>
+        <maml:description>
+          <maml:para>Environment variable containing the CI-issued OIDC token value used by JFrog CLI token exchange.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JFrogPlatformUri</maml:name>
+        <maml:description>
+          <maml:para>JFrog Platform URL used for JFrog CLI OIDC token exchange. Defaults from JFrogBaseUri when omitted.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JFrogRepository</maml:name>
+        <maml:description>
+          <maml:para>JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoints, for example powershell-virtual.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -30918,7 +31412,19 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryCredentialSecret</maml:name>
         <maml:description>
-          <maml:para>Repository credential secret (password/token) in clear text.</maml:para>
+          <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
+        <maml:description>
+          <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -30930,7 +31436,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryCredentialSecretFilePath</maml:name>
         <maml:description>
-          <maml:para>Repository credential secret (password/token) in a clear-text file.</maml:para>
+          <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -30942,7 +31448,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryCredentialUserName</maml:name>
         <maml:description>
-          <maml:para>Repository credential username (basic auth).</maml:para>
+          <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -31130,6 +31636,34 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
       <command:example>
         <maml:title>Publish to Azure Artifacts (private feed preset)</maml:title>
         <dev:code>New-ConfigurationPublish -ProfileName 'Company' -Enabled</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish to JFrog Artifactory with PAT/basic authentication</maml:title>
+        <dev:code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish to JFrog Artifactory with a separate NuGet API key</maml:title>
+        <dev:code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -FilePath "$env:USERPROFILE\.secrets\jfrog-nuget-api-key.txt" -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish to JFrog Artifactory with a PAT/access token stored in an environment variable</maml:title>
+        <dev:code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -Enabled</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish to JFrog Artifactory with CI OIDC token exchange</maml:title>
+        <dev:code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -JFrogOidcProvider 'azure-oidc' -JFrogOidcProviderType Azure -JFrogOidcTokenIdEnvironmentVariable 'JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID' -Enabled</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

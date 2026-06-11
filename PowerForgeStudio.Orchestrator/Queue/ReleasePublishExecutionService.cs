@@ -535,9 +535,9 @@ public sealed partial class ReleasePublishExecutionService
             return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "No publishable module package path was captured from the build artefacts.");
         }
 
-        if (string.IsNullOrWhiteSpace(publishConfig.ApiKey))
+        if (string.IsNullOrWhiteSpace(publishConfig.ApiKey) && !HasRepositoryAuthentication(publishConfig.Repository))
         {
-            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "Module publish is enabled but no API key was resolved.");
+            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "Module publish is enabled but no API key or repository credential was resolved.");
         }
 
         try
@@ -548,7 +548,7 @@ public sealed partial class ReleasePublishExecutionService
                     IsNupkg = false,
                     RepositoryName = destination,
                     Tool = publishConfig.Tool,
-                    ApiKey = publishConfig.ApiKey,
+                    ApiKey = string.IsNullOrWhiteSpace(publishConfig.ApiKey) ? null : publishConfig.ApiKey,
                     Repository = publishConfig.Repository,
                     SkipDependenciesCheck = true,
                     SkipModuleManifestValidate = false
@@ -616,6 +616,18 @@ public sealed partial class ReleasePublishExecutionService
             execution.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
             execution.Succeeded ? $"GitHub release {tag} published." : execution.ErrorMessage!,
             packageDetails.ZipAssets.FirstOrDefault());
+    }
+
+    private static bool HasRepositoryAuthentication(PublishRepositoryConfiguration? repository)
+    {
+        if (repository?.Credential is { } credential &&
+            !string.IsNullOrWhiteSpace(credential.UserName) &&
+            !string.IsNullOrWhiteSpace(credential.Secret))
+        {
+            return true;
+        }
+
+        return repository?.CredentialProvider is { Kind: not RepositoryCredentialProviderKind.None };
     }
 }
 

@@ -98,6 +98,154 @@ public sealed class PublishConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_builds_jfrog_repository_configuration_from_shortcut()
+    {
+        var secretPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
+        File.WriteAllText(secretPath, " pat ");
+        try
+        {
+            var factory = new PublishConfigurationFactory();
+
+            var segment = factory.Create(new PublishConfigurationRequest
+            {
+                ParameterSetName = "ApiFromFile",
+                Type = PublishDestination.PowerShellGallery,
+                FilePath = secretPath,
+                RepositoryName = "JFrogPS",
+                Tool = PublishTool.PSResourceGet,
+                JFrogBaseUri = "https://company.jfrog.io/artifactory",
+                JFrogRepository = "powershell-virtual",
+                RepositoryCredentialUserName = "name@company.com",
+                RepositoryCredentialSecretFilePath = secretPath,
+                RepositoryCredentialSecretFilePathSpecified = true,
+                Enabled = true
+            });
+
+            Assert.Equal("pat", segment.Configuration.ApiKey);
+            Assert.Equal("JFrogPS", segment.Configuration.RepositoryName);
+
+            var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
+            Assert.Equal("JFrogPS", repository.Name);
+            Assert.Equal(RepositoryApiVersion.V3, repository.ApiVersion);
+            Assert.Equal("https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json", repository.Uri);
+            Assert.Equal("https://company.jfrog.io/artifactory/api/nuget/powershell-virtual", repository.SourceUri);
+            Assert.Equal("https://company.jfrog.io/artifactory/api/nuget/powershell-virtual", repository.PublishUri);
+
+            var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
+            Assert.Equal("name@company.com", credential.UserName);
+            Assert.Equal("pat", credential.Secret);
+        }
+        finally
+        {
+            if (File.Exists(secretPath))
+                File.Delete(secretPath);
+        }
+    }
+
+    [Fact]
+    public void Create_builds_jfrog_repository_configuration_without_api_key()
+    {
+        var secretPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
+        File.WriteAllText(secretPath, " pat ");
+        try
+        {
+            var factory = new PublishConfigurationFactory();
+
+            var segment = factory.Create(new PublishConfigurationRequest
+            {
+                ParameterSetName = "JFrog",
+                Type = PublishDestination.PowerShellGallery,
+                RepositoryName = "JFrogPS",
+                Tool = PublishTool.PSResourceGet,
+                JFrogBaseUri = "https://company.jfrog.io/artifactory",
+                JFrogRepository = "powershell-virtual",
+                RepositoryCredentialUserName = "name@company.com",
+                RepositoryCredentialSecretFilePath = secretPath,
+                RepositoryCredentialSecretFilePathSpecified = true,
+                Enabled = true
+            });
+
+            Assert.Equal(string.Empty, segment.Configuration.ApiKey);
+            Assert.Equal("JFrogPS", segment.Configuration.RepositoryName);
+
+            var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
+            Assert.Equal("https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json", repository.Uri);
+
+            var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
+            Assert.Equal("name@company.com", credential.UserName);
+            Assert.Equal("pat", credential.Secret);
+        }
+        finally
+        {
+            if (File.Exists(secretPath))
+                File.Delete(secretPath);
+        }
+    }
+
+    [Fact]
+    public void Create_reads_repository_credential_secret_from_environment()
+    {
+        var envName = "POWERFORGE_TEST_JFROG_PAT_" + Guid.NewGuid().ToString("N");
+        try
+        {
+            Environment.SetEnvironmentVariable(envName, " env-pat ");
+            var factory = new PublishConfigurationFactory();
+
+            var segment = factory.Create(new PublishConfigurationRequest
+            {
+                ParameterSetName = "JFrog",
+                Type = PublishDestination.PowerShellGallery,
+                RepositoryName = "JFrogPS",
+                Tool = PublishTool.PSResourceGet,
+                JFrogBaseUri = "https://company.jfrog.io/artifactory",
+                JFrogRepository = "powershell-virtual",
+                RepositoryCredentialUserName = "name@company.com",
+                RepositoryCredentialSecretEnvironmentVariable = envName,
+                RepositoryCredentialSecretEnvironmentVariableSpecified = true,
+                Enabled = true
+            });
+
+            var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
+            var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
+            Assert.Equal("name@company.com", credential.UserName);
+            Assert.Equal("env-pat", credential.Secret);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envName, null);
+        }
+    }
+
+    [Fact]
+    public void Create_builds_jfrog_oidc_runtime_credential_provider()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "JFrog",
+            Type = PublishDestination.PowerShellGallery,
+            RepositoryName = "JFrogPS",
+            Tool = PublishTool.PSResourceGet,
+            JFrogBaseUri = "https://company.jfrog.io/artifactory",
+            JFrogRepository = "powershell-virtual",
+            JFrogOidcProvider = "azure-oidc",
+            JFrogOidcProviderType = JFrogOidcProviderType.Azure,
+            JFrogOidcTokenIdEnvironmentVariable = "JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID",
+            Enabled = true
+        });
+
+        var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
+        Assert.Null(repository.Credential);
+        var provider = Assert.IsType<RepositoryCredentialProviderConfiguration>(repository.CredentialProvider);
+        Assert.Equal(RepositoryCredentialProviderKind.JFrogOidc, provider.Kind);
+        Assert.Equal("https://company.jfrog.io/", provider.JFrogPlatformUri);
+        Assert.Equal("azure-oidc", provider.JFrogOidcProvider);
+        Assert.Equal("JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID", provider.JFrogOidcTokenIdEnvironmentVariable);
+        Assert.Equal(JFrogOidcProviderType.Azure, provider.JFrogOidcProviderType);
+    }
+
+    [Fact]
     public void Create_throws_when_custom_repository_uses_psgallery_name()
     {
         var factory = new PublishConfigurationFactory();

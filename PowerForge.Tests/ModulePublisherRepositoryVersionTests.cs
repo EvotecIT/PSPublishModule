@@ -166,8 +166,119 @@ public sealed class ModulePublisherRepositoryVersionTests
         }
     }
 
+    [Fact]
+    public void Publish_AllowsRuntimeCredentialProviderWithoutApiKeyOrStaticCredential()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        var calls = new List<string>();
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(
+                manifestPath,
+                """
+                @{
+                    ModuleVersion = '3.0.13'
+                    GUID = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
+                    RootModule = 'PSPublishModule.psm1'
+                    RequiredModules = @(
+                        @{ ModuleName = 'DependencyModule'; ModuleVersion = '1.0.0' }
+                    )
+                }
+                """);
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var runner = new StubPowerShellRunner(request =>
+            {
+                var script = File.ReadAllText(request.ScriptPath!);
+                if (script.Contains("Register-PSResourceRepository", StringComparison.Ordinal))
+                {
+                    calls.Add("register");
+                    return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0", string.Empty, "pwsh.exe");
+                }
+
+                if (script.Contains("Find-PSResource", StringComparison.Ordinal))
+                {
+                    calls.Add("find");
+                    Assert.Equal("oidc-user@example.com", request.Arguments[4]);
+                    Assert.Equal("jfrog-access-token", request.Arguments[5]);
+
+                    var names = DecodeLines(request.Arguments[0]);
+                    if (names.Contains("PSPublishModule", StringComparer.OrdinalIgnoreCase))
+                        return new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "3.0.12"), string.Empty, "pwsh.exe");
+                    if (names.Contains("DependencyModule", StringComparer.OrdinalIgnoreCase))
+                        return new PowerShellRunResult(0, VisibleRepositoryItem("DependencyModule", "1.2.3"), string.Empty, "pwsh.exe");
+
+                    return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+                }
+
+                if (script.Contains("Publish-PSResource", StringComparison.Ordinal))
+                {
+                    calls.Add("publish");
+                    Assert.Equal("oidc-user@example.com", request.Arguments[7]);
+                    Assert.Equal("jfrog-access-token", request.Arguments[8]);
+                    return new PowerShellRunResult(0, "PFPSRG::PUBLISH::OK", string.Empty, "pwsh.exe");
+                }
+
+                throw new InvalidOperationException("Unexpected PowerShell script invocation.");
+            });
+            var processRunner = new StubProcessRunner(_ => new ProcessRunResult(
+                0,
+                """{"access_token":"jfrog-access-token","username":"oidc-user@example.com"}""",
+                string.Empty,
+                "jf.exe",
+                TimeSpan.FromMilliseconds(10),
+                timedOut: false));
+            var publisher = new ModulePublisher(new NullLogger(), runner, client: null, processRunner: processRunner);
+
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.PSResourceGet,
+                RepositoryName = "JFrogPS",
+                Repository = new PublishRepositoryConfiguration
+                {
+                    Name = "JFrogPS",
+                    Uri = "https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json",
+                    EnsureRegistered = true,
+                    CredentialProvider = new RepositoryCredentialProviderConfiguration
+                    {
+                        Kind = RepositoryCredentialProviderKind.JFrogOidc,
+                        JFrogPlatformUri = "https://company.jfrog.io/",
+                        JFrogOidcProvider = "azure-oidc",
+                        JFrogOidcProviderType = JFrogOidcProviderType.Azure,
+                        JFrogOidcTokenId = "ci-jwt"
+                    }
+                }
+            };
+            var plan = CreatePlan();
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var result = publisher.Publish(publish, plan, buildResult, Array.Empty<ArtefactBuildResult>());
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(new[] { "register", "find", "find", "publish" }, calls);
+            var processRequest = Assert.Single(processRunner.Requests);
+            Assert.Equal(new[] { "eot", "azure-oidc", "--url=https://company.jfrog.io/", "--oidc-provider-type=Azure" }, processRequest.Arguments);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
     private static string Encode(string value)
         => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
+
+    private static string[] DecodeLines(string value)
+        => Encoding.UTF8.GetString(Convert.FromBase64String(value))
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static string VisibleRepositoryItem(string name, string version)
         => string.Join("::", new[]
@@ -257,6 +368,24 @@ public sealed class ModulePublisherRepositoryVersionTests
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
             return _run(request);
+        }
+    }
+
+    private sealed class StubProcessRunner : IProcessRunner
+    {
+        private readonly Func<ProcessRunRequest, ProcessRunResult> _run;
+
+        public StubProcessRunner(Func<ProcessRunRequest, ProcessRunResult> run)
+        {
+            _run = run;
+        }
+
+        public List<ProcessRunRequest> Requests { get; } = new();
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            return Task.FromResult(_run(request));
         }
     }
 

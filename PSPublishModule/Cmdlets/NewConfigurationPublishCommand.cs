@@ -5,7 +5,7 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Provides a way to configure publishing to PowerShell Gallery, GitHub, or private galleries such as Azure Artifacts.
+/// Provides a way to configure publishing to PowerShell Gallery, GitHub, JFrog Artifactory, or other private PowerShell module repositories.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -14,9 +14,13 @@ namespace PSPublishModule;
 /// (PowerShellGet/PSResourceGet/Auto).
 /// </para>
 /// <para>
-/// For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs
-/// and (optionally) credentials, or use the Azure Artifacts preset parameters to resolve those URIs automatically.
+/// For private repositories (for example Azure DevOps Artifacts, JFrog Artifactory, GitHub Packages, or private NuGet v3 feeds), provide repository URIs
+/// and (optionally) credentials, or use provider-specific preset parameters to resolve those URIs automatically.
 /// To avoid secrets in source control, pass API keys/tokens via <c>-FilePath</c> or environment-specific tooling.
+/// </para>
+/// <para>
+/// JFrog Artifactory can be configured directly with <c>-JFrogBaseUri</c> and <c>-JFrogRepository</c>.
+/// For PAT/basic-auth feeds, use repository credentials only. Add <c>-FilePath</c> or <c>-ApiKey</c> only when the feed requires a separate NuGet API key for package push.
 /// </para>
 /// </remarks>
 /// <example>
@@ -30,6 +34,22 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Publish to Azure Artifacts (private feed preset)</summary>
 /// <code>New-ConfigurationPublish -ProfileName 'Company' -Enabled</code>
+/// </example>
+/// <example>
+/// <summary>Publish to JFrog Artifactory with PAT/basic authentication</summary>
+/// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled</code>
+/// </example>
+/// <example>
+/// <summary>Publish to JFrog Artifactory with a separate NuGet API key</summary>
+/// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -FilePath "$env:USERPROFILE\.secrets\jfrog-nuget-api-key.txt" -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled</code>
+/// </example>
+/// <example>
+/// <summary>Publish to JFrog Artifactory with a PAT/access token stored in an environment variable</summary>
+/// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -Enabled</code>
+/// </example>
+/// <example>
+/// <summary>Publish to JFrog Artifactory with CI OIDC token exchange</summary>
+/// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -JFrogOidcProvider 'azure-oidc' -JFrogOidcProviderType Azure -JFrogOidcTokenIdEnvironmentVariable 'JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID' -Enabled</code>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationPublish", DefaultParameterSetName = "ApiFromFile")]
 public sealed class NewConfigurationPublishCommand : PSCmdlet
@@ -57,14 +77,16 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string ProfileName { get; set; } = string.Empty;
 
-    /// <summary>API key to be used for publishing in clear text in a file.</summary>
+    /// <summary>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string FilePath { get; set; } = string.Empty;
 
-    /// <summary>API key to be used for publishing in clear text.</summary>
+    /// <summary>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>GitHub username (required for GitHub publishing).</summary>
@@ -76,12 +98,14 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryName { get; set; }
 
     /// <summary>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
     public PowerForge.PublishTool Tool { get; set; } = PowerForge.PublishTool.Auto;
 
     /// <summary>Repository base URI (used for both source and publish unless overridden).</summary>
@@ -99,62 +123,111 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiFromFile")]
     public string? RepositoryPublishUri { get; set; }
 
+    /// <summary>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(Mandatory = true, ParameterSetName = "JFrog")]
+    public string? JFrogBaseUri { get; set; }
+
+    /// <summary>JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoints, for example powershell-virtual.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(Mandatory = true, ParameterSetName = "JFrog")]
+    public string? JFrogRepository { get; set; }
+
     /// <summary>Whether to mark the repository as trusted (avoids prompts). Default: true.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
     public bool RepositoryTrusted { get; set; } = true;
 
     /// <summary>Repository priority for PSResourceGet (lower is higher priority).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
     public int? RepositoryPriority { get; set; }
 
     /// <summary>Repository API version for PSResourceGet registration (v2/v3).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
     public PowerForge.RepositoryApiVersion RepositoryApiVersion { get; set; } = PowerForge.RepositoryApiVersion.Auto;
 
     /// <summary>When true, registers/updates the repository before publishing. Default: true.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
     public bool EnsureRepositoryRegistered { get; set; } = true;
 
     /// <summary>When set, unregisters the repository after publish if it was created by this run.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter UnregisterRepositoryAfterPublish { get; set; }
 
-    /// <summary>Repository credential username (basic auth).</summary>
+    /// <summary>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
     [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryCredentialUserName { get; set; }
 
-    /// <summary>Repository credential secret (password/token) in clear text.</summary>
+    /// <summary>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
     [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryCredentialSecret { get; set; }
 
-    /// <summary>Repository credential secret (password/token) in a clear-text file.</summary>
+    /// <summary>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
     [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryCredentialSecretFilePath { get; set; }
+
+    /// <summary>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
+    public string? RepositoryCredentialSecretEnvironmentVariable { get; set; }
+
+    /// <summary>JFrog Platform URL used for JFrog CLI OIDC token exchange. Defaults from JFrogBaseUri when omitted.</summary>
+    [Parameter(ParameterSetName = "JFrog")]
+    public string? JFrogPlatformUri { get; set; }
+
+    /// <summary>JFrog OIDC provider name configured in Artifactory. Enables runtime token exchange through JFrog CLI.</summary>
+    [Parameter(ParameterSetName = "JFrog")]
+    public string? JFrogOidcProvider { get; set; }
+
+    /// <summary>CI-issued OIDC token value used by JFrog CLI token exchange. Prefer JFrogOidcTokenIdEnvironmentVariable in CI.</summary>
+    [Parameter(ParameterSetName = "JFrog")]
+    public string? JFrogOidcTokenId { get; set; }
+
+    /// <summary>Environment variable containing the CI-issued OIDC token value used by JFrog CLI token exchange.</summary>
+    [Parameter(ParameterSetName = "JFrog")]
+    public string? JFrogOidcTokenIdEnvironmentVariable { get; set; }
+
+    /// <summary>JFrog OIDC provider implementation passed to JFrog CLI. Use Azure for Azure DevOps or Entra-backed OIDC mappings.</summary>
+    [Parameter(ParameterSetName = "JFrog")]
+    public PowerForge.JFrogOidcProviderType JFrogOidcProviderType { get; set; } = PowerForge.JFrogOidcProviderType.GitHub;
 
     /// <summary>Enable publishing to the chosen destination.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
     [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter Enabled { get; set; }
 
     /// <summary>Override tag name used for GitHub publishing.</summary>
@@ -167,6 +240,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
     [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter Force { get; set; }
 
     /// <summary>Optional ID of the artefact used for publishing.</summary>
@@ -174,6 +248,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
     [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? ID { get; set; }
 
     /// <summary>Publish GitHub release as a release even if module prerelease is set.</summary>
@@ -190,6 +265,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter UseAsDependencyVersionSource { get; set; }
 
     /// <summary>Emits publish configuration for the build pipeline.</summary>
@@ -208,6 +284,11 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         var repositoryUri = RepositoryUri;
         var repositorySourceUri = RepositorySourceUri;
         var repositoryPublishUri = RepositoryPublishUri;
+
+        if (ParameterSetName == "JFrog")
+        {
+            type = PowerForge.PublishDestination.PowerShellGallery;
+        }
 
         if (ParameterSetName == "Profile")
         {
@@ -238,7 +319,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
                 var repositoryCredentialSpecified =
                     !string.IsNullOrWhiteSpace(RepositoryCredentialUserName) &&
                     (!string.IsNullOrWhiteSpace(RepositoryCredentialSecret) ||
-                     !string.IsNullOrWhiteSpace(RepositoryCredentialSecretFilePath));
+                     !string.IsNullOrWhiteSpace(RepositoryCredentialSecretFilePath) ||
+                     !string.IsNullOrWhiteSpace(RepositoryCredentialSecretEnvironmentVariable));
 
                 if (apiKeySpecified && filePathSpecified)
                     throw new ArgumentException("Specify either ApiKey or FilePath for profile-based private gallery publishing, not both.", nameof(FilePath));
@@ -268,6 +350,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             RepositoryUri = repositoryUri,
             RepositorySourceUri = repositorySourceUri,
             RepositoryPublishUri = repositoryPublishUri,
+            JFrogBaseUri = JFrogBaseUri,
+            JFrogRepository = JFrogRepository,
             RepositoryTrusted = repositoryTrusted,
             RepositoryPriority = repositoryPriority,
             RepositoryApiVersion = repositoryApiVersion,
@@ -278,6 +362,13 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             RepositoryCredentialSecretSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryCredentialSecret)),
             RepositoryCredentialSecretFilePath = RepositoryCredentialSecretFilePath,
             RepositoryCredentialSecretFilePathSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryCredentialSecretFilePath)),
+            RepositoryCredentialSecretEnvironmentVariable = RepositoryCredentialSecretEnvironmentVariable,
+            RepositoryCredentialSecretEnvironmentVariableSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryCredentialSecretEnvironmentVariable)),
+            JFrogPlatformUri = JFrogPlatformUri,
+            JFrogOidcProvider = JFrogOidcProvider,
+            JFrogOidcTokenId = JFrogOidcTokenId,
+            JFrogOidcTokenIdEnvironmentVariable = JFrogOidcTokenIdEnvironmentVariable,
+            JFrogOidcProviderType = JFrogOidcProviderType,
             Enabled = Enabled.IsPresent,
             OverwriteTagName = OverwriteTagName,
             Force = Force.IsPresent,
