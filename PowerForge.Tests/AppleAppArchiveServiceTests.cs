@@ -53,6 +53,44 @@ public sealed class AppleAppArchiveServiceTests
     }
 
     [Fact]
+    public async Task CreateArchiveAsync_generates_unique_default_archive_paths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var runner = new CapturingProcessRunner();
+            var service = new AppleAppArchiveService(runner);
+
+            var request = new AppleAppArchiveRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "Tactra",
+                ArchiveRoot = root.FullName,
+                Platform = ApplePlatform.iOS,
+                XcodeBuildExecutable = "xcodebuild-test"
+            };
+
+            var first = await service.CreateArchiveAsync(request);
+            var second = await service.CreateArchiveAsync(request);
+
+            Assert.NotEqual(first.ArchivePath, second.ArchivePath);
+            Assert.StartsWith(root.FullName, first.ArchivePath, StringComparison.Ordinal);
+            Assert.StartsWith(root.FullName, second.ArchivePath, StringComparison.Ordinal);
+            Assert.Equal(".xcarchive", Path.GetExtension(first.ArchivePath));
+            Assert.Equal(".xcarchive", Path.GetExtension(second.ArchivePath));
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.Contains(first.ArchivePath, runner.Requests[0].Arguments);
+            Assert.Contains(second.ArchivePath, runner.Requests[1].Arguments);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task UploadArchiveAsync_writes_export_options_and_runs_export_archive()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

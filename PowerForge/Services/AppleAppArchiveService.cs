@@ -162,9 +162,10 @@ public sealed class AppleAppArchiveService
         var root = string.IsNullOrWhiteSpace(request.ArchiveRoot)
             ? Path.Combine(Path.GetTempPath(), "powerforge-apple-archives")
             : Path.GetFullPath(request.ArchiveRoot!);
-        var stamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
+        var stamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff");
+        var uniqueSuffix = Guid.NewGuid().ToString("N").Substring(0, 12);
         var safeScheme = SanitizePathPart(request.Scheme);
-        return Path.Combine(root, $"{safeScheme}-{stamp}.xcarchive");
+        return Path.Combine(root, $"{safeScheme}-{stamp}-{uniqueSuffix}.xcarchive");
     }
 
     private static string ResolveExportPath(AppleAppArchiveUploadRequest request)
