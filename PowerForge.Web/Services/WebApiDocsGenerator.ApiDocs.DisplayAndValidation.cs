@@ -222,7 +222,7 @@ public static partial class WebApiDocsGenerator
 
         var signature = NormalizeSignatureKey(member.Signature);
         if (!string.IsNullOrWhiteSpace(signature))
-            return signature;
+            return BuildMemberSignatureKeyWithPowerShellParameterSet(member, signature);
 
         var name = string.IsNullOrWhiteSpace(member.DisplayName) ? member.Name : member.DisplayName;
         name = NormalizeSignatureKey(name);
@@ -235,7 +235,25 @@ public static partial class WebApiDocsGenerator
         var parameterTypes = member.Parameters
             .Select(parameter => NormalizeSignatureKey(parameter.Type))
             .ToArray();
-        return $"{name}({string.Join(",", parameterTypes)})";
+        return BuildMemberSignatureKeyWithPowerShellParameterSet(member, $"{name}({string.Join(",", parameterTypes)})");
+    }
+
+    private static string BuildMemberSignatureKeyWithPowerShellParameterSet(ApiMemberModel member, string signatureKey)
+    {
+        if (string.IsNullOrWhiteSpace(signatureKey))
+            return string.Empty;
+
+        if (!string.Equals(member.Kind, "CommandSyntax", StringComparison.OrdinalIgnoreCase))
+            return signatureKey;
+
+        if (!member.HasExplicitParameterSetName)
+            return signatureKey;
+
+        var parameterSetName = NormalizeSignatureKey(member.ParameterSetName);
+        if (string.IsNullOrWhiteSpace(parameterSetName))
+            return signatureKey;
+
+        return $"{signatureKey}|powershell-parameter-set:{parameterSetName}";
     }
 
     private static string BuildMemberSignatureLabel(ApiMemberModel member)
