@@ -369,6 +369,152 @@ public sealed class AppStoreConnectClientTests
         }
     }
 
+    [Fact]
+    public async Task ScreenshotSyncService_PreflightsAllLocalMappingsBeforeRemoteRequests()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            await File.WriteAllBytesAsync(Path.Combine(folder.FullName, "01-home.png"), new byte[] { 1 });
+
+            var handler = new SequenceHandler();
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+            var service = new AppStoreConnectScreenshotSyncService(client);
+
+            await Assert.ThrowsAsync<DirectoryNotFoundException>(() => service.SyncAsync(new AppStoreConnectScreenshotSyncRequest
+            {
+                BaseDirectory = root.FullName,
+                Spec = new AppStoreConnectScreenshotSyncSpec
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.0",
+                    Platform = ApplePlatform.iOS,
+                    Locale = "en-US",
+                    ScreenshotSets = new[]
+                    {
+                        new AppStoreConnectScreenshotSetSyncSpec
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_65",
+                            Path = "iphone-6-5"
+                        },
+                        new AppStoreConnectScreenshotSetSyncSpec
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_67",
+                            Path = "missing"
+                        }
+                    }
+                }
+            }));
+
+            Assert.Empty(handler.RequestUris);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task ScreenshotSyncService_RejectsAppendWhenExistingScreenshotsWouldExceedLimit()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            for (var i = 1; i <= 5; i++)
+                await File.WriteAllBytesAsync(Path.Combine(folder.FullName, $"{i:00}-shot.png"), new byte[] { 1 });
+
+            var existingScreenshotsJson = string.Join(
+                ",",
+                Enumerable.Range(1, 8).Select(i => $$"""
+                {
+                  "id": "existing-{{i}}",
+                  "type": "appScreenshots",
+                  "attributes": { "fileName": "{{i}}.png", "fileSize": 1 }
+                }
+                """));
+
+            var handler = new SequenceHandler(
+                new SequenceResponse(HttpStatusCode.OK,
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "version-1",
+                          "type": "appStoreVersions",
+                          "attributes": {
+                            "versionString": "1.0.0",
+                            "appStoreState": "PREPARE_FOR_SUBMISSION",
+                            "platform": "IOS"
+                          }
+                        }
+                      ]
+                    }
+                    """),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "loc-1",
+                          "type": "appStoreVersionLocalizations",
+                          "attributes": { "locale": "en-US", "name": "Tactra" }
+                        }
+                      ]
+                    }
+                    """),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "set-1",
+                          "type": "appScreenshotSets",
+                          "attributes": { "screenshotDisplayType": "APP_IPHONE_65" }
+                        }
+                      ]
+                    }
+                    """),
+                new SequenceResponse(HttpStatusCode.OK, $$"""
+                    { "data": [ {{existingScreenshotsJson}} ] }
+                    """));
+
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+            var service = new AppStoreConnectScreenshotSyncService(client);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SyncAsync(new AppStoreConnectScreenshotSyncRequest
+            {
+                BaseDirectory = root.FullName,
+                Spec = new AppStoreConnectScreenshotSyncSpec
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.0",
+                    Platform = ApplePlatform.iOS,
+                    Locale = "en-US",
+                    ScreenshotSets = new[]
+                    {
+                        new AppStoreConnectScreenshotSetSyncSpec
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_65",
+                            Path = "iphone-6-5"
+                        }
+                    }
+                }
+            }));
+
+            Assert.Contains("would exceed Apple's 10 screenshots per set limit", ex.Message, StringComparison.Ordinal);
+            Assert.Equal(4, handler.RequestUris.Count);
+            Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static AppStoreConnectApiCredential CreateCredential()
     {
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);

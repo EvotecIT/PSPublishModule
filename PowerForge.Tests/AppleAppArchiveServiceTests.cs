@@ -106,6 +106,38 @@ public sealed class AppleAppArchiveServiceTests
         }
     }
 
+    [Fact]
+    public async Task UploadArchiveAsync_defaults_export_options_plist_inside_export_path()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcarchive"));
+            var exportPath = Path.Combine(root.FullName, "export");
+            var runner = new CapturingProcessRunner();
+            var service = new AppleAppArchiveService(runner);
+
+            var result = await service.UploadArchiveAsync(new AppleAppArchiveUploadRequest
+            {
+                ArchivePath = archive.FullName,
+                ExportPath = exportPath,
+                TeamId = "8ZPGZ79T7J",
+                XcodeBuildExecutable = "xcodebuild-test"
+            });
+
+            var expectedPlistPath = Path.Combine(exportPath, "ExportOptions.plist");
+            Assert.True(result.Succeeded);
+            Assert.Equal(expectedPlistPath, result.ExportOptionsPlistPath);
+            Assert.True(File.Exists(expectedPlistPath));
+            Assert.Single(runner.Requests);
+            Assert.Contains(expectedPlistPath, runner.Requests[0].Arguments);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private sealed class CapturingProcessRunner : IProcessRunner
     {
         public List<ProcessRunRequest> Requests { get; } = new();

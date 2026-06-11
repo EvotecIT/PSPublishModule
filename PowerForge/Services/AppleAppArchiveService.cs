@@ -180,7 +180,7 @@ public sealed class AppleAppArchiveService
         if (!string.IsNullOrWhiteSpace(request.ExportOptionsPlistPath))
             return Path.GetFullPath(request.ExportOptionsPlistPath!);
 
-        return Path.Combine(Path.GetTempPath(), "powerforge-apple-upload", "ExportOptions.plist");
+        return Path.Combine(ResolveExportPath(request), "ExportOptions.plist");
     }
 
     private static string BuildExportOptionsPlist(AppleAppArchiveUploadRequest request)

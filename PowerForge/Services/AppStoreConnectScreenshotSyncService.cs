@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class AppStoreConnectScreenshotSyncService
 {
+    private const int AppleScreenshotSetLimit = 10;
+
     private readonly AppStoreConnectClient _client;
 
     /// <summary>
@@ -47,6 +49,10 @@ public sealed class AppStoreConnectScreenshotSyncService
         if (duplicateDisplayTypes.Length > 0)
             throw new ArgumentException($"Duplicate screenshot display type mapping: {string.Join(", ", duplicateDisplayTypes)}", nameof(request));
 
+        var preflightedSets = spec.ScreenshotSets
+            .Select(setSpec => PreflightScreenshotSet(request.BaseDirectory, setSpec))
+            .ToArray();
+
         var version = !string.IsNullOrWhiteSpace(spec.VersionId)
             ? new AppStoreConnectVersionInfo
             {
@@ -74,32 +80,30 @@ public sealed class AppStoreConnectScreenshotSyncService
             limit: 200,
             cancellationToken).ConfigureAwait(false);
 
-        var results = new List<AppStoreConnectScreenshotSetSyncResult>();
-        foreach (var setSpec in spec.ScreenshotSets)
+        var plannedSets = new List<PlannedScreenshotSet>();
+        foreach (var preflightedSet in preflightedSets)
         {
-            if (string.IsNullOrWhiteSpace(setSpec.ScreenshotDisplayType))
-                throw new InvalidOperationException("ScreenshotDisplayType is required for every screenshot set mapping.");
-            if (string.IsNullOrWhiteSpace(setSpec.Path))
-                throw new InvalidOperationException($"Path is required for screenshot display type '{setSpec.ScreenshotDisplayType}'.");
-            var maxCount = setSpec.MaxCount <= 0 ? 10 : setSpec.MaxCount;
-            if (maxCount > 10)
-                throw new InvalidOperationException($"MaxCount cannot exceed Apple's 10 screenshots per set limit for '{setSpec.ScreenshotDisplayType}'.");
-
-            var folder = ResolvePath(request.BaseDirectory, setSpec.Path);
-            if (!Directory.Exists(folder))
-                throw new DirectoryNotFoundException($"Screenshot folder was not found: {folder}");
-
-            var files = Directory.GetFiles(folder, string.IsNullOrWhiteSpace(setSpec.Filter) ? "*.png" : setSpec.Filter)
-                .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-                .Take(maxCount)
-                .ToArray();
-
-            if (files.Length == 0)
-                throw new InvalidOperationException($"No screenshots matched '{setSpec.Filter}' in '{folder}'.");
-
-            var displayType = setSpec.ScreenshotDisplayType.Trim();
             var set = existingSets.FirstOrDefault(candidate =>
-                string.Equals(candidate.ScreenshotDisplayType, displayType, StringComparison.OrdinalIgnoreCase));
+                string.Equals(candidate.ScreenshotDisplayType, preflightedSet.ScreenshotDisplayType, StringComparison.OrdinalIgnoreCase));
+            AppStoreConnectScreenshotInfo[] existingScreenshots = Array.Empty<AppStoreConnectScreenshotInfo>();
+            if (set is not null)
+                existingScreenshots = await _client.GetScreenshotsAsync(set.Id, limit: 200, cancellationToken).ConfigureAwait(false);
+
+            if (!request.ReplaceExisting && existingScreenshots.Length + preflightedSet.Files.Length > AppleScreenshotSetLimit)
+            {
+                throw new InvalidOperationException(
+                    $"Screenshot display type '{preflightedSet.ScreenshotDisplayType}' already has {existingScreenshots.Length} screenshots; " +
+                    $"uploading {preflightedSet.Files.Length} more would exceed Apple's {AppleScreenshotSetLimit} screenshots per set limit.");
+            }
+
+            plannedSets.Add(new PlannedScreenshotSet(preflightedSet, set, existingScreenshots));
+        }
+
+        var results = new List<AppStoreConnectScreenshotSetSyncResult>();
+        foreach (var plannedSet in plannedSets)
+        {
+            var displayType = plannedSet.Preflighted.ScreenshotDisplayType;
+            var set = plannedSet.ScreenshotSet;
             if (set is null)
             {
                 set = await _client.CreateScreenshotSetAsync(localization.Id, displayType, cancellationToken).ConfigureAwait(false);
@@ -109,8 +113,7 @@ public sealed class AppStoreConnectScreenshotSyncService
             var deletedCount = 0;
             if (request.ReplaceExisting)
             {
-                var existingScreenshots = await _client.GetScreenshotsAsync(set.Id, limit: 200, cancellationToken).ConfigureAwait(false);
-                foreach (var screenshot in existingScreenshots)
+                foreach (var screenshot in plannedSet.ExistingScreenshots)
                 {
                     await _client.DeleteScreenshotAsync(screenshot.Id, cancellationToken).ConfigureAwait(false);
                     deletedCount++;
@@ -118,14 +121,14 @@ public sealed class AppStoreConnectScreenshotSyncService
             }
 
             var uploaded = new List<AppStoreConnectScreenshotUploadResult>();
-            foreach (var file in files)
+            foreach (var file in plannedSet.Preflighted.Files)
                 uploaded.Add(await _client.UploadScreenshotAsync(set.Id, file, cancellationToken).ConfigureAwait(false));
 
             results.Add(new AppStoreConnectScreenshotSetSyncResult
             {
                 ScreenshotDisplayType = displayType,
                 ScreenshotSetId = set.Id,
-                Path = folder,
+                Path = plannedSet.Preflighted.Folder,
                 DeletedCount = deletedCount,
                 Uploaded = uploaded.ToArray()
             });
@@ -143,4 +146,66 @@ public sealed class AppStoreConnectScreenshotSyncService
         => System.IO.Path.IsPathRooted(path)
             ? System.IO.Path.GetFullPath(path)
             : System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDirectory, path));
+
+    private static PreflightedScreenshotSet PreflightScreenshotSet(string baseDirectory, AppStoreConnectScreenshotSetSyncSpec setSpec)
+    {
+        if (string.IsNullOrWhiteSpace(setSpec.ScreenshotDisplayType))
+            throw new InvalidOperationException("ScreenshotDisplayType is required for every screenshot set mapping.");
+        if (string.IsNullOrWhiteSpace(setSpec.Path))
+            throw new InvalidOperationException($"Path is required for screenshot display type '{setSpec.ScreenshotDisplayType}'.");
+
+        var maxCount = setSpec.MaxCount <= 0 ? AppleScreenshotSetLimit : setSpec.MaxCount;
+        if (maxCount > AppleScreenshotSetLimit)
+            throw new InvalidOperationException($"MaxCount cannot exceed Apple's {AppleScreenshotSetLimit} screenshots per set limit for '{setSpec.ScreenshotDisplayType}'.");
+
+        var folder = ResolvePath(baseDirectory, setSpec.Path);
+        if (!Directory.Exists(folder))
+            throw new DirectoryNotFoundException($"Screenshot folder was not found: {folder}");
+
+        var filter = string.IsNullOrWhiteSpace(setSpec.Filter) ? "*.png" : setSpec.Filter;
+        var files = Directory.GetFiles(folder, filter)
+            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
+            .Take(maxCount)
+            .ToArray();
+
+        if (files.Length == 0)
+            throw new InvalidOperationException($"No screenshots matched '{filter}' in '{folder}'.");
+
+        return new PreflightedScreenshotSet(setSpec.ScreenshotDisplayType.Trim(), folder, files);
+    }
+
+    private sealed class PreflightedScreenshotSet
+    {
+        public PreflightedScreenshotSet(string screenshotDisplayType, string folder, string[] files)
+        {
+            ScreenshotDisplayType = screenshotDisplayType;
+            Folder = folder;
+            Files = files;
+        }
+
+        public string ScreenshotDisplayType { get; }
+
+        public string Folder { get; }
+
+        public string[] Files { get; }
+    }
+
+    private sealed class PlannedScreenshotSet
+    {
+        public PlannedScreenshotSet(
+            PreflightedScreenshotSet preflighted,
+            AppStoreConnectScreenshotSetInfo? screenshotSet,
+            AppStoreConnectScreenshotInfo[] existingScreenshots)
+        {
+            Preflighted = preflighted;
+            ScreenshotSet = screenshotSet;
+            ExistingScreenshots = existingScreenshots;
+        }
+
+        public PreflightedScreenshotSet Preflighted { get; }
+
+        public AppStoreConnectScreenshotSetInfo? ScreenshotSet { get; }
+
+        public AppStoreConnectScreenshotInfo[] ExistingScreenshots { get; }
+    }
 }
