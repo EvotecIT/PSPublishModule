@@ -1,8 +1,10 @@
 # PSPublishModule Private Galleries
 
-This page describes the supported enterprise flow for consuming private modules
-from Azure Artifacts with PSPublishModule and the related Microsoft Artifact
-Registry (MAR) intake path for Microsoft-owned packages.
+This page describes the supported enterprise flow for consuming and publishing
+private PowerShell modules with PSPublishModule. It covers Azure Artifacts,
+JFrog Artifactory, generic NuGet-compatible feeds, GitHub Packages, and the
+related Microsoft Artifact Registry (MAR) intake path for Microsoft-owned
+packages.
 
 For the short maintainer/end-user process used for the Evotec private feed, see
 `Docs/PSPublishModule.PrivateGalleryProcess.md`.
@@ -40,6 +42,212 @@ Install Microsoft-owned packages from MAR with the wrapper or native command:
 Install-PrivateModule -MicrosoftArtifactRegistry -Name Microsoft.PowerShell.SecretManagement
 Install-PSResource -Repository MAR -Name Microsoft.PowerShell.SecretManagement
 ```
+
+## JFrog Artifactory
+
+JFrog Artifactory is supported as a NuGet-compatible private PowerShell module
+repository. PSPublishModule can derive the required PowerShellGet and
+PSResourceGet endpoints from the Artifactory base URI and the NuGet repository
+key:
+
+```text
+Base URI:   https://company.jfrog.io/artifactory
+Repository: powershell-virtual
+PSResourceGet endpoint:
+  https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json
+PowerShellGet source/publish endpoint:
+  https://company.jfrog.io/artifactory/api/nuget/powershell-virtual
+```
+
+### JFrog Publisher Configuration With PAT/Basic Auth
+
+Use this when the same JFrog PAT or access token is accepted as the repository
+credential for publishing and for authenticated read/probe operations. This is
+the preferred simple build configuration because it avoids a pre-created local
+profile and avoids duplicating the same PAT as a NuGet API key:
+
+```powershell
+New-ConfigurationPublish `
+    -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
+    -JFrogRepository 'powershell-virtual' `
+    -RepositoryName 'JFrogPS' `
+    -Tool PSResourceGet `
+    -RepositoryCredentialUserName 'name@company.com' `
+    -RepositoryCredentialSecretFilePath 'C:\Support\Important\JFrogArtifactoryPAT.txt' `
+    -Enabled:$true
+```
+
+The local repository name can be omitted when the Artifactory repository key is
+also an acceptable local PowerShell repository name. Keep it when you want a
+shorter or clearer local alias such as `JFrogPS`.
+
+For CI, prefer an environment variable over a local secret file:
+
+```powershell
+New-ConfigurationPublish `
+    -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
+    -JFrogRepository 'powershell-virtual' `
+    -RepositoryName 'JFrogPS' `
+    -Tool PSResourceGet `
+    -RepositoryCredentialUserName 'name@company.com' `
+    -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' `
+    -Enabled:$true
+```
+
+### JFrog Publisher Configuration With Separate NuGet API Key
+
+Use this only when Artifactory requires a NuGet API key for package push in
+addition to a repository credential for registration, probing, or authenticated
+feed access:
+
+```powershell
+New-ConfigurationPublish `
+    -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
+    -JFrogRepository 'powershell-virtual' `
+    -RepositoryName 'JFrogPS' `
+    -Tool PSResourceGet `
+    -FilePath 'C:\Support\Important\JFrogNuGetApiKey.txt' `
+    -RepositoryCredentialUserName 'name@company.com' `
+    -RepositoryCredentialSecretFilePath 'C:\Support\Important\JFrogArtifactoryPAT.txt' `
+    -Enabled:$true
+```
+
+### JFrog OIDC / Federated CI Authentication
+
+Use JFrog OIDC token exchange when the build runner can obtain a short-lived
+OIDC token from the CI platform. PSPublishModule runs `jf eot` at publish time,
+parses the returned JFrog username/access token, and passes that credential to
+PSResourceGet or PowerShellGet. The resulting access token is not written into
+the publish configuration.
+
+```powershell
+New-ConfigurationPublish `
+    -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
+    -JFrogRepository 'powershell-virtual' `
+    -RepositoryName 'JFrogPS' `
+    -Tool PSResourceGet `
+    -JFrogOidcProvider 'azure-oidc' `
+    -JFrogOidcProviderType Azure `
+    -JFrogOidcTokenIdEnvironmentVariable 'JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID' `
+    -Enabled:$true
+```
+
+Provider type choices are:
+
+- `GitHub` for GitHub Actions OIDC.
+- `Azure` for Azure DevOps or Entra-backed JFrog OIDC mappings.
+- `GenericOidc` for other OIDC-compatible CI providers.
+
+`JFrogPlatformUri` can be supplied when the platform URL is not derivable from
+`JFrogBaseUri`. For the common SaaS shape above, PSPublishModule derives
+`https://company.jfrog.io/` from `https://company.jfrog.io/artifactory`.
+
+This is the right direction for FAMS/federated-style automation because it uses
+the identity provider to mint a short-lived token and exchanges it for a JFrog
+access token only during the publish run. It still needs a real JFrog OIDC
+integration, identity mapping, feed permission, JFrog CLI on PATH, and live
+publish proof before it should be treated as production-ready.
+
+### JFrog Browser SSO / Entra Login
+
+If JFrog is connected to Microsoft Entra ID through SAML/OIDC SSO, interactive
+users can use the existing JFrog CLI browser-login bootstrap path:
+
+```powershell
+Connect-ModuleRepository `
+    -Provider JFrog `
+    -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
+    -JFrogRepository 'powershell-virtual' `
+    -Name 'JFrogPS' `
+    -Tool PSResourceGet `
+    -BootstrapMode JFrogCli `
+    -InstallPrerequisites `
+    -Verbose
+```
+
+This runs `jf login` and then probes whether PowerShell repository tooling can
+use the resulting session. Treat it as an interactive workstation/bootstrap
+test, not as the default publish configuration: JFrog CLI browser login is not
+CI-friendly, and PSResourceGet/PowerShellGet may still require an explicit
+repository credential, access token, or OIDC exchange result.
+
+### JFrog Connection And Install Test
+
+Before handing a feed to publishers or end users, test both authenticated access
+and module install from a clean shell:
+
+```powershell
+Connect-ModuleRepository `
+    -Provider JFrog `
+    -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
+    -JFrogRepository 'powershell-virtual' `
+    -Name 'JFrogPS' `
+    -Tool PSResourceGet `
+    -CredentialUserName 'name@company.com' `
+    -CredentialSecretFilePath 'C:\Support\Important\JFrogArtifactoryPAT.txt' `
+    -InstallPrerequisites `
+    -Verbose
+
+Install-PrivateModule `
+    -Name 'YourModuleName' `
+    -Repository 'JFrogPS' `
+    -CredentialUserName 'name@company.com' `
+    -CredentialSecretFilePath 'C:\Support\Important\JFrogArtifactoryPAT.txt' `
+    -Force
+```
+
+Use a PAT or access token with the minimum Artifactory permissions required for
+the scenario: read for install/update validation, and deploy/publish for module
+release builds. Keep tokens outside committed configuration by using environment
+variables, CI secrets, or local secret files.
+
+### JFrog Profile For Workstation Onboarding
+
+A profile is still useful for managed workstation onboarding because it stores
+the non-secret feed shape once and lets install/update commands reference a
+stable profile name:
+
+```powershell
+Set-ModuleRepositoryProfile `
+    -Name 'JFrogPS' `
+    -Provider JFrog `
+    -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
+    -JFrogRepository 'powershell-virtual' `
+    -RepositoryName 'JFrogPS' `
+    -Tool PSResourceGet `
+    -Trusted $true
+
+Install-PrivateModule `
+    -Name 'YourModuleName' `
+    -ProfileName 'JFrogPS' `
+    -CredentialUserName 'name@company.com' `
+    -CredentialSecretFilePath 'C:\Support\Important\JFrogArtifactoryPAT.txt'
+```
+
+Profiles should contain feed metadata only. Do not store PATs, passwords, or
+session tokens in exported profile JSON.
+
+## Other NuGet-Compatible Private Feeds
+
+For a private feed that is not one of the provider-specific presets, use the
+generic repository URI parameters. This is also the escape hatch when a vendor
+uses nonstandard NuGet endpoints:
+
+```powershell
+New-ConfigurationPublish `
+    -Type PowerShellGallery `
+    -RepositoryName 'CompanyModules' `
+    -Tool PSResourceGet `
+    -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' `
+    -RepositorySourceUri 'https://packages.company.test/nuget/v3/index.json' `
+    -RepositoryPublishUri 'https://packages.company.test/nuget/v3/index.json' `
+    -RepositoryCredentialUserName 'publisher' `
+    -RepositoryCredentialSecretFilePath 'C:\Support\Important\CompanyFeedToken.txt' `
+    -Enabled:$true
+```
+
+If the repository also requires a separate NuGet API key for push, add
+`-FilePath` or `-ApiKey` to the publish configuration.
 
 For production estates, keep using a central enterprise feed such as Azure
 Artifacts as the only trusted runtime source. The recommended flow is:
@@ -561,10 +769,11 @@ Azure DevOps Services and client tooling support it.
 
 ## Other Private Feeds
 
-The profile model is intentionally provider-shaped, but the only implemented
-managed provider is currently Azure Artifacts. JFrog and generic NuGet v3 feeds
-should be added as explicit providers/adapters with their own credential policy
-instead of overloading Azure Artifacts behavior.
+The profile model is intentionally provider-shaped. Azure Artifacts and JFrog
+have first-class provider paths; generic NuGet v2/v3 feeds and GitHub Packages
+remain available through explicit repository URI and credential parameters.
+When a feed has its own credential policy, keep it explicit in configuration
+instead of overloading the Azure Artifacts credential-provider behavior.
 
 ## Live Azure Artifacts Validation
 

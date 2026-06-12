@@ -572,6 +572,150 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
         }
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ModuleRepositoryPublish_AllowsRepositoryCredentialProviderWithoutApiKey()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        File.WriteAllText(Path.Combine(buildDirectory, "Build-Module.ps1"), "# build");
+
+        var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "Packed", "PSPublishModule")).FullName;
+        var manifestPath = Path.Combine(packageDirectory, "PSPublishModule.psd1");
+        File.WriteAllText(
+            manifestPath,
+            """
+            @{
+                RootModule = 'PSPublishModule.psm1'
+                ModuleVersion = '2.0.0'
+            }
+            """);
+
+        var signingResult = new ReleaseSigningExecutionResult(
+            RootPath: repositoryRoot,
+            Succeeded: true,
+            Summary: "Signing completed.",
+            SourceCheckpointStateJson: null,
+            Receipts: [
+                new ReleaseSigningReceipt(
+                    RootPath: repositoryRoot,
+                    RepositoryName: "PSPublishModule",
+                    AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    ArtifactPath: packageDirectory,
+                    ArtifactKind: "Directory",
+                    Status: ReleaseSigningReceiptStatus.Signed,
+                    Summary: "Package directory signed.",
+                    SignedAtUtc: DateTimeOffset.UtcNow),
+                new ReleaseSigningReceipt(
+                    RootPath: repositoryRoot,
+                    RepositoryName: "PSPublishModule",
+                    AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    ArtifactPath: manifestPath,
+                    ArtifactKind: "File",
+                    Status: ReleaseSigningReceiptStatus.Signed,
+                    Summary: "Manifest signed.",
+                    SignedAtUtc: DateTimeOffset.UtcNow)
+            ]);
+
+        var queueItem = new ReleaseQueueItem(
+            RootPath: repositoryRoot,
+            RepositoryName: "PSPublishModule",
+            RepositoryKind: ReleaseRepositoryKind.Module,
+            WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+            QueueOrder: 1,
+            Stage: ReleaseQueueStage.Publish,
+            Status: ReleaseQueueItemStatus.ReadyToRun,
+            Summary: "Ready for publish.",
+            CheckpointKey: "publish.ready",
+            CheckpointStateJson: JsonSerializer.Serialize(signingResult),
+            UpdatedAtUtc: DateTimeOffset.UtcNow);
+
+        RepositoryPublishRequest? captured = null;
+        var moduleRunner = new StubPowerShellRunner((request) => {
+                if (request.InvocationMode != PowerShellInvocationMode.Command || string.IsNullOrWhiteSpace(request.CommandText))
+                    return new PowerShellRunResult(1, string.Empty, "Unexpected invocation.", "pwsh");
+
+                if (request.CommandText.Contains("$targetJson =", StringComparison.Ordinal))
+                {
+                    var match = Regex.Match(request.CommandText, "\\$targetJson = '([^']+)'");
+                    if (!match.Success)
+                        return new PowerShellRunResult(1, string.Empty, "Export path missing.", "pwsh");
+
+                    File.WriteAllText(
+                        match.Groups[1].Value,
+                        """
+                        {
+                          "Segments": [
+                            {
+                              "Type": "GalleryNuget",
+                              "Configuration": {
+                                "Destination": "PowerShellGallery",
+                                "Enabled": true,
+                                "Tool": "PSResourceGet",
+                                "ApiKey": "",
+                                "RepositoryName": "JFrogPS",
+                                "Repository": {
+                                  "Name": "JFrogPS",
+                                  "Uri": "https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json",
+                                  "CredentialProvider": {
+                                    "Kind": "JFrogOidc",
+                                    "JFrogPlatformUri": "https://company.jfrog.io/",
+                                    "JFrogOidcProvider": "azure-oidc",
+                                    "JFrogOidcProviderType": "Azure"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                        """);
+
+                    return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
+                }
+
+                return new PowerShellRunResult(1, string.Empty, "Unexpected command.", "pwsh");
+            });
+        var service = new ReleasePublishExecutionService(
+            new RepositoryCatalogScanner(),
+            new ModuleBuildHostService(moduleRunner),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(),
+            new ProjectBuildPublishHostService(),
+            (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, "published", string.Empty, "dotnet", TimeSpan.Zero, timedOut: false, errorMessage: null)),
+            publishRepositoryAsync: (request, _) => {
+                captured = request;
+                return Task.FromResult(new RepositoryPublishResult(
+                    path: request.Path,
+                    isNupkg: request.IsNupkg,
+                    repositoryName: request.RepositoryName ?? "JFrogPS",
+                    tool: request.Tool,
+                    repositoryCreated: false,
+                    repositoryUnregistered: false));
+            });
+
+        try
+        {
+            using var _ = new EnvironmentScope()
+                .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(captured);
+            Assert.Equal(packageDirectory, captured!.Path);
+            Assert.Equal("JFrogPS", captured.RepositoryName);
+            Assert.Null(captured.ApiKey);
+            Assert.NotNull(captured.Repository?.CredentialProvider);
+            Assert.Equal(RepositoryCredentialProviderKind.JFrogOidc, captured.Repository!.CredentialProvider!.Kind);
+            Assert.Equal("azure-oidc", captured.Repository.CredentialProvider.JFrogOidcProvider);
+            var receipt = Assert.Single(result.Receipts);
+            Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly Func<PowerShellRunRequest, PowerShellRunResult> _execute;

@@ -34,11 +34,13 @@ public sealed class ModulePublisher
     {
     }
 
-    internal ModulePublisher(ILogger logger, IPowerShellRunner runner, HttpClient? client)
+    internal ModulePublisher(ILogger logger, IPowerShellRunner runner, HttpClient? client, IProcessRunner? processRunner = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         if (runner is null) throw new ArgumentNullException(nameof(runner));
-        _repositoryPublisher = new RepositoryPublisher(_logger, runner);
+        _repositoryPublisher = processRunner is null
+            ? new RepositoryPublisher(_logger, runner)
+            : new RepositoryPublisher(_logger, runner, processRunner);
         _psResourceGet = new PSResourceGetClient(runner, _logger);
         _powerShellGet = new PowerShellGetClient(runner, _logger);
         _gitHub = new GitHubReleasePublisher(_logger);
@@ -92,11 +94,12 @@ public sealed class ModulePublisher
         var hasCredential = credential is not null &&
                             !string.IsNullOrWhiteSpace(credential.UserName) &&
                             !string.IsNullOrWhiteSpace(credential.Secret);
+        var hasRuntimeCredentialProvider = repoConfig?.CredentialProvider is { Kind: not RepositoryCredentialProviderKind.None };
 
         if (isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey))
             throw new InvalidOperationException("Publish API key is required for repository publishing to PSGallery.");
 
-        if (!isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey) && !hasCredential)
+        if (!isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey) && !hasCredential && !hasRuntimeCredentialProvider)
             throw new InvalidOperationException("Publish API key or credential is required for repository publishing.");
 
         var tool = publish.Tool;
@@ -124,10 +127,12 @@ public sealed class ModulePublisher
         PublishRepositoryConfiguration? repoConfig,
         bool includeScriptFolders)
     {
-        var credential = repoConfig?.Credential;
+        var credential = _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
         string? temporaryPublishPath = null;
         var repositoryCreated = false;
-        PublishRepositoryConfiguration? repositoryForPublish = repoConfig;
+        PublishRepositoryConfiguration? repositoryForPublish = repoConfig is null
+            ? null
+            : CloneRepositoryForPublish(repoConfig, credential);
         var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
 
         try
@@ -142,7 +147,7 @@ public sealed class ModulePublisher
             if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
                 repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
-                repositoryForPublish = CloneRegisteredRepository(repoConfig);
+                repositoryForPublish = CloneRegisteredRepository(repoConfig, credential);
             }
 
             if (!publish.Force)
@@ -616,7 +621,14 @@ public sealed class ModulePublisher
         _psResourceGet.UnregisterRepository(repositoryName, timeout: TimeSpan.FromMinutes(2));
     }
 
-    private static PublishRepositoryConfiguration CloneRegisteredRepository(PublishRepositoryConfiguration repo)
+    private static PublishRepositoryConfiguration CloneRegisteredRepository(PublishRepositoryConfiguration repo, RepositoryCredential? credential)
+        => CloneRepositoryForPublish(repo, credential, ensureRegistered: false, unregisterAfterUse: false);
+
+    private static PublishRepositoryConfiguration CloneRepositoryForPublish(
+        PublishRepositoryConfiguration repo,
+        RepositoryCredential? credential,
+        bool ensureRegistered = false,
+        bool unregisterAfterUse = false)
         => new()
         {
             Name = repo.Name,
@@ -626,10 +638,25 @@ public sealed class ModulePublisher
             Trusted = repo.Trusted,
             Priority = repo.Priority,
             ApiVersion = repo.ApiVersion,
-            EnsureRegistered = false,
-            UnregisterAfterUse = false,
-            Credential = repo.Credential
+            EnsureRegistered = ensureRegistered,
+            UnregisterAfterUse = unregisterAfterUse,
+            Credential = credential,
+            CredentialProvider = credential is null ? CloneCredentialProvider(repo.CredentialProvider) : null
         };
+
+    private static RepositoryCredentialProviderConfiguration? CloneCredentialProvider(RepositoryCredentialProviderConfiguration? provider)
+        => provider is null
+            ? null
+            : new RepositoryCredentialProviderConfiguration
+            {
+                Kind = provider.Kind,
+                UserName = provider.UserName,
+                JFrogPlatformUri = provider.JFrogPlatformUri,
+                JFrogOidcProvider = provider.JFrogOidcProvider,
+                JFrogOidcTokenId = provider.JFrogOidcTokenId,
+                JFrogOidcTokenIdEnvironmentVariable = provider.JFrogOidcTokenIdEnvironmentVariable,
+                JFrogOidcProviderType = provider.JFrogOidcProviderType
+            };
 
     private static (string RepositoryName, PublishRepositoryConfiguration? Repository) ResolveRepository(PublishConfiguration publish)
     {

@@ -31,6 +31,14 @@ public sealed class ModulePublishConfigurationReaderTests
                   "Credential": {
                     "UserName": "user",
                     "Secret": "secret"
+                  },
+                  "CredentialProvider": {
+                    "Kind": "JFrogOidc",
+                    "UserName": "fallback-user",
+                    "JFrogPlatformUri": "https://company.jfrog.io/",
+                    "JFrogOidcProvider": "azure-oidc",
+                    "JFrogOidcTokenIdEnvironmentVariable": "JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID",
+                    "JFrogOidcProviderType": "Azure"
                   }
                 }
               }
@@ -66,6 +74,13 @@ public sealed class ModulePublishConfigurationReaderTests
         Assert.NotNull(repositoryPublish.Repository.Credential);
         Assert.Equal("user", repositoryPublish.Repository.Credential!.UserName);
         Assert.Equal("secret", repositoryPublish.Repository.Credential.Secret);
+        Assert.NotNull(repositoryPublish.Repository.CredentialProvider);
+        Assert.Equal(RepositoryCredentialProviderKind.JFrogOidc, repositoryPublish.Repository.CredentialProvider!.Kind);
+        Assert.Equal("fallback-user", repositoryPublish.Repository.CredentialProvider.UserName);
+        Assert.Equal("https://company.jfrog.io/", repositoryPublish.Repository.CredentialProvider.JFrogPlatformUri);
+        Assert.Equal("azure-oidc", repositoryPublish.Repository.CredentialProvider.JFrogOidcProvider);
+        Assert.Equal("JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID", repositoryPublish.Repository.CredentialProvider.JFrogOidcTokenIdEnvironmentVariable);
+        Assert.Equal(JFrogOidcProviderType.Azure, repositoryPublish.Repository.CredentialProvider.JFrogOidcProviderType);
 
         var gitHubPublish = configs[1];
         Assert.Equal(PublishDestination.GitHub, gitHubPublish.Destination);

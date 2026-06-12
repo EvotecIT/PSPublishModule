@@ -87,6 +87,17 @@ public sealed class ModulePublishConfigurationReader
                 : new RepositoryCredential {
                     UserName = repository.Credential.UserName,
                     Secret = repository.Credential.Secret
+                },
+            CredentialProvider = repository.CredentialProvider is null
+                ? null
+                : new RepositoryCredentialProviderConfiguration {
+                    Kind = repository.CredentialProvider.Kind,
+                    UserName = repository.CredentialProvider.UserName,
+                    JFrogPlatformUri = repository.CredentialProvider.JFrogPlatformUri,
+                    JFrogOidcProvider = repository.CredentialProvider.JFrogOidcProvider,
+                    JFrogOidcTokenId = repository.CredentialProvider.JFrogOidcTokenId,
+                    JFrogOidcTokenIdEnvironmentVariable = repository.CredentialProvider.JFrogOidcTokenIdEnvironmentVariable,
+                    JFrogOidcProviderType = repository.CredentialProvider.JFrogOidcProviderType
                 }
         };
     }

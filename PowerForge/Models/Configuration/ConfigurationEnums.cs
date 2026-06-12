@@ -101,6 +101,30 @@ public enum PrivateGalleryCredentialSource
 }
 
 /// <summary>
+/// Runtime credential provider used when repository credentials must be resolved at publish time.
+/// </summary>
+public enum RepositoryCredentialProviderKind
+{
+    /// <summary>No runtime credential provider is configured.</summary>
+    None,
+    /// <summary>Exchange a CI-issued OIDC token for a JFrog access token with JFrog CLI.</summary>
+    JFrogOidc
+}
+
+/// <summary>
+/// JFrog OIDC provider implementation passed to <c>jf exchange-oidc-token</c>.
+/// </summary>
+public enum JFrogOidcProviderType
+{
+    /// <summary>GitHub Actions OIDC provider.</summary>
+    GitHub,
+    /// <summary>Azure DevOps / Azure OIDC provider.</summary>
+    Azure,
+    /// <summary>Generic OIDC-compatible provider.</summary>
+    GenericOidc
+}
+
+/// <summary>
 /// Profile store scope used by private gallery profile commands.
 /// </summary>
 public enum ModuleRepositoryProfileScope

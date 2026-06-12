@@ -121,4 +121,48 @@ public sealed class PublishRepositoryConfiguration
     /// Optional credential used for repository operations (Find/Publish).
     /// </summary>
     public RepositoryCredential? Credential { get; set; }
+
+    /// <summary>
+    /// Optional runtime credential provider used when credentials should be resolved immediately before publishing.
+    /// </summary>
+    public RepositoryCredentialProviderConfiguration? CredentialProvider { get; set; }
+}
+
+/// <summary>
+/// Describes a runtime repository credential source.
+/// </summary>
+public sealed class RepositoryCredentialProviderConfiguration
+{
+    /// <summary>Credential provider kind.</summary>
+    public RepositoryCredentialProviderKind Kind { get; set; } = RepositoryCredentialProviderKind.None;
+
+    /// <summary>
+    /// Optional fallback username when the provider does not return one.
+    /// </summary>
+    public string? UserName { get; set; }
+
+    /// <summary>
+    /// JFrog Platform URL used by <c>jf exchange-oidc-token --url</c>, for example https://company.jfrog.io/.
+    /// </summary>
+    public string? JFrogPlatformUri { get; set; }
+
+    /// <summary>
+    /// JFrog OIDC provider name configured in Artifactory.
+    /// </summary>
+    public string? JFrogOidcProvider { get; set; }
+
+    /// <summary>
+    /// Optional CI-issued OIDC token value. Prefer <see cref="JFrogOidcTokenIdEnvironmentVariable"/> for CI use.
+    /// </summary>
+    public string? JFrogOidcTokenId { get; set; }
+
+    /// <summary>
+    /// Environment variable containing the CI-issued OIDC token value.
+    /// </summary>
+    public string? JFrogOidcTokenIdEnvironmentVariable { get; set; }
+
+    /// <summary>
+    /// JFrog OIDC provider implementation.
+    /// </summary>
+    public JFrogOidcProviderType JFrogOidcProviderType { get; set; } = JFrogOidcProviderType.GitHub;
 }

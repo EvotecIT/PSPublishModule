@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -11,6 +12,7 @@ public sealed class RepositoryPublisher
     private readonly ILogger _logger;
     private readonly PSResourceGetClient _psResourceGet;
     private readonly PowerShellGetClient _powerShellGet;
+    private readonly IProcessRunner _processRunner;
 
     /// <summary>
     /// Creates a new publisher using the provided logger and the default out-of-process PowerShell runner.
@@ -24,9 +26,18 @@ public sealed class RepositoryPublisher
     /// Creates a new publisher using the provided logger and runner.
     /// </summary>
     public RepositoryPublisher(ILogger logger, IPowerShellRunner runner)
+        : this(logger, runner, new ProcessRunner())
+    {
+    }
+
+    /// <summary>
+    /// Creates a new publisher using the provided logger, PowerShell runner, and external process runner.
+    /// </summary>
+    public RepositoryPublisher(ILogger logger, IPowerShellRunner runner, IProcessRunner processRunner)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         if (runner is null) throw new ArgumentNullException(nameof(runner));
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _psResourceGet = new PSResourceGetClient(runner, _logger);
         _powerShellGet = new PowerShellGetClient(runner, _logger);
     }
@@ -57,7 +68,7 @@ public sealed class RepositoryPublisher
                                   !string.IsNullOrWhiteSpace(request.RepositoryName);
 
         var repoConfig = request.Repository;
-        var credential = repoConfig?.Credential;
+        var credential = ResolveRepositoryCredential(repoConfig);
 
         var tool = request.Tool;
         if (tool == PublishTool.Auto)
@@ -216,5 +227,168 @@ public sealed class RepositoryPublisher
         }
 
         _psResourceGet.UnregisterRepository(repositoryName, timeout: TimeSpan.FromMinutes(2));
+    }
+
+    internal RepositoryCredential? ResolveCredentialForRepository(PublishRepositoryConfiguration? repoConfig)
+        => ResolveRepositoryCredential(repoConfig);
+
+    private RepositoryCredential? ResolveRepositoryCredential(PublishRepositoryConfiguration? repoConfig)
+    {
+        if (repoConfig?.CredentialProvider is null ||
+            repoConfig.CredentialProvider.Kind == RepositoryCredentialProviderKind.None)
+        {
+            return repoConfig?.Credential;
+        }
+
+        if (repoConfig.Credential is not null)
+            throw new InvalidOperationException("Repository configuration cannot use both static credentials and a runtime credential provider.");
+
+        return repoConfig.CredentialProvider.Kind switch
+        {
+            RepositoryCredentialProviderKind.JFrogOidc => ExchangeJFrogOidcToken(repoConfig.CredentialProvider),
+            _ => throw new InvalidOperationException($"Repository credential provider '{repoConfig.CredentialProvider.Kind}' is not supported.")
+        };
+    }
+
+    private RepositoryCredential ExchangeJFrogOidcToken(RepositoryCredentialProviderConfiguration provider)
+    {
+        if (string.IsNullOrWhiteSpace(provider.JFrogOidcProvider))
+            throw new InvalidOperationException("JFrogOidcProvider is required for JFrog OIDC credential exchange.");
+
+        var executable = ResolveOnPath(Path.DirectorySeparatorChar == '\\' ? "jf.exe" : "jf") ??
+                         ResolveOnPath("jf");
+        if (string.IsNullOrWhiteSpace(executable))
+            throw new InvalidOperationException("JFrog CLI executable 'jf' was not found on PATH. Install JFrog CLI before using JFrog OIDC publishing.");
+
+        var tokenId = ResolveJfrogOidcTokenId(provider);
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(tokenId))
+            environment["JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID"] = tokenId;
+
+        var arguments = new List<string>
+        {
+            "eot",
+            provider.JFrogOidcProvider!.Trim()
+        };
+
+        if (!string.IsNullOrWhiteSpace(provider.JFrogPlatformUri))
+            arguments.Add("--url=" + provider.JFrogPlatformUri!.Trim());
+
+        arguments.Add("--oidc-provider-type=" + provider.JFrogOidcProviderType);
+
+        _logger.Info("Exchanging JFrog OIDC token for a short-lived repository credential.");
+        var result = _processRunner.RunAsync(
+            new ProcessRunRequest(
+                executable!,
+                Environment.CurrentDirectory,
+                arguments,
+                TimeSpan.FromMinutes(2),
+                environmentVariables: environment.Count == 0 ? null : environment,
+                captureOutput: true,
+                captureError: true)).GetAwaiter().GetResult();
+
+        if (!result.Succeeded)
+        {
+            var detail = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+            throw new InvalidOperationException($"JFrog OIDC token exchange failed with exit code {result.ExitCode}. {detail}".Trim());
+        }
+
+        var credential = ParseJfrogOidcCredential(result.StdOut, provider.UserName);
+        if (string.IsNullOrWhiteSpace(credential.Secret))
+            throw new InvalidOperationException("JFrog OIDC token exchange succeeded but did not return an access token.");
+
+        if (string.IsNullOrWhiteSpace(credential.UserName))
+            throw new InvalidOperationException("JFrog OIDC token exchange succeeded but did not return a username. Provide RepositoryCredentialUserName as a fallback.");
+
+        return credential;
+    }
+
+    private static string? ResolveJfrogOidcTokenId(RepositoryCredentialProviderConfiguration provider)
+    {
+        if (!string.IsNullOrWhiteSpace(provider.JFrogOidcTokenIdEnvironmentVariable))
+        {
+            var value = Environment.GetEnvironmentVariable(provider.JFrogOidcTokenIdEnvironmentVariable!.Trim());
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(provider.JFrogOidcTokenId)
+            ? null
+            : provider.JFrogOidcTokenId!.Trim();
+    }
+
+    private static RepositoryCredential ParseJfrogOidcCredential(string stdout, string? fallbackUserName)
+    {
+        var trimmed = stdout?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(trimmed) && trimmed.StartsWith("{", StringComparison.Ordinal))
+        {
+            using var document = JsonDocument.Parse(trimmed);
+            var root = document.RootElement;
+            return new RepositoryCredential
+            {
+                UserName = TryGetJsonString(root, "username") ?? fallbackUserName,
+                Secret = TryGetJsonString(root, "access_token")
+            };
+        }
+
+        string? accessToken = null;
+        string? userName = null;
+        foreach (var line in SplitLines(trimmed))
+        {
+            var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+                continue;
+
+            if (parts[0].Equals("access_token", StringComparison.OrdinalIgnoreCase))
+                accessToken = parts[1];
+            else if (parts[0].Equals("username", StringComparison.OrdinalIgnoreCase))
+                userName = parts[1];
+        }
+
+        return new RepositoryCredential
+        {
+            UserName = userName ?? fallbackUserName,
+            Secret = accessToken
+        };
+    }
+
+    private static string? TryGetJsonString(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+
+    private static IEnumerable<string> SplitLines(string value)
+        => value.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
+
+    private static string? ResolveOnPath(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return null;
+
+        if (Path.IsPathRooted(fileName) && File.Exists(fileName))
+            return fileName;
+
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        foreach (var entry in path.Split(Path.PathSeparator))
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+                continue;
+
+            try
+            {
+                var candidate = Path.Combine(entry.Trim(), fileName);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            catch
+            {
+                // Ignore malformed PATH entries.
+            }
+        }
+
+        return null;
     }
 }
