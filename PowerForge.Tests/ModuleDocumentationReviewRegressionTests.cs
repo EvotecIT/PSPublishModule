@@ -122,6 +122,18 @@ public class ModuleDocumentationReviewRegressionTests
     }
 
     [Fact]
+    public void DocumentationPlanner_Uses_AboutTopic_FileName_When_Topic_Section_Is_Missing()
+    {
+        var markdown = DocumentationPlanner.AboutToMarkdownForTesting("""
+        SHORT DESCRIPTION
+            Demo topic.
+        """, "about_FileFallback.help.txt");
+
+        Assert.Contains("# about_FileFallback", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("# about_topic", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DocumentationPlanner_Discovers_Help_About_Source_Folder()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PFDocsAbout", System.Guid.NewGuid().ToString("N")));

@@ -208,15 +208,15 @@ internal sealed partial class DocumentationPlanner
                || trimmed.Contains("code_of_codunduct");
     }
 
-    private static string AboutToMarkdown(string content)
+    private static string AboutToMarkdown(string aboutFileName, string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return string.Empty;
-        var converted = AboutTopicMarkdown.Convert("about_topic.help", content);
+        var converted = AboutTopicMarkdown.Convert(Path.GetFileNameWithoutExtension(aboutFileName), content);
         return StripYamlFrontMatter(converted.Markdown);
     }
 
-    internal static string AboutToMarkdownForTesting(string content)
-        => AboutToMarkdown(content);
+    internal static string AboutToMarkdownForTesting(string content, string aboutFileName = "about_topic.help.txt")
+        => AboutToMarkdown(aboutFileName, content);
 
     private static string StripYamlFrontMatter(string markdown)
     {

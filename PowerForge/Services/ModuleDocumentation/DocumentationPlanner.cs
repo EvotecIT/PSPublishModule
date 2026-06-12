@@ -144,7 +144,7 @@ internal sealed partial class DocumentationPlanner
                                     {
                                         Title = Name ?? string.Empty,
                                         Kind = "ABOUT",
-                                        Content = AboutToMarkdown(content!),
+                                        Content = AboutToMarkdown(Name ?? string.Empty, content!),
                                         FileName = Name,
                                         Path = Path,
                                         Source = "Remote",
@@ -290,7 +290,7 @@ internal sealed partial class DocumentationPlanner
                     string raw;
                     try { raw = System.IO.File.ReadAllText(f.FullName); }
                     catch { continue; }
-                    res.Items.Add(new DocumentItem { Title = title, Kind = "ABOUT", Path = f.FullName, FileName = f.Name, Content = AboutToMarkdown(raw), Source = "Local" });
+                    res.Items.Add(new DocumentItem { Title = title, Kind = "ABOUT", Path = f.FullName, FileName = f.Name, Content = AboutToMarkdown(f.Name, raw), Source = "Local" });
                 }
             }
             catch { }
@@ -448,7 +448,7 @@ internal sealed partial class DocumentationPlanner
                                 if (string.IsNullOrEmpty(content)) continue;
                                 if (f.Name.StartsWith("about_", StringComparison.OrdinalIgnoreCase) && f.Name.EndsWith(".help.txt", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    res.Items.Add(new DocumentItem { Title = f.Name, Kind = "ABOUT", Content = AboutToMarkdown(content!), FileName = f.Name, Path = f.Path, Source = "Remote", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch2) });
+                                    res.Items.Add(new DocumentItem { Title = f.Name, Kind = "ABOUT", Content = AboutToMarkdown(f.Name, content!), FileName = f.Name, Path = f.Path, Source = "Remote", BaseUri = RepositoryContentNormalizer.BuildRawBase(req.ProjectUri, branch2) });
                                     continue;
                                 }
                                 if (IsCommunityFile(f.Name))
