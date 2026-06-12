@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
 
@@ -95,6 +97,27 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     public DotNetPublishStyle[]? Styles { get; set; }
 
     /// <summary>
+    /// Optional publish output-path override applied to selected targets.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public string? OutputPath { get; set; }
+
+    /// <summary>
+    /// Optional global MSBuild properties passed to restore, build, publish, and installer steps.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public Hashtable? MsBuildProperty { get; set; }
+
+    /// <summary>
+    /// Skips installer definitions after selected targets are filtered.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter SkipInstallers { get; set; }
+
+    /// <summary>
     /// Disables restore steps for this run.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
@@ -176,6 +199,9 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                     Runtimes = Runtimes,
                     Frameworks = Frameworks,
                     Styles = Styles,
+                    OutputPath = OutputPath,
+                    MsBuildProperties = ConvertHashtable(MsBuildProperty),
+                    SkipInstallers = SkipInstallers.IsPresent,
                     SkipRestore = SkipRestore.IsPresent,
                     SkipBuild = SkipBuild.IsPresent,
                     JsonOnly = JsonOnly.IsPresent,
@@ -226,5 +252,22 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
             WriteError(new ErrorRecord(ex, "InvokeDotNetPublishFailed", ErrorCategory.NotSpecified, null));
             if (exitCodeMode) Host.SetShouldExit(1);
         }
+    }
+
+    private static Dictionary<string, string>? ConvertHashtable(Hashtable? values)
+    {
+        if (values is null || values.Count == 0)
+            return null;
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (DictionaryEntry entry in values)
+        {
+            var key = entry.Key?.ToString();
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+            result[key.Trim()] = entry.Value?.ToString() ?? string.Empty;
+        }
+
+        return result.Count == 0 ? null : result;
     }
 }

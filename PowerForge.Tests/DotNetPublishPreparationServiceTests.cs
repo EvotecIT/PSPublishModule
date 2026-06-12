@@ -67,6 +67,12 @@ public sealed class DotNetPublishPreparationServiceTests
                 Runtimes = new[] { "linux-x64" },
                 Frameworks = new[] { "net10.0" },
                 Styles = new[] { DotNetPublishStyle.PortableCompat },
+                OutputPath = "Artifacts/Portable/{target}/{rid}",
+                MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["UseLocalHtmlForgeX"] = "true"
+                },
+                SkipInstallers = true,
                 SkipRestore = true,
                 SkipBuild = true,
                 JsonOnly = true
@@ -80,13 +86,14 @@ public sealed class DotNetPublishPreparationServiceTests
             Assert.Equal("App", context.Spec.Targets[0].Name);
             Assert.Single(context.Spec.Profiles[0].Targets);
             Assert.Equal("App", context.Spec.Profiles[0].Targets[0]);
-            Assert.Single(context.Spec.Installers);
-            Assert.Equal("AppInstaller", context.Spec.Installers[0].Id);
             Assert.Equal(new[] { "linux-x64" }, context.Spec.Targets[0].Publish.Runtimes);
             Assert.Equal("net10.0", context.Spec.Targets[0].Publish.Framework);
             Assert.Equal(new[] { "net10.0" }, context.Spec.Targets[0].Publish.Frameworks);
             Assert.Equal(DotNetPublishStyle.PortableCompat, context.Spec.Targets[0].Publish.Style);
             Assert.Equal(new[] { DotNetPublishStyle.PortableCompat }, context.Spec.Targets[0].Publish.Styles);
+            Assert.Equal("Artifacts/Portable/{target}/{rid}", context.Spec.Targets[0].Publish.OutputPath);
+            Assert.Equal("true", context.Spec.DotNet.MsBuildProperties!["UseLocalHtmlForgeX"]);
+            Assert.Empty(context.Spec.Installers);
             Assert.False(context.Spec.DotNet.Restore);
             Assert.False(context.Spec.DotNet.Build);
             Assert.True(context.Spec.DotNet.NoRestoreInPublish);
