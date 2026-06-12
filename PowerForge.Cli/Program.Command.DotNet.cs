@@ -1,6 +1,7 @@
 using PowerForge;
 using PowerForge.Cli;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -97,7 +98,7 @@ internal static partial class Program
                     if (effectiveStyles.Length > 1 && GetActiveDotNetPublishProfile(spec) is not null)
                         cmdLogger.Warn("Multiple --style values were provided with an active profile; the single-value profile style filter is ignored and target styles drive matrix expansion.");
                     ApplyDotNetPublishSpecOverrides(spec, overrideTargets, effectiveRids, effectiveFrameworks, effectiveStyles);
-                    var plan = runner.Plan(spec, specPath);
+                    var plan = runner.Plan(spec, specPath, enforceRequiredEnvironmentVariables: runPipeline);
                     ApplyDotNetPublishSkipFlags(plan, skipRestore, skipBuild);
 
                     if (validateOnly)
@@ -117,7 +118,7 @@ internal static partial class Program
                                 Config = "dotnetpublish",
                                 ConfigPath = specPath,
                                 Spec = CliJson.SerializeToElement(spec, CliJson.Context.DotNetPublishSpec),
-                                Plan = CliJson.SerializeToElement(plan, CliJson.Context.DotNetPublishPlan),
+                                Plan = SerializeRedactedDotNetPublishPlan(plan),
                                 Logs = LogsToJsonElement(logBuffer)
                             });
                             return validateExitCode;
@@ -156,7 +157,7 @@ internal static partial class Program
                             Config = "dotnetpublish",
                             ConfigPath = specPath,
                             Spec = CliJson.SerializeToElement(spec, CliJson.Context.DotNetPublishSpec),
-                            Plan = CliJson.SerializeToElement(plan, CliJson.Context.DotNetPublishPlan),
+                            Plan = SerializeRedactedDotNetPublishPlan(plan),
                             Result = result is null ? null : CliJson.SerializeToElement(result, CliJson.Context.DotNetPublishResult),
                             Logs = LogsToJsonElement(logBuffer)
                         });
@@ -334,7 +335,7 @@ internal static partial class Program
                         spec.DotNet.ProjectRoot = Path.GetFullPath(projectRoot.Trim().Trim('"'));
 
                     var runner = new DotNetPublishPipelineRunner(cmdLogger);
-                    var plan = runner.Plan(spec, specPath);
+                    var plan = runner.Plan(spec, specPath, enforceRequiredEnvironmentVariables: false);
                     var bundle = (spec.Bundles ?? Array.Empty<DotNetPublishBundle>())
                         .FirstOrDefault(entry => string.Equals(entry.Id, bundleId, StringComparison.OrdinalIgnoreCase));
                     if (bundle is null)
@@ -526,6 +527,30 @@ internal static partial class Program
                 Console.WriteLine(DotNetScaffoldUsage);
                 return 2;
             }
+        }
+    }
+
+    private static System.Text.Json.JsonElement SerializeRedactedDotNetPublishPlan(DotNetPublishPlan plan)
+    {
+        var environmentVariables = new Dictionary<string, string?>(plan.EnvironmentVariables, StringComparer.OrdinalIgnoreCase);
+        var hookEnvironments = (plan.Steps ?? Array.Empty<DotNetPublishStep>())
+            .Select(step => new
+            {
+                Step = step,
+                Environment = new Dictionary<string, string>(step.HookEnvironment, StringComparer.OrdinalIgnoreCase)
+            })
+            .ToArray();
+
+        DotNetPublishPlanRedactor.RedactInPlace(plan);
+        try
+        {
+            return CliJson.SerializeToElement(plan, CliJson.Context.DotNetPublishPlan);
+        }
+        finally
+        {
+            plan.EnvironmentVariables = environmentVariables;
+            foreach (var entry in hookEnvironments)
+                entry.Step.HookEnvironment = entry.Environment;
         }
     }
 }

@@ -130,6 +130,16 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
         }
     }
 
+    [Fact]
+    public void Plan_PreservesTwoArgumentOverloadForBinaryCompatibility()
+    {
+        var overload = typeof(DotNetPublishPipelineRunner).GetMethod(
+            nameof(DotNetPublishPipelineRunner.Plan),
+            new[] { typeof(DotNetPublishSpec), typeof(string) });
+
+        Assert.NotNull(overload);
+    }
+
     private static DotNetPublishTarget NewTarget(string projectPath)
         => new()
         {

@@ -30,6 +30,17 @@ public sealed partial class DotNetPublishPipelineRunner
     /// Optional path to the JSON config file. When provided, relative paths are resolved against its directory,
     /// unless <see cref="DotNetPublishDotNetOptions.ProjectRoot"/> is set.
     /// </param>
+    public DotNetPublishPlan Plan(DotNetPublishSpec spec, string? configPath)
+        => Plan(spec, configPath, enforceRequiredEnvironmentVariables: true);
+
+    /// <summary>
+    /// Resolves paths/defaults from <paramref name="spec"/> and produces an ordered execution plan.
+    /// </summary>
+    /// <param name="spec">Publish spec.</param>
+    /// <param name="configPath">
+    /// Optional path to the JSON config file. When provided, relative paths are resolved against its directory,
+    /// unless <see cref="DotNetPublishDotNetOptions.ProjectRoot"/> is set.
+    /// </param>
     /// <param name="enforceRequiredEnvironmentVariables">
     /// When true, missing required dotnet environment variables fail planning. Plan-only and validate-only callers
     /// can set this to false so configuration inspection does not require private feed credentials.
@@ -37,7 +48,7 @@ public sealed partial class DotNetPublishPipelineRunner
     public DotNetPublishPlan Plan(
         DotNetPublishSpec spec,
         string? configPath,
-        bool enforceRequiredEnvironmentVariables = true)
+        bool enforceRequiredEnvironmentVariables)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         spec = ResolveProfile(spec);
