@@ -230,7 +230,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
 
             if (workflow.Plan is not null)
             {
-                WriteObject(workflow.Plan);
+                WriteObject(DotNetPublishPlanRedactor.RedactInPlace(workflow.Plan));
                 if (exitCodeMode) Host.SetShouldExit(0);
                 return;
             }

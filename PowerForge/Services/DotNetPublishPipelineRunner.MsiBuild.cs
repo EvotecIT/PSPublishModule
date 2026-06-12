@@ -141,7 +141,7 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Info($"MSI output directory for '{installerId}' -> {configuredOutputDir}");
         if (!string.IsNullOrWhiteSpace(configuredOutputName))
             _logger.Info($"MSI output name for '{installerId}' -> {configuredOutputName}.msi");
-        RunDotnet(plan.ProjectRoot, args);
+        RunDotnet(plan.ProjectRoot, args, plan.EnvironmentVariables);
 
         if (versionResolution.Patch.HasValue && !string.IsNullOrWhiteSpace(versionResolution.StatePath))
             WriteMsiVersionState(versionResolution.StatePath!, versionResolution.Patch.Value, versionResolution.Version!);

@@ -7,20 +7,21 @@ namespace PowerForge;
 internal sealed class DotNetPublishWorkflowService
 {
     private readonly ILogger _logger;
-    private readonly Func<DotNetPublishSpec, string?, DotNetPublishPlan> _planPublish;
+    private readonly Func<DotNetPublishSpec, string?, bool, DotNetPublishPlan> _planPublish;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult> _runPublish;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?> _createProgressReporter;
     private readonly Action<DotNetPublishSpec, string> _writeSpecJson;
 
     public DotNetPublishWorkflowService(
         ILogger logger,
-        Func<DotNetPublishSpec, string?, DotNetPublishPlan>? planPublish = null,
+        Func<DotNetPublishSpec, string?, bool, DotNetPublishPlan>? planPublish = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runPublish = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?>? createProgressReporter = null,
         Action<DotNetPublishSpec, string>? writeSpecJson = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _planPublish = planPublish ?? ((spec, sourceLabel) => new DotNetPublishPipelineRunner(_logger).Plan(spec, sourceLabel));
+        _planPublish = planPublish ?? ((spec, sourceLabel, enforceRequiredEnvironmentVariables) =>
+            new DotNetPublishPipelineRunner(_logger).Plan(spec, sourceLabel, enforceRequiredEnvironmentVariables));
         _runPublish = runPublish ?? ((plan, progress) => new DotNetPublishPipelineRunner(_logger).Run(plan, progress));
         _createProgressReporter = createProgressReporter ?? (_ => null);
         _writeSpecJson = writeSpecJson ?? WriteSpecJson;
@@ -47,7 +48,8 @@ internal sealed class DotNetPublishWorkflowService
             };
         }
 
-        var plan = _planPublish(context.Spec, context.SourceLabel);
+        var enforceRequiredEnvironmentVariables = !context.PlanOnly && !context.ValidateOnly;
+        var plan = _planPublish(context.Spec, context.SourceLabel, enforceRequiredEnvironmentVariables);
         if (context.PlanOnly || context.ValidateOnly)
         {
             if (context.ValidateOnly)

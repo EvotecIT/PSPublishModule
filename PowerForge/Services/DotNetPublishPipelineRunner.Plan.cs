@@ -30,7 +30,14 @@ public sealed partial class DotNetPublishPipelineRunner
     /// Optional path to the JSON config file. When provided, relative paths are resolved against its directory,
     /// unless <see cref="DotNetPublishDotNetOptions.ProjectRoot"/> is set.
     /// </param>
-    public DotNetPublishPlan Plan(DotNetPublishSpec spec, string? configPath)
+    /// <param name="enforceRequiredEnvironmentVariables">
+    /// When true, missing required dotnet environment variables fail planning. Plan-only and validate-only callers
+    /// can set this to false so configuration inspection does not require private feed credentials.
+    /// </param>
+    public DotNetPublishPlan Plan(
+        DotNetPublishSpec spec,
+        string? configPath,
+        bool enforceRequiredEnvironmentVariables = true)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         spec = ResolveProfile(spec);
@@ -520,6 +527,9 @@ public sealed partial class DotNetPublishPipelineRunner
             NoRestoreInPublish = spec.DotNet.NoRestoreInPublish,
             NoBuildInPublish = spec.DotNet.NoBuildInPublish,
             MsBuildProperties = msbuildProps,
+            EnvironmentVariables = ResolveDotNetEnvironmentVariables(
+                spec.DotNet.EnvironmentVariables,
+                enforceRequiredEnvironmentVariables),
             Targets = targets.ToArray(),
             Bundles = bundles,
             Installers = installers,
@@ -665,8 +675,127 @@ public sealed partial class DotNetPublishPipelineRunner
             Runtimes = (dotNet.Runtimes ?? Array.Empty<string>()).ToArray(),
             MsBuildProperties = dotNet.MsBuildProperties is null
                 ? null
-                : new Dictionary<string, string>(dotNet.MsBuildProperties, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(dotNet.MsBuildProperties, StringComparer.OrdinalIgnoreCase),
+            EnvironmentVariables = CloneEnvironmentVariables(dotNet.EnvironmentVariables)
         };
+    }
+
+    private static Dictionary<string, DotNetPublishEnvironmentVariable>? CloneEnvironmentVariables(
+        Dictionary<string, DotNetPublishEnvironmentVariable>? environmentVariables)
+    {
+        if (environmentVariables is null)
+            return null;
+
+        var clone = new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in environmentVariables)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Key))
+                continue;
+
+            var value = entry.Value ?? new DotNetPublishEnvironmentVariable();
+            clone[entry.Key.Trim()] = new DotNetPublishEnvironmentVariable
+            {
+                Value = value.Value,
+                FromEnvironmentVariable = value.FromEnvironmentVariable,
+                FromEnvironmentVariables = (value.FromEnvironmentVariables ?? Array.Empty<string>()).ToArray(),
+                Required = value.Required,
+                Secret = value.Secret
+            };
+        }
+
+        return clone;
+    }
+
+    private static Dictionary<string, string?> ResolveDotNetEnvironmentVariables(
+        Dictionary<string, DotNetPublishEnvironmentVariable>? environmentVariables,
+        bool enforceRequired)
+    {
+        var resolved = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in environmentVariables ?? new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase))
+        {
+            var targetName = (entry.Key ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(targetName))
+                continue;
+
+            var definition = entry.Value ?? new DotNetPublishEnvironmentVariable();
+            var value = definition.Value;
+            var sources = BuildEnvironmentSourceList(targetName, definition);
+
+            if (value is null)
+            {
+                foreach (var source in sources)
+                {
+                    var candidate = GetEnvironmentVariable(source);
+                    if (!string.IsNullOrWhiteSpace(candidate))
+                    {
+                        value = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (enforceRequired && definition.Required && string.IsNullOrWhiteSpace(value))
+            {
+                var sourceList = sources.Length == 0
+                    ? targetName
+                    : string.Join(", ", sources);
+                throw new InvalidOperationException(
+                    $"Required dotnet environment variable '{targetName}' could not be resolved. " +
+                    $"Set one of: {sourceList}.");
+            }
+
+            if (value is not null)
+                resolved[targetName] = value;
+        }
+
+        return resolved;
+    }
+
+    private static string[] BuildEnvironmentSourceList(string targetName, DotNetPublishEnvironmentVariable definition)
+    {
+        var sources = new List<string>();
+        if (!string.IsNullOrWhiteSpace(definition.FromEnvironmentVariable))
+            sources.Add(definition.FromEnvironmentVariable!.Trim());
+
+        foreach (var source in definition.FromEnvironmentVariables ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(source))
+                sources.Add(source.Trim());
+        }
+
+        if (sources.Count == 0)
+            sources.Add(targetName);
+
+        return sources
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string? GetEnvironmentVariable(string name)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        if (!string.IsNullOrWhiteSpace(value))
+            return value;
+
+        try
+        {
+            value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User);
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+        catch
+        {
+            // Non-Windows platforms may not support user-scoped environment variables.
+        }
+
+        try
+        {
+            return Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static DotNetPublishOutputs CloneOutputs(DotNetPublishOutputs outputs)

@@ -277,9 +277,12 @@ public sealed partial class DotNetPublishPipelineRunner
         return sb.ToString();
     }
 
-    private void RunDotnet(string workingDir, IReadOnlyList<string> args)
+    private void RunDotnet(
+        string workingDir,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null)
     {
-        var result = RunProcess("dotnet", workingDir, args);
+        var result = RunProcess("dotnet", workingDir, args, environmentVariables);
         if (result.ExitCode != 0)
         {
             var stderr = (result.StdErr ?? string.Empty).TrimEnd();
@@ -308,9 +311,13 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static (int ExitCode, string StdOut, string StdErr) RunProcess(string fileName, string workingDir, IReadOnlyList<string> args)
+    private static (int ExitCode, string StdOut, string StdErr) RunProcess(
+        string fileName,
+        string workingDir,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null)
     {
-        var result = RunProcessCore(fileName, workingDir, args, timeout: null);
+        var result = RunProcessCore(fileName, workingDir, args, timeout: null, environmentVariables);
         return (result.ExitCode, result.StdOut, result.StdErr);
     }
 
@@ -319,13 +326,14 @@ public sealed partial class DotNetPublishPipelineRunner
         string workingDir,
         IReadOnlyList<string> args,
         TimeSpan timeout)
-        => RunProcessCore(fileName, workingDir, args, timeout);
+        => RunProcessCore(fileName, workingDir, args, timeout, environmentVariables: null);
 
     private static (int ExitCode, string StdOut, string StdErr, bool TimedOut) RunProcessCore(
         string fileName,
         string workingDir,
         IReadOnlyList<string> args,
-        TimeSpan? timeout)
+        TimeSpan? timeout,
+        IReadOnlyDictionary<string, string?>? environmentVariables)
     {
         var psi = new ProcessStartInfo
         {
@@ -337,6 +345,20 @@ public sealed partial class DotNetPublishPipelineRunner
             CreateNoWindow = true
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
+
+        if (environmentVariables is not null)
+        {
+            foreach (var variable in environmentVariables)
+            {
+                if (string.IsNullOrWhiteSpace(variable.Key))
+                    continue;
+
+                if (variable.Value is null)
+                    psi.EnvironmentVariables.Remove(variable.Key);
+                else
+                    psi.EnvironmentVariables[variable.Key] = variable.Value;
+            }
+        }
 
 #if NET472
         psi.Arguments = BuildWindowsArgumentString(args);

@@ -1027,6 +1027,43 @@ public sealed class DotNetPublishDotNetOptions
     /// Optional MSBuild properties passed to build/publish (as <c>/p:Name=Value</c>).
     /// </summary>
     public Dictionary<string, string>? MsBuildProperties { get; set; }
+
+    /// <summary>
+    /// Optional environment variables supplied to dotnet restore/build/publish commands.
+    /// Use this for private package feeds that rely on NuGet.config environment-variable expansion.
+    /// </summary>
+    public Dictionary<string, DotNetPublishEnvironmentVariable>? EnvironmentVariables { get; set; }
+}
+
+/// <summary>
+/// Environment variable definition for dotnet restore/build/publish commands.
+/// </summary>
+public sealed class DotNetPublishEnvironmentVariable
+{
+    /// <summary>
+    /// Literal value to assign. Prefer <see cref="FromEnvironmentVariables"/> for secrets.
+    /// </summary>
+    public string? Value { get; set; }
+
+    /// <summary>
+    /// Single source environment variable used when <see cref="Value"/> is not set.
+    /// </summary>
+    public string? FromEnvironmentVariable { get; set; }
+
+    /// <summary>
+    /// Ordered source environment variable fallback list used when <see cref="Value"/> is not set.
+    /// </summary>
+    public string[] FromEnvironmentVariables { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// When true, planning fails if no literal or source environment value can be resolved.
+    /// </summary>
+    public bool Required { get; set; }
+
+    /// <summary>
+    /// Indicates that the value is sensitive and should not be written to logs.
+    /// </summary>
+    public bool Secret { get; set; } = true;
 }
 
 /// <summary>
