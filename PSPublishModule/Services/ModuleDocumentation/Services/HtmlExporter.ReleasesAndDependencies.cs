@@ -504,15 +504,36 @@ internal sealed partial class HtmlExporter
     {
         foreach (var t in types)
         {
-            var type = EscapeCodeSpan(string.IsNullOrWhiteSpace(t.TypeName) ? "None" : t.TypeName.Trim());
+            var type = FormatCodeSpan(string.IsNullOrWhiteSpace(t.TypeName) ? "None" : t.TypeName.Trim());
             var desc = NormalizeListDescription(t.Description);
             sb.AppendLine(string.IsNullOrWhiteSpace(desc)
-                ? $"- `{type}`"
-                : $"- `{type}` - {desc}");
+                ? $"- {type}"
+                : $"- {type} - {desc}");
         }
     }
 
-    private static string EscapeCodeSpan(string value) => value.Replace("`", "\\`");
+    private static string FormatCodeSpan(string value)
+    {
+        var delimiterLength = 1;
+        var currentRun = 0;
+        foreach (var ch in value)
+        {
+            if (ch == '`')
+            {
+                currentRun++;
+                delimiterLength = Math.Max(delimiterLength, currentRun + 1);
+                continue;
+            }
+
+            currentRun = 0;
+        }
+
+        var delimiter = new string('`', delimiterLength);
+        var needsPadding = value.StartsWith("`", StringComparison.Ordinal) ||
+                           value.EndsWith("`", StringComparison.Ordinal);
+        var content = needsPadding ? $" {value} " : value;
+        return $"{delimiter}{content}{delimiter}";
+    }
 
     private static string NormalizeListDescription(string? value)
     {

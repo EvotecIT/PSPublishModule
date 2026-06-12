@@ -329,7 +329,7 @@ internal static class AboutTopicMarkdown
                 continue;
             }
 
-            AppendHelpTextBodyMarkdown(sb, body);
+            AppendHelpTextBodyMarkdown(sb, title, body);
         }
 
         var helpText = GeneratedTextNormalizer.Normalize(string.Join("\n", SplitLines(content)));
@@ -520,10 +520,11 @@ internal static class AboutTopicMarkdown
         return output;
     }
 
-    private static void AppendHelpTextBodyMarkdown(StringBuilder sb, List<string> lines)
+    private static void AppendHelpTextBodyMarkdown(StringBuilder sb, string sectionTitle, List<string> lines)
     {
         var inCodeBlock = false;
         var wroteBlank = false;
+        var isExamplesSection = sectionTitle.Equals("EXAMPLES", StringComparison.OrdinalIgnoreCase);
 
         foreach (var raw in lines)
         {
@@ -547,7 +548,7 @@ internal static class AboutTopicMarkdown
                 continue;
             }
 
-            if (IsHelpTextCodeLine(line))
+            if (IsHelpTextCodeLine(line) || (isExamplesSection && IsExampleCodeLine(trimmed)))
             {
                 if (!inCodeBlock)
                 {
@@ -580,6 +581,25 @@ internal static class AboutTopicMarkdown
         }
 
         sb.AppendLine();
+    }
+
+    private static bool IsExampleCodeLine(string trimmed)
+    {
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        if (trimmed.StartsWith("$", StringComparison.Ordinal))
+            return true;
+
+        var first = trimmed.Split(new[] { ' ', '\t', '|' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(first))
+            return false;
+
+        var dash = first.IndexOf('-');
+        return dash > 0
+               && dash < first.Length - 1
+               && first.Take(dash).All(char.IsLetter)
+               && first.Skip(dash + 1).All(ch => char.IsLetterOrDigit(ch) || ch == '_');
     }
 
     private static bool IsHelpTextCodeLine(string line)

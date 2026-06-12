@@ -112,6 +112,29 @@ LONG DESCRIPTION
     }
 
     [Fact]
+    public void AboutTopicMarkdown_Fences_Simple_Example_Commands_Without_Fencing_Remarks()
+    {
+        const string content = @"
+TOPIC
+    about_Examples
+
+EXAMPLES
+    Get-ChildItem
+
+    Lists child items.
+
+    $items | ConvertTo-Json
+";
+
+        var res = AboutTopicMarkdown.Convert("about_Examples.help", content);
+        var markdown = res.Markdown.Replace("\r\n", "\n");
+
+        Assert.Contains("```powershell\nGet-ChildItem\n```", markdown);
+        Assert.Contains("Lists child items.", markdown);
+        Assert.Contains("```powershell\n$items | ConvertTo-Json\n```", markdown);
+    }
+
+    [Fact]
     public void MamlHelpWriter_WritesParameterSetNameAndPossibleValues()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-maml-help-writer-values-" + Guid.NewGuid().ToString("N"));

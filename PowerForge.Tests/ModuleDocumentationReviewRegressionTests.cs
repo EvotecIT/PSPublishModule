@@ -112,6 +112,16 @@ public class ModuleDocumentationReviewRegressionTests
     }
 
     [Fact]
+    public void DocumentationPlanner_Strips_Converted_AboutTopic_FrontMatter_With_Windows_LineEndings()
+    {
+        var markdown = DocumentationPlanner.AboutToMarkdownForTesting("TOPIC\r\n    about_Demo\r\n\r\nSHORT DESCRIPTION\r\n    Demo topic.\r\n");
+
+        Assert.DoesNotContain("schema:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("---", markdown, StringComparison.Ordinal);
+        Assert.Contains("# about_Demo", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DocumentationPlanner_Discovers_Help_About_Source_Folder()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PFDocsAbout", System.Guid.NewGuid().ToString("N")));

@@ -220,15 +220,16 @@ internal sealed partial class DocumentationPlanner
 
     private static string StripYamlFrontMatter(string markdown)
     {
-        if (!markdown.StartsWith("---\n", StringComparison.Ordinal))
-            return markdown;
+        var normalized = (markdown ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+        if (!normalized.StartsWith("---\n", StringComparison.Ordinal))
+            return normalized;
 
-        var end = markdown.IndexOf("\n---", 4, StringComparison.Ordinal);
+        var end = normalized.IndexOf("\n---", 4, StringComparison.Ordinal);
         if (end < 0)
-            return markdown;
+            return normalized;
 
-        var contentStart = markdown.IndexOf('\n', end + 1);
-        return contentStart < 0 ? string.Empty : markdown.Substring(contentStart + 1).TrimStart();
+        var contentStart = normalized.IndexOf('\n', end + 1);
+        return contentStart < 0 ? string.Empty : normalized.Substring(contentStart + 1).TrimStart();
     }
 
     private static List<RepoRelease> NormalizeRepoReleases(IEnumerable<RepoRelease> releases, string? projectUri)

@@ -289,6 +289,24 @@ public class HtmlExporterMarkdownTests
     }
 
     [Fact]
+    public void RenderHelpMarkdown_Uses_Valid_CodeSpan_For_Generic_Type_Names()
+    {
+        var model = new CommandHelpModel
+        {
+            Name = "Get-Demo",
+            Synopsis = "Gets demo data."
+        };
+        model.Outputs.Add(new TypeHelp
+        {
+            TypeName = "System.Collections.Generic.List`1[System.String]"
+        });
+
+        var markdown = HtmlExporter.RenderHelpMarkdownForTesting(model);
+
+        Assert.Contains("- ``System.Collections.Generic.List`1[System.String]``", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Export_Renders_Structured_Releases_With_Release_Cards()
     {
         var exporter = new HtmlExporter();
