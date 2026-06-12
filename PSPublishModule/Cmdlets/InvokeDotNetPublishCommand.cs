@@ -262,10 +262,10 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (DictionaryEntry entry in values)
         {
-            var key = entry.Key?.ToString();
-            if (string.IsNullOrWhiteSpace(key))
+            var trimmedKey = (entry.Key?.ToString() ?? string.Empty).Trim();
+            if (trimmedKey.Length == 0)
                 continue;
-            result[key.Trim()] = entry.Value?.ToString() ?? string.Empty;
+            result[trimmedKey] = entry.Value?.ToString() ?? string.Empty;
         }
 
         return result.Count == 0 ? null : result;
