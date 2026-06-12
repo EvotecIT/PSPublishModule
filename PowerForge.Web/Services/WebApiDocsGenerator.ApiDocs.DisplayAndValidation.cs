@@ -249,7 +249,7 @@ public static partial class WebApiDocsGenerator
         if (!member.HasExplicitParameterSetName)
             return signatureKey;
 
-        var parameterSetName = NormalizeSignatureKey(member.ParameterSetName);
+        var parameterSetName = NormalizeSignatureKey(member.SourceParameterSetName);
         if (string.IsNullOrWhiteSpace(parameterSetName))
             return signatureKey;
 

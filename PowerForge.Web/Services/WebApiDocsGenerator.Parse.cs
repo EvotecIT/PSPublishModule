@@ -179,6 +179,7 @@ public static partial class WebApiDocsGenerator
                         Name = name!,
                         Kind = "CommandSyntax",
                         ParameterSetName = parameterSetName,
+                        SourceParameterSetName = parameterSetName,
                         HasExplicitParameterSetName = !string.IsNullOrWhiteSpace(parameterSetName),
                         IncludesCommonParameters = includesCommonParameters,
                         Returns = returns,

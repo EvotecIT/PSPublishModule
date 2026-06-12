@@ -70,6 +70,7 @@ public static partial class WebApiDocsGenerator
         public string? Summary { get; set; }
         public string? Kind { get; set; }
         public string? ParameterSetName { get; set; }
+        public string? SourceParameterSetName { get; set; }
         public bool HasExplicitParameterSetName { get; set; }
         public bool IncludesCommonParameters { get; set; }
         public string? Signature { get; set; }

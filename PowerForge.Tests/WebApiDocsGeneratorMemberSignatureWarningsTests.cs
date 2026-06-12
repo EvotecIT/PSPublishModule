@@ -160,10 +160,45 @@ public class WebApiDocsGeneratorMemberSignatureWarningsTests
         }
     }
 
+    [Fact]
+    public void Generate_WarnsForPowerShellDuplicateSyntaxWhenExplicitParameterSetNamesAreDuplicated()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-powershell-duplicate-explicit-parameter-sets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var helpPath = Path.Combine(root, "PSWriteOffice-help.xml");
+        File.WriteAllText(helpPath, CreatePowerShellDuplicateSyntaxHelpXml(includeExplicitParameterSetNames: true, duplicateExplicitParameterSetName: true));
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            Type = ApiDocsType.PowerShell,
+            HelpPath = helpPath,
+            OutputPath = outputPath,
+            Format = "json",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Contains(result.Warnings, warning => warning.Contains("[PFWEB.APIDOCS.MEMBER.SIGNATURES]", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static string CreatePowerShellDuplicateSyntaxHelpXml(bool includeExplicitParameterSetNames)
+        => CreatePowerShellDuplicateSyntaxHelpXml(includeExplicitParameterSetNames, duplicateExplicitParameterSetName: false);
+
+    private static string CreatePowerShellDuplicateSyntaxHelpXml(bool includeExplicitParameterSetNames, bool duplicateExplicitParameterSetName)
     {
         var firstSetAttribute = includeExplicitParameterSetNames ? " parameterSetName=\"Document\"" : string.Empty;
-        var secondSetAttribute = includeExplicitParameterSetNames ? " parameterSetName=\"PipelineDocument\"" : string.Empty;
+        var secondSetName = duplicateExplicitParameterSetName ? "Document" : "PipelineDocument";
+        var secondSetAttribute = includeExplicitParameterSetNames ? $" parameterSetName=\"{secondSetName}\"" : string.Empty;
 
         return
             $$"""
