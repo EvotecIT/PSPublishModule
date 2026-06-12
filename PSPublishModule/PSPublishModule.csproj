@@ -27,7 +27,7 @@
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
     <PackageReference Include="Spectre.Console" Version="0.55.2" />
     <PackageReference Include="Spectre.Console.Json" Version="0.55.2" />
-    <PackageReference Include="HtmlForgeX" Version="0.43.1" />
+    <PackageReference Include="HtmlForgeX" Version="0.44.0" />
     <PackageReference Include="HtmlForgeX.Markdown" Version="0.20.12" />
     <PackageReference Include="OfficeIMO.Markdown" Version="0.6.29" />
   </ItemGroup>

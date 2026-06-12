@@ -78,15 +78,15 @@
       },
       "HtmlForgeX": {
         "type": "Transitive",
-        "resolved": "0.43.1",
-        "contentHash": "LWrVZqbh5qKndU7fV5ze7L5N4plfsIX6VXVEVHHXUEFw97iSocz1XPSP7PGEvkHvKKmllNFRtrbqo8V8yHrlqQ=="
+        "resolved": "0.44.0",
+        "contentHash": "DyIafz6fxyfdWO+fUzvur50PawS0NEmPODOd3ODZ4bswXnsPnK3xRHGtxVPWfpD1+TE2Dy0xD14w2m6ISSb1Ww=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Transitive",
         "resolved": "0.20.12",
-        "contentHash": "X7zd7Tskr/iBRMuMnRNw1AKrZRwVunFJC2vuJDrAaptycCQq5wQc1VhFNyK2Qs9BEm9+P7VWyMmrwQkgMz5zcw==",
+        "contentHash": "qYO9KHp/FybdhX7jxiLqODKA60ASdhCZOhBdugvRKqRgJAIQ32BcS3tD8y2euLD5voUpwROOJOJq3xBqWBpU1w==",
         "dependencies": {
-          "HtmlForgeX": "0.43.1",
+          "HtmlForgeX": "0.44.0",
           "OfficeIMO.Markdown": "0.6.29"
         }
       },
@@ -899,7 +899,7 @@
       "pspublishmodule": {
         "type": "Project",
         "dependencies": {
-          "HtmlForgeX": "[0.43.1, )",
+          "HtmlForgeX": "[0.44.0, )",
           "HtmlForgeX.Markdown": "[0.20.12, )",
           "OfficeIMO.Markdown": "[0.6.29, )",
           "PowerForge": "[1.0.0, )",
