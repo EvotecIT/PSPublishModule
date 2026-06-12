@@ -135,6 +135,28 @@ EXAMPLES
     }
 
     [Fact]
+    public void AboutTopicMarkdown_Fences_Multiline_Script_Examples()
+    {
+        const string content = @"
+TOPIC
+    about_Examples
+
+EXAMPLES
+    if ($items.Count -gt 0) {
+        $items | ConvertTo-Json
+    }
+
+    Writes JSON only when items exist.
+";
+
+        var res = AboutTopicMarkdown.Convert("about_Examples.help", content);
+        var markdown = res.Markdown.Replace("\r\n", "\n");
+
+        Assert.Contains("```powershell\nif ($items.Count -gt 0) {\n$items | ConvertTo-Json\n}\n```", markdown);
+        Assert.Contains("Writes JSON only when items exist.", markdown);
+    }
+
+    [Fact]
     public void MamlHelpWriter_WritesParameterSetNameAndPossibleValues()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-maml-help-writer-values-" + Guid.NewGuid().ToString("N"));

@@ -591,6 +591,13 @@ internal static class AboutTopicMarkdown
         if (trimmed.StartsWith("$", StringComparison.Ordinal))
             return true;
 
+        if (trimmed is "{" or "}" or "};" or "})" or "});")
+            return true;
+
+        if (trimmed.EndsWith("{", StringComparison.Ordinal) &&
+            IsPowerShellControlFlowStart(trimmed))
+            return true;
+
         var first = trimmed.Split(new[] { ' ', '\t', '|' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         if (string.IsNullOrWhiteSpace(first))
             return false;
@@ -600,6 +607,24 @@ internal static class AboutTopicMarkdown
                && dash < first.Length - 1
                && first.Take(dash).All(char.IsLetter)
                && first.Skip(dash + 1).All(ch => char.IsLetterOrDigit(ch) || ch == '_');
+    }
+
+    private static bool IsPowerShellControlFlowStart(string trimmed)
+    {
+        var first = trimmed.Split(new[] { ' ', '\t', '(' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return first is not null &&
+               (first.Equals("if", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("elseif", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("else", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("foreach", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("for", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("while", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("do", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("switch", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("try", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("catch", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("finally", StringComparison.OrdinalIgnoreCase) ||
+                first.Equals("function", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsHelpTextCodeLine(string line)
