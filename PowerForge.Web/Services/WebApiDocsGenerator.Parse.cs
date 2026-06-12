@@ -173,11 +173,14 @@ public static partial class WebApiDocsGenerator
             {
                 foreach (var syntaxItem in syntax.Elements(commandNs + "syntaxItem"))
                 {
+                    var parameterSetName = ResolvePowerShellParameterSetName(syntaxItem, commandNs, mamlNs, devNs);
                     var member = new ApiMemberModel
                     {
                         Name = name!,
                         Kind = "CommandSyntax",
-                        ParameterSetName = ResolvePowerShellParameterSetName(syntaxItem, commandNs, mamlNs, devNs),
+                        ParameterSetName = parameterSetName,
+                        SourceParameterSetName = parameterSetName,
+                        HasExplicitParameterSetName = !string.IsNullOrWhiteSpace(parameterSetName),
                         IncludesCommonParameters = includesCommonParameters,
                         Returns = returns,
                         ReturnType = type.OutputTypes.Count == 1 ? type.OutputTypes[0] : null
