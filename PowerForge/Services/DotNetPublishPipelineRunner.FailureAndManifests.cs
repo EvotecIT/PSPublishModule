@@ -521,7 +521,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 OutputFiles = ToManifestOutputFiles(projectRoot, files),
                 Files = files.Length,
                 TotalBytes = SumFileBytes(files),
-                SignedFiles = build.SignedFiles is { Length: > 0 } ? build.SignedFiles.Length : null
+                SignedFiles = build.SignedFiles is { Length: > 0 } ? build.SignedFiles.Length : null,
+                PackageMetadata = ToManifestPackageMetadata(projectRoot, build.PackageMetadata)
             });
         }
 
@@ -552,6 +553,7 @@ public sealed partial class DotNetPublishPipelineRunner
         public DotNetPublishServicePackageResult? ServicePackage { get; set; }
         public DotNetPublishStateTransferResult? StateTransfer { get; set; }
         public int? SignedFiles { get; set; }
+        public DotNetPublishMsiPackageMetadata[]? PackageMetadata { get; set; }
     }
 
     private static bool HasCleanup(DotNetPublishCleanupResult? cleanup)
@@ -577,6 +579,29 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
 
         return outputFiles.Length == 0 ? null : outputFiles;
+    }
+
+    private static DotNetPublishMsiPackageMetadata[]? ToManifestPackageMetadata(
+        string projectRoot,
+        IEnumerable<DotNetPublishMsiPackageMetadata>? packages)
+    {
+        var metadata = (packages ?? Array.Empty<DotNetPublishMsiPackageMetadata>())
+            .Where(package => package is not null && !string.IsNullOrWhiteSpace(package.Path))
+            .Select(package => new DotNetPublishMsiPackageMetadata
+            {
+                Path = Path.IsPathRooted(package.Path)
+                    ? ToManifestRelativePath(projectRoot, package.Path)
+                    : package.Path.Replace('\\', '/'),
+                ProductCode = EmptyToNull(package.ProductCode),
+                ProductName = EmptyToNull(package.ProductName),
+                ProductVersion = EmptyToNull(package.ProductVersion),
+                Manufacturer = EmptyToNull(package.Manufacturer),
+                UpgradeCode = EmptyToNull(package.UpgradeCode),
+                ReadError = EmptyToNull(package.ReadError)
+            })
+            .ToArray();
+
+        return metadata.Length == 0 ? null : metadata;
     }
 
     private static IEnumerable<string> EnumerateStorePackageFiles(DotNetPublishStorePackageResult store)

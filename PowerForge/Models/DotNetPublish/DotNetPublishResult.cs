@@ -256,6 +256,9 @@ public sealed class DotNetPublishMsiBuildResult
     /// <summary>MSI files signed by <c>msi.sign</c> step.</summary>
     public string[] SignedFiles { get; set; } = Array.Empty<string>();
 
+    /// <summary>Package identity metadata read from detected MSI output files.</summary>
+    public DotNetPublishMsiPackageMetadata[] PackageMetadata { get; set; } = Array.Empty<DotNetPublishMsiPackageMetadata>();
+
     /// <summary>Resolved MSI version used for build (when version policy is enabled).</summary>
     public string? Version { get; set; }
 
