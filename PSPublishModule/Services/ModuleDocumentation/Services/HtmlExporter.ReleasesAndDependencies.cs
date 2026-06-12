@@ -472,27 +472,13 @@ internal sealed partial class HtmlExporter
         if (m.Inputs.Count > 0)
         {
             sb.AppendLine("## Inputs");
-            sb.AppendLine("| Type | Description |");
-            sb.AppendLine("|:-----|:------------|");
-            foreach (var t in m.Inputs)
-            {
-                var type = (t.TypeName ?? string.Empty).Replace("|", "\\|");
-                var desc = string.IsNullOrWhiteSpace(t.Description) ? "" : t.Description!.Replace("|", "\\|");
-                sb.AppendLine($"| {type} | {desc} |");
-            }
+            AppendTypeHelpList(sb, m.Inputs);
             sb.AppendLine();
         }
         if (m.Outputs.Count > 0)
         {
             sb.AppendLine("## Outputs");
-            sb.AppendLine("| Type | Description |");
-            sb.AppendLine("|:-----|:------------|");
-            foreach (var t in m.Outputs)
-            {
-                var type = (t.TypeName ?? string.Empty).Replace("|", "\\|");
-                var desc = string.IsNullOrWhiteSpace(t.Description) ? "" : t.Description!.Replace("|", "\\|");
-                sb.AppendLine($"| {type} | {desc} |");
-            }
+            AppendTypeHelpList(sb, m.Outputs);
             sb.AppendLine();
         }
         if (!string.IsNullOrWhiteSpace(m.Notes))
@@ -510,6 +496,30 @@ internal sealed partial class HtmlExporter
             }
         }
         return sb.ToString();
+    }
+
+    internal static string RenderHelpMarkdownForTesting(CommandHelpModel model) => RenderHelpMarkdown(model);
+
+    private static void AppendTypeHelpList(System.Text.StringBuilder sb, IEnumerable<TypeHelp> types)
+    {
+        foreach (var t in types)
+        {
+            var type = EscapeCodeSpan(string.IsNullOrWhiteSpace(t.TypeName) ? "None" : t.TypeName.Trim());
+            var desc = NormalizeListDescription(t.Description);
+            sb.AppendLine(string.IsNullOrWhiteSpace(desc)
+                ? $"- `{type}`"
+                : $"- `{type}` - {desc}");
+        }
+    }
+
+    private static string EscapeCodeSpan(string value) => value.Replace("`", "\\`");
+
+    private static string NormalizeListDescription(string? value)
+    {
+        var text = value ?? string.Empty;
+        return string.IsNullOrWhiteSpace(text)
+            ? string.Empty
+            : text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", " ").Trim();
     }
 
     private static string BuildDependenciesMarkdown(ModuleInfoModel module)

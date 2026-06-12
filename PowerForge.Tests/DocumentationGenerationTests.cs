@@ -83,6 +83,35 @@ EXAMPLES
     }
 
     [Fact]
+    public void AboutTopicMarkdown_Fences_Command_And_Environment_Blocks()
+    {
+        const string content = @"
+TOPIC
+    about_PrivateGalleries
+
+LONG DESCRIPTION
+    Create and connect a profile directly:
+
+        Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+
+    Configure these machine or user environment variables before running -InstallPrerequisites:
+
+        POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE
+        POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE
+
+    The package variables may point at local paths, UNC paths, or internal HTTPS mirror URLs.
+";
+
+        var res = AboutTopicMarkdown.Convert("about_PrivateGalleries.help", content);
+        var markdown = res.Markdown.Replace("\r\n", "\n");
+
+        Assert.Contains("```powershell\nInitialize-ModuleRepository -ProfileName Company", markdown);
+        Assert.Contains("POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE", markdown);
+        Assert.Contains("POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE\n```", markdown);
+        Assert.Contains("The package variables may point at local paths", markdown);
+    }
+
+    [Fact]
     public void MamlHelpWriter_WritesParameterSetNameAndPossibleValues()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-maml-help-writer-values-" + Guid.NewGuid().ToString("N"));

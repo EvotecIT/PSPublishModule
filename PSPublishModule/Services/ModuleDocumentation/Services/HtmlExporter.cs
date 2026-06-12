@@ -21,7 +21,8 @@ internal sealed partial class HtmlExporter
         var list = items?.ToList() ?? new List<DocumentItem>();
 
         // Build document page per HtmlForgeX examples
-        var doc = new Document { ThemeMode = ThemeMode.System, LibraryMode = LibraryMode.Online };
+        var doc = new Document { ThemeMode = ThemeMode.System, LibraryMode = LibraryMode.Offline };
+        ConfigureDocumentDefaults(doc);
         // Route all Markdown(...) calls through the OfficeIMO-backed provider for consistent GFM-style parsing.
         doc.Settings(settings => settings.UseOfficeImo(options =>
         {
@@ -250,6 +251,7 @@ internal sealed partial class HtmlExporter
                                     tabs.AddTab("🧩 Scripts", panel =>
                                     {
                                         panel.Tabs(inner => {
+                                            ConfigureNestedTabs(inner);
                                             foreach (var s in scripts)
                                             {
                                                 var name = string.IsNullOrWhiteSpace(s.FileName) ? s.Title : s.FileName;
@@ -277,9 +279,11 @@ internal sealed partial class HtmlExporter
                 if (docsLocal.Count > 0 && docsRepo.Count > 0)
                 {
                     panel.Tabs(group => {
+                        ConfigureNestedTabs(group, navWidth: "12rem");
                         group.AddTab("📄 Local", p =>
                         {
                             var inner = new TablerTabs();
+                            ConfigureNestedTabs(inner);
                             p.Add(inner);
                             foreach (var d in docsLocal)
                             {
@@ -295,6 +299,7 @@ internal sealed partial class HtmlExporter
                         group.AddTab("🌐 Repository", p =>
                         {
                             var inner = new TablerTabs();
+                            ConfigureNestedTabs(inner);
                             p.Add(inner);
                             foreach (var d in docsRepo)
                             {
@@ -313,6 +318,7 @@ internal sealed partial class HtmlExporter
                 {
                     var render = docsLocal.Count > 0 ? docsLocal : docsRepo;
                     var inner = new TablerTabs();
+                    ConfigureNestedTabs(inner);
                     panel.Add(inner);
                     foreach (var d in render)
                     {
@@ -366,15 +372,18 @@ internal sealed partial class HtmlExporter
                 {
                     panel.Tabs(group =>
                     {
+                        ConfigureNestedTabs(group, navWidth: "12rem");
                         group.AddTab("📄 Local", p =>
                         {
                             var inner = new TablerTabs();
+                            ConfigureNestedTabs(inner);
                             p.Add(inner);
                             RenderSourceTabs(inner, docSourcesLocal);
                         });
                         group.AddTab("🌐 Repository", p =>
                         {
                             var inner = new TablerTabs();
+                            ConfigureNestedTabs(inner);
                             p.Add(inner);
                             RenderSourceTabs(inner, docSourcesRepo);
                         });
@@ -384,6 +393,7 @@ internal sealed partial class HtmlExporter
                 {
                     var render = docSourcesLocal.Count > 0 ? docSourcesLocal : docSourcesRepo;
                     var inner = new TablerTabs();
+                    ConfigureNestedTabs(inner);
                     panel.Add(inner);
                     RenderSourceTabs(inner, render);
                 }
@@ -398,6 +408,7 @@ internal sealed partial class HtmlExporter
                                     tabs.AddTab("ℹ️ About", panel =>
                                     {
                                         panel.Tabs(inner => {
+                                            ConfigureNestedTabs(inner);
                                             foreach (var a in abouts.OrderBy(x => x.FileName ?? x.Title, StringComparer.OrdinalIgnoreCase))
                                             {
                                                 var name = string.IsNullOrWhiteSpace(a.FileName) ? a.Title : a.FileName;
@@ -423,6 +434,7 @@ internal sealed partial class HtmlExporter
                                     tabs.AddTab("📐 Formats / Types", panel =>
                                     {
                                         panel.Tabs(inner => {
+                                            ConfigureNestedTabs(inner);
                                             foreach (var f in formats.OrderBy(x => x.FileName ?? x.Title, StringComparer.OrdinalIgnoreCase))
                                             {
                                                 var name = string.IsNullOrWhiteSpace(f.FileName) ? f.Title : f.FileName;
@@ -453,6 +465,7 @@ internal sealed partial class HtmlExporter
                                     tabs.AddTab("👥 Community", panel =>
                                     {
                                         panel.Tabs(inner => {
+                                            ConfigureNestedTabs(inner);
                                             foreach (var c in community.OrderBy(x => x.FileName ?? x.Title, StringComparer.OrdinalIgnoreCase))
                                             {
                                                 var name = string.IsNullOrWhiteSpace(c.FileName) ? c.Title : c.FileName;
@@ -496,6 +509,7 @@ internal sealed partial class HtmlExporter
                                     tabs.AddTab("🔗 Dependencies", panel =>
                                     {
                                         panel.Tabs(depTabs => {
+                                            ConfigureNestedTabs(depTabs, navWidth: "12rem");
                                             // Declared (combined) table
                                             depTabs.AddTab("📋 Declared", p => {
                                                 var rootRow = new [] { new {
@@ -608,6 +622,7 @@ internal sealed partial class HtmlExporter
                                         tabs.AddTab("⚙️ Commands", panel =>
                                         {
                                         panel.Tabs(inner => {
+                                            ConfigureNestedTabs(inner, navWidth: "20rem");
                                             foreach (var entry in helpMap)
                                             {
                                                 var label = $"{EmojiForCommand(entry.Command)} {entry.Command}".Replace("-", "‑");
@@ -766,7 +781,11 @@ internal sealed partial class HtmlExporter
             {
                 var next = NextNonEmpty(lines, i + 1);
                 if (!IsHorizontalRule(next))
+                {
+                    output.Add(string.Empty);
                     output.Add("---");
+                    output.Add(string.Empty);
+                }
             }
         }
 

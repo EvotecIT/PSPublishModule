@@ -211,25 +211,24 @@ internal sealed partial class DocumentationPlanner
     private static string AboutToMarkdown(string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return string.Empty;
-        var lines = content.Replace("\r\n", "\n").Split('\n');
-        var sb = new System.Text.StringBuilder(content.Length + 256);
-        foreach (var line in lines)
-        {
-            var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed)) { sb.AppendLine(); continue; }
-            // Uppercase headings become H3 for readability
-            bool looksHeading = trimmed.Length <= 40 && trimmed.ToUpperInvariant() == trimmed && trimmed.All(ch => !char.IsLetter(ch) || char.IsUpper(ch));
-            if (looksHeading)
-            {
-                var title = System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(trimmed.ToLowerInvariant());
-                sb.Append("### ").Append(title).AppendLine();
-            }
-            else
-            {
-                sb.AppendLine(trimmed);
-            }
-        }
-        return sb.ToString();
+        var converted = AboutTopicMarkdown.Convert("about_topic.help", content);
+        return StripYamlFrontMatter(converted.Markdown);
+    }
+
+    internal static string AboutToMarkdownForTesting(string content)
+        => AboutToMarkdown(content);
+
+    private static string StripYamlFrontMatter(string markdown)
+    {
+        if (!markdown.StartsWith("---\n", StringComparison.Ordinal))
+            return markdown;
+
+        var end = markdown.IndexOf("\n---", 4, StringComparison.Ordinal);
+        if (end < 0)
+            return markdown;
+
+        var contentStart = markdown.IndexOf('\n', end + 1);
+        return contentStart < 0 ? string.Empty : markdown.Substring(contentStart + 1).TrimStart();
     }
 
     private static List<RepoRelease> NormalizeRepoReleases(IEnumerable<RepoRelease> releases, string? projectUri)

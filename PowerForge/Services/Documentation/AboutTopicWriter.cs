@@ -329,20 +329,7 @@ internal static class AboutTopicMarkdown
                 continue;
             }
 
-            if (title.Equals("EXAMPLES", StringComparison.OrdinalIgnoreCase))
-            {
-                sb.AppendLine("```text");
-                foreach (var l in body) sb.AppendLine(l);
-                sb.AppendLine("```");
-                sb.AppendLine();
-                continue;
-            }
-
-            foreach (var paragraph in SplitParagraphs(body))
-            {
-                sb.AppendLine(paragraph);
-                sb.AppendLine();
-            }
+            AppendHelpTextBodyMarkdown(sb, body);
         }
 
         var helpText = GeneratedTextNormalizer.Normalize(string.Join("\n", SplitLines(content)));
@@ -488,7 +475,7 @@ internal static class AboutTopicMarkdown
             current ??= new AboutSection("CONTENT");
             if (!sections.Contains(current)) sections.Add(current);
 
-            current.BodyLines.Add(line.Trim());
+            current.BodyLines.Add(line.TrimEnd());
         }
 
         return sections;
@@ -512,9 +499,19 @@ internal static class AboutTopicMarkdown
     private static List<string> NormalizeBody(List<string> lines)
     {
         var output = new List<string>();
+        var commonIndent = lines
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Select(CountLeadingSpaces)
+            .DefaultIfEmpty(0)
+            .Min();
+
         foreach (var l in lines)
         {
-            output.Add((l ?? string.Empty).TrimEnd());
+            var line = (l ?? string.Empty).TrimEnd();
+            if (commonIndent > 0 && line.Length >= commonIndent)
+                line = line.Substring(commonIndent);
+
+            output.Add(line);
         }
 
         // Trim leading/trailing empties
@@ -523,25 +520,213 @@ internal static class AboutTopicMarkdown
         return output;
     }
 
-    private static IEnumerable<string> SplitParagraphs(List<string> lines)
+    private static void AppendHelpTextBodyMarkdown(StringBuilder sb, List<string> lines)
     {
-        var sb = new StringBuilder();
-        foreach (var l in lines)
+        var inCodeBlock = false;
+        var wroteBlank = false;
+
+        foreach (var raw in lines)
         {
-            if (string.IsNullOrWhiteSpace(l))
+            var line = raw ?? string.Empty;
+            var trimmed = line.Trim();
+
+            if (string.IsNullOrWhiteSpace(trimmed))
             {
-                var p = sb.ToString().Trim();
-                if (!string.IsNullOrWhiteSpace(p)) yield return p;
-                sb.Clear();
+                if (inCodeBlock)
+                {
+                    sb.AppendLine("```");
+                    inCodeBlock = false;
+                }
+
+                if (!wroteBlank)
+                {
+                    sb.AppendLine();
+                    wroteBlank = true;
+                }
+
                 continue;
             }
 
-            if (sb.Length > 0) sb.AppendLine();
-            sb.Append(l);
+            if (IsHelpTextCodeLine(line))
+            {
+                if (!inCodeBlock)
+                {
+                    if (!wroteBlank)
+                        sb.AppendLine();
+
+                    sb.AppendLine("```powershell");
+                    inCodeBlock = true;
+                }
+
+                sb.AppendLine(trimmed);
+                wroteBlank = false;
+                continue;
+            }
+
+            if (inCodeBlock)
+            {
+                sb.AppendLine("```");
+                sb.AppendLine();
+                inCodeBlock = false;
+            }
+
+            sb.AppendLine(trimmed);
+            wroteBlank = false;
         }
 
-        var last = sb.ToString().Trim();
-        if (!string.IsNullOrWhiteSpace(last)) yield return last;
+        if (inCodeBlock)
+        {
+            sb.AppendLine("```");
+        }
+
+        sb.AppendLine();
+    }
+
+    private static bool IsHelpTextCodeLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return false;
+
+        var trimmed = line.Trim();
+        if (IsPowerShellPromptLine(trimmed))
+            return true;
+
+        if (trimmed.StartsWith(".\\", StringComparison.Ordinal) ||
+            trimmed.StartsWith("./", StringComparison.Ordinal) ||
+            trimmed.StartsWith("%", StringComparison.Ordinal) ||
+            trimmed.StartsWith("$env:", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (IsPowerShellCommandLine(trimmed))
+            return true;
+
+        if (IsAssignmentLine(trimmed))
+            return true;
+
+        if (IsUpperSnakeIdentifier(trimmed))
+            return true;
+
+        return CountLeadingSpaces(line) >= 8 && !IsMarkdownListLine(trimmed);
+    }
+
+    private static bool IsPowerShellPromptLine(string line)
+    {
+        if (line.StartsWith(">>", StringComparison.Ordinal))
+            return true;
+
+        if (!line.StartsWith("PS", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (line.Length == 2)
+            return false;
+
+        if (line[2] == '>')
+            return true;
+
+        var promptEnd = line.IndexOf('>');
+        return promptEnd > 2 && char.IsWhiteSpace(line[2]);
+    }
+
+    private static bool IsPowerShellCommandLine(string line)
+    {
+        if (line.IndexOf(" -", StringComparison.Ordinal) < 0)
+            return false;
+
+        var first = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(first))
+            return false;
+
+        var dash = first.IndexOf('-');
+        if (dash <= 0 || dash == first.Length - 1)
+            return false;
+
+        return first.Take(dash).All(char.IsLetter)
+               && first.Skip(dash + 1).All(ch => char.IsLetterOrDigit(ch) || ch == '_');
+    }
+
+    private static bool IsAssignmentLine(string line)
+    {
+        var equals = line.IndexOf('=');
+        if (equals <= 0)
+            return false;
+
+        var left = line.Substring(0, equals).Trim();
+        var right = line.Substring(equals + 1).Trim();
+        if (left.Length == 0 || left.Length > 80)
+            return false;
+
+        if (right.IndexOf(". ", StringComparison.Ordinal) >= 0)
+            return false;
+
+        return left.All(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '.' || ch == '-')
+               && !line.EndsWith(".", StringComparison.Ordinal);
+    }
+
+    private static bool IsUpperSnakeIdentifier(string line)
+    {
+        if (line.Length < 8 || line.IndexOf(' ') >= 0)
+            return false;
+
+        var hasUnderscore = false;
+        var hasLetter = false;
+        foreach (var ch in line)
+        {
+            if (ch == '_')
+            {
+                hasUnderscore = true;
+                continue;
+            }
+
+            if (char.IsLetter(ch))
+            {
+                hasLetter = true;
+                if (!char.IsUpper(ch))
+                    return false;
+                continue;
+            }
+
+            if (!char.IsDigit(ch))
+                return false;
+        }
+
+        return hasUnderscore && hasLetter;
+    }
+
+    private static bool IsMarkdownListLine(string line)
+    {
+        if (line.StartsWith("- ", StringComparison.Ordinal) ||
+            line.StartsWith("* ", StringComparison.Ordinal))
+            return true;
+
+        var dot = line.IndexOf('.');
+        return dot > 0
+               && dot < 4
+               && line.Take(dot).All(char.IsDigit)
+               && dot + 1 < line.Length
+               && char.IsWhiteSpace(line[dot + 1]);
+    }
+
+    private static int CountLeadingSpaces(string line)
+    {
+        var count = 0;
+        foreach (var ch in line ?? string.Empty)
+        {
+            if (ch == ' ')
+            {
+                count++;
+                continue;
+            }
+
+            if (ch == '\t')
+            {
+                count += 4;
+                continue;
+            }
+
+            break;
+        }
+
+        return count;
     }
 
     private static string ToTitleCase(string upper)

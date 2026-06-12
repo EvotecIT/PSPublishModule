@@ -9,6 +9,7 @@ using PowerForge;
 using System.Collections;
 using System.Management.Automation;
 using System.Management.Automation.Language;
+using System.Threading.Tasks;
 
 namespace PSPublishModule;
 
@@ -270,48 +271,103 @@ internal sealed partial class HtmlExporter
         ExamplesLayout examplesLayout,
         Action<string>? log)
     {
-        var list = new List<(string, string?, int, bool)>();
-        var parser = new GetHelpParser();
-        foreach (var cmd in commands)
+        if (commands.Count == 0)
+            return new List<(string, string?, int, bool)>();
+
+        var degree = Math.Max(1, Math.Min(Math.Min(Environment.ProcessorCount, commands.Count), 4));
+        log?.Invoke($"Rendering command help in parallel (degree {degree})...");
+
+        var results = new HelpRenderResult[commands.Count];
+        Parallel.ForEach(
+            Enumerable.Range(0, commands.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = degree },
+            index =>
+            {
+                results[index] = RenderCommandHelp(moduleName, commands[index], timeoutSeconds, examplesMode, examplesLayout);
+            });
+
+        var list = new List<(string, string?, int, bool)>(results.Length);
+        foreach (var result in results)
         {
-            string? content = null;
-            var structured = false;
-            var model = parser.Parse(cmd, timeoutSeconds, examplesMode);
-            if (model != null)
+            foreach (var message in result.Messages)
             {
-                content = CommandHelpMarkdownFormatter.Render(moduleName, model, examplesLayout);
-                structured = true;
+                log?.Invoke(message);
             }
-            else
+
+            list.Add((result.Command, result.Help, result.Lines, result.Structured));
+        }
+
+        return list;
+    }
+
+    private HelpRenderResult RenderCommandHelp(
+        string moduleName,
+        string cmd,
+        int timeoutSeconds,
+        ExamplesMode examplesMode,
+        ExamplesLayout examplesLayout)
+    {
+        var messages = new List<string>();
+        var parser = new GetHelpParser();
+        string? content = null;
+        var structured = false;
+        var model = parser.Parse(cmd, timeoutSeconds, examplesMode);
+        if (model != null)
+        {
+            content = CommandHelpMarkdownFormatter.Render(moduleName, model, examplesLayout);
+            structured = true;
+        }
+        else
+        {
+            // Fallback to raw Get-Help text -> markdown
+            content = GetHelpMarkdown(moduleName, cmd, timeoutSeconds);
+        }
+        var lines = string.IsNullOrEmpty(content) ? 0 : content!.Split(new[] {'\n'}, StringSplitOptions.None).Length;
+        if (model != null)
+        {
+            var sets = model.Syntax?.Count ?? 0;
+            var pcount = model.Parameters?.Count ?? 0;
+            var ex = model.Examples?.Count ?? 0;
+            messages.Add($"Rendering help for {cmd}... (structured: sets={sets}, params={pcount}, examples={ex})");
+            // Per-example diagnostics
+            if (model.Examples != null && model.Examples.Count > 0)
             {
-                // Fallback to raw Get-Help text -> markdown
-                content = GetHelpMarkdown(moduleName, cmd, timeoutSeconds);
-            }
-            var lines = string.IsNullOrEmpty(content) ? 0 : content!.Split(new[] {'\n'}, StringSplitOptions.None).Length;
-            if (model != null)
-            {
-                var sets = model.Syntax?.Count ?? 0;
-                var pcount = model.Parameters?.Count ?? 0;
-                var ex = model.Examples?.Count ?? 0;
-                log?.Invoke($"Rendering help for {cmd}... (structured: sets={sets}, params={pcount}, examples={ex})");
-                // Per-example diagnostics
-                if (model.Examples != null && model.Examples.Count > 0)
+                for (int i = 0; i < model.Examples.Count; i++)
                 {
-                    for (int i = 0; i < model.Examples.Count; i++)
-                    {
-                        var e = model.Examples[i];
-                        var mode = string.IsNullOrEmpty(e.Mode) ? "structured" : e.Mode!;
-                        log?.Invoke($"  • Example {i + 1}: mode={mode}, codeLines={e.CodeLines}, remarksLines={e.RemarksLines}");
-                    }
+                    var e = model.Examples[i];
+                    var mode = string.IsNullOrEmpty(e.Mode) ? "structured" : e.Mode!;
+                    messages.Add($"  • Example {i + 1}: mode={mode}, codeLines={e.CodeLines}, remarksLines={e.RemarksLines}");
                 }
             }
-            else
-            {
-                log?.Invoke($"Rendering help for {cmd}... ({lines} lines)");
-            }
-            list.Add((cmd, content, lines, structured));
         }
-        return list;
+        else
+        {
+            messages.Add($"Rendering help for {cmd}... ({lines} lines)");
+        }
+
+        return new HelpRenderResult(cmd, content, lines, structured, messages);
+    }
+
+    private sealed class HelpRenderResult
+    {
+        public HelpRenderResult(string command, string? help, int lines, bool structured, IReadOnlyList<string> messages)
+        {
+            Command = command;
+            Help = help;
+            Lines = lines;
+            Structured = structured;
+            Messages = messages;
+        }
+
+        public string Command { get; }
+
+        public string? Help { get; }
+
+        public int Lines { get; }
+
+        public bool Structured { get; }
+
+        public IReadOnlyList<string> Messages { get; }
     }
 
 }

@@ -90,6 +90,59 @@ public class ModuleDocumentationReviewRegressionTests
     }
 
     [Fact]
+    public void DocumentationPlanner_Fences_AboutTopic_PowerShell_Prompt_Blocks()
+    {
+        var markdown = DocumentationPlanner.AboutToMarkdownForTesting("""
+        EXAMPLES
+
+        PS> Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -Settings {
+
+            >>     New-ConfigurationModule -Type RequiredModule -Name 'Pester'
+            >>     New-ConfigurationBuild -Enable
+            >> }
+
+        Builds the module.
+        """);
+
+        Assert.Contains("```powershell", markdown);
+        Assert.Contains("PS> Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -Settings {", markdown);
+        Assert.Contains(">>     New-ConfigurationModule -Type RequiredModule -Name 'Pester'", markdown);
+        Assert.Contains(">> }", markdown);
+        Assert.Contains("```\n\nBuilds the module.", markdown.Replace("\r\n", "\n"));
+    }
+
+    [Fact]
+    public void DocumentationPlanner_Discovers_Help_About_Source_Folder()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PFDocsAbout", System.Guid.NewGuid().ToString("N")));
+        var about = Directory.CreateDirectory(Path.Combine(root.FullName, "Help", "About"));
+        File.WriteAllText(Path.Combine(about.FullName, "about_Demo.help.txt"), """
+        TOPIC
+            about_Demo
+
+        SHORT DESCRIPTION
+            Demo about topic.
+        """);
+
+        try
+        {
+            var planner = new DocumentationPlanner(new DocumentationFinder());
+            var result = planner.Execute(new DocumentationPlanner.Request
+            {
+                RootBase = root.FullName
+            });
+
+            var item = Assert.Single(result.Items, i => i.Kind == "ABOUT");
+            Assert.Equal("about_Demo.help.txt", item.FileName);
+            Assert.Contains("Demo about topic.", item.Content);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void CoreResolver_Allows_Module_Local_Microsoft_And_System_Package_Names()
     {
         Assert.False(OnModuleImportAndRemove.ShouldSkipCoreResolutionForTesting("Microsoft.Extensions.Logging"));

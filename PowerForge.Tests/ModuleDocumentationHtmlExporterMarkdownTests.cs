@@ -27,8 +27,8 @@ public class HtmlExporterMarkdownTests
         ```
         """);
 
-        Assert.Contains("# Title\n---\nText", prepared, StringComparison.Ordinal);
-        Assert.Contains("## Section\n---\nMore", prepared, StringComparison.Ordinal);
+        Assert.Contains("# Title\n\n---\n\nText", prepared, StringComparison.Ordinal);
+        Assert.Contains("## Section\n\n---\n\nMore", prepared, StringComparison.Ordinal);
         Assert.Contains("```powershell\n# Not a heading\n```", prepared, StringComparison.Ordinal);
 
         module.HeadingRules = DocumentationHeadingRules.H1;
@@ -39,8 +39,8 @@ public class HtmlExporterMarkdownTests
         More
         """);
 
-        Assert.Contains("# Title\n---\nText", prepared, StringComparison.Ordinal);
-        Assert.DoesNotContain("## Section\n---\nMore", prepared, StringComparison.Ordinal);
+        Assert.Contains("# Title\n\n---\n\nText", prepared, StringComparison.Ordinal);
+        Assert.DoesNotContain("## Section\n\n---\n\nMore", prepared, StringComparison.Ordinal);
 
         module.HeadingRules = DocumentationHeadingRules.None;
         prepared = HtmlExporter.PrepareMarkdownForTesting(module, "# Title\nText");
@@ -96,6 +96,196 @@ public class HtmlExporterMarkdownTests
                 File.Delete(outputPath);
             }
         }
+    }
+
+    [Fact]
+    public void Export_Uses_Lazy_DataTables_For_Markdown_Tables()
+    {
+        var exporter = new HtmlExporter();
+        var module = new ModuleInfoModel
+        {
+            Name = "ugit",
+            Version = "1.0.0",
+            SkipCommands = true,
+            SkipDependencies = true
+        };
+
+        var items = new[]
+        {
+            new DocumentItem
+            {
+                Title = "README",
+                Kind = "FILE",
+                Source = "Local",
+                Content = """
+                | Name | Value |
+                | --- | --- |
+                | One | 1 |
+                | Two | 2 |
+                """
+            }
+        };
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.html");
+
+        try
+        {
+            exporter.Export(module, items, outputPath, open: false);
+
+            var html = File.ReadAllText(outputPath);
+            Assert.Contains("var lazy = true;", html, StringComparison.Ordinal);
+            Assert.Contains("window.htmlForgeXWhenVisible", html, StringComparison.Ordinal);
+            Assert.Contains("deferRender", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Fact]
+    public void Export_Adds_Module_Documentation_Markdown_Theme()
+    {
+        var exporter = new HtmlExporter();
+        var module = new ModuleInfoModel
+        {
+            Name = "ugit",
+            Version = "1.0.0",
+            SkipCommands = true,
+            SkipDependencies = true
+        };
+
+        var items = new[]
+        {
+            new DocumentItem
+            {
+                Title = "README",
+                Kind = "FILE",
+                Source = "Local",
+                Content = """
+                # Themed Markdown
+
+                ## Setup
+
+                Use `Install-Module` for setup.
+
+                ```powershell
+                Install-Module ugit -Scope CurrentUser
+                ```
+                """
+            }
+        };
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.html");
+
+        try
+        {
+            exporter.Export(module, items, outputPath, open: false);
+
+            var html = File.ReadAllText(outputPath);
+            Assert.Contains("hfx-module-docs-markdown", html, StringComparison.Ordinal);
+            Assert.Contains(".hfx-md h2", html, StringComparison.Ordinal);
+            Assert.Contains(".hfx-md :not(pre) > code", html, StringComparison.Ordinal);
+            Assert.Contains("overflow-wrap: anywhere", html, StringComparison.Ordinal);
+            Assert.Contains("language-powershell", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("languages.powershell", html, StringComparison.Ordinal);
+            Assert.Contains("Themed Markdown", html, StringComparison.Ordinal);
+            Assert.Contains("Setup", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("cdn.jsdelivr.net", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(">## Themed Markdown<", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("># Themed Markdown<", html, StringComparison.Ordinal);
+            Assert.DoesNotContain(">## Setup<", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Fact]
+    public void Export_Renders_Nested_Documentation_Tabs_Vertically()
+    {
+        var exporter = new HtmlExporter();
+        var module = new ModuleInfoModel
+        {
+            Name = "ugit",
+            Version = "1.0.0",
+            SkipCommands = true,
+            SkipDependencies = true
+        };
+
+        var items = new[]
+        {
+            new DocumentItem
+            {
+                Title = "One",
+                Kind = "DOC",
+                Source = "Local",
+                FileName = "one.md",
+                Content = "# One"
+            },
+            new DocumentItem
+            {
+                Title = "Two",
+                Kind = "DOC",
+                Source = "Local",
+                FileName = "two.md",
+                Content = "# Two"
+            }
+        };
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.html");
+
+        try
+        {
+            exporter.Export(module, items, outputPath, open: false);
+
+            var html = File.ReadAllText(outputPath);
+            Assert.Contains("aria-orientation=\"vertical\"", html, StringComparison.Ordinal);
+            Assert.Contains("flex-md-column", html, StringComparison.Ordinal);
+            Assert.Contains("max-height: 70vh", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Fact]
+    public void RenderHelpMarkdown_Uses_Lists_For_Inputs_And_Outputs()
+    {
+        var model = new CommandHelpModel
+        {
+            Name = "Get-Demo",
+            Synopsis = "Gets demo data."
+        };
+        model.Inputs.Add(new TypeHelp
+        {
+            TypeName = "System.String",
+            Description = "Pipeline input value."
+        });
+        model.Outputs.Add(new TypeHelp
+        {
+            TypeName = "Demo.Result",
+            Description = "Structured output value."
+        });
+
+        var markdown = HtmlExporter.RenderHelpMarkdownForTesting(model);
+
+        Assert.Contains("## Inputs", markdown, StringComparison.Ordinal);
+        Assert.Contains("- `System.String` - Pipeline input value.", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Outputs", markdown, StringComparison.Ordinal);
+        Assert.Contains("- `Demo.Result` - Structured output value.", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("| Type | Description |", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
