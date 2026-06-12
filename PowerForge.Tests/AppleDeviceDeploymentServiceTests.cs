@@ -39,6 +39,27 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
     }
 
     [Fact]
+    public async Task GetDevicesAsync_throws_when_devicectl_fails()
+    {
+        var runner = new CapturingProcessRunner(_ => new ProcessRunResult(
+            72,
+            string.Empty,
+            "developer tools are not configured",
+            "xcrun-test",
+            TimeSpan.FromMilliseconds(1),
+            timedOut: false));
+        var service = new AppleDeviceDeploymentService(runner);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetDevicesAsync(new AppleDeviceListRequest
+        {
+            XcrunExecutable = "xcrun-test"
+        }));
+
+        Assert.Contains("devicectl list devices failed", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("developer tools are not configured", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task BuildAsync_builds_xcodebuild_device_command()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -80,6 +101,37 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 "-allowProvisioningUpdates",
                 "build"
             }, request.Arguments);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_uses_plain_configuration_directory_for_macos_app_path()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var derived = Path.Combine(root.FullName, "DerivedData");
+            var runner = new CapturingProcessRunner(_ => Success("ok"));
+            var service = new AppleDeviceDeploymentService(runner);
+
+            var result = await service.BuildAsync(new AppleAppBuildRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "Tactra",
+                Platform = ApplePlatform.macOS,
+                Destination = "platform=macOS",
+                DerivedDataPath = derived,
+                XcodeBuildExecutable = "xcodebuild-test"
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(Path.Combine(derived, "Build", "Products", "Debug", "Tactra.app"), result.AppPath);
         }
         finally
         {
@@ -203,6 +255,46 @@ App installed:
             Assert.NotNull(result.Launch);
             Assert.Equal(3, runner.Requests.Count);
             Assert.Equal("xcodebuild-test", runner.Requests[0].FileName);
+            Assert.Equal(new[] { "devicectl", "device", "install", "app", "--device", "device-1", app.FullName }, runner.Requests[1].Arguments);
+            Assert.Equal(new[] { "devicectl", "device", "process", "launch", "--device", "device-1", "com.evotecit.tactra" }, runner.Requests[2].Arguments);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task DeployAsync_reuses_id_destination_for_install_and_launch()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.app"));
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.Arguments.Contains("install"))
+                    return Success("App installed:\n• bundleID: com.evotecit.tactra\n");
+
+                return Success("ok");
+            });
+            var service = new AppleDeviceDeploymentService(runner);
+
+            var result = await service.DeployAsync(new AppleAppDeviceDeploymentRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "Tactra",
+                AppPath = app.FullName,
+                Destination = "id=device-1",
+                BundleIdentifier = "com.evotecit.tactra",
+                Launch = true,
+                XcodeBuildExecutable = "xcodebuild-test",
+                XcrunExecutable = "xcrun-test"
+            });
+
+            Assert.True(result.Succeeded);
             Assert.Equal(new[] { "devicectl", "device", "install", "app", "--device", "device-1", app.FullName }, runner.Requests[1].Arguments);
             Assert.Equal(new[] { "devicectl", "device", "process", "launch", "--device", "device-1", "com.evotecit.tactra" }, runner.Requests[2].Arguments);
         }

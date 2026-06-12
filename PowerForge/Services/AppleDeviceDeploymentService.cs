@@ -52,7 +52,7 @@ public sealed class AppleDeviceDeploymentService
             cancellationToken).ConfigureAwait(false);
 
         if (!result.Succeeded)
-            return Array.Empty<AppleDeviceInfo>();
+            throw CreateProcessException(result, "devicectl list devices failed.");
 
         var devices = ParseDevices(result.StdOut)
             .Where(device => request.IncludeUnavailable || device.IsAvailable);
@@ -271,9 +271,10 @@ public sealed class AppleDeviceDeploymentService
         if (!build.Succeeded)
             return deployment;
 
+        var deployDeviceIdentifier = request.DeviceIdentifier ?? TryParseDestinationDeviceIdentifier(request.Destination);
         var install = await InstallAsync(new AppleAppInstallRequest
         {
-            DeviceIdentifier = request.DeviceIdentifier,
+            DeviceIdentifier = deployDeviceIdentifier,
             Device = request.Device,
             AppPath = build.AppPath,
             XcrunExecutable = request.XcrunExecutable,
@@ -292,7 +293,7 @@ public sealed class AppleDeviceDeploymentService
 
         deployment.Launch = await LaunchAsync(new AppleAppLaunchRequest
         {
-            DeviceIdentifier = request.DeviceIdentifier,
+            DeviceIdentifier = deployDeviceIdentifier,
             Device = request.Device,
             BundleIdentifier = bundleIdentifier!,
             XcrunExecutable = request.XcrunExecutable,
@@ -432,12 +433,15 @@ public sealed class AppleDeviceDeploymentService
             return Path.GetFullPath(request.AppPath!);
 
         var productName = string.IsNullOrWhiteSpace(request.ProductName) ? request.Scheme.Trim() : request.ProductName!.Trim();
-        return Path.Combine(
-            derivedDataPath,
-            "Build",
-            "Products",
-            $"{(string.IsNullOrWhiteSpace(request.Configuration) ? "Debug" : request.Configuration.Trim())}-{GetSdkProductSuffix(request.Platform)}",
-            $"{productName}.app");
+        return Path.Combine(derivedDataPath, "Build", "Products", GetProductDirectory(request), $"{productName}.app");
+    }
+
+    private static string GetProductDirectory(AppleAppBuildRequest request)
+    {
+        var configuration = string.IsNullOrWhiteSpace(request.Configuration) ? "Debug" : request.Configuration.Trim();
+        return request.Platform == ApplePlatform.macOS
+            ? configuration
+            : $"{configuration}-{GetSdkProductSuffix(request.Platform)}";
     }
 
     private static string GetSdkProductSuffix(ApplePlatform platform)
@@ -492,10 +496,35 @@ public sealed class AppleDeviceDeploymentService
            string.Equals(device.Name, filter, StringComparison.OrdinalIgnoreCase) ||
            device.Model.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
 
+    private static string? TryParseDestinationDeviceIdentifier(string? destination)
+    {
+        if (string.IsNullOrWhiteSpace(destination))
+            return null;
+
+        var trimmed = destination!.Trim();
+        const string prefix = "id=";
+        if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var value = trimmed.Substring(prefix.Length).Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
     private static string? MatchValue(Regex regex, string output)
     {
         var match = regex.Match(output ?? string.Empty);
         return match.Success ? match.Groups["value"].Value.Trim() : null;
+    }
+
+    private static InvalidOperationException CreateProcessException(ProcessRunResult result, string message)
+    {
+        var detail = string.Join(Environment.NewLine, new[] { result.StdErr, result.StdOut }
+            .Where(static value => !string.IsNullOrWhiteSpace(value)));
+        var errorMessage = string.IsNullOrWhiteSpace(detail)
+            ? $"{message} ExitCode={result.ExitCode}. TimedOut={result.TimedOut}."
+            : $"{message} ExitCode={result.ExitCode}. TimedOut={result.TimedOut}.{Environment.NewLine}{detail}";
+
+        return new InvalidOperationException(errorMessage);
     }
 
     private static string NormalizeExecutable(string? executable, string fallback)
