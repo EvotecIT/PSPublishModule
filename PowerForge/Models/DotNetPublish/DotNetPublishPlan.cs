@@ -47,6 +47,9 @@ public sealed class DotNetPublishPlan
     /// <summary>Resolved MSBuild properties.</summary>
     public Dictionary<string, string> MsBuildProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Resolved environment variables passed to dotnet commands.</summary>
+    public Dictionary<string, string?> EnvironmentVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Resolved targets (paths + publish options).</summary>
     public DotNetPublishTargetPlan[] Targets { get; set; } = Array.Empty<DotNetPublishTargetPlan>();
 

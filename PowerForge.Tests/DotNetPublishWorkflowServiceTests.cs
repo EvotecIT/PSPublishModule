@@ -44,9 +44,10 @@ public sealed class DotNetPublishWorkflowServiceTests
         };
         var service = new DotNetPublishWorkflowService(
             logger,
-            planPublish: (spec, sourceLabel) =>
+            planPublish: (spec, sourceLabel, enforceRequiredEnvironmentVariables) =>
             {
                 Assert.Equal("config.json", sourceLabel);
+                Assert.False(enforceRequiredEnvironmentVariables);
                 return expectedPlan;
             });
 
@@ -68,7 +69,11 @@ public sealed class DotNetPublishWorkflowServiceTests
         var expectedProgress = new TestProgressReporter();
         var service = new DotNetPublishWorkflowService(
             new NullLogger(),
-            planPublish: (_, _) => new DotNetPublishPlan(),
+            planPublish: (_, _, enforceRequiredEnvironmentVariables) =>
+            {
+                Assert.True(enforceRequiredEnvironmentVariables);
+                return new DotNetPublishPlan();
+            },
             runPublish: (plan, progress) =>
             {
                 Assert.NotNull(plan);

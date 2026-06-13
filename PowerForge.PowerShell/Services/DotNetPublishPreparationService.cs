@@ -120,6 +120,9 @@ internal sealed class DotNetPublishPreparationService
         var overrideRuntimes = NormalizeStrings(request.Runtimes);
         var overrideFrameworks = NormalizeStrings(request.Frameworks);
         var overrideStyles = NormalizeStyles(request.Styles);
+        var outputPath = string.IsNullOrWhiteSpace(request.OutputPath)
+            ? null
+            : request.OutputPath!.Trim();
 
         if (overrideTargets.Length > 0)
         {
@@ -174,7 +177,8 @@ internal sealed class DotNetPublishPreparationService
 
         if (overrideRuntimes.Length > 0
             || overrideFrameworks.Length > 0
-            || overrideStyles.Length > 0)
+            || overrideStyles.Length > 0
+            || !string.IsNullOrWhiteSpace(outputPath))
         {
             foreach (var target in spec.Targets ?? Array.Empty<DotNetPublishTarget>())
             {
@@ -194,10 +198,27 @@ internal sealed class DotNetPublishPreparationService
                     target.Publish.Style = overrideStyles[0];
                     target.Publish.Styles = overrideStyles;
                 }
+
+                if (!string.IsNullOrWhiteSpace(outputPath))
+                    target.Publish.OutputPath = outputPath;
             }
         }
 
         spec.DotNet ??= new DotNetPublishDotNetOptions();
+        if (request.MsBuildProperties is { Count: > 0 })
+        {
+            spec.DotNet.MsBuildProperties ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in request.MsBuildProperties)
+            {
+                if (string.IsNullOrWhiteSpace(property.Key))
+                    continue;
+                spec.DotNet.MsBuildProperties[property.Key.Trim()] = property.Value;
+            }
+        }
+
+        if (request.SkipInstallers)
+            spec.Installers = Array.Empty<DotNetPublishInstaller>();
+
         if (request.SkipRestore)
         {
             spec.DotNet.Restore = false;

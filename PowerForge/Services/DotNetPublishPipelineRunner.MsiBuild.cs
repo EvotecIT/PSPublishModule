@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
@@ -140,7 +141,7 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Info($"MSI output directory for '{installerId}' -> {configuredOutputDir}");
         if (!string.IsNullOrWhiteSpace(configuredOutputName))
             _logger.Info($"MSI output name for '{installerId}' -> {configuredOutputName}.msi");
-        RunDotnet(plan.ProjectRoot, args);
+        RunDotnet(plan.ProjectRoot, args, plan.EnvironmentVariables);
 
         if (versionResolution.Patch.HasValue && !string.IsNullOrWhiteSpace(versionResolution.StatePath))
             WriteMsiVersionState(versionResolution.StatePath!, versionResolution.Patch.Value, versionResolution.Version!);
@@ -154,6 +155,7 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (var output in outputs)
                 _logger.Info($"  -> {output}");
         }
+        var packageMetadata = ReadMsiPackageMetadata(outputs);
 
         return new DotNetPublishMsiBuildResult
         {
@@ -164,6 +166,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Style = style.Value,
             ProjectPath = installerProjectPath,
             OutputFiles = outputs,
+            PackageMetadata = packageMetadata,
             Version = versionResolution.Version,
             VersionPropertyName = versionResolution.PropertyName,
             VersionPatch = versionResolution.Patch,
@@ -172,6 +175,38 @@ public sealed partial class DotNetPublishPipelineRunner
             ClientLicensePropertyName = licenseResolution.PropertyName,
             ClientId = licenseResolution.ClientId
         };
+    }
+
+    private DotNetPublishMsiPackageMetadata[] ReadMsiPackageMetadata(IEnumerable<string> outputs)
+    {
+        var reader = new MsiPackageMetadataReader();
+        var metadata = new List<DotNetPublishMsiPackageMetadata>();
+        foreach (var output in outputs ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(output))
+                continue;
+
+            try
+            {
+                metadata.Add(reader.Read(output));
+            }
+            catch (Exception ex) when (ex is COMException
+                                           or InvalidOperationException
+                                           or PlatformNotSupportedException
+                                           or FileNotFoundException
+                                           or UnauthorizedAccessException)
+            {
+                var message = ex.GetBaseException().Message;
+                _logger.Warn($"MSI metadata could not be read for '{output}': {message}");
+                metadata.Add(new DotNetPublishMsiPackageMetadata
+                {
+                    Path = Path.GetFullPath(output),
+                    ReadError = message
+                });
+            }
+        }
+
+        return metadata.ToArray();
     }
 
     private string ResolveOrPrepareInstallerProjectPath(

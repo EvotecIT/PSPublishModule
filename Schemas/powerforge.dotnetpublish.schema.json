@@ -102,6 +102,20 @@
       "type": "string",
       "enum": ["FixedMajorMinorDatePatch", "UtcShortYearMonthDayMinute"]
     },
+    "DotNetPublishEnvironmentVariable": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Value": { "type": ["string", "null"] },
+        "FromEnvironmentVariable": { "type": ["string", "null"] },
+        "FromEnvironmentVariables": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Required": { "type": "boolean" },
+        "Secret": { "type": "boolean" }
+      }
+    },
     "DotNetPublishMsiVersionOptions": {
       "type": "object",
       "additionalProperties": false,
@@ -1092,6 +1106,10 @@
         "MsBuildProperties": {
           "type": ["object", "null"],
           "additionalProperties": { "type": "string" }
+        },
+        "EnvironmentVariables": {
+          "type": ["object", "null"],
+          "additionalProperties": { "$ref": "#/$defs/DotNetPublishEnvironmentVariable" }
         }
       }
     },

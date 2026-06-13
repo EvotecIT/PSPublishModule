@@ -36,7 +36,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 var label = string.IsNullOrWhiteSpace(framework) ? runtimeValue : $"{runtimeValue}, {framework}";
                 _logger.Info($"Restore ({label}) -> {request.ProjectPath}");
 
-                RunDotnet(workDir, BuildRestoreArguments(plan, request.ProjectPath, runtimeValue, framework));
+                RunDotnet(workDir, BuildRestoreArguments(plan, request.ProjectPath, runtimeValue, framework), plan.EnvironmentVariables);
             }
 
             return;
@@ -46,14 +46,14 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(plan.SolutionPath))
         {
             _logger.Info($"Restore -> {plan.SolutionPath}");
-            RunDotnet(workDir, new[] { "restore", plan.SolutionPath!, "--nologo" }.Concat(props).ToArray());
+            RunDotnet(workDir, new[] { "restore", plan.SolutionPath!, "--nologo" }.Concat(props).ToArray(), plan.EnvironmentVariables);
             return;
         }
 
         foreach (var p in plan.Targets.Select(t => t.ProjectPath).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             _logger.Info($"Restore -> {p}");
-            RunDotnet(workDir, new[] { "restore", p, "--nologo" }.Concat(props).ToArray());
+            RunDotnet(workDir, new[] { "restore", p, "--nologo" }.Concat(props).ToArray(), plan.EnvironmentVariables);
         }
     }
 
@@ -196,14 +196,14 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(plan.SolutionPath))
         {
             _logger.Info($"Clean -> {plan.SolutionPath}");
-            RunDotnet(workDir, new[] { "clean", plan.SolutionPath!, "-c", plan.Configuration, "--nologo" });
+            RunDotnet(workDir, new[] { "clean", plan.SolutionPath!, "-c", plan.Configuration, "--nologo" }, plan.EnvironmentVariables);
             return;
         }
 
         foreach (var p in plan.Targets.Select(t => t.ProjectPath).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             _logger.Info($"Clean -> {p}");
-            RunDotnet(workDir, new[] { "clean", p, "-c", plan.Configuration, "--nologo" });
+            RunDotnet(workDir, new[] { "clean", p, "-c", plan.Configuration, "--nologo" }, plan.EnvironmentVariables);
         }
     }
 
@@ -223,7 +223,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (plan.Restore) args.Add("--no-restore");
                 args.AddRange(props);
 
-                RunDotnet(workDir, args);
+                RunDotnet(workDir, args, plan.EnvironmentVariables);
             }
 
             return;
@@ -235,14 +235,14 @@ public sealed partial class DotNetPublishPipelineRunner
             var args = new List<string> { "build", plan.SolutionPath!, "-c", plan.Configuration, "--nologo" };
             if (plan.Restore) args.Add("--no-restore");
             args.AddRange(props);
-            RunDotnet(workDir, args);
+            RunDotnet(workDir, args, plan.EnvironmentVariables);
             return;
         }
 
         foreach (var p in plan.Targets.Select(t => t.ProjectPath).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             _logger.Info($"Build -> {p}");
-            RunDotnet(workDir, new[] { "build", p, "-c", plan.Configuration, "--nologo" }.Concat(props).ToArray());
+            RunDotnet(workDir, new[] { "build", p, "-c", plan.Configuration, "--nologo" }.Concat(props).ToArray(), plan.EnvironmentVariables);
         }
     }
 
@@ -313,7 +313,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var publishArgs = BuildPublishArguments(plan, target, tfm, rid, style, publishDir);
 
         _logger.Info($"Publishing {target.Name} ({rid}) -> {publishDir}");
-        RunDotnet(plan.ProjectRoot, publishArgs);
+        RunDotnet(plan.ProjectRoot, publishArgs, plan.EnvironmentVariables);
 
         var cleanup = ApplyCleanup(publishDir, target.Publish);
 

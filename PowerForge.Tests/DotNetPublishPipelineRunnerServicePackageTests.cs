@@ -114,6 +114,13 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
             var installContent = File.ReadAllText(result.InstallScriptPath!);
             Assert.Contains("PowerForge.Svc", installContent, StringComparison.Ordinal);
             Assert.Contains("Svc.exe", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[string]$ServiceName", installContent, StringComparison.Ordinal);
+            Assert.Contains("[string]$ConfigPath", installContent, StringComparison.Ordinal);
+            Assert.Contains("[string]$Account", installContent, StringComparison.Ordinal);
+            Assert.Contains("[switch]$PreserveExistingServiceBinPath", installContent, StringComparison.Ordinal);
+            Assert.Contains("Set-CommandLineOption", installContent, StringComparison.Ordinal);
+            Assert.Contains("$preservedBinaryPathName", installContent, StringComparison.Ordinal);
+            Assert.Contains("--config", installContent, StringComparison.Ordinal);
             Assert.DoesNotContain("{{", installContent, StringComparison.Ordinal);
 
             var uninstallContent = File.ReadAllText(result.UninstallScriptPath!);

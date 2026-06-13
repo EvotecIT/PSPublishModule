@@ -163,7 +163,24 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
                     Style = DotNetPublishStyle.Portable,
                     OutputFiles = new[] { msiPath, msiSidecarPath },
                     SignedFiles = new[] { msiPath },
-                    Version = "1.2.3"
+                    Version = "1.2.3",
+                    PackageMetadata = new[]
+                    {
+                        new DotNetPublishMsiPackageMetadata
+                        {
+                            Path = msiPath,
+                            ProductCode = "{11111111-1111-1111-1111-111111111111}",
+                            ProductName = "App",
+                            ProductVersion = "1.2.3",
+                            Manufacturer = "Evotec",
+                            UpgradeCode = "{22222222-2222-2222-2222-222222222222}"
+                        },
+                        new DotNetPublishMsiPackageMetadata
+                        {
+                            Path = msiSidecarPath,
+                            ReadError = "metadata unavailable"
+                        }
+                    }
                 }
             };
             var storePackages = new List<DotNetPublishStorePackageResult>
@@ -201,6 +218,16 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             Assert.Equal("Portable", installer.GetProperty("Style").GetString());
             Assert.Equal(1, installer.GetProperty("SignedFiles").GetInt32());
             Assert.False(installer.TryGetProperty("Cleanup", out _));
+            var packageMetadata = installer.GetProperty("PackageMetadata");
+            Assert.Equal(2, packageMetadata.GetArrayLength());
+            var firstPackage = packageMetadata[0];
+            Assert.Equal("Artifacts/Msi/app/output/App.msi", firstPackage.GetProperty("Path").GetString());
+            Assert.Equal("{11111111-1111-1111-1111-111111111111}", firstPackage.GetProperty("ProductCode").GetString());
+            Assert.Equal("App", firstPackage.GetProperty("ProductName").GetString());
+            Assert.Equal("1.2.3", firstPackage.GetProperty("ProductVersion").GetString());
+            Assert.Equal("Evotec", firstPackage.GetProperty("Manufacturer").GetString());
+            Assert.Equal("{22222222-2222-2222-2222-222222222222}", firstPackage.GetProperty("UpgradeCode").GetString());
+            Assert.Equal("metadata unavailable", packageMetadata[1].GetProperty("ReadError").GetString());
 
             var store = FindManifestEntry(doc, "Category", "StorePackage");
             Assert.Equal("app.store", store.GetProperty("StorePackageId").GetString());

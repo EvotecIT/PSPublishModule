@@ -166,7 +166,7 @@ public sealed partial class DotNetPublishPipelineRunner
             $"Store package build starting for '{storePackageId}' ({target}, {framework}, {runtime}, {style.Value}) -> {Path.GetFileName(projectPath)} using {Path.GetFileName(buildExecutable)}");
 
         var preBuildFiles = storePackage.ClearOutput ? SnapshotStoreFiles(searchRoots) : null;
-        var result = RunProcess(buildExecutable!, plan.ProjectRoot, args);
+        var result = RunProcess(buildExecutable!, plan.ProjectRoot, args, plan.EnvironmentVariables);
         if (result.ExitCode != 0)
         {
             var stderr = (result.StdErr ?? string.Empty).TrimEnd();

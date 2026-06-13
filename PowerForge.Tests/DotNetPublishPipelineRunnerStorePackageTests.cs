@@ -338,6 +338,67 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
     }
 
     [Fact]
+    public void Run_StorePackage_PassesPlanEnvironmentVariablesToBuild()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var packagingProject = CreateFakeStorePackagingProject(root, writeEnvironmentProbe: true);
+            var outputDir = Path.Combine(root, "Artifacts", "Store", "app.store");
+            var probePath = Path.Combine(outputDir, "StoreEnv.txt");
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Restore = true,
+                Build = false,
+                EnvironmentVariables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["POWERFORGE_STORE_TEST_TOKEN"] = "store-secret"
+                },
+                StorePackages = new[]
+                {
+                    new DotNetPublishStorePackagePlan
+                    {
+                        Id = "app.store",
+                        PrepareFromTarget = "app",
+                        PackagingProjectPath = packagingProject,
+                        OutputPath = outputDir,
+                        BuildMode = DotNetPublishStoreBuildMode.StoreUpload,
+                        Bundle = DotNetPublishStoreBundleMode.Always
+                    }
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "store.package:app.store:app:net8.0-windows10.0.19041.0:win-x64:FrameworkDependent",
+                        Kind = DotNetPublishStepKind.StorePackage,
+                        Title = "Store package",
+                        StorePackageId = "app.store",
+                        TargetName = "app",
+                        Framework = "net8.0-windows10.0.19041.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.FrameworkDependent,
+                        StorePackageProjectPath = packagingProject,
+                        StorePackageOutputPath = outputDir
+                    }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            Assert.Equal("store-secret", File.ReadAllText(probePath).Trim());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Run_StorePackage_FallsBackToDefaultAppPackagesDirectory()
     {
         var root = CreateTempRoot();
@@ -761,13 +822,20 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
         return fullPath;
     }
 
-    private static string CreateFakeStorePackagingProject(string root, bool writeToDefaultAppPackages = false, bool writeOutputs = true)
+    private static string CreateFakeStorePackagingProject(
+        string root,
+        bool writeToDefaultAppPackages = false,
+        bool writeOutputs = true,
+        bool writeEnvironmentProbe = false)
     {
         var path = Path.Combine(root, "Store", "FakeStore.csproj");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var outputRootExpression = writeToDefaultAppPackages
             ? "$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'AppPackages'))"
             : "$(AppxPackageDir)";
+        var environmentProbeTarget = writeEnvironmentProbe ? """
+    <WriteLinesToFile File="$([System.IO.Path]::Combine('$(PowerForgeStoreOutputRoot)', 'StoreEnv.txt'))" Lines="$(POWERFORGE_STORE_TEST_TOKEN)" Overwrite="true" />
+""" : string.Empty;
         var outputTarget = writeOutputs ? """
   <Target Name="PowerForgeFakeStoreOutputs" AfterTargets="Build">
     <PropertyGroup>
@@ -780,6 +848,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
     <WriteLinesToFile File="$(PowerForgeBundlePath)" Lines="bundle" Overwrite="true" />
     <WriteLinesToFile File="$(PowerForgeUploadPath)" Lines="upload" Overwrite="true" />
     <WriteLinesToFile File="$(PowerForgeSymbolsPath)" Lines="symbols" Overwrite="true" />
+ENVIRONMENT_PROBE_TOKEN
   </Target>
 """ : """
   <Target Name="PowerForgeFakeStoreOutputs" AfterTargets="Build">
@@ -794,7 +863,8 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
 OUTPUT_TARGET_TOKEN
 </Project>
 """.Replace("OUTPUT_TARGET_TOKEN", outputTarget, StringComparison.Ordinal)
-    .Replace("OUTPUT_ROOT_TOKEN", outputRootExpression, StringComparison.Ordinal), new UTF8Encoding(false));
+    .Replace("OUTPUT_ROOT_TOKEN", outputRootExpression, StringComparison.Ordinal)
+    .Replace("ENVIRONMENT_PROBE_TOKEN", environmentProbeTarget, StringComparison.Ordinal), new UTF8Encoding(false));
         return path;
     }
 

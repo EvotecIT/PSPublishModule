@@ -14,6 +14,9 @@ internal sealed class DotNetPublishPreparationRequest
     public string[]? Runtimes { get; set; }
     public string[]? Frameworks { get; set; }
     public DotNetPublishStyle[]? Styles { get; set; }
+    public string? OutputPath { get; set; }
+    public Dictionary<string, string>? MsBuildProperties { get; set; }
+    public bool SkipInstallers { get; set; }
     public bool SkipRestore { get; set; }
     public bool SkipBuild { get; set; }
     public bool JsonOnly { get; set; }
