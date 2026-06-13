@@ -11,12 +11,12 @@ Executes DotNet publish engine from DSL settings or an existing JSON config.
 ## SYNTAX
 ### Settings (Default)
 ```powershell
-Invoke-DotNetPublish -Settings <scriptblock> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -Settings <scriptblock> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
 ```powershell
-Invoke-DotNetPublish -ConfigPath <string> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -ConfigPath <string> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -123,11 +123,43 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -MsBuildProperty
+Optional global MSBuild properties passed to restore, build, publish, and installer steps.
+
+```yaml
+Type: Hashtable
+Parameter Sets: Settings, Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -NoInteractive
 Disables interactive output mode. Reserved for future UI parity.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: Settings, Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OutputPath
+Optional publish output-path override applied to selected targets.
+
+```yaml
+Type: String
 Parameter Sets: Settings, Config
 Aliases: None
 Possible values:
@@ -221,6 +253,22 @@ Accept wildcard characters: True
 
 ### -SkipBuild
 Disables build steps for this run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Settings, Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipInstallers
+Skips installer definitions after selected targets are filtered.
 
 ```yaml
 Type: SwitchParameter

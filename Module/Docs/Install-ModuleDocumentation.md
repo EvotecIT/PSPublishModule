@@ -8,7 +8,7 @@ schema: 2.0.0
 ## SYNOPSIS
 Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.
 
-Resolves the module and copies its Internals folder and selected root files into a destination folder arranged by DocumentationLayout. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. When successful, returns the destination path.
+Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. When successful, returns the destination path.
 
 ## SYNTAX
 ### ByName (Default)
@@ -24,7 +24,7 @@ Install-ModuleDocumentation -Path <string> [-Module <psmoduleinfo>] [-RequiredVe
 ## DESCRIPTION
 Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.
 
-Resolves the module and copies its Internals folder and selected root files into a destination folder arranged by DocumentationLayout. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. When successful, returns the destination path.
+Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. When successful, returns the destination path.
 
 ## EXAMPLES
 
@@ -40,7 +40,7 @@ Copies Internals and selected root files into C:\\Docs\\EFAdminManager\\<Version
 PS> Get-Module -ListAvailable EFAdminManager | Install-ModuleDocumentation -Path C:\\Docs -OnExists Merge -Open
 ```
 
-Merges content into an existing destination and opens the README (if present) afterwards.
+Merges content into an existing destination, preserves existing files, and opens the README (if present) afterwards.
 
 ### EXAMPLE 3
 ```powershell
@@ -64,6 +64,13 @@ PS> Install-ModuleDocumentation -Name EFAdminManager -Path C:\\Docs -OnExists Ov
 Removes the destination before copying. Alternatively, use -OnExists Merge -Force to overwrite individual files.
 
 ### EXAMPLE 6
+```powershell
+PS> Install-ModuleDocumentation -Name EFAdminManager -Path C:\\Docs -Layout ModuleAndVersion -ListOnly
+```
+
+Shows the folder that would be used for the selected module/version without copying bundled documentation.
+
+### EXAMPLE 7
 ```powershell
 PS> New-ConfigurationInformation -IncludeAll 'Internals\\' ; New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -DocumentationOrder '01-Intro.md','02-HowTo.md'
 ```
@@ -89,7 +96,7 @@ Accept wildcard characters: True
 ```
 
 ### -Force
-Overwrite files during merge or overwrite operations.
+Allow replacement of existing files during merge, and clear read-only attributes when overwrite needs to delete an existing destination.
 
 ```yaml
 Type: SwitchParameter
@@ -105,7 +112,7 @@ Accept wildcard characters: True
 ```
 
 ### -Layout
-Output folder structure strategy. Default is ModuleAndVersion.
+Output folder structure strategy. The default, ModuleAndVersion, keeps each module version in its own subfolder.
 
 ```yaml
 Type: DocumentationLayout
@@ -121,7 +128,7 @@ Accept wildcard characters: True
 ```
 
 ### -ListOnly
-Plan only; output the resolved destination without copying files.
+Plan only; output the resolved destination path without copying files or changing the destination.
 
 ```yaml
 Type: SwitchParameter
@@ -169,7 +176,7 @@ Accept wildcard characters: True
 ```
 
 ### -NoIntro
-Suppress IntroText display during installation.
+Suppress delivery IntroText or IntroFile output during installation.
 
 ```yaml
 Type: SwitchParameter
@@ -185,7 +192,7 @@ Accept wildcard characters: True
 ```
 
 ### -OnExists
-Behavior when the destination folder already exists. Default is Merge.
+Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used.
 
 ```yaml
 Type: OnExistsOption
@@ -217,7 +224,7 @@ Accept wildcard characters: True
 ```
 
 ### -Path
-Destination folder where documentation will be written.
+Base destination folder where documentation will be written. The final folder also depends on Layout.
 
 ```yaml
 Type: String

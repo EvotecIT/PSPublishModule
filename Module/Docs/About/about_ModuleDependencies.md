@@ -57,7 +57,9 @@ ONLINE RESOLUTION WITHOUT INSTALLING
 
 If you want PowerForge to resolve Auto or Latest from a repository instead of the local machine, enable:
 
+```powershell
 New-ConfigurationBuild -ResolveMissingModulesOnline
+```
 
 This is useful when your CI runner or fresh workstation does not already have the dependency installed, but you
 still want the manifest to resolve to a concrete version.
@@ -66,7 +68,9 @@ INSTALLING MISSING DEPENDENCIES FOR THE BUILD
 
 If the build itself needs the module on the machine, enable:
 
+```powershell
 New-ConfigurationBuild -InstallMissingModules
+```
 
 This build-time installation covers both RequiredModule and ExternalModule entries.
 
@@ -90,7 +94,9 @@ BUNDLING DEPENDENCIES INTO ARTEFACTS
 
 If you want the output artefact to contain the dependency modules, configure:
 
+```powershell
 New-ConfigurationArtefact -AddRequiredModules
+```
 
 This packaging step only bundles RequiredModule dependencies. ExternalModule entries are intentionally excluded.
 Transitive RequiredModules discovered from bundled dependencies are included so offline artefacts keep the
@@ -149,28 +155,33 @@ If installation or download fails:
 
 ## Examples
 
-```text
+
+```powershell
 PS> Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -Settings {
 >>     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
 >>     New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
 >> }
+```
 
 Declares a required dependency, resolves its version online when needed, and installs it before the build.
 
+```powershell
 PS> Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -Settings {
 >>     New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'
 >>     New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Download -RequiredModulesRepository 'PSGallery'
 >> }
+```
 
 Builds a packed artefact and always downloads the required module into the package instead of relying on a local copy.
 
+```powershell
 PS> Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -Settings {
 >>     New-ConfigurationModule -Type ExternalModule -Name 'Az.Accounts' -Version 'Latest'
 >>     New-ConfigurationBuild -Enable -InstallMissingModules
 >> }
+```
 
 Installs the dependency for the build host, but keeps it out of packaged artefacts.
-```
 
 ## Notes
 
