@@ -90,6 +90,81 @@ public class ModuleDocumentationReviewRegressionTests
     }
 
     [Fact]
+    public void DocumentationPlanner_Fences_AboutTopic_PowerShell_Prompt_Blocks()
+    {
+        var markdown = DocumentationPlanner.AboutToMarkdownForTesting("""
+        EXAMPLES
+
+        PS> Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -Settings {
+
+            >>     New-ConfigurationModule -Type RequiredModule -Name 'Pester'
+            >>     New-ConfigurationBuild -Enable
+            >> }
+
+        Builds the module.
+        """);
+
+        Assert.Contains("```powershell", markdown);
+        Assert.Contains("PS> Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -Settings {", markdown);
+        Assert.Contains(">>     New-ConfigurationModule -Type RequiredModule -Name 'Pester'", markdown);
+        Assert.Contains(">> }", markdown);
+        Assert.Contains("```\n\nBuilds the module.", markdown.Replace("\r\n", "\n"));
+    }
+
+    [Fact]
+    public void DocumentationPlanner_Strips_Converted_AboutTopic_FrontMatter_With_Windows_LineEndings()
+    {
+        var markdown = DocumentationPlanner.AboutToMarkdownForTesting("TOPIC\r\n    about_Demo\r\n\r\nSHORT DESCRIPTION\r\n    Demo topic.\r\n");
+
+        Assert.DoesNotContain("schema:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("---", markdown, StringComparison.Ordinal);
+        Assert.Contains("# about_Demo", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DocumentationPlanner_Uses_AboutTopic_FileName_When_Topic_Section_Is_Missing()
+    {
+        var markdown = DocumentationPlanner.AboutToMarkdownForTesting("""
+        SHORT DESCRIPTION
+            Demo topic.
+        """, "about_FileFallback.help.txt");
+
+        Assert.Contains("# about_FileFallback", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("# about_topic", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DocumentationPlanner_Discovers_Help_About_Source_Folder()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PFDocsAbout", System.Guid.NewGuid().ToString("N")));
+        var about = Directory.CreateDirectory(Path.Combine(root.FullName, "Help", "About"));
+        File.WriteAllText(Path.Combine(about.FullName, "about_Demo.help.txt"), """
+        TOPIC
+            about_Demo
+
+        SHORT DESCRIPTION
+            Demo about topic.
+        """);
+
+        try
+        {
+            var planner = new DocumentationPlanner(new DocumentationFinder());
+            var result = planner.Execute(new DocumentationPlanner.Request
+            {
+                RootBase = root.FullName
+            });
+
+            var item = Assert.Single(result.Items, i => i.Kind == "ABOUT");
+            Assert.Equal("about_Demo.help.txt", item.FileName);
+            Assert.Contains("Demo about topic.", item.Content);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void CoreResolver_Allows_Module_Local_Microsoft_And_System_Package_Names()
     {
         Assert.False(OnModuleImportAndRemove.ShouldSkipCoreResolutionForTesting("Microsoft.Extensions.Logging"));

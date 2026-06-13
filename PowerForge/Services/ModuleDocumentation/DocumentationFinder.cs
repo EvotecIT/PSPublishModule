@@ -50,12 +50,14 @@ internal sealed class DocumentationFinder
         var roots = new System.Collections.Generic.List<string>
         {
             Path.Combine(bases.RootBase, "en-US"),
-            bases.RootBase
+            bases.RootBase,
+            Path.Combine(bases.RootBase, "Help", "About")
         };
         if (!string.IsNullOrWhiteSpace(bases.InternalsBase))
         {
             roots.Add(Path.Combine(bases.InternalsBase!, "en-US"));
             roots.Add(bases.InternalsBase!);
+            roots.Add(Path.Combine(bases.InternalsBase!, "Help", "About"));
         }
         if (extraDocsPaths != null)
         {

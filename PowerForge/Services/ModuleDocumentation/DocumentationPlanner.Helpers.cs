@@ -208,28 +208,28 @@ internal sealed partial class DocumentationPlanner
                || trimmed.Contains("code_of_codunduct");
     }
 
-    private static string AboutToMarkdown(string content)
+    private static string AboutToMarkdown(string aboutFileName, string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return string.Empty;
-        var lines = content.Replace("\r\n", "\n").Split('\n');
-        var sb = new System.Text.StringBuilder(content.Length + 256);
-        foreach (var line in lines)
-        {
-            var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed)) { sb.AppendLine(); continue; }
-            // Uppercase headings become H3 for readability
-            bool looksHeading = trimmed.Length <= 40 && trimmed.ToUpperInvariant() == trimmed && trimmed.All(ch => !char.IsLetter(ch) || char.IsUpper(ch));
-            if (looksHeading)
-            {
-                var title = System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(trimmed.ToLowerInvariant());
-                sb.Append("### ").Append(title).AppendLine();
-            }
-            else
-            {
-                sb.AppendLine(trimmed);
-            }
-        }
-        return sb.ToString();
+        var converted = AboutTopicMarkdown.Convert(Path.GetFileNameWithoutExtension(aboutFileName), content);
+        return StripYamlFrontMatter(converted.Markdown);
+    }
+
+    internal static string AboutToMarkdownForTesting(string content, string aboutFileName = "about_topic.help.txt")
+        => AboutToMarkdown(aboutFileName, content);
+
+    private static string StripYamlFrontMatter(string markdown)
+    {
+        var normalized = (markdown ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+        if (!normalized.StartsWith("---\n", StringComparison.Ordinal))
+            return normalized;
+
+        var end = normalized.IndexOf("\n---", 4, StringComparison.Ordinal);
+        if (end < 0)
+            return normalized;
+
+        var contentStart = normalized.IndexOf('\n', end + 1);
+        return contentStart < 0 ? string.Empty : normalized.Substring(contentStart + 1).TrimStart();
     }
 
     private static List<RepoRelease> NormalizeRepoReleases(IEnumerable<RepoRelease> releases, string? projectUri)
