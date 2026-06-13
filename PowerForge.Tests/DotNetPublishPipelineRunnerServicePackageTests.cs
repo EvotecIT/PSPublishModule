@@ -124,6 +124,8 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
             Assert.DoesNotContain("{{", installContent, StringComparison.Ordinal);
 
             var uninstallContent = File.ReadAllText(result.UninstallScriptPath!);
+            Assert.Contains("[string]$ServiceName", uninstallContent, StringComparison.Ordinal);
+            Assert.Contains("PowerForge.Svc", uninstallContent, StringComparison.Ordinal);
             Assert.DoesNotContain("{{", uninstallContent, StringComparison.Ordinal);
 
             var metadata = File.ReadAllText(result.MetadataPath);

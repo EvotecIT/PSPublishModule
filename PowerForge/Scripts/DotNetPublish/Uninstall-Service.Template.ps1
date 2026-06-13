@@ -1,11 +1,12 @@
 ﻿#requires -Version 5.1
 [CmdletBinding()]
 param(
+    [string]$ServiceName = '{{ServiceName}}',
     [switch]$Force
 )
 $ErrorActionPreference = 'Stop'
 
-$serviceName = '{{ServiceName}}'
+$serviceName = $ServiceName
 
 $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if ($existing) {
