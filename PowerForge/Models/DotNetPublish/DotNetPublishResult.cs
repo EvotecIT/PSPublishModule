@@ -159,6 +159,23 @@ public sealed class DotNetPublishArtefactResult
 
     /// <summary>Number of publish output files that were signed.</summary>
     public int SignedFiles { get; set; }
+
+    /// <summary>
+    /// Returns a concise artifact summary suitable for PowerShell collection display.
+    /// </summary>
+    public override string ToString()
+    {
+        var target = string.IsNullOrWhiteSpace(Target) ? "<unknown>" : Target;
+        var framework = string.IsNullOrWhiteSpace(Framework) ? "<framework>" : Framework;
+        var runtime = string.IsNullOrWhiteSpace(Runtime) ? "<runtime>" : Runtime;
+        var output = string.IsNullOrWhiteSpace(ZipPath)
+            ? OutputDir
+            : ZipPath;
+
+        return string.IsNullOrWhiteSpace(output)
+            ? $"{target} ({framework}, {runtime}, {Style})"
+            : $"{target} ({framework}, {runtime}, {Style}) -> {output}";
+    }
 }
 
 /// <summary>
