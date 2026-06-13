@@ -11,6 +11,54 @@ The helpers live in shared `PowerForge` services first and are exposed through t
 PowerShell cmdlets, so the same release logic can be reused by scripts, tests, CLI,
 and future project release pipelines.
 
+## Local Device Deployment
+
+For developer-device smoke testing, use the local deployment cmdlets. They wrap
+`xcodebuild build` and `xcrun devicectl` with structured arguments and typed results:
+
+```powershell
+Get-AppleDevice
+
+Publish-AppleAppToDevice `
+    -ProjectPath '.\Tactra.xcodeproj' `
+    -Scheme 'Tactra' `
+    -Configuration Debug `
+    -Device 'EvoPhone' `
+    -BundleIdentifier 'com.evotecit.tactra' `
+    -UseBuildMirror `
+    -Launch
+```
+
+`Publish-AppleAppToDevice` runs the full local loop:
+
+1. optionally mirrors the project root to a local temp folder with `rsync`
+2. builds the app with `xcodebuild build`
+3. installs the generated `.app` bundle with `xcrun devicectl device install app`
+4. optionally launches the bundle with `xcrun devicectl device process launch`
+
+The mirror step is useful for workspaces stored in cloud/file-provider locations where
+plain `xcodebuild` can stall. Use `-UseBuildMirror` for that path, or set
+`-BuildMirrorPath` when you want a deterministic mirror directory.
+
+The individual stages are also available when scripts need finer control:
+
+```powershell
+$build = New-AppleAppBuild `
+    -ProjectPath '.\Tactra.xcodeproj' `
+    -Scheme 'Tactra' `
+    -Device 'EvoPhone' `
+    -UseBuildMirror
+
+$install = Install-AppleApp -AppPath $build.AppPath -Device 'EvoPhone'
+
+$bundleId = $install.BundleIdentifier
+if (-not $bundleId) { $bundleId = 'com.evotecit.tactra' }
+
+Start-AppleApp `
+    -BundleIdentifier $bundleId `
+    -Device 'EvoPhone'
+```
+
 ## Binary Upload Flow
 
 ```powershell
