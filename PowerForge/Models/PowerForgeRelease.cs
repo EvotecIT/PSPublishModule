@@ -18,6 +18,8 @@ internal sealed class PowerForgeReleaseSpec
 
     public PowerForgeToolReleaseSpec? Tools { get; set; }
 
+    public PowerForgeAppleReleaseOptions? AppleApps { get; set; }
+
     public PowerForgeWorkspaceValidationOptions? WorkspaceValidation { get; set; }
 
     public PowerForgeReleaseOutputsOptions Outputs { get; set; } = new();
@@ -194,6 +196,10 @@ internal sealed class PowerForgeReleaseResult
 
     public DotNetPublishResult? DotNetTools { get; set; }
 
+    public PowerForgeAppleReleasePlan? AppleAppPlan { get; set; }
+
+    public PowerForgeAppleAppReleaseResult[] AppleApps { get; set; } = Array.Empty<PowerForgeAppleAppReleaseResult>();
+
     public WorkspaceValidationPlan? WorkspaceValidationPlan { get; set; }
 
     public WorkspaceValidationResult? WorkspaceValidation { get; set; }
@@ -266,6 +272,128 @@ internal sealed class PowerForgeReleaseStagingOptions
     public string? MetadataNameTemplate { get; set; }
 
     public string? OtherNameTemplate { get; set; }
+}
+
+internal sealed class PowerForgeAppleReleaseOptions
+{
+    public string? ProjectRoot { get; set; }
+
+    public string? Configuration { get; set; }
+
+    public string? ArchiveRoot { get; set; }
+
+    public string? ExportRoot { get; set; }
+
+    public string? TeamId { get; set; }
+
+    public string XcodeBuildExecutable { get; set; } = "xcodebuild";
+
+    public bool Archive { get; set; } = true;
+
+    public bool Upload { get; set; }
+
+    public bool AllowProvisioningUpdates { get; set; } = true;
+
+    public bool ManageAppVersionAndBuildNumber { get; set; }
+
+    public bool UploadSymbols { get; set; } = true;
+
+    public bool GenerateAppStoreInformation { get; set; } = true;
+
+    public string? SigningStyle { get; set; }
+
+    public string? ScreenshotConfigPath { get; set; }
+
+    public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
+
+    public bool SyncScreenshots { get; set; }
+
+    public bool ReplaceScreenshots { get; set; }
+
+    public AppleAppConfiguration[] Apps { get; set; } = Array.Empty<AppleAppConfiguration>();
+}
+
+internal sealed class PowerForgeAppleReleasePlan
+{
+    public string ProjectRoot { get; set; } = string.Empty;
+
+    public string Configuration { get; set; } = "Release";
+
+    public bool Archive { get; set; }
+
+    public bool Upload { get; set; }
+
+    public bool SyncScreenshots { get; set; }
+
+    public string? ScreenshotConfigPath { get; set; }
+
+    public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
+
+    public bool ReplaceScreenshots { get; set; }
+
+    public string XcodeBuildExecutable { get; set; } = "xcodebuild";
+
+    public bool AllowProvisioningUpdates { get; set; } = true;
+
+    public bool ManageAppVersionAndBuildNumber { get; set; }
+
+    public bool UploadSymbols { get; set; } = true;
+
+    public bool GenerateAppStoreInformation { get; set; } = true;
+
+    public string SigningStyle { get; set; } = "automatic";
+
+    public PowerForgeAppleAppReleaseTargetPlan[] Apps { get; set; } = Array.Empty<PowerForgeAppleAppReleaseTargetPlan>();
+}
+
+internal sealed class PowerForgeAppleAppReleaseTargetPlan
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string? BundleId { get; set; }
+
+    public ApplePlatform Platform { get; set; }
+
+    public string ProjectPath { get; set; } = string.Empty;
+
+    public bool IsWorkspace { get; set; }
+
+    public string Scheme { get; set; } = string.Empty;
+
+    public string Configuration { get; set; } = "Release";
+
+    public string Destination { get; set; } = string.Empty;
+
+    public string ArchivePath { get; set; } = string.Empty;
+
+    public string ExportPath { get; set; } = string.Empty;
+
+    public string? TeamId { get; set; }
+
+    public bool Upload { get; set; }
+
+    public bool VersionUpdateRequested { get; set; }
+
+    public string? MarketingVersion { get; set; }
+
+    public string? BuildNumber { get; set; }
+
+    public AppleBuildNumberPolicy BuildNumberPolicy { get; set; } = AppleBuildNumberPolicy.KeepExisting;
+}
+
+internal sealed class PowerForgeAppleAppReleaseResult
+{
+    public PowerForgeAppleAppReleaseTargetPlan Plan { get; set; } = new();
+
+    public AppleAppArchiveResult? Archive { get; set; }
+
+    public AppleAppArchiveUploadResult? Upload { get; set; }
+
+    public XcodeProjectVersionUpdateResult? VersionUpdate { get; set; }
+
+    public bool Success { get; set; }
+
+    public string? ErrorMessage { get; set; }
 }
 
 internal sealed class PowerForgeReleaseGitHubOptions

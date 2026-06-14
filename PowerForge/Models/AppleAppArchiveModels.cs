@@ -89,6 +89,9 @@ public sealed class AppleAppArchiveUploadRequest
     /// <summary>Controls whether App Store Connect manages app version and build numbers during upload.</summary>
     public bool ManageAppVersionAndBuildNumber { get; set; }
 
+    /// <summary>Controls whether xcodebuild may update provisioning profiles during export/upload.</summary>
+    public bool AllowProvisioningUpdates { get; set; } = true;
+
     /// <summary>Controls whether debug symbols are uploaded.</summary>
     public bool UploadSymbols { get; set; } = true;
 

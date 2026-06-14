@@ -115,9 +115,11 @@ public sealed class AppleAppArchiveService
             "-exportPath",
             exportPath,
             "-exportOptionsPlist",
-            plistPath,
-            "-allowProvisioningUpdates"
+            plistPath
         };
+        if (request.AllowProvisioningUpdates)
+            args.Add("-allowProvisioningUpdates");
+
         args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
 
         var result = await _processRunner.RunAsync(
