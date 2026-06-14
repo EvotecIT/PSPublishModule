@@ -95,6 +95,12 @@ public sealed class ModuleBuildSpec
     public string[] ExcludeLibraryFilter { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Optional library file names that should be packaged but not loaded by the generated PowerShell bootstrapper.
+    /// This is intended for native dependency DLLs that sit beside managed assemblies.
+    /// </summary>
+    public string[] IgnoreLibraryOnLoad { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// When true, copies only top-level published binaries and skips recursive runtime/native payload folders.
     /// </summary>
     public bool DoNotCopyLibrariesRecursively { get; set; }

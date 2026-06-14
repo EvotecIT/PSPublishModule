@@ -69,6 +69,7 @@ public sealed partial class ModulePipelineRunner
         string? netProjectPath = null;
         string[]? exportAssembliesFromSegments = null;
         string[]? excludeLibraryFilterFromSegments = null;
+        string[]? ignoreLibraryOnLoadFromSegments = null;
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? handleRuntimesFromSegments = null;
         bool? useAssemblyLoadContextFromSegments = null;
@@ -287,6 +288,7 @@ public sealed partial class ModulePipelineRunner
                     if (!string.IsNullOrWhiteSpace(bl.NETProjectPath)) netProjectPath = bl.NETProjectPath;
                     if (bl.BinaryModule is { Length: > 0 }) exportAssembliesFromSegments = bl.BinaryModule;
                     if (bl.ExcludeLibraryFilter is { Length: > 0 }) excludeLibraryFilterFromSegments = bl.ExcludeLibraryFilter;
+                    if (bl.IgnoreLibraryOnLoad is { Length: > 0 }) ignoreLibraryOnLoadFromSegments = bl.IgnoreLibraryOnLoad;
                     if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
                     if (bl.HandleRuntimes.HasValue) handleRuntimesFromSegments = bl.HandleRuntimes.Value;
                     if (bl.UseAssemblyLoadContext.HasValue)
@@ -636,6 +638,7 @@ public sealed partial class ModulePipelineRunner
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
             BinaryConflictReportRoot = projectRoot,
+            IgnoreLibraryOnLoad = NormalizeStringArray(ignoreLibraryOnLoadFromSegments ?? spec.Build.IgnoreLibraryOnLoad),
             KeepStaging = spec.Build.KeepStaging,
             RefreshManifestOnly = refreshPsd1Only
         };

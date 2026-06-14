@@ -22,6 +22,7 @@ internal static class ModuleBootstrapperGenerator
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.None,
         IReadOnlyList<string>? assemblyTypeAccelerators = null,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies = null,
+        IReadOnlyList<string>? ignoreLibrariesOnLoad = null,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
         IReadOnlyList<string>? targetFrameworks = null,
         Action<string>? log = null)
@@ -55,7 +56,7 @@ internal static class ModuleBootstrapperGenerator
         if (hasLib)
         {
             var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
-            var librariesContent = BuildLibrariesScript(root, moduleName, exportAssemblyFileNames, assemblyLoadContextLoaderIdentity?.AssemblyName);
+            var librariesContent = BuildLibrariesScript(root, moduleName, exportAssemblyFileNames, assemblyLoadContextLoaderIdentity?.AssemblyName, ignoreLibrariesOnLoad);
             WritePowerShellFile(librariesPath, librariesContent);
         }
 
@@ -114,15 +115,17 @@ internal static class ModuleBootstrapperGenerator
         string moduleRoot,
         string moduleName,
         IReadOnlyList<string> exportAssemblyFileNames,
-        string? assemblyLoadContextLoaderAssemblyName)
+        string? assemblyLoadContextLoaderAssemblyName,
+        IReadOnlyList<string>? ignoreLibrariesOnLoad)
     {
         // Generate a deterministic list of DLLs to Add-Type for each Lib/<Folder>.
         var libRoot = Path.Combine(moduleRoot, "Lib");
+        var ignored = NormalizeFileNameSet(ignoreLibrariesOnLoad);
         var byFolder = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        byFolder["Core"] = EnumerateDllRelativePaths(libRoot, "Core", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
-        byFolder["Default"] = EnumerateDllRelativePaths(libRoot, "Default", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
-        byFolder["Standard"] = EnumerateDllRelativePaths(libRoot, "Standard", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
-        byFolder[""] = EnumerateDllRelativePaths(libRoot, null, exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
+        byFolder["Core"] = EnumerateDllRelativePaths(libRoot, "Core", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName, ignored);
+        byFolder["Default"] = EnumerateDllRelativePaths(libRoot, "Default", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName, ignored);
+        byFolder["Standard"] = EnumerateDllRelativePaths(libRoot, "Standard", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName, ignored);
+        byFolder[""] = EnumerateDllRelativePaths(libRoot, null, exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName, ignored);
 
         var map = BuildLibrariesByFolderMap(byFolder);
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Libraries.Template.ps1");
@@ -174,7 +177,8 @@ internal static class ModuleBootstrapperGenerator
         string libRoot,
         string? folderName,
         IReadOnlyList<string> exportAssemblyFileNames,
-        string? assemblyLoadContextLoaderAssemblyName)
+        string? assemblyLoadContextLoaderAssemblyName,
+        ISet<string> ignoredLibraryFileNames)
     {
         var list = new List<string>();
 
@@ -198,6 +202,8 @@ internal static class ModuleBootstrapperGenerator
         var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(assemblyLoadContextLoaderAssemblyName))
             excluded.Add(assemblyLoadContextLoaderAssemblyName + ".dll");
+        foreach (var ignored in ignoredLibraryFileNames)
+            excluded.Add(ignored);
 
         var exportFirst = new HashSet<string>(exportAssemblyFileNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         foreach (var name in exportAssemblyFileNames ?? Array.Empty<string>())
@@ -224,6 +230,20 @@ internal static class ModuleBootstrapperGenerator
             parts.Add(fileName);
             return string.Join("\\", parts);
         }
+    }
+
+    private static ISet<string> NormalizeFileNameSet(IReadOnlyList<string>? values)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            var fileName = Path.GetFileName(value.Trim().Trim('"'));
+            if (string.IsNullOrWhiteSpace(fileName)) continue;
+            set.Add(fileName);
+        }
+
+        return set;
     }
 
     private static string EscapePsSingleQuoted(string value)

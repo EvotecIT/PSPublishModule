@@ -22,6 +22,8 @@ public class ModuleBootstrapperGeneratorTests
             var libraries = File.ReadAllText(librariesPath);
             Assert.Contains("# DemoModule.Libraries.ps1", libraries);
             Assert.Contains("Lib\\Core\\DemoModule.dll", libraries);
+            Assert.Contains("$L -split '[\\\\/]'", libraries);
+            Assert.Contains("[System.Reflection.AssemblyName]::GetAssemblyName($LibraryPath)", libraries);
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("# DemoModule bootstrapper", bootstrapper);
@@ -29,6 +31,38 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$FunctionsToExport = @('Get-Demo')", bootstrapper);
             Assert.Contains("$AliasesToExport = @('gdemo')", bootstrapper);
             Assert.DoesNotContain("ProcessArchitecture", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithIgnoredLibrariesOnLoad_OmitsNativeLibrariesFromLibrariesScript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-ignore-native-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "Dependency.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "libgcc_s_seh-1.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                ignoreLibrariesOnLoad: new[] { "libgcc_s_seh-1.dll" });
+
+            var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+            Assert.Contains("Lib\\Default\\DemoModule.dll", libraries);
+            Assert.Contains("Lib\\Default\\Dependency.dll", libraries);
+            Assert.DoesNotContain("libgcc_s_seh-1.dll", libraries);
         }
         finally
         {

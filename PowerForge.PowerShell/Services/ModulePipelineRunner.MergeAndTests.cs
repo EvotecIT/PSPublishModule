@@ -372,6 +372,7 @@ public sealed partial class ModulePipelineRunner
                 assemblyTypeAcceleratorMode: plan?.BuildSpec.AssemblyTypeAcceleratorMode ?? AssemblyTypeAcceleratorExportMode.None,
                 assemblyTypeAccelerators: plan?.BuildSpec.AssemblyTypeAccelerators,
                 assemblyTypeAcceleratorAssemblies: plan?.BuildSpec.AssemblyTypeAcceleratorAssemblies,
+                ignoreLibrariesOnLoad: plan?.BuildSpec.IgnoreLibraryOnLoad,
                 conditionalFunctionDependencies: conditionalExportDependencies,
                 targetFrameworks: plan?.BuildSpec.Frameworks,
                 log: message => _logger.Info(message));
