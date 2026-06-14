@@ -65,6 +65,8 @@ Invoke-ProjectRelease -Project $project -Plan
 
 For module help/docs generation workflow (`Invoke-ModuleBuild`, `New-ConfigurationDocumentation`, `about_*` topics),
 see `Docs/PSPublishModule.ModuleDocumentation.md`.
+For project-specific actions that run at stable module pipeline stages, see
+`Docs/PSPublishModule.ModuleLifecycleActions.md`.
 
 Schema
 - Location: `Schemas/project.build.schema.json`

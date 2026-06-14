@@ -214,7 +214,7 @@ Creates a preserve/restore rule for DotNet publish state handling.
 Creates a DotNet publish target entry for DotNet publish DSL.
 
 ### [New-ConfigurationExecute](New-ConfigurationExecute.md)
-Reserved placeholder for future execution-time configuration.
+Creates a module pipeline lifecycle action.
 
 ### [New-ConfigurationFileConsistency](New-ConfigurationFileConsistency.md)
 Creates configuration for file consistency checking (encoding and line endings) during module build.
@@ -370,5 +370,7 @@ Updates one or more modules from a private repository, optionally refreshing Azu
 ## About Topics
 
 ### [about_ModuleDependencies](About/about_ModuleDependencies.md)
+
+### [about_ModuleLifecycleActions](About/about_ModuleLifecycleActions.md)
 
 ### [about_PrivateGalleries](About/about_PrivateGalleries.md)

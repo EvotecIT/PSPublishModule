@@ -14,11 +14,17 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildPipeline pipeline,
         ModulePipelineRunState state)
     {
+        ExecuteActions(ModulePipelineActionStage.BeforeDependencies, plan, session, state);
         state.DependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
+        ExecuteActions(ModulePipelineActionStage.AfterDependencies, plan, session, state);
+
+        ExecuteActions(ModulePipelineActionStage.BeforeVersioning, plan, session, state);
         SyncSourceProjectVersionIfRequested(plan);
         ExecuteAppleVersioningPhase(plan, session, state);
+        ExecuteActions(ModulePipelineActionStage.AfterVersioning, plan, session, state);
 
         ModuleBuildPipeline.StagingResult staged;
+        ExecuteActions(ModulePipelineActionStage.BeforeStaging, plan, session, state);
         session.Start(session.StageStep);
         try
         {
@@ -33,8 +39,10 @@ public sealed partial class ModulePipelineRunner
             state.StagingPathForCleanup ??= plan.BuildSpec.StagingPath;
             throw;
         }
+        ExecuteActions(ModulePipelineActionStage.AfterStaging, plan, session, state);
 
         ModuleBuildResult buildResult;
+        ExecuteActions(ModulePipelineActionStage.BeforeBuild, plan, session, state);
         session.Start(session.BuildStep);
         try
         {
@@ -47,11 +55,13 @@ public sealed partial class ModulePipelineRunner
             session.Fail(session.BuildStep, ex);
             throw;
         }
+        ExecuteActions(ModulePipelineActionStage.AfterBuild, plan, session, state);
 
         state.MergeExecution = plan.BuildSpec.RefreshManifestOnly ? MergeExecutionResult.None : ApplyMerge(plan, buildResult);
         if (!plan.BuildSpec.RefreshManifestOnly)
             ApplyPlaceholders(plan, buildResult);
 
+        ExecuteActions(ModulePipelineActionStage.BeforeManifest, plan, session, state);
         session.Start(session.ManifestStep);
         try
         {
@@ -80,6 +90,7 @@ public sealed partial class ModulePipelineRunner
             session.Fail(session.ManifestStep, ex);
             throw;
         }
+        ExecuteActions(ModulePipelineActionStage.AfterManifest, plan, session, state);
     }
 
     private void ExecuteDocumentationPhase(
@@ -90,8 +101,12 @@ public sealed partial class ModulePipelineRunner
     {
         var buildResult = state.RequireBuildResult();
 
+        ExecuteActions(ModulePipelineActionStage.BeforeDocumentation, plan, session, state);
         if (plan.Documentation is null || plan.DocumentationBuild?.Enable != true)
+        {
+            ExecuteActions(ModulePipelineActionStage.AfterDocumentation, plan, session, state);
             return;
+        }
 
         try
         {
@@ -131,6 +146,7 @@ public sealed partial class ModulePipelineRunner
             session.Fail(session.DocsMamlStep, ex);
             throw;
         }
+        ExecuteActions(ModulePipelineActionStage.AfterDocumentation, plan, session, state);
     }
 
     private void ExecuteFormattingAndSigningPhases(
@@ -142,6 +158,7 @@ public sealed partial class ModulePipelineRunner
     {
         var buildResult = state.RequireBuildResult();
 
+        ExecuteActions(ModulePipelineActionStage.BeforeFormatting, plan, session, state);
         if (plan.Formatting is not null)
         {
             var formattingPipeline = new FormattingPipeline(_logger);
@@ -202,6 +219,7 @@ public sealed partial class ModulePipelineRunner
                 }
             }
         }
+        ExecuteActions(ModulePipelineActionStage.AfterFormatting, plan, session, state);
 
         try
         {
@@ -213,6 +231,7 @@ public sealed partial class ModulePipelineRunner
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
 
+        ExecuteActions(ModulePipelineActionStage.BeforeSigning, plan, session, state);
         if (plan.SignModule)
         {
             session.Start(session.SignStep);
@@ -230,6 +249,7 @@ public sealed partial class ModulePipelineRunner
                 throw;
             }
         }
+        ExecuteActions(ModulePipelineActionStage.AfterSigning, plan, session, state);
     }
 
     private void ExecuteValidationPhases(
@@ -239,6 +259,7 @@ public sealed partial class ModulePipelineRunner
     {
         var buildResult = state.RequireBuildResult();
 
+        ExecuteActions(ModulePipelineActionStage.BeforeValidation, plan, session, state);
         if (plan.FileConsistencySettings?.Enable == true)
         {
             var s = plan.FileConsistencySettings;
@@ -532,6 +553,7 @@ public sealed partial class ModulePipelineRunner
                 throw;
             }
         }
+        ExecuteActions(ModulePipelineActionStage.AfterValidation, plan, session, state);
     }
 
     private void ExecuteTestPhases(
@@ -541,6 +563,7 @@ public sealed partial class ModulePipelineRunner
     {
         var buildResult = state.RequireBuildResult();
 
+        ExecuteActions(ModulePipelineActionStage.BeforeTests, plan, session, state);
         if (plan.ImportModules is not null &&
             (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
         {
@@ -608,6 +631,7 @@ public sealed partial class ModulePipelineRunner
                 }
             }
         }
+        ExecuteActions(ModulePipelineActionStage.AfterTests, plan, session, state);
     }
 
     private void ExecutePackagingPublishAndInstallPhases(
@@ -620,6 +644,7 @@ public sealed partial class ModulePipelineRunner
     {
         var buildResult = state.RequireBuildResult();
 
+        ExecuteActions(ModulePipelineActionStage.BeforeArtefacts, plan, session, state);
         if (plan.Artefacts is { Length: > 0 })
         {
             var builder = new ArtefactBuilder(_logger);
@@ -649,7 +674,9 @@ public sealed partial class ModulePipelineRunner
                 }
             }
         }
+        ExecuteActions(ModulePipelineActionStage.AfterArtefacts, plan, session, state);
 
+        ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
         if (plan.Publishes is { Length: > 0 })
         {
             foreach (var publish in plan.Publishes)
@@ -673,7 +700,9 @@ public sealed partial class ModulePipelineRunner
                 }
             }
         }
+        ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
 
+        ExecuteActions(ModulePipelineActionStage.BeforeInstall, plan, session, state);
         if (plan.InstallEnabled)
         {
             session.Start(session.InstallStep);
@@ -718,6 +747,7 @@ public sealed partial class ModulePipelineRunner
                 }
             }
         }
+        ExecuteActions(ModulePipelineActionStage.AfterInstall, plan, session, state);
     }
 
     internal void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)

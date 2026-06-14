@@ -308,11 +308,13 @@ Invoke-ModuleBuild @buildParams -Settings {
     New-ConfigurationArtefact -Type Unpacked -Enable -Path (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>') -RequiredModulesPath (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>/Modules') -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
+        "Examples\Example.ModuleLifecycleActions.ps1" = "Examples\Example.ModuleLifecycleActions.ps1"
     } -CopyFilesRelative
 
     New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'PackedWithModules') -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
+        "Examples\Example.ModuleLifecycleActions.ps1" = "Examples\Example.ModuleLifecycleActions.ps1"
     } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip"
 
     New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'Packed') -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"

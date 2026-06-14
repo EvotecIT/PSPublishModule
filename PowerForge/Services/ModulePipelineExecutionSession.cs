@@ -12,6 +12,7 @@ internal sealed class ModulePipelineExecutionSession
     private readonly Dictionary<ConfigurationPublishSegment, ModulePipelineStep> _publishSteps;
     private readonly Dictionary<ConfigurationAppleAppSegment, ModulePipelineStep> _appleAppSteps;
     private readonly Dictionary<ConfigurationXcodeProjectVersionSegment, ModulePipelineStep> _xcodeProjectVersionSteps;
+    private readonly Dictionary<ConfigurationActionSegment, ModulePipelineStep> _actionSteps;
 
     private ModulePipelineExecutionSession(ModulePipelineStep[] steps, IModulePipelineProgressReporter reporter)
     {
@@ -34,6 +35,9 @@ internal sealed class ModulePipelineExecutionSession
         _xcodeProjectVersionSteps = Steps
             .Where(static step => step.XcodeProjectVersionSegment is not null)
             .ToDictionary(static step => step.XcodeProjectVersionSegment!, static step => step);
+        _actionSteps = Steps
+            .Where(static step => step.ActionSegment is not null)
+            .ToDictionary(static step => step.ActionSegment!, static step => step);
 
         TestSteps = Steps
             .Where(static step => step.Kind == ModulePipelineStepKind.Tests &&
@@ -96,6 +100,12 @@ internal sealed class ModulePipelineExecutionSession
     {
         if (xcodeProjectVersion is null) return null;
         return _xcodeProjectVersionSteps.TryGetValue(xcodeProjectVersion, out var step) ? step : null;
+    }
+
+    internal ModulePipelineStep? GetActionStep(ConfigurationActionSegment action)
+    {
+        if (action is null) return null;
+        return _actionSteps.TryGetValue(action, out var step) ? step : null;
     }
 
     internal void Start(ModulePipelineStep? step)

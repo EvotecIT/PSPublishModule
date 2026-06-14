@@ -33,6 +33,6 @@ Legend:
 | Compatibility | Compatibility checks + report export | `ConfigurationCompatibilitySegment` | [OK] plus severity option |
 | Validation | Not present | `ConfigurationValidationSegment` (new) | [OK] new |
 | TestsAfterMerge | Pester tests after merge | Wired into pipeline via test runner | [OK] |
-| Execute | Placeholder (no-op) | Placeholder (no-op) | [OK] |
+| Execute | Project-specific script hook segment | `ConfigurationActionSegment` runs file or inline PowerShell at stable lifecycle stages with JSON context | [OK] plus contextual stages |
 
 Known gaps to close (C# pipeline): none currently identified for the DSL segments listed above.

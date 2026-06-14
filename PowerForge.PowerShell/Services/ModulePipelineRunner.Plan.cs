@@ -93,6 +93,7 @@ public sealed partial class ModulePipelineRunner
         var placeHolders = new List<PlaceHolderReplacement>();
         var commandDependencies = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var testsAfterMerge = new List<TestConfiguration>();
+        var actions = new List<ConfigurationActionSegment>();
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
         var appleApps = new List<ConfigurationAppleAppSegment>();
@@ -476,6 +477,16 @@ public sealed partial class ModulePipelineRunner
                         testsAfterMerge.Add(cfg);
                     break;
                 }
+                case ConfigurationActionSegment action:
+                {
+                    var cfg = action.Configuration ?? new ModulePipelineActionConfiguration();
+                    if (cfg.Enabled)
+                    {
+                        action.Configuration = cfg;
+                        actions.Add(action);
+                    }
+                    break;
+                }
                 case ConfigurationPublishSegment publish:
                 {
                     publishes.Add(publish);
@@ -819,6 +830,9 @@ public sealed partial class ModulePipelineRunner
             placeHolderOption: placeHolderOption,
             commandModuleDependencies: commandDeps,
             testsAfterMerge: testsAfterMerge.ToArray(),
+            actions: refreshPsd1Only
+                ? Array.Empty<ConfigurationActionSegment>()
+                : actions.ToArray(),
             appleApps: refreshPsd1Only
                 ? Array.Empty<ConfigurationAppleAppSegment>()
                 : appleApps
