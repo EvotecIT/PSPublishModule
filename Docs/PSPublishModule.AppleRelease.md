@@ -119,10 +119,6 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
     "ExportRoot": "Artifacts/Apple/Exports",
     "TeamId": "8ZPGZ79T7J",
     "Upload": false,
-    "ScreenshotConfigPaths": [
-      "scripts/appstoreconnect-screenshots-ios.json",
-      "scripts/appstoreconnect-screenshots-macos.json"
-    ],
     "Apps": [
       {
         "Name": "Tactra iPhone",
@@ -153,26 +149,28 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
 Plan first:
 
 ```powershell
-Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json' -ToolsOnly -Plan
+Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json' -Plan
 ```
 
 Archive without uploading:
 
 ```powershell
-Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json' -ToolsOnly
+Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json'
 ```
 
 Upload to App Store Connect by setting `AppleApps.Upload` to `true`, or by keeping a
 separate release config for the store lane. The unified flow reuses the same archive
 and `xcodebuild -exportArchive` helpers as `New-AppleAppArchive` and
 `Publish-AppleAppArchive`; it does not duplicate signing or upload behavior.
+`-ToolsOnly` intentionally runs downloadable tool targets only and skips `AppleApps`.
 
 ## Current Boundary
 
 These helpers automate signed binary archive/upload and provide low-level screenshot
 upload primitives. App Store localized text metadata, build selection for review, and
 release submission still need dedicated App Store Connect write support before they
-should be automated here.
+should be automated here. Unified `AppleApps` screenshot sync is not wired yet; keep
+using `Sync-AppStoreConnectScreenshots` or project-specific screenshot scripts for now.
 
 ## Screenshot Upload Flow
 

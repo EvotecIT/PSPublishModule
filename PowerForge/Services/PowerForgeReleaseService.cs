@@ -140,7 +140,7 @@ internal sealed class PowerForgeReleaseService
         var runModule = spec.Module is not null && (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
         var runPackages = spec.Packages is not null && !request.ModuleOnly && !request.ToolsOnly;
         var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
-        var runAppleApps = spec.AppleApps is not null && !request.ModuleOnly && !request.PackagesOnly;
+        var runAppleApps = spec.AppleApps is not null && !request.ModuleOnly && !request.PackagesOnly && !request.ToolsOnly;
         var configurationOverride = NormalizeConfiguration(request.Configuration);
         var runWorkspaceValidation = spec.WorkspaceValidation is not null && !request.SkipWorkspaceValidation;
         var publishUnifiedGitHub = ShouldPublishUnifiedGitHub(spec, request);
@@ -295,7 +295,7 @@ internal sealed class PowerForgeReleaseService
 
         if (runAppleApps)
         {
-            var applePlan = PrepareAppleRelease(spec.AppleApps!, configPath, configurationOverride);
+            var applePlan = PrepareAppleRelease(spec.AppleApps!, configPath, configurationOverride, sharedReleaseVersion);
             result.AppleAppPlan = applePlan;
 
             if (!request.PlanOnly && !request.ValidateOnly)
@@ -421,8 +421,12 @@ internal sealed class PowerForgeReleaseService
     private static PowerForgeAppleReleasePlan PrepareAppleRelease(
         PowerForgeAppleReleaseOptions options,
         string releaseConfigPath,
-        string? configurationOverride)
+        string? configurationOverride,
+        string? sharedReleaseVersion)
     {
+        if (options.SyncScreenshots)
+            throw new NotSupportedException("AppleApps.SyncScreenshots is not supported by the unified release workflow yet. Use Sync-AppStoreConnectScreenshots or project-specific screenshot sync scripts for now.");
+
         var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var projectRoot = ResolveOutputPath(configDirectory, string.IsNullOrWhiteSpace(options.ProjectRoot) ? "." : options.ProjectRoot!);
         var configuration = configurationOverride ?? NormalizeConfiguration(options.Configuration) ?? "Release";
@@ -438,7 +442,7 @@ internal sealed class PowerForgeReleaseService
 
         var apps = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
             .Where(app => app.Enabled)
-            .Select(app => PrepareAppleAppPlan(app, options, projectRoot, archiveRoot, exportRoot, configuration))
+            .Select(app => PrepareAppleAppPlan(app, options, projectRoot, archiveRoot, exportRoot, configuration, sharedReleaseVersion))
             .ToArray();
 
         if (apps.Length == 0)
@@ -470,7 +474,8 @@ internal sealed class PowerForgeReleaseService
         string projectRoot,
         string archiveRoot,
         string exportRoot,
-        string configuration)
+        string configuration,
+        string? sharedReleaseVersion)
     {
         if (string.IsNullOrWhiteSpace(app.ProjectPath))
             throw new InvalidOperationException("Apple app ProjectPath is required.");
@@ -478,6 +483,9 @@ internal sealed class PowerForgeReleaseService
             throw new InvalidOperationException($"Apple app '{app.Name ?? app.ProjectPath}' requires Scheme for archive automation.");
 
         var projectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
+        if (!File.Exists(projectPath) && !Directory.Exists(projectPath))
+            throw new FileNotFoundException($"Apple app project or workspace was not found: {projectPath}", projectPath);
+
         var isWorkspace = projectPath.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase);
         var name = string.IsNullOrWhiteSpace(app.Name) ? app.Scheme!.Trim() : app.Name!.Trim();
         var safeName = SanitizeStageEntryName(name).Replace(' ', '-');
@@ -487,6 +495,19 @@ internal sealed class PowerForgeReleaseService
         var destination = AppleAppArchiveService.GetGenericDestination(platform);
         var archivePath = Path.Combine(archiveRoot, platform.ToString(), $"{safeName}.xcarchive");
         var exportPath = Path.Combine(exportRoot, platform.ToString(), safeName);
+        var versionUpdateRequested = app.UseResolvedVersion ||
+                                     !string.IsNullOrWhiteSpace(app.MarketingVersion) ||
+                                     !string.IsNullOrWhiteSpace(app.BuildNumber) ||
+                                     app.BuildNumberPolicy != AppleBuildNumberPolicy.KeepExisting;
+        var marketingVersion = versionUpdateRequested
+            ? app.UseResolvedVersion ? sharedReleaseVersion : app.MarketingVersion
+            : null;
+        if (versionUpdateRequested && string.IsNullOrWhiteSpace(marketingVersion))
+            throw new InvalidOperationException($"Apple app '{name}' requires MarketingVersion unless UseResolvedVersion is enabled with a resolvable release version.");
+
+        var buildNumber = versionUpdateRequested
+            ? ResolveAppleBuildNumber(app, projectPath, new XcodeProjectVersionEditor())
+            : null;
 
         return new PowerForgeAppleAppReleaseTargetPlan
         {
@@ -501,7 +522,11 @@ internal sealed class PowerForgeReleaseService
             ArchivePath = archivePath,
             ExportPath = exportPath,
             TeamId = options.TeamId,
-            Upload = options.Upload
+            Upload = options.Upload,
+            VersionUpdateRequested = versionUpdateRequested,
+            MarketingVersion = marketingVersion?.Trim(),
+            BuildNumber = buildNumber,
+            BuildNumberPolicy = app.BuildNumberPolicy
         };
     }
 
@@ -515,6 +540,11 @@ internal sealed class PowerForgeReleaseService
                 Plan = app,
                 Success = true
             };
+
+            if (app.VersionUpdateRequested)
+            {
+                result.VersionUpdate = new XcodeProjectVersionEditor().Update(app.ProjectPath, app.MarketingVersion!, app.BuildNumber);
+            }
 
             if (plan.Archive)
             {
@@ -565,6 +595,34 @@ internal sealed class PowerForgeReleaseService
         }
 
         return results.ToArray();
+    }
+
+    private static string? ResolveAppleBuildNumber(
+        AppleAppConfiguration app,
+        string projectPath,
+        XcodeProjectVersionEditor editor)
+    {
+        if (!string.IsNullOrWhiteSpace(app.BuildNumber))
+            return app.BuildNumber!.Trim();
+
+        return app.BuildNumberPolicy switch
+        {
+            AppleBuildNumberPolicy.KeepExisting => null,
+            AppleBuildNumberPolicy.Explicit => throw new InvalidOperationException("AppleApps.Apps.BuildNumber is required when BuildNumberPolicy is Explicit."),
+            AppleBuildNumberPolicy.IncrementExisting => IncrementExistingAppleBuildNumber(editor.Read(projectPath)),
+            _ => throw new InvalidOperationException($"Unsupported Apple build number policy: {app.BuildNumberPolicy}.")
+        };
+    }
+
+    private static string IncrementExistingAppleBuildNumber(XcodeProjectVersionInfo info)
+    {
+        if (info.BuildNumber is null)
+            throw new InvalidOperationException($"Cannot increment Apple build number because CURRENT_PROJECT_VERSION is missing or inconsistent in '{info.ProjectFilePath}'.");
+
+        if (!long.TryParse(info.BuildNumber, out var current))
+            throw new InvalidOperationException($"Cannot increment Apple build number '{info.BuildNumber}' in '{info.ProjectFilePath}'. Only integer build numbers are supported.");
+
+        return (current + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static (WorkspaceValidationSpec Spec, string ConfigPath) LoadWorkspaceValidationSpec(

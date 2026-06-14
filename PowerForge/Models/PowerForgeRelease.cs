@@ -371,6 +371,14 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
     public string? TeamId { get; set; }
 
     public bool Upload { get; set; }
+
+    public bool VersionUpdateRequested { get; set; }
+
+    public string? MarketingVersion { get; set; }
+
+    public string? BuildNumber { get; set; }
+
+    public AppleBuildNumberPolicy BuildNumberPolicy { get; set; } = AppleBuildNumberPolicy.KeepExisting;
 }
 
 internal sealed class PowerForgeAppleAppReleaseResult
@@ -380,6 +388,8 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public AppleAppArchiveResult? Archive { get; set; }
 
     public AppleAppArchiveUploadResult? Upload { get; set; }
+
+    public XcodeProjectVersionUpdateResult? VersionUpdate { get; set; }
 
     public bool Success { get; set; }
 
