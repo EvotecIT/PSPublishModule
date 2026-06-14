@@ -295,7 +295,7 @@ internal sealed class PowerForgeReleaseService
 
         if (runAppleApps)
         {
-            var applePlan = PrepareAppleRelease(spec.AppleApps!, configPath, configurationOverride, sharedReleaseVersion);
+            var applePlan = PrepareAppleRelease(spec.AppleApps!, configPath, configurationOverride, sharedReleaseVersion, request.Targets);
             result.AppleAppPlan = applePlan;
 
             if (!request.PlanOnly && !request.ValidateOnly)
@@ -422,7 +422,8 @@ internal sealed class PowerForgeReleaseService
         PowerForgeAppleReleaseOptions options,
         string releaseConfigPath,
         string? configurationOverride,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        string[]? selectedTargetNames)
     {
         if (options.SyncScreenshots)
             throw new NotSupportedException("AppleApps.SyncScreenshots is not supported by the unified release workflow yet. Use Sync-AppStoreConnectScreenshots or project-specific screenshot sync scripts for now.");
@@ -440,8 +441,21 @@ internal sealed class PowerForgeReleaseService
             .Select(path => ResolveOutputPath(projectRoot, path))
             .ToArray();
 
-        var apps = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
+        var selectedTargets = NormalizeStrings(selectedTargetNames);
+        var configuredApps = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
             .Where(app => app.Enabled)
+            .ToArray();
+        if (selectedTargets.Length > 0)
+        {
+            var missing = selectedTargets
+                .Where(selected => configuredApps.All(app => !AppleAppMatchesTarget(app, selected)))
+                .ToArray();
+            if (missing.Length > 0)
+                throw new ArgumentException($"Unknown Apple app target(s): {string.Join(", ", missing)}", nameof(selectedTargetNames));
+        }
+
+        var apps = configuredApps
+            .Where(app => selectedTargets.Length == 0 || selectedTargets.Any(selected => AppleAppMatchesTarget(app, selected)))
             .Select(app => PrepareAppleAppPlan(app, options, projectRoot, archiveRoot, exportRoot, configuration, sharedReleaseVersion))
             .ToArray();
 
@@ -605,7 +619,22 @@ internal sealed class PowerForgeReleaseService
     private static string NormalizeAppleArchiveProjectPath(string projectPath, string appName)
     {
         if (Directory.Exists(projectPath))
+        {
+            var extension = Path.GetExtension(projectPath);
+            if (string.Equals(extension, ".xcodeproj", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(extension, ".xcworkspace", StringComparison.OrdinalIgnoreCase))
+            {
+                return projectPath;
+            }
+
+            throw new InvalidOperationException($"Apple app '{appName}' ProjectPath must point to a .xcodeproj or .xcworkspace directory for archive automation: {projectPath}");
+        }
+
+        if (File.Exists(projectPath) &&
+            string.Equals(Path.GetExtension(projectPath), ".xcodeproj", StringComparison.OrdinalIgnoreCase))
+        {
             return projectPath;
+        }
 
         if (File.Exists(projectPath) &&
             string.Equals(Path.GetFileName(projectPath), "project.pbxproj", StringComparison.OrdinalIgnoreCase))
@@ -620,6 +649,24 @@ internal sealed class PowerForgeReleaseService
 
         throw new InvalidOperationException($"Apple app '{appName}' ProjectPath must point to a .xcodeproj or .xcworkspace for archive automation. project.pbxproj paths are only supported when they are inside a .xcodeproj directory.");
     }
+
+    private static bool AppleAppMatchesTarget(AppleAppConfiguration app, string targetName)
+    {
+        var trimmed = targetName.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        return string.Equals(app.Name?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(app.Scheme?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(app.BundleId?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string[] NormalizeStrings(IEnumerable<string>? values)
+        => (values ?? Array.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static string? ResolveAppleBuildNumber(
         AppleAppConfiguration app,
@@ -2440,6 +2487,7 @@ internal sealed class PowerForgeReleaseService
             packages = BuildPackageManifestSection(result.Packages),
             legacyTools = BuildLegacyToolsManifestSection(result.Tools),
             dotNetTools = BuildDotNetToolsManifestSection(result.DotNetTools),
+            appleApps = BuildAppleAppsManifestSection(result.AppleAppPlan, result.AppleApps),
             githubReleases = result.ToolGitHubReleases,
             unifiedGithubRelease = result.UnifiedGitHubRelease
         };
@@ -2447,6 +2495,91 @@ internal sealed class PowerForgeReleaseService
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
         File.WriteAllText(manifestPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private static object? BuildAppleAppsManifestSection(
+        PowerForgeAppleReleasePlan? plan,
+        PowerForgeAppleAppReleaseResult[] results)
+    {
+        if (plan is null && (results is null || results.Length == 0))
+            return null;
+
+        return new
+        {
+            plan = plan is null ? null : new
+            {
+                plan.ProjectRoot,
+                plan.Configuration,
+                plan.Archive,
+                plan.Upload,
+                plan.SyncScreenshots,
+                plan.ScreenshotConfigPath,
+                plan.ScreenshotConfigPaths,
+                plan.ReplaceScreenshots,
+                plan.XcodeBuildExecutable,
+                plan.AllowProvisioningUpdates,
+                plan.ManageAppVersionAndBuildNumber,
+                plan.UploadSymbols,
+                plan.GenerateAppStoreInformation,
+                plan.SigningStyle,
+                apps = plan.Apps.Select(app => new
+                {
+                    app.Name,
+                    app.BundleId,
+                    Platform = app.Platform.ToString(),
+                    app.ProjectPath,
+                    app.IsWorkspace,
+                    app.Scheme,
+                    app.Configuration,
+                    app.Destination,
+                    app.ArchivePath,
+                    app.ExportPath,
+                    app.TeamId,
+                    app.Upload,
+                    app.VersionUpdateRequested,
+                    app.MarketingVersion,
+                    app.BuildNumber,
+                    BuildNumberPolicy = app.BuildNumberPolicy.ToString()
+                }).ToArray()
+            },
+            results = (results ?? Array.Empty<PowerForgeAppleAppReleaseResult>()).Select(result => new
+            {
+                app = result.Plan.Name,
+                result.Success,
+                result.ErrorMessage,
+                versionUpdate = result.VersionUpdate is null ? null : new
+                {
+                    result.VersionUpdate.ProjectFilePath,
+                    result.VersionUpdate.Changed,
+                    result.VersionUpdate.WhatIf,
+                    before = new
+                    {
+                        result.VersionUpdate.Before.MarketingVersion,
+                        result.VersionUpdate.Before.BuildNumber
+                    },
+                    after = new
+                    {
+                        result.VersionUpdate.After.MarketingVersion,
+                        result.VersionUpdate.After.BuildNumber
+                    }
+                },
+                archive = result.Archive is null ? null : new
+                {
+                    result.Archive.ArchivePath,
+                    result.Archive.Destination,
+                    result.Archive.Succeeded,
+                    ExitCode = result.Archive.ProcessResult.ExitCode
+                },
+                upload = result.Upload is null ? null : new
+                {
+                    result.Upload.ArchivePath,
+                    result.Upload.ExportPath,
+                    result.Upload.ExportOptionsPlistPath,
+                    result.Upload.Succeeded,
+                    ExitCode = result.Upload.ProcessResult.ExitCode
+                }
+            }).ToArray()
+        };
     }
 
     private static void WriteReleaseChecksums(PowerForgeReleaseResult result, string checksumsPath)
