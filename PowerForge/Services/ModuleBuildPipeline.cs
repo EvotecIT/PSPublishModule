@@ -174,6 +174,7 @@ public sealed class ModuleBuildPipeline
                 assemblyTypeAcceleratorMode,
                 spec.AssemblyTypeAccelerators,
                 spec.AssemblyTypeAcceleratorAssemblies,
+                spec.IgnoreLibraryOnLoad,
                 targetFrameworks: spec.Frameworks,
                 log: message => _logger.Info(message));
         }

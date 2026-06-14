@@ -117,6 +117,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
                         BuildLibraries = new BuildLibrariesConfiguration
                         {
                             ExcludeLibraryFilter = new[] { "Microsoft.CodeAnalysis*" },
+                            IgnoreLibraryOnLoad = new[] { "libgcc_s_seh-1.dll" },
                             NETDoNotCopyLibrariesRecursively = true
                         }
                     }
@@ -128,6 +129,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             var plan = runner.Plan(spec);
 
             Assert.Equal(new[] { "Microsoft.CodeAnalysis*" }, plan.BuildSpec.ExcludeLibraryFilter);
+            Assert.Equal(new[] { "libgcc_s_seh-1.dll" }, plan.BuildSpec.IgnoreLibraryOnLoad);
             Assert.True(plan.BuildSpec.DoNotCopyLibrariesRecursively);
         }
         finally
