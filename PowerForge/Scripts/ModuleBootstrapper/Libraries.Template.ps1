@@ -52,7 +52,8 @@ $LibrariesToLoad = $LibrariesByFolder[$LibFolder]
 if ($null -eq $LibrariesToLoad) { $LibrariesToLoad = @() }
 foreach ($L in $LibrariesToLoad) {
     try {
-        $LibraryPath = [IO.Path]::Combine($PSScriptRoot, $L)
+        $LibraryPathParts = @($PSScriptRoot) + @($L -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $LibraryPath = [IO.Path]::Combine([string[]] $LibraryPathParts)
         try {
             $null = [System.Reflection.AssemblyName]::GetAssemblyName($LibraryPath)
         } catch [System.BadImageFormatException] {

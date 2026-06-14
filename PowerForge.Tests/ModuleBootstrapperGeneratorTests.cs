@@ -22,6 +22,7 @@ public class ModuleBootstrapperGeneratorTests
             var libraries = File.ReadAllText(librariesPath);
             Assert.Contains("# DemoModule.Libraries.ps1", libraries);
             Assert.Contains("Lib\\Core\\DemoModule.dll", libraries);
+            Assert.Contains("$L -split '[\\\\/]'", libraries);
             Assert.Contains("[System.Reflection.AssemblyName]::GetAssemblyName($LibraryPath)", libraries);
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
