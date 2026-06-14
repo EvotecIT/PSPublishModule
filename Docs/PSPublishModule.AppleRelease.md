@@ -101,6 +101,72 @@ Get-AppStoreConnectBuild -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyP
 Test-AppleAppReleaseDrift -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath -Path '.\Tactra.xcodeproj' -AppId $appId -Platform iOS
 ```
 
+## Unified Release Flow
+
+Apple app archive/upload targets can also live in the same `powerforge.release.json`
+used for modules, NuGet packages, downloadable tools, Winget manifests, and GitHub
+release assets. This is the preferred shape for apps such as Tactra or BayManager
+that need one release file to describe iPhone, iPad, macOS, and store-delivery lanes.
+
+```json
+{
+  "$schema": "./Schemas/powerforge.release.schema.json",
+  "SchemaVersion": 1,
+  "AppleApps": {
+    "ProjectRoot": ".",
+    "Configuration": "Release",
+    "ArchiveRoot": "Artifacts/Apple/Archives",
+    "ExportRoot": "Artifacts/Apple/Exports",
+    "TeamId": "8ZPGZ79T7J",
+    "Upload": false,
+    "ScreenshotConfigPaths": [
+      "scripts/appstoreconnect-screenshots-ios.json",
+      "scripts/appstoreconnect-screenshots-macos.json"
+    ],
+    "Apps": [
+      {
+        "Name": "Tactra iPhone",
+        "BundleId": "com.evotecit.tactra",
+        "Platform": "iOS",
+        "ProjectPath": "Tactra.xcodeproj",
+        "Scheme": "Tactra"
+      },
+      {
+        "Name": "Tactra iPad",
+        "BundleId": "com.evotecit.tactra",
+        "Platform": "iPadOS",
+        "ProjectPath": "Tactra.xcodeproj",
+        "Scheme": "Tactra"
+      },
+      {
+        "Name": "Tactra Mac",
+        "BundleId": "com.evotecit.tactra.mac",
+        "Platform": "macOS",
+        "ProjectPath": "Tactra.xcodeproj",
+        "Scheme": "TactraMac"
+      }
+    ]
+  }
+}
+```
+
+Plan first:
+
+```powershell
+Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json' -ToolsOnly -Plan
+```
+
+Archive without uploading:
+
+```powershell
+Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json' -ToolsOnly
+```
+
+Upload to App Store Connect by setting `AppleApps.Upload` to `true`, or by keeping a
+separate release config for the store lane. The unified flow reuses the same archive
+and `xcodebuild -exportArchive` helpers as `New-AppleAppArchive` and
+`Publish-AppleAppArchive`; it does not duplicate signing or upload behavior.
+
 ## Current Boundary
 
 These helpers automate signed binary archive/upload and provide low-level screenshot

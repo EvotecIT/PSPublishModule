@@ -235,6 +235,36 @@
           }
         }
       }
+    },
+    "AppleApps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ProjectRoot": { "type": [ "string", "null" ] },
+        "Configuration": { "type": "string", "enum": [ "Release", "Debug" ] },
+        "ArchiveRoot": { "type": [ "string", "null" ] },
+        "ExportRoot": { "type": [ "string", "null" ] },
+        "TeamId": { "type": [ "string", "null" ] },
+        "XcodeBuildExecutable": { "type": "string" },
+        "Archive": { "type": "boolean" },
+        "Upload": { "type": "boolean" },
+        "AllowProvisioningUpdates": { "type": "boolean" },
+        "ManageAppVersionAndBuildNumber": { "type": "boolean" },
+        "UploadSymbols": { "type": "boolean" },
+        "GenerateAppStoreInformation": { "type": "boolean" },
+        "SigningStyle": { "type": [ "string", "null" ] },
+        "ScreenshotConfigPath": { "type": [ "string", "null" ] },
+        "ScreenshotConfigPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "SyncScreenshots": { "type": "boolean" },
+        "ReplaceScreenshots": { "type": "boolean" },
+        "Apps": {
+          "type": "array",
+          "items": { "$ref": "powerforge.segments.schema.json#/$defs/AppleAppConfiguration" }
+        }
+      }
     }
   }
 }

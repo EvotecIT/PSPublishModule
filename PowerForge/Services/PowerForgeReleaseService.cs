@@ -52,6 +52,8 @@ internal sealed class PowerForgeReleaseService
     private readonly Func<DotNetPublishPlan, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> _publishGitHubRelease;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
+    private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
+    private readonly Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult> _uploadAppleApp;
 
     /// <summary>
     /// Creates a new unified release service.
@@ -66,7 +68,9 @@ internal sealed class PowerForgeReleaseService
             (spec, configPath, request, selectedOutputs) => PlanDotNetTools(logger, spec, configPath, request, selectedOutputs),
             plan => new DotNetPublishPipelineRunner(logger).Run(plan, progress: null),
             publishRequest => new GitHubReleasePublisher(logger).PublishRelease(publishRequest),
-            plan => new WingetSubmissionService(logger).Run(plan))
+            plan => new WingetSubmissionService(logger).Run(plan),
+            request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult(),
+            request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult())
     {
     }
 
@@ -85,7 +89,9 @@ internal sealed class PowerForgeReleaseService
             (spec, configPath, request, selectedOutputs) => PlanDotNetTools(logger, spec, configPath, request, selectedOutputs),
             plan => new DotNetPublishPipelineRunner(logger).Run(plan, progress: null),
             publishGitHubRelease,
-            plan => new WingetSubmissionService(logger).Run(plan))
+            plan => new WingetSubmissionService(logger).Run(plan),
+            request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult(),
+            request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult())
     {
     }
 
@@ -98,7 +104,9 @@ internal sealed class PowerForgeReleaseService
         Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> planDotNetTools,
         Func<DotNetPublishPlan, DotNetPublishResult> runDotNetTools,
         Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> publishGitHubRelease,
-        Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult>? submitWinget = null)
+        Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult>? submitWinget = null,
+        Func<AppleAppArchiveRequest, AppleAppArchiveResult>? archiveAppleApp = null,
+        Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult>? uploadAppleApp = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -109,6 +117,8 @@ internal sealed class PowerForgeReleaseService
         _runDotNetTools = runDotNetTools ?? throw new ArgumentNullException(nameof(runDotNetTools));
         _publishGitHubRelease = publishGitHubRelease ?? throw new ArgumentNullException(nameof(publishGitHubRelease));
         _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
+        _archiveAppleApp = archiveAppleApp ?? (request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult());
+        _uploadAppleApp = uploadAppleApp ?? (request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult());
     }
 
     /// <summary>
@@ -130,17 +140,18 @@ internal sealed class PowerForgeReleaseService
         var runModule = spec.Module is not null && (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
         var runPackages = spec.Packages is not null && !request.ModuleOnly && !request.ToolsOnly;
         var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
+        var runAppleApps = spec.AppleApps is not null && !request.ModuleOnly && !request.PackagesOnly;
         var configurationOverride = NormalizeConfiguration(request.Configuration);
         var runWorkspaceValidation = spec.WorkspaceValidation is not null && !request.SkipWorkspaceValidation;
         var publishUnifiedGitHub = ShouldPublishUnifiedGitHub(spec, request);
 
-        if (!runModule && !runPackages && !runTools && !runWorkspaceValidation)
+        if (!runModule && !runPackages && !runTools && !runAppleApps && !runWorkspaceValidation)
         {
             return new PowerForgeReleaseResult
             {
                 Success = false,
                 ConfigPath = configPath,
-                ErrorMessage = "Release config does not enable any selected WorkspaceValidation, Module, Packages, or Tools sections."
+                ErrorMessage = "Release config does not enable any selected WorkspaceValidation, Module, Packages, Tools, or AppleApps sections."
             };
         }
 
@@ -282,6 +293,25 @@ internal sealed class PowerForgeReleaseService
             }
         }
 
+        if (runAppleApps)
+        {
+            var applePlan = PrepareAppleRelease(spec.AppleApps!, configPath, configurationOverride);
+            result.AppleAppPlan = applePlan;
+
+            if (!request.PlanOnly && !request.ValidateOnly)
+            {
+                var appleResults = RunAppleRelease(applePlan);
+                result.AppleApps = appleResults;
+                var failure = appleResults.FirstOrDefault(entry => !entry.Success);
+                if (failure is not null)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = failure.ErrorMessage ?? $"Apple app release failed for '{failure.Plan.Name}'.";
+                    return result;
+                }
+            }
+        }
+
         if (!request.PlanOnly && !request.ValidateOnly)
         {
             PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
@@ -386,6 +416,155 @@ internal sealed class PowerForgeReleaseService
         };
 
         return (buildRequest, plan, artifactPaths);
+    }
+
+    private static PowerForgeAppleReleasePlan PrepareAppleRelease(
+        PowerForgeAppleReleaseOptions options,
+        string releaseConfigPath,
+        string? configurationOverride)
+    {
+        var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        var projectRoot = ResolveOutputPath(configDirectory, string.IsNullOrWhiteSpace(options.ProjectRoot) ? "." : options.ProjectRoot!);
+        var configuration = configurationOverride ?? NormalizeConfiguration(options.Configuration) ?? "Release";
+        var archiveRoot = ResolveOutputPath(projectRoot, string.IsNullOrWhiteSpace(options.ArchiveRoot) ? Path.Combine("Artifacts", "Apple", "Archives") : options.ArchiveRoot!);
+        var exportRoot = ResolveOutputPath(projectRoot, string.IsNullOrWhiteSpace(options.ExportRoot) ? Path.Combine("Artifacts", "Apple", "Exports") : options.ExportRoot!);
+        var screenshotConfigPath = string.IsNullOrWhiteSpace(options.ScreenshotConfigPath)
+            ? null
+            : ResolveOutputPath(projectRoot, options.ScreenshotConfigPath!);
+        var screenshotConfigPaths = (options.ScreenshotConfigPaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolveOutputPath(projectRoot, path))
+            .ToArray();
+
+        var apps = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
+            .Where(app => app.Enabled)
+            .Select(app => PrepareAppleAppPlan(app, options, projectRoot, archiveRoot, exportRoot, configuration))
+            .ToArray();
+
+        if (apps.Length == 0)
+            throw new InvalidOperationException("AppleApps.Apps must contain at least one enabled app entry.");
+
+        return new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = projectRoot,
+            Configuration = configuration,
+            Archive = options.Archive,
+            Upload = options.Upload,
+            SyncScreenshots = options.SyncScreenshots,
+            ScreenshotConfigPath = screenshotConfigPath,
+            ScreenshotConfigPaths = screenshotConfigPaths,
+            ReplaceScreenshots = options.ReplaceScreenshots,
+            XcodeBuildExecutable = string.IsNullOrWhiteSpace(options.XcodeBuildExecutable) ? "xcodebuild" : options.XcodeBuildExecutable.Trim(),
+            AllowProvisioningUpdates = options.AllowProvisioningUpdates,
+            ManageAppVersionAndBuildNumber = options.ManageAppVersionAndBuildNumber,
+            UploadSymbols = options.UploadSymbols,
+            GenerateAppStoreInformation = options.GenerateAppStoreInformation,
+            SigningStyle = string.IsNullOrWhiteSpace(options.SigningStyle) ? "automatic" : options.SigningStyle!.Trim(),
+            Apps = apps
+        };
+    }
+
+    private static PowerForgeAppleAppReleaseTargetPlan PrepareAppleAppPlan(
+        AppleAppConfiguration app,
+        PowerForgeAppleReleaseOptions options,
+        string projectRoot,
+        string archiveRoot,
+        string exportRoot,
+        string configuration)
+    {
+        if (string.IsNullOrWhiteSpace(app.ProjectPath))
+            throw new InvalidOperationException("Apple app ProjectPath is required.");
+        if (string.IsNullOrWhiteSpace(app.Scheme))
+            throw new InvalidOperationException($"Apple app '{app.Name ?? app.ProjectPath}' requires Scheme for archive automation.");
+
+        var projectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
+        var isWorkspace = projectPath.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase);
+        var name = string.IsNullOrWhiteSpace(app.Name) ? app.Scheme!.Trim() : app.Name!.Trim();
+        var safeName = SanitizeStageEntryName(name).Replace(' ', '-');
+        if (string.IsNullOrWhiteSpace(safeName))
+            safeName = "AppleApp";
+        var platform = app.Platform;
+        var destination = AppleAppArchiveService.GetGenericDestination(platform);
+        var archivePath = Path.Combine(archiveRoot, platform.ToString(), $"{safeName}.xcarchive");
+        var exportPath = Path.Combine(exportRoot, platform.ToString(), safeName);
+
+        return new PowerForgeAppleAppReleaseTargetPlan
+        {
+            Name = name,
+            BundleId = app.BundleId,
+            Platform = platform,
+            ProjectPath = projectPath,
+            IsWorkspace = isWorkspace,
+            Scheme = app.Scheme!.Trim(),
+            Configuration = configuration,
+            Destination = destination,
+            ArchivePath = archivePath,
+            ExportPath = exportPath,
+            TeamId = options.TeamId,
+            Upload = options.Upload
+        };
+    }
+
+    private PowerForgeAppleAppReleaseResult[] RunAppleRelease(PowerForgeAppleReleasePlan plan)
+    {
+        var results = new List<PowerForgeAppleAppReleaseResult>();
+        foreach (var app in plan.Apps)
+        {
+            var result = new PowerForgeAppleAppReleaseResult
+            {
+                Plan = app,
+                Success = true
+            };
+
+            if (plan.Archive)
+            {
+                var archive = _archiveAppleApp(new AppleAppArchiveRequest
+                {
+                    ProjectPath = app.ProjectPath,
+                    IsWorkspace = app.IsWorkspace,
+                    Scheme = app.Scheme,
+                    Configuration = app.Configuration,
+                    Platform = app.Platform,
+                    Destination = app.Destination,
+                    ArchivePath = app.ArchivePath,
+                    XcodeBuildExecutable = plan.XcodeBuildExecutable,
+                    AllowProvisioningUpdates = plan.AllowProvisioningUpdates
+                });
+                result.Archive = archive;
+                if (!archive.Succeeded)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"xcodebuild archive failed for '{app.Name}' with exit code {archive.ProcessResult.ExitCode}.";
+                    results.Add(result);
+                    continue;
+                }
+            }
+
+            if (plan.Upload && result.Success)
+            {
+                var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
+                {
+                    ArchivePath = app.ArchivePath,
+                    ExportPath = app.ExportPath,
+                    TeamId = app.TeamId,
+                    XcodeBuildExecutable = plan.XcodeBuildExecutable,
+                    SigningStyle = plan.SigningStyle,
+                    ManageAppVersionAndBuildNumber = plan.ManageAppVersionAndBuildNumber,
+                    UploadSymbols = plan.UploadSymbols,
+                    GenerateAppStoreInformation = plan.GenerateAppStoreInformation
+                });
+                result.Upload = upload;
+                if (!upload.Succeeded)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"xcodebuild exportArchive upload failed for '{app.Name}' with exit code {upload.ProcessResult.ExitCode}.";
+                }
+            }
+
+            results.Add(result);
+        }
+
+        return results.ToArray();
     }
 
     private static (WorkspaceValidationSpec Spec, string ConfigPath) LoadWorkspaceValidationSpec(
