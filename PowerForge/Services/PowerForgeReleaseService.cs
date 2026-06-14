@@ -137,10 +137,15 @@ internal sealed class PowerForgeReleaseService
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
         var selectedToolOutputs = ResolveSelectedToolOutputs(request);
+        var selectedTargets = NormalizeStrings(request.Targets);
         var runModule = spec.Module is not null && (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
         var runPackages = spec.Packages is not null && !request.ModuleOnly && !request.ToolsOnly;
         var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
         var runAppleApps = spec.AppleApps is not null && !request.ModuleOnly && !request.PackagesOnly && !request.ToolsOnly;
+        var appleTargetMatches = runAppleApps
+            ? ResolveAppleTargetMatches(spec.AppleApps!, selectedTargets)
+            : Array.Empty<string>();
+        var toolTargetMatches = Array.Empty<string>();
         var configurationOverride = NormalizeConfiguration(request.Configuration);
         var runWorkspaceValidation = spec.WorkspaceValidation is not null && !request.SkipWorkspaceValidation;
         var publishUnifiedGitHub = ShouldPublishUnifiedGitHub(spec, request);
@@ -228,74 +233,103 @@ internal sealed class PowerForgeReleaseService
             if (UsesDotNetToolWorkflow(spec.Tools!))
             {
                 var (dotNetSpec, dotNetSourcePath) = _loadDotNetToolsSpec(spec.Tools!, configPath);
-                var dotNetPlan = _planDotNetTools(dotNetSpec, dotNetSourcePath, request, selectedToolOutputs);
-                ApplySharedReleaseVersion(dotNetPlan, sharedReleaseVersion);
-                ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
-                result.DotNetToolPlan = dotNetPlan;
-
-                if (!request.PlanOnly && !request.ValidateOnly)
+                toolTargetMatches = ResolveDotNetToolTargetMatches(dotNetSpec, selectedTargets);
+                ValidateMixedSelectedTargets(selectedTargets, toolTargetMatches, appleTargetMatches, runTools, runAppleApps);
+                if (ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches))
                 {
-                    var dotNetTools = _runDotNetTools(dotNetPlan);
-                    FilterDotNetToolResult(dotNetTools, selectedToolOutputs);
-                    result.DotNetTools = dotNetTools;
-                    if (!dotNetTools.Succeeded)
-                    {
-                        result.Success = false;
-                        result.ErrorMessage = dotNetTools.ErrorMessage ?? "DotNet tool release workflow failed.";
-                        return result;
-                    }
+                    var dotNetTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
+                    var dotNetPlan = WithRequestTargets(
+                        request,
+                        dotNetTargets,
+                        () => _planDotNetTools(dotNetSpec, dotNetSourcePath, request, selectedToolOutputs));
+                    ApplySharedReleaseVersion(dotNetPlan, sharedReleaseVersion);
+                    ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
+                    result.DotNetToolPlan = dotNetPlan;
 
-                    var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
-                    if (publishToolGitHub)
+                    if (!request.PlanOnly && !request.ValidateOnly)
                     {
-                        var releases = PublishDotNetToolGitHubReleases(spec, configDirectory, dotNetPlan, dotNetTools, sharedReleaseVersion);
-                        result.ToolGitHubReleases = releases;
-                        var failures = releases.Where(entry => !entry.Success).ToArray();
-                        if (failures.Length > 0)
+                        var dotNetTools = _runDotNetTools(dotNetPlan);
+                        FilterDotNetToolResult(dotNetTools, selectedToolOutputs);
+                        result.DotNetTools = dotNetTools;
+                        if (!dotNetTools.Succeeded)
                         {
                             result.Success = false;
-                            result.ErrorMessage = failures[0].ErrorMessage ?? "Tool GitHub release publishing failed.";
+                            result.ErrorMessage = dotNetTools.ErrorMessage ?? "DotNet tool release workflow failed.";
                             return result;
+                        }
+
+                        var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
+                        if (publishToolGitHub)
+                        {
+                            var releases = PublishDotNetToolGitHubReleases(spec, configDirectory, dotNetPlan, dotNetTools, sharedReleaseVersion);
+                            result.ToolGitHubReleases = releases;
+                            var failures = releases.Where(entry => !entry.Success).ToArray();
+                            if (failures.Length > 0)
+                            {
+                                result.Success = false;
+                                result.ErrorMessage = failures[0].ErrorMessage ?? "Tool GitHub release publishing failed.";
+                                return result;
+                            }
                         }
                     }
                 }
             }
             else
             {
-                var toolPlan = _planTools(spec.Tools!, configPath, request);
-                result.ToolPlan = toolPlan;
-
-                if (!request.PlanOnly && !request.ValidateOnly)
+                toolTargetMatches = ResolveLegacyToolTargetMatches(spec.Tools!, selectedTargets);
+                ValidateMixedSelectedTargets(selectedTargets, toolTargetMatches, appleTargetMatches, runTools, runAppleApps);
+                if (ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches))
                 {
-                    var tools = _runTools(toolPlan);
-                    result.Tools = tools;
-                    if (!tools.Success)
-                    {
-                        result.Success = false;
-                        result.ErrorMessage = tools.ErrorMessage ?? "Tool release workflow failed.";
-                        return result;
-                    }
+                    var legacyToolTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
+                    var toolPlan = WithRequestTargets(
+                        request,
+                        legacyToolTargets,
+                        () => _planTools(spec.Tools!, configPath, request));
+                    result.ToolPlan = toolPlan;
 
-                    var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
-                    if (publishToolGitHub)
+                    if (!request.PlanOnly && !request.ValidateOnly)
                     {
-                        var releases = PublishLegacyToolGitHubReleases(spec, configDirectory, tools);
-                        result.ToolGitHubReleases = releases;
-                        var failures = releases.Where(entry => !entry.Success).ToArray();
-                        if (failures.Length > 0)
+                        var tools = _runTools(toolPlan);
+                        result.Tools = tools;
+                        if (!tools.Success)
                         {
                             result.Success = false;
-                            result.ErrorMessage = failures[0].ErrorMessage ?? "Tool GitHub release publishing failed.";
+                            result.ErrorMessage = tools.ErrorMessage ?? "Tool release workflow failed.";
                             return result;
+                        }
+
+                        var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
+                        if (publishToolGitHub)
+                        {
+                            var releases = PublishLegacyToolGitHubReleases(spec, configDirectory, tools);
+                            result.ToolGitHubReleases = releases;
+                            var failures = releases.Where(entry => !entry.Success).ToArray();
+                            if (failures.Length > 0)
+                            {
+                                result.Success = false;
+                                result.ErrorMessage = failures[0].ErrorMessage ?? "Tool GitHub release publishing failed.";
+                                return result;
+                            }
                         }
                     }
                 }
             }
         }
-
-        if (runAppleApps)
+        else if (runAppleApps)
         {
-            var applePlan = PrepareAppleRelease(spec.AppleApps!, configPath, configurationOverride, sharedReleaseVersion, request.Targets);
+            ValidateMixedSelectedTargets(selectedTargets, Array.Empty<string>(), appleTargetMatches, runTools, runAppleApps);
+        }
+
+        if (runAppleApps && ShouldRunSectionForTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches))
+        {
+            var selectedAppleTargets = GetSectionSelectedTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
+            var applePlan = PrepareAppleRelease(
+                spec.AppleApps!,
+                configPath,
+                configurationOverride,
+                sharedReleaseVersion,
+                request.SkipBuild,
+                selectedAppleTargets);
             result.AppleAppPlan = applePlan;
 
             if (!request.PlanOnly && !request.ValidateOnly)
@@ -333,6 +367,105 @@ internal sealed class PowerForgeReleaseService
         }
 
         return result;
+    }
+
+    private static TResult WithRequestTargets<TResult>(PowerForgeReleaseRequest request, string[] targets, Func<TResult> action)
+    {
+        var originalTargets = request.Targets;
+        request.Targets = targets;
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            request.Targets = originalTargets;
+        }
+    }
+
+    private static bool ShouldRunSectionForTargets(
+        string[] selectedTargets,
+        string[] sectionTargetMatches,
+        bool hasOtherTargetSection,
+        string[] otherSectionTargetMatches)
+    {
+        if (selectedTargets.Length == 0 || sectionTargetMatches.Length > 0)
+            return true;
+
+        return !hasOtherTargetSection || otherSectionTargetMatches.Length == 0;
+    }
+
+    private static string[] GetSectionSelectedTargets(
+        string[] selectedTargets,
+        string[] sectionTargetMatches,
+        bool hasOtherTargetSection,
+        string[] otherSectionTargetMatches)
+    {
+        if (selectedTargets.Length == 0)
+            return Array.Empty<string>();
+
+        if (sectionTargetMatches.Length > 0)
+            return sectionTargetMatches;
+
+        return hasOtherTargetSection && otherSectionTargetMatches.Length > 0
+            ? Array.Empty<string>()
+            : selectedTargets;
+    }
+
+    private static string[] ResolveLegacyToolTargetMatches(PowerForgeToolReleaseSpec tools, string[] selectedTargets)
+    {
+        if (selectedTargets.Length == 0)
+            return Array.Empty<string>();
+
+        return selectedTargets
+            .Where(selected => (tools.Targets ?? Array.Empty<PowerForgeToolReleaseTarget>())
+                .Any(target => string.Equals(target.Name?.Trim(), selected, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+    }
+
+    private static string[] ResolveDotNetToolTargetMatches(DotNetPublishSpec spec, string[] selectedTargets)
+    {
+        if (selectedTargets.Length == 0)
+            return Array.Empty<string>();
+
+        return selectedTargets
+            .Where(selected => (spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+                .Any(target => string.Equals(target.Name?.Trim(), selected, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+    }
+
+    private static string[] ResolveAppleTargetMatches(PowerForgeAppleReleaseOptions options, string[] selectedTargets)
+    {
+        if (selectedTargets.Length == 0)
+            return Array.Empty<string>();
+
+        var apps = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
+            .Where(app => app.Enabled)
+            .ToArray();
+
+        return selectedTargets
+            .Where(selected => apps.Any(app => AppleAppMatchesTarget(app, selected)))
+            .ToArray();
+    }
+
+    private static void ValidateMixedSelectedTargets(
+        string[] selectedTargets,
+        string[] toolTargetMatches,
+        string[] appleTargetMatches,
+        bool runTools,
+        bool runAppleApps)
+    {
+        if (!runTools || !runAppleApps || selectedTargets.Length == 0)
+            return;
+
+        var knownTargets = toolTargetMatches
+            .Concat(appleTargetMatches)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = selectedTargets
+            .Where(selected => !knownTargets.Contains(selected))
+            .ToArray();
+        if (missing.Length > 0)
+            throw new ArgumentException($"Unknown release target(s): {string.Join(", ", missing)}", nameof(PowerForgeReleaseRequest.Targets));
     }
 
     private static (WorkspaceValidationService Service, WorkspaceValidationSpec Spec, string ConfigPath, WorkspaceValidationRequest Request, WorkspaceValidationPlan Plan) PrepareWorkspaceValidation(
@@ -423,10 +556,13 @@ internal sealed class PowerForgeReleaseService
         string releaseConfigPath,
         string? configurationOverride,
         string? sharedReleaseVersion,
+        bool skipBuild,
         string[]? selectedTargetNames)
     {
         if (options.SyncScreenshots)
             throw new NotSupportedException("AppleApps.SyncScreenshots is not supported by the unified release workflow yet. Use Sync-AppStoreConnectScreenshots or project-specific screenshot sync scripts for now.");
+        if (skipBuild && options.Archive)
+            throw new InvalidOperationException("PowerForge release SkipBuild is not supported when AppleApps.Archive is enabled. Set AppleApps.Archive=false to reuse an existing Apple archive explicitly.");
 
         var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var projectRoot = ResolveOutputPath(configDirectory, string.IsNullOrWhiteSpace(options.ProjectRoot) ? "." : options.ProjectRoot!);
