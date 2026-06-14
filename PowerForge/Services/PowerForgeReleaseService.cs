@@ -482,12 +482,13 @@ internal sealed class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(app.Scheme))
             throw new InvalidOperationException($"Apple app '{app.Name ?? app.ProjectPath}' requires Scheme for archive automation.");
 
-        var projectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
-        if (!File.Exists(projectPath) && !Directory.Exists(projectPath))
-            throw new FileNotFoundException($"Apple app project or workspace was not found: {projectPath}", projectPath);
-
-        var isWorkspace = projectPath.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase);
         var name = string.IsNullOrWhiteSpace(app.Name) ? app.Scheme!.Trim() : app.Name!.Trim();
+        var requestedProjectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
+        if (!File.Exists(requestedProjectPath) && !Directory.Exists(requestedProjectPath))
+            throw new FileNotFoundException($"Apple app project or workspace was not found: {requestedProjectPath}", requestedProjectPath);
+
+        var projectPath = NormalizeAppleArchiveProjectPath(requestedProjectPath, name);
+        var isWorkspace = projectPath.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase);
         var safeName = SanitizeStageEntryName(name).Replace(' ', '-');
         if (string.IsNullOrWhiteSpace(safeName))
             safeName = "AppleApp";
@@ -502,6 +503,8 @@ internal sealed class PowerForgeReleaseService
         var marketingVersion = versionUpdateRequested
             ? app.UseResolvedVersion ? sharedReleaseVersion : app.MarketingVersion
             : null;
+        if (versionUpdateRequested && isWorkspace)
+            throw new InvalidOperationException($"Apple app '{name}' uses a .xcworkspace ProjectPath. Unified Apple version updates require a .xcodeproj ProjectPath or project.pbxproj path.");
         if (versionUpdateRequested && string.IsNullOrWhiteSpace(marketingVersion))
             throw new InvalidOperationException($"Apple app '{name}' requires MarketingVersion unless UseResolvedVersion is enabled with a resolvable release version.");
 
@@ -566,7 +569,7 @@ internal sealed class PowerForgeReleaseService
                     result.Success = false;
                     result.ErrorMessage = $"xcodebuild archive failed for '{app.Name}' with exit code {archive.ProcessResult.ExitCode}.";
                     results.Add(result);
-                    continue;
+                    return results.ToArray();
                 }
             }
 
@@ -588,6 +591,8 @@ internal sealed class PowerForgeReleaseService
                 {
                     result.Success = false;
                     result.ErrorMessage = $"xcodebuild exportArchive upload failed for '{app.Name}' with exit code {upload.ProcessResult.ExitCode}.";
+                    results.Add(result);
+                    return results.ToArray();
                 }
             }
 
@@ -595,6 +600,25 @@ internal sealed class PowerForgeReleaseService
         }
 
         return results.ToArray();
+    }
+
+    private static string NormalizeAppleArchiveProjectPath(string projectPath, string appName)
+    {
+        if (Directory.Exists(projectPath))
+            return projectPath;
+
+        if (File.Exists(projectPath) &&
+            string.Equals(Path.GetFileName(projectPath), "project.pbxproj", StringComparison.OrdinalIgnoreCase))
+        {
+            var projectDirectory = Path.GetDirectoryName(projectPath);
+            if (!string.IsNullOrWhiteSpace(projectDirectory) &&
+                string.Equals(Path.GetExtension(projectDirectory), ".xcodeproj", StringComparison.OrdinalIgnoreCase))
+            {
+                return projectDirectory;
+            }
+        }
+
+        throw new InvalidOperationException($"Apple app '{appName}' ProjectPath must point to a .xcodeproj or .xcworkspace for archive automation. project.pbxproj paths are only supported when they are inside a .xcodeproj directory.");
     }
 
     private static string? ResolveAppleBuildNumber(

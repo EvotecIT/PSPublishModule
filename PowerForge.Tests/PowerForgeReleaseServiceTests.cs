@@ -735,6 +735,198 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_NormalizesPbxprojPathForArchive()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var xcodeproj = CreateXcodeProject(root, "Tactra.xcodeproj");
+            var archiveRequests = new List<AppleAppArchiveRequest>();
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: request =>
+                {
+                    archiveRequests.Add(request);
+                    return new AppleAppArchiveResult
+                    {
+                        ArchivePath = request.ArchivePath!,
+                        Destination = request.Destination!,
+                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
+                    };
+                },
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Upload = false,
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = Path.Combine("Tactra.xcodeproj", "project.pbxproj"),
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                });
+
+            Assert.True(result.Success);
+            var app = Assert.Single(result.AppleAppPlan!.Apps);
+            Assert.Equal(xcodeproj, app.ProjectPath);
+            Assert.False(app.IsWorkspace);
+
+            var archiveRequest = Assert.Single(archiveRequests);
+            Assert.Equal(xcodeproj, archiveRequest.ProjectPath);
+            Assert.False(archiveRequest.IsWorkspace);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_RejectsWorkspaceVersionUpdatesBeforeArchive()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "Tactra.xcworkspace"));
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra Workspace",
+                                ProjectPath = "Tactra.xcworkspace",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                MarketingVersion = "2.1.0"
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                }));
+
+            Assert.Contains(".xcworkspace", ex.Message, StringComparison.Ordinal);
+            Assert.Contains(".xcodeproj", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_StopsAfterFirstAppFailure()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "First.xcodeproj");
+            CreateXcodeProject(root, "Second.xcodeproj");
+            var archiveRequests = new List<AppleAppArchiveRequest>();
+            var uploadRequests = new List<AppleAppArchiveUploadRequest>();
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: request =>
+                {
+                    archiveRequests.Add(request);
+                    return new AppleAppArchiveResult
+                    {
+                        ArchivePath = request.ArchivePath!,
+                        Destination = request.Destination!,
+                        ProcessResult = new ProcessRunResult(65, string.Empty, "archive-failed", "xcodebuild", TimeSpan.FromSeconds(1), false)
+                    };
+                },
+                uploadAppleApp: request =>
+                {
+                    uploadRequests.Add(request);
+                    throw new InvalidOperationException("Upload should not run after archive failure.");
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Upload = true,
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "First",
+                                ProjectPath = "First.xcodeproj",
+                                Scheme = "First",
+                                Platform = ApplePlatform.iOS
+                            },
+                            new AppleAppConfiguration
+                            {
+                                Name = "Second",
+                                ProjectPath = "Second.xcodeproj",
+                                Scheme = "Second",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                });
+
+            Assert.False(result.Success);
+            Assert.Contains("First", result.ErrorMessage, StringComparison.Ordinal);
+            var appResult = Assert.Single(result.AppleApps);
+            Assert.Equal("First", appResult.Plan.Name);
+            Assert.False(appResult.Success);
+            Assert.Single(archiveRequests);
+            Assert.Empty(uploadRequests);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_PlanOnly_InstallerPropertyOverridesFlowIntoDotNetInstallerPlan()
     {
         var root = CreateSandbox();
