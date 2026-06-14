@@ -68,6 +68,37 @@
       "type": "string",
       "enum": ["AfterMerge"]
     },
+    "ModulePipelineActionStage": {
+      "type": "string",
+      "enum": [
+        "BeforeDependencies",
+        "AfterDependencies",
+        "BeforeVersioning",
+        "AfterVersioning",
+        "BeforeStaging",
+        "AfterStaging",
+        "BeforeBuild",
+        "AfterBuild",
+        "BeforeManifest",
+        "AfterManifest",
+        "BeforeDocumentation",
+        "AfterDocumentation",
+        "BeforeFormatting",
+        "AfterFormatting",
+        "BeforeValidation",
+        "AfterValidation",
+        "BeforeTests",
+        "AfterTests",
+        "BeforeSigning",
+        "AfterSigning",
+        "BeforeArtefacts",
+        "AfterArtefacts",
+        "BeforePublish",
+        "AfterPublish",
+        "BeforeInstall",
+        "AfterInstall"
+      ]
+    },
     "ValidationSeverity": {
       "type": "string",
       "enum": ["Off", "Warning", "Error"]

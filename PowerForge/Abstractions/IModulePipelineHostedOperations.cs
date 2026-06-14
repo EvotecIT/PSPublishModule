@@ -36,6 +36,12 @@ internal interface IModulePipelineHostedOperations
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders);
 
+    ModulePipelineActionResult RunAction(
+        ModulePipelineActionConfiguration action,
+        ModulePipelineActionContext context,
+        string contextPath,
+        string projectRoot);
+
     void ValidateModuleImports(
         string manifestPath,
         ImportModuleEntry[] modules,

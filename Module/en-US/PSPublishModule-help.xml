@@ -28195,19 +28195,598 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
       <command:verb>New</command:verb>
       <command:noun>ConfigurationExecute</command:noun>
       <maml:description>
-        <maml:para>Reserved placeholder for future execution-time configuration.</maml:para>
+        <maml:para>Creates a module pipeline lifecycle action.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet currently exists only for backward compatibility with older build scripts.&#xD;
-It emits no configuration segment and has no effect.</maml:para>
+      <maml:para>Lifecycle actions run PowerShell at a named module pipeline context point such as AfterStaging,&#xD;
+AfterManifest, or BeforePublish. PowerForge writes a stable JSON context file before each&#xD;
+action and exposes its path through the POWERFORGE_CONTEXT environment variable.</maml:para>
+      <maml:para>Use lifecycle actions for project-specific preparation, generated-file adjustments, artifact checks, and&#xD;
+release guardrails that need a precise pipeline context. Configuration segment order does not control&#xD;
+execution order; the At value does.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="Inline">
         <maml:name>New-ConfigurationExecute</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>At</maml:name>
+          <maml:description>
+            <maml:para>Stable module pipeline lifecycle point where the action runs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModulePipelineActionStage</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">BeforeDependencies</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterDependencies</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeVersioning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterVersioning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeStaging</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterStaging</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeBuild</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterBuild</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeManifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterManifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeDocumentation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterDocumentation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeFormatting</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterFormatting</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeValidation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterValidation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeTests</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterTests</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeSigning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterSigning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeArtefacts</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterArtefacts</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforePublish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterPublish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeInstall</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterInstall</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModulePipelineActionStage</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ContinueOnError</maml:name>
+          <maml:description>
+            <maml:para>When set, logs a failed action and lets the pipeline continue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Disabled</maml:name>
+          <maml:description>
+            <maml:para>When set, disables the action while keeping it in configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Environment</maml:name>
+          <maml:description>
+            <maml:para>Environment variable overrides passed to the action process.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InlineScript</maml:name>
+          <maml:description>
+            <maml:para>Inline PowerShell script text.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Friendly action name shown in progress and result output.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PreferWindowsPowerShell</maml:name>
+          <maml:description>
+            <maml:para>When set, prefer Windows PowerShell before pwsh on Windows.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Action timeout in seconds. Defaults to five minutes.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkingDirectory</maml:name>
+          <maml:description>
+            <maml:para>Optional working directory. Relative paths resolve from the project root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="File">
+        <maml:name>New-ConfigurationExecute</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>At</maml:name>
+          <maml:description>
+            <maml:para>Stable module pipeline lifecycle point where the action runs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModulePipelineActionStage</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">BeforeDependencies</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterDependencies</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeVersioning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterVersioning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeStaging</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterStaging</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeBuild</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterBuild</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeManifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterManifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeDocumentation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterDocumentation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeFormatting</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterFormatting</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeValidation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterValidation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeTests</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterTests</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeSigning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterSigning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeArtefacts</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterArtefacts</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforePublish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterPublish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeInstall</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterInstall</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModulePipelineActionStage</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ContinueOnError</maml:name>
+          <maml:description>
+            <maml:para>When set, logs a failed action and lets the pipeline continue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Disabled</maml:name>
+          <maml:description>
+            <maml:para>When set, disables the action while keeping it in configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Environment</maml:name>
+          <maml:description>
+            <maml:para>Environment variable overrides passed to the action process.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FilePath</maml:name>
+          <maml:description>
+            <maml:para>Path to a PowerShell script file. Relative paths resolve from the project root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Friendly action name shown in progress and result output.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PreferWindowsPowerShell</maml:name>
+          <maml:description>
+            <maml:para>When set, prefer Windows PowerShell before pwsh on Windows.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Action timeout in seconds. Defaults to five minutes.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkingDirectory</maml:name>
+          <maml:description>
+            <maml:para>Optional working directory. Relative paths resolve from the project root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="ScriptBlock">
+        <maml:name>New-ConfigurationExecute</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>At</maml:name>
+          <maml:description>
+            <maml:para>Stable module pipeline lifecycle point where the action runs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModulePipelineActionStage</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">BeforeDependencies</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterDependencies</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeVersioning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterVersioning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeStaging</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterStaging</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeBuild</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterBuild</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeManifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterManifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeDocumentation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterDocumentation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeFormatting</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterFormatting</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeValidation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterValidation</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeTests</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterTests</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeSigning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterSigning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeArtefacts</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterArtefacts</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforePublish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterPublish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeInstall</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AfterInstall</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModulePipelineActionStage</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ContinueOnError</maml:name>
+          <maml:description>
+            <maml:para>When set, logs a failed action and lets the pipeline continue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Disabled</maml:name>
+          <maml:description>
+            <maml:para>When set, disables the action while keeping it in configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Environment</maml:name>
+          <maml:description>
+            <maml:para>Environment variable overrides passed to the action process.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Friendly action name shown in progress and result output.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PreferWindowsPowerShell</maml:name>
+          <maml:description>
+            <maml:para>When set, prefer Windows PowerShell before pwsh on Windows.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ScriptBlock</maml:name>
+          <maml:description>
+            <maml:para>Inline PowerShell script block. The script block text is executed out-of-process.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ScriptBlock</command:parameterValue>
+          <dev:type>
+            <maml:name>ScriptBlock</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Action timeout in seconds. Defaults to five minutes.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkingDirectory</maml:name>
+          <maml:description>
+            <maml:para>Optional working directory. Relative paths resolve from the project root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
-    <command:parameters />
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>At</maml:name>
+        <maml:description>
+          <maml:para>Stable module pipeline lifecycle point where the action runs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModulePipelineActionStage</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">BeforeDependencies</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterDependencies</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeVersioning</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterVersioning</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeStaging</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterStaging</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeBuild</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterBuild</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeManifest</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterManifest</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeDocumentation</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterDocumentation</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeFormatting</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterFormatting</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeValidation</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterValidation</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeTests</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterTests</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeSigning</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterSigning</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeArtefacts</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterArtefacts</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforePublish</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterPublish</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeInstall</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AfterInstall</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModulePipelineActionStage</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ContinueOnError</maml:name>
+        <maml:description>
+          <maml:para>When set, logs a failed action and lets the pipeline continue.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Disabled</maml:name>
+        <maml:description>
+          <maml:para>When set, disables the action while keeping it in configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Environment</maml:name>
+        <maml:description>
+          <maml:para>Environment variable overrides passed to the action process.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FilePath</maml:name>
+        <maml:description>
+          <maml:para>Path to a PowerShell script file. Relative paths resolve from the project root.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>InlineScript</maml:name>
+        <maml:description>
+          <maml:para>Inline PowerShell script text.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Friendly action name shown in progress and result output.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PreferWindowsPowerShell</maml:name>
+        <maml:description>
+          <maml:para>When set, prefer Windows PowerShell before pwsh on Windows.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ScriptBlock</maml:name>
+        <maml:description>
+          <maml:para>Inline PowerShell script block. The script block text is executed out-of-process.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ScriptBlock</command:parameterValue>
+        <dev:type>
+          <maml:name>ScriptBlock</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Action timeout in seconds. Defaults to five minutes.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WorkingDirectory</maml:name>
+        <maml:description>
+          <maml:para>Optional working directory. Relative paths resolve from the project root.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
@@ -28218,7 +28797,7 @@ It emits no configuration segment and has no effect.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.Object</maml:name>
+          <maml:name>PowerForge.ConfigurationActionSegment</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -28229,13 +28808,23 @@ It emits no configuration segment and has no effect.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Call the placeholder cmdlet (no output)</maml:title>
+        <maml:title>Run an inline action after staging</maml:title>
         <maml:introduction>
           <maml:para>PS&gt; </maml:para>
         </maml:introduction>
-        <dev:code>New-ConfigurationExecute</dev:code>
+        <dev:code>New-ConfigurationExecute -Name 'Inspect staged module' -At AfterStaging -InlineScript '$ctx = Get-Content $env:POWERFORGE_CONTEXT | ConvertFrom-Json; Get-ChildItem $ctx.ModuleRoot'</dev:code>
         <dev:remarks>
-          <maml:para>No action is performed and nothing is emitted to the pipeline.</maml:para>
+          <maml:para>Runs the inline PowerShell after the module staging context exists.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Run a script file before publishing</maml:title>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationExecute -Name 'Release guard' -At BeforePublish -FilePath '.\Build\Test-ReleaseReady.ps1' -TimeoutSeconds 120</dev:code>
+        <dev:remarks>
+          <maml:para>Runs a repository script before publish steps execute.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

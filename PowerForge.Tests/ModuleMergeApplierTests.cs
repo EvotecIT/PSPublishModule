@@ -133,6 +133,7 @@ public sealed class ModuleMergeApplierTests
             placeHolderOption: null,
             commandModuleDependencies: new Dictionary<string, string[]>(),
             testsAfterMerge: Array.Empty<TestConfiguration>(),
+            actions: Array.Empty<ConfigurationActionSegment>(),
             mergeModule: mergeModule,
             mergeMissing: mergeMissing,
             doNotAttemptToFixRelativePaths: false,

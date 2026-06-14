@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -23,6 +24,203 @@ public sealed class ModulePipelineHostedOperationsTests
         Assert.IsType<PowerShellModulePipelineHostedOperations>(services.HostedOperations);
         Assert.IsType<PowerShellMissingFunctionAnalysisService>(services.MissingFunctionAnalysisService);
         Assert.IsType<PowerShellScriptFunctionExportDetector>(services.ScriptFunctionExportDetector);
+    }
+
+    [Fact]
+    public void Run_ExecutesLifecycleActionWithStableContext()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Name = "Inspect staged module",
+                            At = ModulePipelineActionStage.AfterStaging,
+                            InlineScript = "$ctx = Get-Content $env:POWERFORGE_CONTEXT | ConvertFrom-Json"
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var result = runner.Run(spec);
+
+            var actionResult = Assert.Single(result.ActionResults);
+            var context = Assert.Single(hostedOperations.ActionContexts);
+            Assert.Single(hostedOperations.ActionContextPaths);
+            Assert.Equal("Inspect staged module", actionResult.Name);
+            Assert.True(actionResult.Succeeded);
+            Assert.Equal(ModulePipelineActionStage.AfterStaging, context.Stage);
+            Assert.Equal("Inspect staged module", context.ActionName);
+            Assert.Equal(moduleName, context.ModuleName);
+            Assert.Equal(root.FullName, context.ProjectRoot);
+            Assert.Equal("1.0.0", context.ExpectedVersion);
+            Assert.Equal("1.0.0", context.ResolvedVersion);
+            Assert.False(string.IsNullOrWhiteSpace(context.StagingPath));
+            Assert.Equal(context.StagingPath, context.ModuleRoot);
+            Assert.Equal(context.ContextPath, hostedOperations.ActionContextPaths.Single());
+            Assert.True(File.Exists(context.ContextPath));
+
+            var jsonOptions = new JsonSerializerOptions();
+            jsonOptions.Converters.Add(new JsonStringEnumConverter());
+            var contextJson = File.ReadAllText(context.ContextPath);
+            Assert.Contains("\"Stage\": \"AfterStaging\"", contextJson, StringComparison.Ordinal);
+
+            var persisted = JsonSerializer.Deserialize<ModulePipelineActionContext>(contextJson, jsonOptions);
+            Assert.NotNull(persisted);
+            Assert.Equal(ModulePipelineActionStage.AfterStaging, persisted!.Stage);
+            Assert.Equal(moduleName, persisted.ModuleName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_ContinuesWhenLifecycleActionFailureAllowsContinue()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Name = "Advisory check",
+                            At = ModulePipelineActionStage.AfterStaging,
+                            InlineScript = "exit 7",
+                            ContinueOnError = true
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations
+            {
+                NextActionSucceeded = false,
+                NextActionExitCode = 7,
+                NextActionStdErr = "advisory failure"
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var result = runner.Run(spec);
+
+            var actionResult = Assert.Single(result.ActionResults);
+            Assert.False(actionResult.Succeeded);
+            Assert.Equal(7, actionResult.ExitCode);
+            Assert.True(actionResult.ContinuedOnError);
+            Assert.Equal("advisory failure", actionResult.StdErr);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunAction_ForwardsContextEnvironmentAndWorkingDirectory()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var scripts = Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
+            var contextPath = Path.Combine(root.FullName, "action.context.json");
+            var requests = new List<PowerShellRunRequest>();
+            var runner = new RecordingPowerShellRunner(request =>
+            {
+                requests.Add(request);
+                return new PowerShellRunResult(0, "ok", string.Empty, "pwsh.exe");
+            });
+            var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger());
+            var action = new ModulePipelineActionConfiguration
+            {
+                Name = "Release guard",
+                At = ModulePipelineActionStage.BeforePublish,
+                InlineScript = "Write-Output $env:POWERFORGE_CONTEXT",
+                WorkingDirectory = ".\\Build",
+                Environment = new Dictionary<string, string?> { ["CUSTOM_FLAG"] = "enabled" },
+                TimeoutSeconds = 42,
+                PreferWindowsPowerShell = true
+            };
+            var context = new ModulePipelineActionContext
+            {
+                Stage = ModulePipelineActionStage.BeforePublish,
+                ActionName = "Release guard",
+                ModuleName = "TestModule",
+                ProjectRoot = root.FullName,
+                StagingPath = Path.Combine(root.FullName, "staging"),
+                ManifestPath = Path.Combine(root.FullName, "staging", "TestModule.psd1"),
+                ResolvedVersion = "1.2.3"
+            };
+
+            var result = operations.RunAction(action, context, contextPath, root.FullName);
+
+            var request = Assert.Single(requests);
+            Assert.Equal(PowerShellInvocationMode.Command, request.InvocationMode);
+            Assert.Equal(action.InlineScript, request.CommandText);
+            Assert.Equal(TimeSpan.FromSeconds(42), request.Timeout);
+            Assert.False(request.PreferPwsh);
+            Assert.Equal(scripts.FullName, request.WorkingDirectory);
+            Assert.NotNull(request.EnvironmentVariables);
+            Assert.Equal("enabled", request.EnvironmentVariables!["CUSTOM_FLAG"]);
+            Assert.Equal(contextPath, request.EnvironmentVariables["POWERFORGE_CONTEXT"]);
+            Assert.Equal("BeforePublish", request.EnvironmentVariables["POWERFORGE_ACTION_STAGE"]);
+            Assert.Equal("Release guard", request.EnvironmentVariables["POWERFORGE_ACTION_NAME"]);
+            Assert.Equal("TestModule", request.EnvironmentVariables["POWERFORGE_MODULE_NAME"]);
+            Assert.Equal(root.FullName, request.EnvironmentVariables["POWERFORGE_PROJECT_ROOT"]);
+            Assert.Equal(context.StagingPath, request.EnvironmentVariables["POWERFORGE_STAGING_PATH"]);
+            Assert.Equal(context.ManifestPath, request.EnvironmentVariables["POWERFORGE_MANIFEST_PATH"]);
+            Assert.Equal("1.2.3", request.EnvironmentVariables["POWERFORGE_RESOLVED_VERSION"]);
+            Assert.True(result.Succeeded);
+            Assert.True(result.Inline);
+            Assert.Equal("pwsh.exe", result.Executable);
+            Assert.Equal(contextPath, result.ContextPath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 
     [Fact]
@@ -1910,6 +2108,12 @@ public sealed class ModulePipelineHostedOperationsTests
         public string? LastRepository { get; private set; }
         public ModuleSkipConfiguration? LastSkipModules { get; private set; }
         public ModuleTestSuiteResult? NextTestSuiteResult { get; set; }
+        public List<ModulePipelineActionContext> ActionContexts { get; } = new();
+        public List<string> ActionContextPaths { get; } = new();
+        public bool NextActionSucceeded { get; set; } = true;
+        public int NextActionExitCode { get; set; }
+        public string NextActionStdOut { get; set; } = string.Empty;
+        public string NextActionStdErr { get; set; } = string.Empty;
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -1973,6 +2177,31 @@ public sealed class ModulePipelineHostedOperationsTests
             bool verbose,
             ModuleImportValidationTarget[] targets)
             => throw new InvalidOperationException("Not used in this test.");
+
+        public ModulePipelineActionResult RunAction(
+            ModulePipelineActionConfiguration action,
+            ModulePipelineActionContext context,
+            string contextPath,
+            string projectRoot)
+        {
+            ActionContexts.Add(context);
+            ActionContextPaths.Add(contextPath);
+
+            return new ModulePipelineActionResult
+            {
+                Name = string.IsNullOrWhiteSpace(action.Name) ? context.Stage.ToString() : action.Name!,
+                Stage = context.Stage,
+                Succeeded = NextActionSucceeded,
+                ExitCode = NextActionExitCode,
+                Executable = "fake-pwsh",
+                FilePath = action.FilePath,
+                Inline = !string.IsNullOrWhiteSpace(action.InlineScript),
+                WorkingDirectory = projectRoot,
+                ContextPath = contextPath,
+                StdOut = NextActionStdOut,
+                StdErr = NextActionStdErr
+            };
+        }
 
         public ModuleSigningResult SignModuleOutput(
             string moduleName,

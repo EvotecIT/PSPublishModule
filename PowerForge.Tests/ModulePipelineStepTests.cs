@@ -42,6 +42,72 @@ public sealed class ModulePipelineStepTests
     }
 
     [Fact]
+    public void Create_IncludesLifecycleActionStepsAtConfiguredStages()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Name = "Inspect staged module",
+                            At = ModulePipelineActionStage.AfterStaging,
+                            InlineScript = "$ctx = Get-Content $env:POWERFORGE_CONTEXT | ConvertFrom-Json"
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Name = "Release guard",
+                            At = ModulePipelineActionStage.BeforePublish,
+                            FilePath = ".\\Build\\Test-ReleaseReady.ps1"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            var idxStage = Array.FindIndex(steps, s => s.Key == "build:stage");
+            var idxAfterStageAction = Array.FindIndex(steps, s => s.Key == "action:AfterStaging:01");
+            var idxBuild = Array.FindIndex(steps, s => s.Key == "build:build");
+            var idxBeforePublishAction = Array.FindIndex(steps, s => s.Key == "action:BeforePublish:01");
+
+            Assert.True(idxStage >= 0);
+            Assert.True(idxAfterStageAction >= 0);
+            Assert.True(idxBuild >= 0);
+            Assert.True(idxBeforePublishAction >= 0);
+            Assert.True(idxStage < idxAfterStageAction);
+            Assert.True(idxAfterStageAction < idxBuild);
+            Assert.Equal(ModulePipelineStepKind.Action, steps[idxAfterStageAction].Kind);
+            Assert.Equal("Inspect staged module", steps[idxAfterStageAction].ActionSegment?.Configuration.Name);
+            Assert.True(idxBuild < idxBeforePublishAction);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Create_IncludesXcodeProjectVersionStep_WhenConfigured()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

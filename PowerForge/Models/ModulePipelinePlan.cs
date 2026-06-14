@@ -138,6 +138,11 @@ public sealed class ModulePipelinePlan
     public TestConfiguration[] TestsAfterMerge { get; }
 
     /// <summary>
+    /// Lifecycle actions to execute at stable pipeline context points.
+    /// </summary>
+    public ConfigurationActionSegment[] Actions { get; }
+
+    /// <summary>
     /// Apple app release targets to prepare before staging the build.
     /// </summary>
     public ConfigurationAppleAppSegment[] AppleApps { get; }
@@ -287,6 +292,7 @@ public sealed class ModulePipelinePlan
         PlaceHolderOptionConfiguration? placeHolderOption,
         IReadOnlyDictionary<string, string[]> commandModuleDependencies,
         TestConfiguration[] testsAfterMerge,
+        ConfigurationActionSegment[] actions,
         bool mergeModule,
         bool mergeMissing,
         bool doNotAttemptToFixRelativePaths,
@@ -336,6 +342,7 @@ public sealed class ModulePipelinePlan
             placeHolderOption,
             commandModuleDependencies,
             testsAfterMerge,
+            actions,
             Array.Empty<ConfigurationAppleAppSegment>(),
             Array.Empty<ConfigurationXcodeProjectVersionSegment>(),
             mergeModule,
@@ -393,6 +400,7 @@ public sealed class ModulePipelinePlan
         PlaceHolderOptionConfiguration? placeHolderOption,
         IReadOnlyDictionary<string, string[]> commandModuleDependencies,
         TestConfiguration[] testsAfterMerge,
+        ConfigurationActionSegment[] actions,
         ConfigurationAppleAppSegment[] appleApps,
         ConfigurationXcodeProjectVersionSegment[] xcodeProjectVersions,
         bool mergeModule,
@@ -444,6 +452,7 @@ public sealed class ModulePipelinePlan
         PlaceHolderOption = placeHolderOption;
         CommandModuleDependencies = commandModuleDependencies ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         TestsAfterMerge = testsAfterMerge ?? Array.Empty<TestConfiguration>();
+        Actions = actions ?? Array.Empty<ConfigurationActionSegment>();
         AppleApps = appleApps ?? Array.Empty<ConfigurationAppleAppSegment>();
         XcodeProjectVersions = xcodeProjectVersions ?? Array.Empty<ConfigurationXcodeProjectVersionSegment>();
         MergeModule = mergeModule;
