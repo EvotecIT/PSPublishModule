@@ -626,6 +626,13 @@ public sealed class ModulePipelineManifestRefreshTests
             ModuleImportValidationTarget[] targets)
             => throw new InvalidOperationException("Not used in this test.");
 
+        public ModulePipelineActionResult RunAction(
+            ModulePipelineActionConfiguration action,
+            ModulePipelineActionContext context,
+            string contextPath,
+            string projectRoot)
+            => throw new InvalidOperationException("Not used in this test.");
+
         public ModuleSigningResult SignModuleOutput(
             string moduleName,
             string rootPath,

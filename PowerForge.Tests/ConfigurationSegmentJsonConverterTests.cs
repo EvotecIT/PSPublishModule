@@ -6,6 +6,55 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    public void Deserialize_ReadsExecuteSegment()
+    {
+        const string json = """
+            {
+              "Build": {
+                "Name": "PSPublishModule",
+                "SourcePath": ".",
+                "Version": "1.0.0"
+              },
+              "Install": {
+                "Enabled": false
+              },
+              "Segments": [
+                {
+                  "Type": "Execute",
+                  "Configuration": {
+                    "Name": "Inspect staged module",
+                    "At": "AfterStaging",
+                    "InlineScript": "$ctx = Get-Content $env:POWERFORGE_CONTEXT | ConvertFrom-Json",
+                    "WorkingDirectory": ".",
+                    "Environment": {
+                      "POWERFORGE_SAMPLE": "true"
+                    },
+                    "TimeoutSeconds": 30,
+                    "ContinueOnError": true
+                  }
+                }
+              ]
+            }
+            """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+
+        Assert.NotNull(spec);
+        var segment = Assert.IsType<ConfigurationActionSegment>(Assert.Single(spec!.Segments));
+        Assert.Equal("Inspect staged module", segment.Configuration.Name);
+        Assert.Equal(ModulePipelineActionStage.AfterStaging, segment.Configuration.At);
+        Assert.NotNull(segment.Configuration.InlineScript);
+        Assert.Equal(".", segment.Configuration.WorkingDirectory);
+        Assert.Equal("true", segment.Configuration.Environment?["POWERFORGE_SAMPLE"]);
+        Assert.Equal(30, segment.Configuration.TimeoutSeconds);
+        Assert.True(segment.Configuration.ContinueOnError);
+    }
+
+    [Fact]
     public void Deserialize_ReadsXcodeProjectVersionSegment()
     {
         const string json = """

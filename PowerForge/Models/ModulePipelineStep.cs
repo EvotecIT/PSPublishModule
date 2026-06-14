@@ -27,6 +27,8 @@ public enum ModulePipelineStepKind
     Install = 4,
     /// <summary>Delete generated staging directory.</summary>
     Cleanup = 5,
+    /// <summary>Run a configured lifecycle action.</summary>
+    Action = 11,
 }
 
 /// <summary>
@@ -57,6 +59,9 @@ public sealed class ModulePipelineStep
     /// <summary>Optional Apple app segment associated with the step.</summary>
     public ConfigurationAppleAppSegment? AppleAppSegment { get; }
 
+    /// <summary>Optional lifecycle action associated with the step.</summary>
+    public ConfigurationActionSegment? ActionSegment { get; }
+
     private ModulePipelineStep(
         ModulePipelineStepKind kind,
         string key,
@@ -64,7 +69,8 @@ public sealed class ModulePipelineStep
         ConfigurationArtefactSegment? artefactSegment = null,
         ConfigurationPublishSegment? publishSegment = null,
         ConfigurationXcodeProjectVersionSegment? xcodeProjectVersionSegment = null,
-        ConfigurationAppleAppSegment? appleAppSegment = null)
+        ConfigurationAppleAppSegment? appleAppSegment = null,
+        ConfigurationActionSegment? actionSegment = null)
     {
         Kind = kind;
         Key = key ?? string.Empty;
@@ -73,6 +79,7 @@ public sealed class ModulePipelineStep
         PublishSegment = publishSegment;
         XcodeProjectVersionSegment = xcodeProjectVersionSegment;
         AppleAppSegment = appleAppSegment;
+        ActionSegment = actionSegment;
     }
 
     /// <summary>
@@ -84,6 +91,9 @@ public sealed class ModulePipelineStep
 
         var steps = new List<ModulePipelineStep>();
 
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDependencies);
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterDependencies);
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeVersioning);
         if (plan.AppleApps is { Length: > 0 })
         {
             for (int i = 0; i < plan.AppleApps.Length; i++)
@@ -125,22 +135,30 @@ public sealed class ModulePipelineStep
                     xcodeProjectVersionSegment: x));
             }
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterVersioning);
 
         // 1) Build (always) - split into sub-steps for better progress visibility.
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeStaging);
         steps.Add(new ModulePipelineStep(
             kind: ModulePipelineStepKind.Build,
             key: "build:stage",
             title: "Stage to staging"));
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterStaging);
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeBuild);
         steps.Add(new ModulePipelineStep(
             kind: ModulePipelineStepKind.Build,
             key: "build:build",
             title: "Build module"));
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterBuild);
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeManifest);
         steps.Add(new ModulePipelineStep(
             kind: ModulePipelineStepKind.Build,
             key: "build:manifest",
             title: "Patch manifest"));
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterManifest);
 
         // 2) Docs (split into extraction + writing so users can see where time goes)
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDocumentation);
         if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
         {
             steps.Add(new ModulePipelineStep(
@@ -160,8 +178,10 @@ public sealed class ModulePipelineStep
                     title: "Generate external help"));
             }
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterDocumentation);
 
-        // 3) Formatting (after build/docs, before validation/packaging). 
+        // 3) Formatting (after build/docs, before validation/packaging).
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeFormatting);
         if (plan.Formatting is not null)
         {
             steps.Add(new ModulePipelineStep(
@@ -177,8 +197,10 @@ public sealed class ModulePipelineStep
                     title: "Format PowerShell (project)"));
             }
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterFormatting);
 
         // 4) Validation checks (after build/docs/formatting, before tests/packaging/publish/install).
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeValidation);
         if (plan.FileConsistencySettings?.Enable == true)
         {
             var scope = plan.FileConsistencySettings.ResolveScope();
@@ -223,8 +245,10 @@ public sealed class ModulePipelineStep
                 key: "validate:binary-conflicts",
                 title: "Analyze binary conflicts"));
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterValidation);
 
         // 5) Tests (after validation, before signing/packaging/publish/install).
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeTests);
         if (plan.ImportModules is not null &&
             (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
         {
@@ -253,8 +277,10 @@ public sealed class ModulePipelineStep
                     title: "Run tests"));
             }
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterTests);
 
         // 6) Signing (after tests, before packaging/publish/install).
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeSigning);
         if (plan.SignModule)
         {
             steps.Add(new ModulePipelineStep(
@@ -262,8 +288,10 @@ public sealed class ModulePipelineStep
                 key: "sign",
                 title: "Sign module"));
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterSigning);
 
         // 7) Artefacts
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeArtefacts);
         if (plan.Artefacts is { Length: > 0 })
         {
             for (int i = 0; i < plan.Artefacts.Length; i++)
@@ -273,7 +301,7 @@ public sealed class ModulePipelineStep
 
                 var id = a.Configuration?.ID;
                 var label = $"Pack {a.ArtefactType}";
-                if (!string.IsNullOrWhiteSpace(id)) label += $" ({id})";        
+                if (!string.IsNullOrWhiteSpace(id)) label += $" ({id})";
 
                 var key = $"artefact:{i + 1:00}:{a.ArtefactType}:{(id ?? string.Empty)}";
                 steps.Add(new ModulePipelineStep(
@@ -283,8 +311,10 @@ public sealed class ModulePipelineStep
                     artefactSegment: a));
             }
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterArtefacts);
 
         // 8) Publishes
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforePublish);
         if (plan.Publishes is { Length: > 0 })
         {
             for (int i = 0; i < plan.Publishes.Length; i++)
@@ -292,9 +322,9 @@ public sealed class ModulePipelineStep
                 var p = plan.Publishes[i];
                 if (p is null) continue;
 
-                var cfg = p.Configuration ?? new PublishConfiguration();       
+                var cfg = p.Configuration ?? new PublishConfiguration();
                 var id = cfg.ID;
-                var repoName = cfg.Repository?.Name ?? cfg.RepositoryName;      
+                var repoName = cfg.Repository?.Name ?? cfg.RepositoryName;
 
                 var label = $"Publish {cfg.Destination}";
                 if (!string.IsNullOrWhiteSpace(repoName)) label += $" ({repoName})";
@@ -308,8 +338,10 @@ public sealed class ModulePipelineStep
                     publishSegment: p));
             }
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterPublish);
 
         // 9) Install
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeInstall);
         if (plan.InstallEnabled)
         {
             steps.Add(new ModulePipelineStep(
@@ -317,6 +349,7 @@ public sealed class ModulePipelineStep
                 key: "install",
                 title: $"Install ({plan.InstallStrategy}, keep {plan.InstallKeepVersions})"));
         }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterInstall);
 
         // 10) Cleanup staging
         if (plan.DeleteGeneratedStagingAfterRun)
@@ -328,5 +361,24 @@ public sealed class ModulePipelineStep
         }
 
         return steps.ToArray();
+    }
+
+    private static void AddActionSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan, ModulePipelineActionStage stage)
+    {
+        var matches = (plan.Actions ?? Array.Empty<ConfigurationActionSegment>())
+            .Where(action => action is not null && action.Configuration?.Enabled == true && action.Configuration.At == stage)
+            .ToArray();
+
+        for (var i = 0; i < matches.Length; i++)
+        {
+            var action = matches[i];
+            var name = action.Configuration?.Name;
+            var label = string.IsNullOrWhiteSpace(name) ? stage.ToString() : name!.Trim();
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Action,
+                key: $"action:{stage}:{i + 1:00}",
+                title: $"Run action ({label})",
+                actionSegment: action));
+        }
     }
 }

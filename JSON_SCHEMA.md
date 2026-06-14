@@ -39,6 +39,7 @@ Add a `$schema` property to your JSON file (PowerForge ignores unknown propertie
   },
   "Segments": [
     { "Type": "Manifest", "Configuration": { "Author": "Me" } },
+    { "Type": "Execute", "Configuration": { "Name": "Inspect staged module", "At": "AfterStaging", "InlineScript": "$ctx = Get-Content $env:POWERFORGE_CONTEXT | ConvertFrom-Json" } },
     { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "Artefacts" } }
   ]
 }
@@ -82,6 +83,7 @@ Notes:
 Segments use a required `Type` discriminator (case-insensitive). Supported `Type` values include:
 
 - Fixed: `Manifest`, `Build`, `BuildLibraries`, `Information`, `Options`, `Formatting`, `Documentation`, `BuildDocumentation`, `ImportModules`, `ModuleSkip`, `Command`, `PlaceHolder`, `PlaceHolderOption`, `Compatibility`, `FileConsistency`, `TestsAfterMerge`
+- Lifecycle actions: `Execute`, `Action`
 - Publish: `GalleryNuget`, `GitHubNuget`
 - Artefacts: `Unpacked`, `Packed`, `Script`, `ScriptPacked`
 - Module dependencies: `RequiredModule`, `ExternalModule`, `ApprovedModule`

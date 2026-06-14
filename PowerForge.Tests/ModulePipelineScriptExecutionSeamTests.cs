@@ -227,6 +227,13 @@ public sealed class ModulePipelineScriptExecutionSeamTests
             LastTargets = targets ?? Array.Empty<ModuleImportValidationTarget>();
         }
 
+        public ModulePipelineActionResult RunAction(
+            ModulePipelineActionConfiguration action,
+            ModulePipelineActionContext context,
+            string contextPath,
+            string projectRoot)
+            => throw new InvalidOperationException("Not used in this test.");
+
         public ModuleSigningResult SignModuleOutput(
             string moduleName,
             string rootPath,

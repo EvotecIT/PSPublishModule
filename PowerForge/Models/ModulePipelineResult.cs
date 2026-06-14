@@ -116,6 +116,11 @@ public sealed class ModulePipelineResult
     public ModulePublishResult[] PublishResults { get; }
 
     /// <summary>
+    /// Lifecycle action results produced during the run.
+    /// </summary>
+    public ModulePipelineActionResult[] ActionResults { get; }
+
+    /// <summary>
     /// Signing result when signing was enabled; otherwise null.
     /// </summary>
     public ModuleSigningResult? SigningResult { get; }
@@ -158,6 +163,7 @@ public sealed class ModulePipelineResult
         ModuleSigningResult? signingResult = null,
         XcodeProjectVersionUpdateResult[]? xcodeProjectVersionResults = null,
         AppleAppReleasePreparationResult[]? appleAppResults = null,
+        ModulePipelineActionResult[]? actionResults = null,
         ModuleOwnerNote[]? ownerNotes = null)
     {
         Plan = plan;
@@ -182,6 +188,7 @@ public sealed class ModulePipelineResult
         XcodeProjectVersionResults = xcodeProjectVersionResults ?? Array.Empty<XcodeProjectVersionUpdateResult>();
         AppleAppResults = appleAppResults ?? Array.Empty<AppleAppReleasePreparationResult>();
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
+        ActionResults = actionResults ?? Array.Empty<ModulePipelineActionResult>();
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
         SigningResult = signingResult;
         OwnerNotes = ownerNotes ?? Array.Empty<ModuleOwnerNote>();

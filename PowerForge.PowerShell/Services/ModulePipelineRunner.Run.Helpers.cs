@@ -74,6 +74,7 @@ public sealed partial class ModulePipelineRunner
             signingResult: state.SigningResult,
             xcodeProjectVersionResults: state.XcodeProjectVersionResults.ToArray(),
             appleAppResults: state.AppleAppResults.ToArray(),
+            actionResults: state.ActionResults.ToArray(),
             ownerNotes: BuildOwnerNotes(
                 plan,
                 buildResult,

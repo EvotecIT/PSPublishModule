@@ -197,10 +197,20 @@ public sealed class ModulePublisherRepositoryVersionTests
     public void Publish_AllowsRuntimeCredentialProviderWithoutApiKeyOrStaticCredential()
     {
         var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        var toolRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
         var calls = new List<string>();
         try
         {
             Directory.CreateDirectory(stagingRoot);
+            Directory.CreateDirectory(toolRoot);
+            File.WriteAllText(Path.Combine(toolRoot, "jf.exe"), string.Empty);
+            Environment.SetEnvironmentVariable(
+                "PATH",
+                string.IsNullOrWhiteSpace(originalPath)
+                    ? toolRoot
+                    : toolRoot + Path.PathSeparator + originalPath);
+
             var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
             File.WriteAllText(
                 manifestPath,
@@ -295,8 +305,11 @@ public sealed class ModulePublisherRepositoryVersionTests
         }
         finally
         {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
             if (Directory.Exists(stagingRoot))
                 Directory.Delete(stagingRoot, recursive: true);
+            if (Directory.Exists(toolRoot))
+                Directory.Delete(toolRoot, recursive: true);
         }
     }
 
@@ -354,6 +367,7 @@ public sealed class ModulePublisherRepositoryVersionTests
             placeHolderOption: null,
             commandModuleDependencies: new Dictionary<string, string[]>(),
             testsAfterMerge: Array.Empty<TestConfiguration>(),
+            actions: Array.Empty<ConfigurationActionSegment>(),
             mergeModule: false,
             mergeMissing: false,
             doNotAttemptToFixRelativePaths: false,

@@ -93,6 +93,90 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
         bool includeScriptFolders)
         => new ModulePublisher(_logger, _runner).Publish(publish, plan, buildResult, artefactResults, includeScriptFolders);
 
+    public ModulePipelineActionResult RunAction(
+        ModulePipelineActionConfiguration action,
+        ModulePipelineActionContext context,
+        string contextPath,
+        string projectRoot)
+    {
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        if (context is null) throw new ArgumentNullException(nameof(context));
+        if (string.IsNullOrWhiteSpace(contextPath)) throw new ArgumentException("Context path is required.", nameof(contextPath));
+
+        var name = string.IsNullOrWhiteSpace(action.Name) ? action.At.ToString() : action.Name!.Trim();
+        var workingDirectory = ResolveActionPath(projectRoot, action.WorkingDirectory) ?? projectRoot;
+        var timeoutSeconds = action.TimeoutSeconds.GetValueOrDefault(300);
+        if (timeoutSeconds < 1) timeoutSeconds = 1;
+
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (action.Environment is not null)
+        {
+            foreach (var entry in action.Environment)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Key)) continue;
+                environment[entry.Key.Trim()] = entry.Value;
+            }
+        }
+
+        environment["POWERFORGE_CONTEXT"] = contextPath;
+        environment["POWERFORGE_ACTION_STAGE"] = action.At.ToString();
+        environment["POWERFORGE_ACTION_NAME"] = name;
+        environment["POWERFORGE_MODULE_NAME"] = context.ModuleName;
+        environment["POWERFORGE_PROJECT_ROOT"] = context.ProjectRoot;
+        environment["POWERFORGE_STAGING_PATH"] = context.StagingPath;
+        environment["POWERFORGE_MANIFEST_PATH"] = context.ManifestPath;
+        environment["POWERFORGE_RESOLVED_VERSION"] = context.ResolvedVersion;
+
+        PowerShellRunRequest request;
+        var filePath = ResolveActionPath(projectRoot, action.FilePath);
+        var hasFile = !string.IsNullOrWhiteSpace(filePath);
+        var hasInline = !string.IsNullOrWhiteSpace(action.InlineScript);
+        if (hasFile && hasInline)
+            throw new InvalidOperationException($"Lifecycle action '{name}' can define FilePath or InlineScript, not both.");
+        if (!hasFile && !hasInline)
+            throw new InvalidOperationException($"Lifecycle action '{name}' requires FilePath or InlineScript.");
+
+        if (hasFile)
+        {
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException($"Lifecycle action script was not found: {filePath}", filePath);
+
+            request = new PowerShellRunRequest(
+                filePath!,
+                Array.Empty<string>(),
+                TimeSpan.FromSeconds(timeoutSeconds),
+                preferPwsh: !action.PreferWindowsPowerShell,
+                workingDirectory: workingDirectory,
+                environmentVariables: environment);
+        }
+        else
+        {
+            request = PowerShellRunRequest.ForCommand(
+                action.InlineScript!,
+                TimeSpan.FromSeconds(timeoutSeconds),
+                preferPwsh: !action.PreferWindowsPowerShell,
+                workingDirectory: workingDirectory,
+                environmentVariables: environment);
+        }
+
+        _logger.Info($"Running lifecycle action '{name}' at {action.At}.");
+        var result = _runner.Run(request);
+        return new ModulePipelineActionResult
+        {
+            Name = name,
+            Stage = action.At,
+            Succeeded = result.ExitCode == 0,
+            ExitCode = result.ExitCode,
+            Executable = result.Executable,
+            FilePath = hasFile ? filePath : null,
+            Inline = hasInline,
+            WorkingDirectory = workingDirectory,
+            ContextPath = contextPath,
+            StdOut = result.StdOut,
+            StdErr = result.StdErr
+        };
+    }
+
     public void ValidateModuleImports(
         string manifestPath,
         ImportModuleEntry[] modules,
@@ -213,6 +297,15 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
         {
             try { File.Delete(scriptPath); } catch { /* best effort */ }
         }
+    }
+
+    private static string? ResolveActionPath(string projectRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        var trimmed = path!.Trim();
+        return Path.IsPathRooted(trimmed)
+            ? Path.GetFullPath(trimmed)
+            : Path.GetFullPath(Path.Combine(projectRoot, trimmed));
     }
 
     private static string EncodeLines(IEnumerable<string> lines)
