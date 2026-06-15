@@ -146,18 +146,65 @@ internal sealed class PowerForgeReleaseService
             ? ResolveAppleTargetMatches(spec.AppleApps!, selectedTargets)
             : Array.Empty<string>();
         var toolTargetMatches = Array.Empty<string>();
-        var selectedTargetsAreAppleOnly = runAppleApps &&
-                                          selectedTargets.Length > 0 &&
-                                          appleTargetMatches.Length == selectedTargets.Length;
-        if (selectedTargetsAreAppleOnly)
+        var runWorkspaceValidation = spec.WorkspaceValidation is not null && !request.SkipWorkspaceValidation;
+        var publishUnifiedGitHub = ShouldPublishUnifiedGitHub(spec, request);
+        DotNetPublishSpec? dotNetSpecForTools = null;
+        string? dotNetSourcePathForTools = null;
+
+        if (runTools)
+        {
+            if (UsesDotNetToolWorkflow(spec.Tools!))
+            {
+                ApplyDotNetPublishProfileOverride(spec.Tools!);
+                var inlineMatches = ResolveOptionalDotNetToolTargetMatches(spec.Tools!.DotNetPublish, selectedTargets);
+                var selectedTargetsAreAppleOnly = runAppleApps &&
+                                                  selectedTargets.Length > 0 &&
+                                                  appleTargetMatches.Length == selectedTargets.Length &&
+                                                  inlineMatches.Length == 0;
+                var externalConfigExists = DotNetToolsConfigExists(spec.Tools!, configPath);
+                var appleTargetsNeedDotNetDisambiguation = selectedTargetsAreAppleOnly &&
+                                                           AppleTargetSelectionUsesNameOrScheme(spec.AppleApps!, selectedTargets);
+                var shouldLoadDotNetSpec = selectedTargets.Length == 0 ||
+                                           inlineMatches.Length > 0 ||
+                                           !selectedTargetsAreAppleOnly ||
+                                           externalConfigExists && appleTargetsNeedDotNetDisambiguation;
+                if (shouldLoadDotNetSpec)
+                {
+                    var dotNetSource = _loadDotNetToolsSpec(spec.Tools!, configPath);
+                    dotNetSpecForTools = dotNetSource.Spec;
+                    dotNetSourcePathForTools = dotNetSource.SourceConfigPath;
+                    toolTargetMatches = ResolveDotNetToolTargetMatches(dotNetSpecForTools, selectedTargets);
+                }
+                else
+                {
+                    toolTargetMatches = inlineMatches;
+                }
+            }
+            else
+            {
+                toolTargetMatches = ResolveLegacyToolTargetMatches(spec.Tools!, selectedTargets);
+            }
+        }
+
+        ValidateSelectedTargets(selectedTargets, toolTargetMatches, appleTargetMatches, runTools, runAppleApps);
+        var hasTargetAwareSelection = selectedTargets.Length > 0 &&
+                                      (toolTargetMatches.Length > 0 || appleTargetMatches.Length > 0);
+        if (hasTargetAwareSelection)
         {
             runModule = false;
             runPackages = false;
-            runTools = false;
         }
-        var configurationOverride = NormalizeConfiguration(request.Configuration);
-        var runWorkspaceValidation = spec.WorkspaceValidation is not null && !request.SkipWorkspaceValidation;
-        var publishUnifiedGitHub = ShouldPublishUnifiedGitHub(spec, request);
+
+        var willRunTools = runTools && ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
+        var willRunAppleApps = runAppleApps && ShouldRunSectionForTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
+        var hasNonAppleConfigurationConsumer = runWorkspaceValidation || runModule || runPackages || willRunTools;
+        var configurationOverride = hasNonAppleConfigurationConsumer
+            ? NormalizeConfiguration(request.Configuration)
+            : null;
+        var appleConfigurationOverride = NormalizeAppleConfiguration(request.Configuration);
+
+        if (willRunTools)
+            ApplyToolRequestOverrides(spec.Tools!, request, configurationOverride);
 
         if (!runModule && !runPackages && !runTools && !runAppleApps && !runWorkspaceValidation)
         {
@@ -212,6 +259,21 @@ internal sealed class PowerForgeReleaseService
             }
         }
 
+        var earlyAppleReleaseVersion = ResolveAppleSharedReleaseVersion(spec, request, result);
+        if (willRunAppleApps)
+        {
+            var selectedAppleTargets = GetSectionSelectedTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
+            _ = PrepareAppleRelease(
+                spec.AppleApps!,
+                configPath,
+                appleConfigurationOverride,
+                earlyAppleReleaseVersion,
+                request.SkipBuild,
+                selectedAppleTargets,
+                allowUnresolvedResolvedVersion: true,
+                validateReusableArchives: !request.PlanOnly && !request.ValidateOnly);
+        }
+
         if (runPackages)
         {
             ApplyPackageRequestOverrides(spec.Packages!, request, configurationOverride);
@@ -235,41 +297,20 @@ internal sealed class PowerForgeReleaseService
         }
 
         var sharedReleaseVersion = ResolveSharedReleaseVersion(spec, result);
-        DotNetPublishSpec? dotNetSpecForTools = null;
-        string? dotNetSourcePathForTools = null;
-        if (runTools)
-        {
-            ApplyToolRequestOverrides(spec.Tools!, request, configurationOverride);
-            if (UsesDotNetToolWorkflow(spec.Tools!))
-            {
-                var dotNetSource = _loadDotNetToolsSpec(spec.Tools!, configPath);
-                dotNetSpecForTools = dotNetSource.Spec;
-                dotNetSourcePathForTools = dotNetSource.SourceConfigPath;
-                toolTargetMatches = ResolveDotNetToolTargetMatches(dotNetSpecForTools, selectedTargets);
-            }
-            else
-            {
-                toolTargetMatches = ResolveLegacyToolTargetMatches(spec.Tools!, selectedTargets);
-            }
-
-            ValidateMixedSelectedTargets(selectedTargets, toolTargetMatches, appleTargetMatches, runTools, runAppleApps);
-        }
-        else if (runAppleApps)
-        {
-            ValidateMixedSelectedTargets(selectedTargets, Array.Empty<string>(), appleTargetMatches, runTools, runAppleApps);
-        }
 
         PowerForgeAppleReleasePlan? applePlan = null;
-        if (runAppleApps && ShouldRunSectionForTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches))
+        if (willRunAppleApps)
         {
             var selectedAppleTargets = GetSectionSelectedTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
+            var appleReleaseVersion = ResolveAppleSharedReleaseVersion(spec, request, result);
             applePlan = PrepareAppleRelease(
                 spec.AppleApps!,
                 configPath,
-                configurationOverride,
-                sharedReleaseVersion,
+                appleConfigurationOverride,
+                appleReleaseVersion,
                 request.SkipBuild,
-                selectedAppleTargets);
+                selectedAppleTargets,
+                validateReusableArchives: !request.PlanOnly && !request.ValidateOnly);
             result.AppleAppPlan = applePlan;
         }
 
@@ -279,7 +320,7 @@ internal sealed class PowerForgeReleaseService
             {
                 if (dotNetSpecForTools is not null &&
                     dotNetSourcePathForTools is not null &&
-                    ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches))
+                    willRunTools)
                 {
                     var dotNetTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
                     var dotNetPlan = WithRequestTargets(
@@ -320,7 +361,7 @@ internal sealed class PowerForgeReleaseService
             }
             else
             {
-                if (ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches))
+                if (willRunTools)
                 {
                     var legacyToolTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
                     var toolPlan = WithRequestTargets(
@@ -455,10 +496,46 @@ internal sealed class PowerForgeReleaseService
         if (selectedTargets.Length == 0)
             return Array.Empty<string>();
 
+        var activeTargets = ResolveDotNetProfileTargetNames(spec);
         return selectedTargets
-            .Where(selected => (spec.Targets ?? Array.Empty<DotNetPublishTarget>())
-                .Any(target => string.Equals(target.Name?.Trim(), selected, StringComparison.OrdinalIgnoreCase)))
+            .Where(selected => activeTargets.Contains(selected))
             .ToArray();
+    }
+
+    private static string[] ResolveOptionalDotNetToolTargetMatches(DotNetPublishSpec? spec, string[] selectedTargets)
+    {
+        return spec is null ? Array.Empty<string>() : ResolveDotNetToolTargetMatches(spec, selectedTargets);
+    }
+
+    private static HashSet<string> ResolveDotNetProfileTargetNames(DotNetPublishSpec spec)
+    {
+        var targetNames = (spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+            .Where(target => target is not null && !string.IsNullOrWhiteSpace(target.Name))
+            .Select(target => target.Name!.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var profiles = (spec.Profiles ?? Array.Empty<DotNetPublishProfile>())
+            .Where(profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Name))
+            .ToArray();
+        if (profiles.Length == 0)
+            return targetNames;
+
+        var profileName = !string.IsNullOrWhiteSpace(spec.Profile)
+            ? spec.Profile!.Trim()
+            : profiles.FirstOrDefault(profile => profile.Default)?.Name;
+        if (string.IsNullOrWhiteSpace(profileName))
+            return targetNames;
+
+        var profile = profiles.FirstOrDefault(profile => profile.Name!.Equals(profileName, StringComparison.OrdinalIgnoreCase));
+        var profileTargets = profile?.Targets ?? Array.Empty<string>();
+        if (profile is null || profileTargets.Length == 0)
+            return targetNames;
+
+        return profileTargets
+            .Where(target => !string.IsNullOrWhiteSpace(target))
+            .Select(target => target.Trim())
+            .Where(targetNames.Contains)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static string[] ResolveAppleTargetMatches(PowerForgeAppleReleaseOptions options, string[] selectedTargets)
@@ -475,14 +552,27 @@ internal sealed class PowerForgeReleaseService
             .ToArray();
     }
 
-    private static void ValidateMixedSelectedTargets(
+    private static bool AppleTargetSelectionUsesNameOrScheme(PowerForgeAppleReleaseOptions options, string[] selectedTargets)
+    {
+        if (selectedTargets.Length == 0)
+            return false;
+
+        var apps = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
+            .Where(app => app.Enabled)
+            .ToArray();
+
+        return selectedTargets.Any(selected =>
+            apps.Any(app => AppleAppNameOrSchemeMatchesTarget(app, selected)));
+    }
+
+    private static void ValidateSelectedTargets(
         string[] selectedTargets,
         string[] toolTargetMatches,
         string[] appleTargetMatches,
         bool runTools,
         bool runAppleApps)
     {
-        if (!runTools || !runAppleApps || selectedTargets.Length == 0)
+        if ((!runTools && !runAppleApps) || selectedTargets.Length == 0)
             return;
 
         var knownTargets = toolTargetMatches
@@ -584,7 +674,9 @@ internal sealed class PowerForgeReleaseService
         string? configurationOverride,
         string? sharedReleaseVersion,
         bool skipBuild,
-        string[]? selectedTargetNames)
+        string[]? selectedTargetNames,
+        bool allowUnresolvedResolvedVersion = false,
+        bool validateReusableArchives = true)
     {
         if (options.SyncScreenshots)
             throw new NotSupportedException("AppleApps.SyncScreenshots is not supported by the unified release workflow yet. Use Sync-AppStoreConnectScreenshots or project-specific screenshot sync scripts for now.");
@@ -593,7 +685,7 @@ internal sealed class PowerForgeReleaseService
 
         var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var projectRoot = ResolveOutputPath(configDirectory, string.IsNullOrWhiteSpace(options.ProjectRoot) ? "." : options.ProjectRoot!);
-        var configuration = configurationOverride ?? NormalizeConfiguration(options.Configuration) ?? "Release";
+        var configuration = configurationOverride ?? NormalizeAppleConfiguration(options.Configuration) ?? "Release";
         var archiveRoot = ResolveOutputPath(projectRoot, string.IsNullOrWhiteSpace(options.ArchiveRoot) ? Path.Combine("Artifacts", "Apple", "Archives") : options.ArchiveRoot!);
         var exportRoot = ResolveOutputPath(projectRoot, string.IsNullOrWhiteSpace(options.ExportRoot) ? Path.Combine("Artifacts", "Apple", "Exports") : options.ExportRoot!);
         var screenshotConfigPath = string.IsNullOrWhiteSpace(options.ScreenshotConfigPath)
@@ -619,13 +711,19 @@ internal sealed class PowerForgeReleaseService
 
         var apps = configuredApps
             .Where(app => selectedTargets.Length == 0 || selectedTargets.Any(selected => AppleAppMatchesTarget(app, selected)))
-            .Select(app => PrepareAppleAppPlan(app, options, projectRoot, archiveRoot, exportRoot, configuration, sharedReleaseVersion))
+            .Select(app => PrepareAppleAppPlan(app, options, projectRoot, archiveRoot, exportRoot, configuration, sharedReleaseVersion, allowUnresolvedResolvedVersion))
             .ToArray();
 
         if (apps.Length == 0)
             throw new InvalidOperationException("AppleApps.Apps must contain at least one enabled app entry.");
         if (!options.Archive && apps.Any(app => app.VersionUpdateRequested))
             throw new InvalidOperationException("Apple app version updates require AppleApps.Archive=true. Set Archive=true to build a fresh archive after updating versions, or remove version update fields when reusing an existing archive.");
+        if (validateReusableArchives && !options.Archive && options.Upload)
+        {
+            var missingArchive = apps.FirstOrDefault(app => !Directory.Exists(app.ArchivePath));
+            if (missingArchive is not null)
+                throw new FileNotFoundException($"Apple app archive was not found for upload-only release: {missingArchive.ArchivePath}", missingArchive.ArchivePath);
+        }
 
         return new PowerForgeAppleReleasePlan
         {
@@ -654,7 +752,8 @@ internal sealed class PowerForgeReleaseService
         string archiveRoot,
         string exportRoot,
         string configuration,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        bool allowUnresolvedResolvedVersion)
     {
         if (string.IsNullOrWhiteSpace(app.ProjectPath))
             throw new InvalidOperationException("Apple app ProjectPath is required.");
@@ -684,7 +783,7 @@ internal sealed class PowerForgeReleaseService
             : null;
         if (versionUpdateRequested && isWorkspace)
             throw new InvalidOperationException($"Apple app '{name}' uses a .xcworkspace ProjectPath. Unified Apple version updates require a .xcodeproj ProjectPath or project.pbxproj path.");
-        if (versionUpdateRequested && string.IsNullOrWhiteSpace(marketingVersion))
+        if (versionUpdateRequested && string.IsNullOrWhiteSpace(marketingVersion) && !(allowUnresolvedResolvedVersion && app.UseResolvedVersion))
             throw new InvalidOperationException($"Apple app '{name}' requires MarketingVersion unless UseResolvedVersion is enabled with a resolvable release version.");
 
         var buildNumber = versionUpdateRequested
@@ -784,28 +883,29 @@ internal sealed class PowerForgeReleaseService
 
     private static string NormalizeAppleArchiveProjectPath(string projectPath, string appName)
     {
-        if (Directory.Exists(projectPath))
+        var normalizedProjectPath = TrimTrailingDirectorySeparators(projectPath);
+        if (Directory.Exists(normalizedProjectPath))
         {
-            var extension = Path.GetExtension(projectPath);
+            var extension = Path.GetExtension(normalizedProjectPath);
             if (string.Equals(extension, ".xcodeproj", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(extension, ".xcworkspace", StringComparison.OrdinalIgnoreCase))
             {
-                return projectPath;
+                return normalizedProjectPath;
             }
 
-            throw new InvalidOperationException($"Apple app '{appName}' ProjectPath must point to a .xcodeproj or .xcworkspace directory for archive automation: {projectPath}");
+            throw new InvalidOperationException($"Apple app '{appName}' ProjectPath must point to a .xcodeproj or .xcworkspace directory for archive automation: {normalizedProjectPath}");
         }
 
-        if (File.Exists(projectPath) &&
-            string.Equals(Path.GetExtension(projectPath), ".xcodeproj", StringComparison.OrdinalIgnoreCase))
+        if (File.Exists(normalizedProjectPath) &&
+            string.Equals(Path.GetExtension(normalizedProjectPath), ".xcodeproj", StringComparison.OrdinalIgnoreCase))
         {
-            return projectPath;
+            return normalizedProjectPath;
         }
 
-        if (File.Exists(projectPath) &&
-            string.Equals(Path.GetFileName(projectPath), "project.pbxproj", StringComparison.OrdinalIgnoreCase))
+        if (File.Exists(normalizedProjectPath) &&
+            string.Equals(Path.GetFileName(normalizedProjectPath), "project.pbxproj", StringComparison.OrdinalIgnoreCase))
         {
-            var projectDirectory = Path.GetDirectoryName(projectPath);
+            var projectDirectory = Path.GetDirectoryName(normalizedProjectPath);
             if (!string.IsNullOrWhiteSpace(projectDirectory) &&
                 string.Equals(Path.GetExtension(projectDirectory), ".xcodeproj", StringComparison.OrdinalIgnoreCase))
             {
@@ -814,6 +914,19 @@ internal sealed class PowerForgeReleaseService
         }
 
         throw new InvalidOperationException($"Apple app '{appName}' ProjectPath must point to a .xcodeproj or .xcworkspace for archive automation. project.pbxproj paths are only supported when they are inside a .xcodeproj directory.");
+    }
+
+    private static string TrimTrailingDirectorySeparators(string path)
+    {
+        var trimmed = Path.GetFullPath(path.Trim());
+        var root = Path.GetPathRoot(trimmed) ?? string.Empty;
+        while (trimmed.Length > root.Length &&
+               (trimmed[trimmed.Length - 1] == Path.DirectorySeparatorChar || trimmed[trimmed.Length - 1] == Path.AltDirectorySeparatorChar))
+        {
+            trimmed = trimmed.Substring(0, trimmed.Length - 1);
+        }
+
+        return trimmed;
     }
 
     private static bool AppleAppMatchesTarget(AppleAppConfiguration app, string targetName)
@@ -825,6 +938,16 @@ internal sealed class PowerForgeReleaseService
         return string.Equals(app.Name?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase) ||
                string.Equals(app.Scheme?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase) ||
                string.Equals(app.BundleId?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool AppleAppNameOrSchemeMatchesTarget(AppleAppConfiguration app, string targetName)
+    {
+        var trimmed = targetName.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        return string.Equals(app.Name?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(app.Scheme?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string[] NormalizeStrings(IEnumerable<string>? values)
@@ -923,6 +1046,21 @@ internal sealed class PowerForgeReleaseService
             .ToArray();
 
         return distinctVersions.Length == 1 ? distinctVersions[0] : null;
+    }
+
+    private static string? ResolveAppleSharedReleaseVersion(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        PowerForgeReleaseResult result)
+    {
+        var sharedReleaseVersion = ResolveSharedReleaseVersion(spec, result);
+        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
+            return sharedReleaseVersion;
+
+        var moduleVersion = result.ModulePlan?.ModuleVersion
+            ?? request.ModuleVersion
+            ?? spec.Module?.ModuleVersion;
+        return string.IsNullOrWhiteSpace(moduleVersion) ? null : moduleVersion;
     }
 
     private static void ApplySharedReleaseVersion(DotNetPublishPlan plan, string? sharedReleaseVersion)
@@ -1621,6 +1759,26 @@ internal sealed class PowerForgeReleaseService
         return spec.DotNetPublish is not null || !string.IsNullOrWhiteSpace(spec.DotNetPublishConfigPath);
     }
 
+    private static bool DotNetToolsConfigExists(PowerForgeToolReleaseSpec tools, string releaseConfigPath)
+    {
+        if (string.IsNullOrWhiteSpace(tools.DotNetPublishConfigPath))
+            return false;
+
+        var releaseConfigDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        var configPath = Path.GetFullPath(Path.IsPathRooted(tools.DotNetPublishConfigPath)
+            ? tools.DotNetPublishConfigPath!
+            : Path.Combine(releaseConfigDirectory, tools.DotNetPublishConfigPath!));
+        return File.Exists(configPath);
+    }
+
+    private static void ApplyDotNetPublishProfileOverride(PowerForgeToolReleaseSpec tools)
+    {
+        if (tools.DotNetPublish is null || string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
+            return;
+
+        tools.DotNetPublish.Profile = tools.DotNetPublishProfile!.Trim();
+    }
+
     private static (DotNetPublishSpec Spec, string SourceConfigPath) LoadDotNetToolsSpec(PowerForgeToolReleaseSpec tools, string releaseConfigPath)
     {
         if (tools.DotNetPublish is not null && !string.IsNullOrWhiteSpace(tools.DotNetPublishConfigPath))
@@ -1628,8 +1786,7 @@ internal sealed class PowerForgeReleaseService
 
         if (tools.DotNetPublish is not null)
         {
-            if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
-                tools.DotNetPublish.Profile = tools.DotNetPublishProfile!.Trim();
+            ApplyDotNetPublishProfileOverride(tools);
 
             return (tools.DotNetPublish, releaseConfigPath);
         }
@@ -2926,6 +3083,11 @@ internal sealed class PowerForgeReleaseService
         }
 
         return normalized;
+    }
+
+    private static string? NormalizeAppleConfiguration(string? configuration)
+    {
+        return string.IsNullOrWhiteSpace(configuration) ? null : configuration!.Trim();
     }
 
     private static void ApplyPackageRequestOverrides(

@@ -1038,7 +1038,49 @@ public sealed class PowerForgeReleaseServiceTests
                     Targets = new[] { "MissingApp" }
                 }));
 
-            Assert.Contains("Unknown Apple app target", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Unknown release target", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("MissingApp", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_RejectsPartiallyUnknownTargetFilter()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var ex = Assert.Throws<ArgumentException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    Targets = new[] { "Tactra", "MissingApp" }
+                }));
+
+            Assert.Contains("Unknown release target", ex.Message, StringComparison.Ordinal);
             Assert.Contains("MissingApp", ex.Message, StringComparison.Ordinal);
         }
         finally
@@ -1120,6 +1162,553 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Null(result.DotNetToolPlan);
             Assert.Single(result.AppleAppPlan!.Apps);
             Assert.Single(archiveRequests);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedExternalDotNetToolsAndAppleApps_AllowsAppleOnlyTargetFilter()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var archiveRequests = new List<AppleAppArchiveRequest>();
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("External DotNet config should not load for an Apple-only target."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run for an Apple-only target."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run for an Apple-only target."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: request =>
+                {
+                    archiveRequests.Add(request);
+                    return new AppleAppArchiveResult
+                    {
+                        ArchivePath = request.ArchivePath!,
+                        Destination = request.Destination!,
+                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
+                    };
+                },
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublishConfigPath = "missing-dotnet-publish.json"
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                BundleId = "com.evotecit.tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    Targets = new[] { "com.evotecit.tactra" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Null(result.DotNetToolPlan);
+            Assert.Single(result.AppleAppPlan!.Apps);
+            Assert.Single(archiveRequests);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedExternalDotNetToolsAndAppleApps_SkipsExistingDotNetConfigForAppleBundleIdTarget()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            File.WriteAllText(Path.Combine(root, "dotnet-publish.json"), "{ invalid json");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublishConfigPath = "dotnet-publish.json"
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                BundleId = "com.evotecit.tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    Targets = new[] { "com.evotecit.tactra" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Null(result.DotNetToolPlan);
+            Assert.Single(result.AppleAppPlan!.Apps);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedExternalDotNetToolsAndAppleApps_RunsSharedTargetInBothSections()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var dotNetConfigPath = Path.Combine(root, "dotnet-publish.json");
+            File.WriteAllText(dotNetConfigPath, """
+{
+  "Targets": [
+    {
+      "Name": "Tactra",
+      "ProjectPath": "Tactra.Cli.csproj"
+    }
+  ]
+}
+""");
+            var plannedToolTargets = Array.Empty<string>();
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, _) => (new DotNetPublishSpec
+                {
+                    Targets = new[]
+                    {
+                        new DotNetPublishTarget
+                        {
+                            Name = "Tactra",
+                            ProjectPath = "Tactra.Cli.csproj"
+                        }
+                    }
+                }, dotNetConfigPath),
+                planDotNetTools: (_, _, request, _) =>
+                {
+                    plannedToolTargets = request.Targets;
+                    return new DotNetPublishPlan
+                    {
+                        ProjectRoot = root,
+                        Configuration = "Release",
+                        Targets = new[]
+                        {
+                            new DotNetPublishTargetPlan
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.Cli.csproj",
+                                Combinations = Array.Empty<DotNetPublishTargetCombination>()
+                            }
+                        }
+                    };
+                },
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublishConfigPath = "dotnet-publish.json"
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                BundleId = "com.evotecit.tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    Targets = new[] { "Tactra" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(new[] { "Tactra" }, plannedToolTargets);
+            Assert.NotNull(result.DotNetToolPlan);
+            Assert.Single(result.AppleAppPlan!.Apps);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedExternalDotNetToolsAndAppleApps_RespectsDotNetPublishProfileTargetFilter()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var dotNetConfigPath = Path.Combine(root, "dotnet-publish.json");
+            File.WriteAllText(dotNetConfigPath, """
+{
+  "Profile": "tools",
+  "Profiles": [
+    {
+      "Name": "tools",
+      "Targets": [ "PowerForge" ]
+    }
+  ],
+  "Targets": [
+    {
+      "Name": "Tactra",
+      "ProjectPath": "Tactra.Cli.csproj"
+    },
+    {
+      "Name": "PowerForge",
+      "ProjectPath": "PowerForge.Cli.csproj"
+    }
+  ]
+}
+""");
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, _) => (new DotNetPublishSpec
+                {
+                    Profile = "tools",
+                    Profiles = new[]
+                    {
+                        new DotNetPublishProfile
+                        {
+                            Name = "tools",
+                            Targets = new[] { "PowerForge" }
+                        }
+                    },
+                    Targets = new[]
+                    {
+                        new DotNetPublishTarget
+                        {
+                            Name = "Tactra",
+                            ProjectPath = "Tactra.Cli.csproj"
+                        },
+                        new DotNetPublishTarget
+                        {
+                            Name = "PowerForge",
+                            ProjectPath = "PowerForge.Cli.csproj"
+                        }
+                    }
+                }, dotNetConfigPath),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run for a target excluded by the active profile."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublishConfigPath = "dotnet-publish.json"
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                BundleId = "com.evotecit.tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    Targets = new[] { "Tactra" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Null(result.DotNetToolPlan);
+            Assert.Single(result.AppleAppPlan!.Apps);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedInlineDotNetToolsAndAppleApps_RespectsDotNetPublishProfileOverrideBeforeTargetMatching()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var plannedToolTargets = Array.Empty<string>();
+            var dotNetPublish = new DotNetPublishSpec
+            {
+                Profile = "tools",
+                Profiles = new[]
+                {
+                    new DotNetPublishProfile
+                    {
+                        Name = "tools",
+                        Targets = new[] { "PowerForge" }
+                    },
+                    new DotNetPublishProfile
+                    {
+                        Name = "apple",
+                        Targets = new[] { "Tactra" }
+                    }
+                },
+                Targets = new[]
+                {
+                    new DotNetPublishTarget
+                    {
+                        Name = "Tactra",
+                        ProjectPath = "Tactra.Cli.csproj"
+                    },
+                    new DotNetPublishTarget
+                    {
+                        Name = "PowerForge",
+                        ProjectPath = "PowerForge.Cli.csproj"
+                    }
+                }
+            };
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (dotNetPublish, configPath),
+                planDotNetTools: (_, _, request, _) =>
+                {
+                    plannedToolTargets = request.Targets;
+                    return new DotNetPublishPlan
+                    {
+                        ProjectRoot = root,
+                        Configuration = "Release",
+                        Targets = new[]
+                        {
+                            new DotNetPublishTargetPlan
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.Cli.csproj",
+                                Combinations = Array.Empty<DotNetPublishTargetCombination>()
+                            }
+                        }
+                    };
+                },
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublishProfile = "apple",
+                        DotNetPublish = dotNetPublish
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                BundleId = "com.evotecit.tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    Targets = new[] { "Tactra" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal("apple", dotNetPublish.Profile);
+            Assert.Equal(new[] { "Tactra" }, plannedToolTargets);
+            Assert.NotNull(result.DotNetToolPlan);
+            Assert.Single(result.AppleAppPlan!.Apps);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedDotNetToolsAndAppleApps_RunsSharedTargetInBothSections()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var archiveRequests = new List<AppleAppArchiveRequest>();
+            var plannedToolTargets = Array.Empty<string>();
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec
+                {
+                    Targets = new[]
+                    {
+                        new DotNetPublishTarget
+                        {
+                            Name = "Tactra",
+                            ProjectPath = "Tactra.Cli.csproj"
+                        }
+                    }
+                }, configPath),
+                planDotNetTools: (_, _, request, _) =>
+                {
+                    plannedToolTargets = request.Targets;
+                    return new DotNetPublishPlan
+                    {
+                        ProjectRoot = root,
+                        Configuration = "Release",
+                        Targets = new[]
+                        {
+                            new DotNetPublishTargetPlan
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.Cli.csproj",
+                                Combinations = Array.Empty<DotNetPublishTargetCombination>()
+                            }
+                        }
+                    };
+                },
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: request =>
+                {
+                    archiveRequests.Add(request);
+                    return new AppleAppArchiveResult
+                    {
+                        ArchivePath = request.ArchivePath!,
+                        Destination = request.Destination!,
+                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
+                    };
+                },
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec
+                        {
+                            Targets = new[]
+                            {
+                                new DotNetPublishTarget
+                                {
+                                    Name = "Tactra",
+                                    ProjectPath = "Tactra.Cli.csproj"
+                                }
+                            }
+                        }
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                BundleId = "com.evotecit.tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    Targets = new[] { "Tactra" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(new[] { "Tactra" }, plannedToolTargets);
+            Assert.NotNull(result.DotNetToolPlan);
+            Assert.Single(result.AppleAppPlan!.Apps);
+            Assert.Empty(archiveRequests);
         }
         finally
         {
@@ -1428,6 +2017,394 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_MixedPackagesAndAppleApps_ValidatesAppleBeforePublishingPackages()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run before Apple validation succeeds."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run after validation failure."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var ex = Assert.Throws<FileNotFoundException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Packages = new ProjectBuildConfiguration
+                    {
+                        RootPath = "."
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Missing.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                }));
+
+            Assert.Contains("Missing.xcodeproj", ex.FileName, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_AllowsCustomXcodeConfiguration()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Configuration = "AppStore",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal("AppStore", result.AppleAppPlan!.Configuration);
+            Assert.Equal("AppStore", Assert.Single(result.AppleAppPlan.Apps).Configuration);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_AllowsCustomRequestConfigurationForAppleOnlyTarget()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run for an Apple-only target."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run for an Apple-only target."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run for an Apple-only target."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run for an Apple-only target."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run for an Apple-only target."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run for an Apple-only target."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        ScriptPath = "Missing-Build-Module.ps1"
+                    },
+                    Packages = new ProjectBuildConfiguration
+                    {
+                        RootPath = "."
+                    },
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        Targets = new[]
+                        {
+                            new PowerForgeToolReleaseTarget
+                            {
+                                Name = "PowerForge",
+                                ProjectPath = "PowerForge.Cli.csproj"
+                            }
+                        }
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                BundleId = "com.evotecit.tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    Configuration = "AppStore",
+                    PlanOnly = true,
+                    Targets = new[] { "com.evotecit.tactra" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Null(result.ModulePlan);
+            Assert.Null(result.Packages);
+            Assert.Null(result.ToolPlan);
+            Assert.Equal("AppStore", result.AppleAppPlan!.Configuration);
+            Assert.Equal("AppStore", Assert.Single(result.AppleAppPlan.Apps).Configuration);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_UsesModuleVersionForResolvedVersion()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var buildScript = Path.Combine(root, "Module", "Build", "Build-Module.ps1");
+            Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
+            File.WriteAllText(buildScript, "# test build script");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        ModuleVersion = "2.3.4"
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                UseResolvedVersion = true
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal("2.3.4", result.ModulePlan!.ModuleVersion);
+            Assert.Equal("2.3.4", Assert.Single(result.AppleAppPlan!.Apps).MarketingVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_TargetFilterUsesConfiguredModuleVersionWithoutRunningModule()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var buildScript = Path.Combine(root, "Module", "Build", "Build-Module.ps1");
+            Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
+            File.WriteAllText(buildScript, "# test build script");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        ModuleVersion = "2.3.4"
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                BundleId = "com.evotecit.tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                UseResolvedVersion = true
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    Targets = new[] { "com.evotecit.tactra" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Null(result.ModulePlan);
+            Assert.Equal("2.3.4", Assert.Single(result.AppleAppPlan!.Apps).MarketingVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedModuleDotNetToolsAndAppleApps_DoesNotApplyModuleVersionToTools()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var buildScript = Path.Combine(root, "Module", "Build", "Build-Module.ps1");
+            Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
+            File.WriteAllText(buildScript, "# test build script");
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec
+                {
+                    Targets = new[]
+                    {
+                        new DotNetPublishTarget
+                        {
+                            Name = "PowerForge",
+                            ProjectPath = "PowerForge.Cli.csproj"
+                        }
+                    }
+                }, configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Configuration = "Release",
+                    MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Version"] = "9.9.9",
+                        ["PackageVersion"] = "9.9.9"
+                    },
+                    Targets = new[]
+                    {
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "PowerForge",
+                            ProjectPath = "PowerForge.Cli.csproj",
+                            Combinations = Array.Empty<DotNetPublishTargetCombination>()
+                        }
+                    }
+                },
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        ModuleVersion = "2.3.4"
+                    },
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec
+                        {
+                            Targets = new[]
+                            {
+                                new DotNetPublishTarget
+                                {
+                                    Name = "PowerForge",
+                                    ProjectPath = "PowerForge.Cli.csproj"
+                                }
+                            }
+                        }
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                UseResolvedVersion = true
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.Equal("9.9.9", result.DotNetToolPlan!.MsBuildProperties["Version"]);
+            Assert.Equal("9.9.9", result.DotNetToolPlan.MsBuildProperties["PackageVersion"]);
+            Assert.Equal("2.3.4", Assert.Single(result.AppleAppPlan!.Apps).MarketingVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleApps_RejectsSkipBuildWhenArchiveIsEnabled()
     {
         var root = CreateSandbox();
@@ -1532,6 +2509,150 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_RejectsMissingReuseArchiveBeforeUpload()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var ex = Assert.Throws<FileNotFoundException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        Upload = true,
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                }));
+
+            Assert.Contains("Tactra.xcarchive", ex.FileName, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedPackagesAndAppleApps_ValidatesMissingReuseArchiveBeforePublishingPackages()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run before Apple archive reuse validation succeeds."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Archive should not run when archive reuse validation fails."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run when archive reuse validation fails."));
+
+            var ex = Assert.Throws<FileNotFoundException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Packages = new ProjectBuildConfiguration
+                    {
+                        RootPath = "."
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        Upload = true,
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                }));
+
+            Assert.Contains("Tactra.xcarchive", ex.FileName, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_PlanOnly_AllowsMissingReuseArchive()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        Upload = true,
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(Path.Combine(root, "Artifacts", "Apple", "Archives", "iOS", "Tactra.xcarchive"),
+                Assert.Single(result.AppleAppPlan!.Apps).ArchivePath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleApps_RejectsExistingNonProjectDirectoryBeforeArchive()
     {
         var root = CreateSandbox();
@@ -1567,6 +2688,48 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Contains(".xcodeproj", ex.Message, StringComparison.Ordinal);
             Assert.Contains(".xcworkspace", ex.Message, StringComparison.Ordinal);
             Assert.Contains(source.FullName, ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_NormalizesTrailingSeparatorProjectPath()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var projectPath = CreateXcodeProject(root, "Tactra.xcodeproj");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj" + Path.DirectorySeparatorChar,
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(projectPath, Assert.Single(result.AppleAppPlan!.Apps).ProjectPath);
         }
         finally
         {

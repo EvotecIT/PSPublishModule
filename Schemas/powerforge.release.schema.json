@@ -241,7 +241,7 @@
       "additionalProperties": false,
       "properties": {
         "ProjectRoot": { "type": [ "string", "null" ] },
-        "Configuration": { "type": "string", "enum": [ "Release", "Debug" ] },
+        "Configuration": { "type": "string" },
         "ArchiveRoot": { "type": [ "string", "null" ] },
         "ExportRoot": { "type": [ "string", "null" ] },
         "TeamId": { "type": [ "string", "null" ] },
