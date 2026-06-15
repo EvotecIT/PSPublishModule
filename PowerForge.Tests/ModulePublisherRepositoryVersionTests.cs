@@ -359,16 +359,37 @@ public sealed class ModulePublisherRepositoryVersionTests
                     if (names.Contains("DependencyModule", StringComparer.OrdinalIgnoreCase) &&
                         repositories.Contains("CompanyGallery", StringComparer.OrdinalIgnoreCase))
                     {
-                        calls.Add("find-target-dependency");
-                        Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
+                        Assert.Equal("0", request.Arguments[3]);
                         Assert.Equal("publisher", request.Arguments[4]);
                         Assert.Equal("target-token", request.Arguments[5]);
+                        if (string.Equals(request.Arguments[1], "[1.2.3]", StringComparison.Ordinal))
+                        {
+                            calls.Add("find-target-dependency-package");
+                            Assert.Equal("[1.2.3]", request.Arguments[1]);
+                            if (!dependencyPublished)
+                            {
+                                return new PowerShellRunResult(
+                                    1,
+                                    string.Empty,
+                                    "Package with name 'DependencyModule' could not be found in repository 'CompanyGallery'.",
+                                    "pwsh.exe");
+                            }
+
+                            return new PowerShellRunResult(
+                                0,
+                                VisibleRepositoryItem("DependencyModule", "1.2.3"),
+                                string.Empty,
+                                "pwsh.exe");
+                        }
+
+                        calls.Add("find-target-dependency");
+                        Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
                         if (!dependencyPublished)
                         {
                             return new PowerShellRunResult(
-                                1,
+                                0,
+                                VisibleRepositoryItem("DependencyModule", "2.0.0", "preview1"),
                                 string.Empty,
-                                "Package with name 'DependencyModule' could not be found in repository 'CompanyGallery'.",
                                 "pwsh.exe");
                         }
 
@@ -382,10 +403,31 @@ public sealed class ModulePublisherRepositoryVersionTests
                     if (names.Contains("OtherDependency", StringComparer.OrdinalIgnoreCase) &&
                         repositories.Contains("CompanyGallery", StringComparer.OrdinalIgnoreCase))
                     {
-                        calls.Add("find-target-other-dependency");
-                        Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
+                        Assert.Equal("0", request.Arguments[3]);
                         Assert.Equal("publisher", request.Arguments[4]);
                         Assert.Equal("target-token", request.Arguments[5]);
+                        if (string.Equals(request.Arguments[1], "[1.2.3]", StringComparison.Ordinal))
+                        {
+                            calls.Add("find-target-other-dependency-package");
+                            Assert.Equal("[1.2.3]", request.Arguments[1]);
+                            if (!otherDependencyPublished)
+                            {
+                                return new PowerShellRunResult(
+                                    1,
+                                    string.Empty,
+                                    "Package with name 'OtherDependency' could not be found in repository 'CompanyGallery'.",
+                                    "pwsh.exe");
+                            }
+
+                            return new PowerShellRunResult(
+                                0,
+                                VisibleRepositoryItem("OtherDependency", "1.2.3"),
+                                string.Empty,
+                                "pwsh.exe");
+                        }
+
+                        calls.Add("find-target-other-dependency");
+                        Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
                         if (otherDependencyPublished)
                         {
                             return new PowerShellRunResult(
@@ -402,13 +444,29 @@ public sealed class ModulePublisherRepositoryVersionTests
                             "pwsh.exe");
                     }
 
+                    if (names.Contains("DependencySupport", StringComparer.OrdinalIgnoreCase) &&
+                        repositories.Contains("CompanyGallery", StringComparer.OrdinalIgnoreCase))
+                    {
+                        calls.Add("find-target-transitive-dependency");
+                        Assert.Equal("[1.0.0]", request.Arguments[1]);
+                        Assert.Equal("0", request.Arguments[3]);
+                        Assert.Equal("publisher", request.Arguments[4]);
+                        Assert.Equal("target-token", request.Arguments[5]);
+                        return new PowerShellRunResult(
+                            0,
+                            VisibleRepositoryItem("DependencySupport", "1.0.0"),
+                            string.Empty,
+                            "pwsh.exe");
+                    }
+
                     if (names.Contains("DependencyModule", StringComparer.OrdinalIgnoreCase) &&
                         repositories.Contains("InternalUpstream", StringComparer.OrdinalIgnoreCase))
                     {
                         calls.Add("find-source-dependency");
                         Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
-                        Assert.Equal("publisher", request.Arguments[4]);
-                        Assert.Equal("target-token", request.Arguments[5]);
+                        Assert.Equal("0", request.Arguments[3]);
+                        Assert.Equal(string.Empty, request.Arguments[4]);
+                        Assert.Equal(string.Empty, request.Arguments[5]);
                         return new PowerShellRunResult(
                             0,
                             string.Join(Environment.NewLine, new[]
@@ -425,8 +483,9 @@ public sealed class ModulePublisherRepositoryVersionTests
                     {
                         calls.Add("find-source-other-dependency");
                         Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
-                        Assert.Equal("publisher", request.Arguments[4]);
-                        Assert.Equal("target-token", request.Arguments[5]);
+                        Assert.Equal("0", request.Arguments[3]);
+                        Assert.Equal(string.Empty, request.Arguments[4]);
+                        Assert.Equal(string.Empty, request.Arguments[5]);
                         return new PowerShellRunResult(
                             0,
                             string.Join(Environment.NewLine, new[]
@@ -451,8 +510,8 @@ public sealed class ModulePublisherRepositoryVersionTests
                     Assert.Equal("1.2.3", request.Arguments[1]);
                     Assert.Equal("InternalUpstream", request.Arguments[2]);
                     Assert.Equal("0", request.Arguments[6]);
-                    Assert.Equal("publisher", request.Arguments[9]);
-                    Assert.Equal("target-token", request.Arguments[10]);
+                    Assert.Equal(string.Empty, request.Arguments[9]);
+                    Assert.Equal(string.Empty, request.Arguments[10]);
 
                     var transitiveModulePath = Path.Combine(request.Arguments[3], "DependencySupport", "1.0.0");
                     Directory.CreateDirectory(transitiveModulePath);
@@ -543,12 +602,14 @@ public sealed class ModulePublisherRepositoryVersionTests
                     "find-target-dependency",
                     "find-source-dependency",
                     "save-dependency",
-                    "publish-transitive-dependency",
+                    "find-target-transitive-dependency",
+                    "find-target-dependency-package",
                     "publish-dependency",
                     "find-target-dependency",
                     "find-target-other-dependency",
                     "find-source-other-dependency",
                     "save-other-dependency",
+                    "find-target-other-dependency-package",
                     "publish-other-dependency",
                     "find-target-other-dependency",
                     "publish-main"
@@ -611,7 +672,7 @@ public sealed class ModulePublisherRepositoryVersionTests
         => Encoding.UTF8.GetString(Convert.FromBase64String(value))
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private static string VisibleRepositoryItem(string name, string version)
+    private static string VisibleRepositoryItem(string name, string version, string? preRelease = null)
         => string.Join("::", new[]
         {
             "PFPSRG::ITEM",
@@ -621,7 +682,7 @@ public sealed class ModulePublisherRepositoryVersionTests
             Encode("Przemyslaw Klys"),
             Encode(name),
             Encode(Guid.Empty.ToString()),
-            Encode(string.Empty)
+            Encode(preRelease ?? string.Empty)
         });
 
     private static string SaveRepositoryItem(string name, string version)

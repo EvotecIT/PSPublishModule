@@ -44,7 +44,7 @@ internal sealed class RequiredModuleRepositoryValidator
         var externalModuleDependencies = GetExternalModulesForPublish(buildResult, plan);
         var missing = new List<string>();
         var sourceRepositoryName = ResolveRequiredModuleSourceRepository(publish);
-        var sourceCredential = ResolveRequiredModuleSourceCredential(sourceRepositoryName, credential);
+        var sourceCredential = ResolveRequiredModuleSourceCredential(sourceRepositoryName, repositoryName, credential);
         var mirroredPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var requiredModule in requiredModules)
@@ -72,6 +72,7 @@ internal sealed class RequiredModuleRepositoryValidator
                         publish.ApiKey,
                         repositoryForPublish,
                         sourceCredential,
+                        credential,
                         mirroredPackages);
 
                     versions = FindRequiredModuleVersionsInRepository(
@@ -109,13 +110,14 @@ internal sealed class RequiredModuleRepositoryValidator
                     new PSResourceFindOptions(
                         names: new[] { requiredModule.ModuleName },
                         version: RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(requiredModule),
-                        prerelease: true,
+                        prerelease: RequiredModuleRepositoryPublisher.AllowsPrerelease(requiredModule),
                         repositories: new[] { repositoryName },
                         credential: credential),
                     timeout: TimeSpan.FromMinutes(2))
                 .Where(r => string.Equals(r.Name, requiredModule.ModuleName, StringComparison.OrdinalIgnoreCase))
                 .Select(ModulePublisher.GetRepositoryVersionText)
                 .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Where(v => RequiredModuleRepositoryPublisher.AllowsPrerelease(requiredModule) || !RequiredModuleRepositoryPublisher.IsPrereleaseVersion(v))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
@@ -140,6 +142,7 @@ internal sealed class RequiredModuleRepositoryValidator
 
     private static RepositoryCredential? ResolveRequiredModuleSourceCredential(
         string sourceRepositoryName,
+        string targetRepositoryName,
         RepositoryCredential? targetCredential)
     {
         if (targetCredential is null)
@@ -148,7 +151,9 @@ internal sealed class RequiredModuleRepositoryValidator
         if (string.Equals(sourceRepositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        return targetCredential;
+        return string.Equals(sourceRepositoryName, targetRepositoryName, StringComparison.OrdinalIgnoreCase)
+            ? targetCredential
+            : null;
     }
 
     private static HashSet<string> GetExternalModulesForPublish(

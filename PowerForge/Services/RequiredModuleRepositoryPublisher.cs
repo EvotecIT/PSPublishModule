@@ -31,6 +31,7 @@ internal sealed class RequiredModuleRepositoryPublisher
         string? targetApiKey,
         PublishRepositoryConfiguration? targetRepository,
         RepositoryCredential? sourceCredential,
+        RepositoryCredential? targetCredential,
         ISet<string>? mirroredPackages = null)
     {
         if (requiredModule is null) throw new ArgumentNullException(nameof(requiredModule));
@@ -88,9 +89,16 @@ internal sealed class RequiredModuleRepositoryPublisher
             foreach (var package in FindSavedModulePackagesForPublish(tempRoot, savedItems, moduleName, selectedVersion))
             {
                 var packageKey = $"{package.Name}|{package.Version}";
-                if (mirroredPackages is not null && !mirroredPackages.Add(packageKey))
+                if (mirroredPackages is not null && mirroredPackages.Contains(packageKey))
                 {
                     _logger.Info($"Skipping already mirrored required module package '{package.Name}' {package.Version}.");
+                    continue;
+                }
+
+                if (TargetRepositoryContainsPackage(targetRepositoryNameValue, targetCredential, package))
+                {
+                    _logger.Info($"Skipping required module package '{package.Name}' {package.Version} because it already exists in repository '{targetRepositoryNameValue}'.");
+                    mirroredPackages?.Add(packageKey);
                     continue;
                 }
 
@@ -107,6 +115,7 @@ internal sealed class RequiredModuleRepositoryPublisher
                         SkipDependenciesCheck = true,
                         SkipModuleManifestValidate = false
                     });
+                mirroredPackages?.Add(packageKey);
             }
 
             _logger.Info($"Published required module '{moduleName}' {selectedVersion} to repository '{targetRepositoryNameValue}'.");
@@ -338,8 +347,40 @@ internal sealed class RequiredModuleRepositoryPublisher
         return true;
     }
 
-    private static bool IsPrereleaseVersion(string? value)
+    internal static bool IsPrereleaseVersion(string? value)
         => !string.IsNullOrWhiteSpace(value) && value!.IndexOf('-') >= 0;
+
+    private bool TargetRepositoryContainsPackage(
+        string targetRepositoryName,
+        RepositoryCredential? targetCredential,
+        SavedRequiredModulePackage package)
+    {
+        try
+        {
+            var versions = _psResourceGet.Find(
+                    new PSResourceFindOptions(
+                        names: new[] { package.Name },
+                        version: $"[{package.Version}]",
+                        prerelease: IsPrereleaseVersion(package.Version),
+                        repositories: new[] { targetRepositoryName },
+                        credential: targetCredential),
+                    timeout: TimeSpan.FromMinutes(2))
+                .Where(r => string.Equals(r.Name, package.Name, StringComparison.OrdinalIgnoreCase))
+                .Select(ModulePublisher.GetRepositoryVersionText)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .ToArray();
+
+            return versions.Any(version => string.Equals(version, package.Version, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            if (ModulePublisher.IsRepositoryPackageNotFound(package.Name, ex))
+                return false;
+
+            throw new InvalidOperationException(
+                $"Failed to verify saved dependency '{package.Name}' {package.Version} in repository '{targetRepositoryName}' before mirroring. {ex.Message}");
+        }
+    }
 
     private static int ComparePreRelease(string left, string right)
     {
