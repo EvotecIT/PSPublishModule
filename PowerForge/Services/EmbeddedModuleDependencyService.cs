@@ -85,9 +85,7 @@ internal sealed class EmbeddedModuleDependencyService
         var manifest = new EmbeddedModuleDependencyManifest
         {
             ModulesRoot = "Modules",
-            Dependencies = entries
-                .OrderBy(static entry => entry.Name, StringComparer.OrdinalIgnoreCase)
-                .ToArray()
+            Dependencies = entries.ToArray()
         };
 
         WriteManifest(Path.Combine(modulesRoot, ManifestFileName), manifest);
@@ -253,11 +251,25 @@ internal sealed class EmbeddedModuleDependencyService
         };
 
     private static RequiredModuleReference[] NormalizeReferences(IReadOnlyList<RequiredModuleReference>? modules)
-        => (modules ?? Array.Empty<RequiredModuleReference>())
-            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
-            .GroupBy(static module => module.ModuleName.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Select(static group => group.Last())
-            .ToArray();
+    {
+        var normalized = new List<RequiredModuleReference>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = (modules?.Count ?? 0) - 1; i >= 0; i--)
+        {
+            var module = modules![i];
+            if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
+                continue;
+
+            if (!seen.Add(module.ModuleName.Trim()))
+                continue;
+
+            normalized.Add(module);
+        }
+
+        normalized.Reverse();
+        return normalized.ToArray();
+    }
 
     private static HashSet<string> NormalizeNameFilter(IReadOnlyCollection<string>? names)
         => new((names ?? Array.Empty<string>())

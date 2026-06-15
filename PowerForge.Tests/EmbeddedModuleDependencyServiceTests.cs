@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -32,6 +33,40 @@ public sealed class EmbeddedModuleDependencyServiceTests
             Assert.Equal("2.25.0", entry.Version);
             Assert.True(File.Exists(Path.Combine(moduleRoot.FullName, "Internals", "Modules", "module-dependencies.json")));
             Assert.True(File.Exists(Path.Combine(moduleRoot.FullName, "Internals", "Modules", "Microsoft.Graph.Authentication", "2.25.0", "Microsoft.Graph.Authentication.psd1")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Embed_PreservesDeclarationOrderInDependencyManifest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var zDependencyRoot = CreateModule(root.FullName, "Z.Dependency", "1.0.0");
+            var aDependencyRoot = CreateModule(root.FullName, "A.Dependency", "1.0.0");
+            var provider = new Provider(
+                new InstalledModuleMetadata("Z.Dependency", "1.0.0", guid: null, moduleBasePath: zDependencyRoot),
+                new InstalledModuleMetadata("A.Dependency", "1.0.0", guid: null, moduleBasePath: aDependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            var manifest = service.Embed(
+                moduleRoot.FullName,
+                new[]
+                {
+                    new RequiredModuleReference("Z.Dependency", requiredVersion: "1.0.0"),
+                    new RequiredModuleReference("A.Dependency", requiredVersion: "1.0.0")
+                },
+                provider);
+
+            Assert.Equal(new[] { "Z.Dependency", "A.Dependency" }, manifest.Dependencies.Select(static entry => entry.Name));
+
+            var persisted = EmbeddedModuleDependencyService.ReadManifest(Path.Combine(moduleRoot.FullName, "Internals", "Modules", "module-dependencies.json"));
+            Assert.Equal(new[] { "Z.Dependency", "A.Dependency" }, persisted.Dependencies.Select(static entry => entry.Name));
         }
         finally
         {
@@ -97,18 +132,15 @@ public sealed class EmbeddedModuleDependencyServiceTests
 
     private sealed class Provider : IModuleDependencyMetadataProvider
     {
-        private readonly InstalledModuleMetadata _metadata;
+        private readonly IReadOnlyDictionary<string, InstalledModuleMetadata> _metadata;
 
-        public Provider(InstalledModuleMetadata metadata)
+        public Provider(params InstalledModuleMetadata[] metadata)
         {
-            _metadata = metadata;
+            _metadata = metadata.ToDictionary(static item => item.Name, StringComparer.OrdinalIgnoreCase);
         }
 
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
-            => new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
-            {
-                [_metadata.Name] = _metadata
-            };
+            => new Dictionary<string, InstalledModuleMetadata>(_metadata, StringComparer.OrdinalIgnoreCase);
 
         public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
             => Array.Empty<RequiredModuleReference>();
