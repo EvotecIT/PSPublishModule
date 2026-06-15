@@ -427,9 +427,7 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "Author", out var projectAuthor));
             Assert.Equal("NewAuthor", projectAuthor);
             Assert.True(ManifestEditor.TryGetRequiredModules(projectManifest, out RequiredModuleReference[]? projectRequiredModules));
-            var required = Assert.Single(projectRequiredModules!);
-            Assert.Equal("PSSharedGoods", required.ModuleName);
-            Assert.Equal("0.0.312", required.ModuleVersion);
+            Assert.Empty(projectRequiredModules!);
         }
         finally
         {
@@ -629,9 +627,7 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.Contains("Preview9", projectManifestContent, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Broken.psm1", projectManifestContent, StringComparison.OrdinalIgnoreCase);
             Assert.True(ManifestEditor.TryGetRequiredModules(projectManifest, out RequiredModuleReference[]? projectRequiredModules));
-            var required = Assert.Single(projectRequiredModules!);
-            Assert.Equal("PSSharedGoods", required.ModuleName);
-            Assert.Equal("0.0.312", required.ModuleVersion);
+            Assert.Empty(projectRequiredModules!);
         }
         finally
         {

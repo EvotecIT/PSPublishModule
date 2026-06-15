@@ -640,29 +640,6 @@ public sealed partial class ModulePipelineRunner
         return true;
     }
 
-    private static RequiredModuleDraft[] ReadRequiredModuleDraftsFromManifest(ModulePipelineSpec spec)
-    {
-        var moduleName = spec?.Build?.Name;
-        var sourcePath = spec?.Build?.SourcePath;
-        if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(sourcePath))
-            return Array.Empty<RequiredModuleDraft>();
-
-        var manifestPath = Path.Combine(sourcePath, $"{moduleName}.psd1");
-        if (!File.Exists(manifestPath))
-            return Array.Empty<RequiredModuleDraft>();
-
-        return ModuleManifestValueReader.ReadRequiredModules(manifestPath)
-            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
-            .Select(static module => new RequiredModuleDraft(
-                moduleName: module.ModuleName.Trim(),
-                moduleVersion: module.ModuleVersion,
-                minimumVersion: module.ModuleVersion,
-                requiredVersion: module.RequiredVersion,
-                guid: module.Guid,
-                versionSource: ModuleDependencyVersionSource.Auto))
-            .ToArray();
-    }
-
     private void EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(ModulePipelineSpec spec)
     {
         if (spec is null) return;
@@ -701,12 +678,6 @@ public sealed partial class ModulePipelineRunner
         var installMissingModulesPrerelease = false;
         string? installMissingModulesRepository = null;
         RepositoryCredential? installMissingModulesCredential = null;
-
-        foreach (var draft in ReadRequiredModuleDraftsFromManifest(spec))
-        {
-            AddOrReplaceRequiredModuleDraft(requiredModulesDraft, requiredIndex, draft);
-            AddOrReplaceRequiredModuleDraft(requiredModulesDraftForPackaging, requiredPackagingIndex, draft);
-        }
 
         foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
         {

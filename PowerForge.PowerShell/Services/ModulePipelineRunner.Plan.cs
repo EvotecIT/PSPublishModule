@@ -111,73 +111,17 @@ public sealed partial class ModulePipelineRunner
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var externalModules = new List<string>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var baselineExternalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
             .Where(static segment => segment is not null)
             .ToArray();
-        var externalDependencyConfigurationIsAuthoritative = segments.Any(static segment =>
-            segment is ConfigurationModuleSegment moduleSegment &&
-            moduleSegment.Kind is ModuleDependencyKind.RequiredModule or ModuleDependencyKind.ExternalModule);
 
         var manifestBaseline = TryReadProjectManifestBaseline(projectRoot, moduleName);
         if (manifestBaseline is not null)
         {
             manifestConfiguration = manifestBaseline.Manifest;
-
-            foreach (var external in manifestBaseline.ExternalModuleDependencies)
-            {
-                if (string.IsNullOrWhiteSpace(external))
-                    continue;
-                if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(external))
-                    continue;
-
-                baselineExternalIndex.Add(external.Trim());
-            }
-
-            if (!externalDependencyConfigurationIsAuthoritative)
-            {
-                foreach (var external in baselineExternalIndex)
-                {
-                    TryAddExternalModuleDependency(external, externalIndex, externalModules);
-                }
-            }
-
-            foreach (var module in manifestBaseline.RequiredModules)
-            {
-                if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
-                    continue;
-
-                var requiredModuleName = module.ModuleName.Trim();
-                if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(requiredModuleName))
-                    continue;
-                if (externalIndex.Contains(requiredModuleName) || baselineExternalIndex.Contains(requiredModuleName))
-                    continue;
-
-                var draft = new RequiredModuleDraft(
-                    moduleName: requiredModuleName,
-                    moduleVersion: module.ModuleVersion,
-                    minimumVersion: module.ModuleVersion,
-                    requiredVersion: module.RequiredVersion,
-                    guid: module.Guid,
-                    versionSource: ModuleDependencyVersionSource.Auto);
-
-                if (requiredIndex.TryGetValue(draft.ModuleName, out var idx))
-                    requiredModulesDraft[idx] = draft;
-                else
-                {
-                    requiredIndex[draft.ModuleName] = requiredModulesDraft.Count;
-                    requiredModulesDraft.Add(draft);
-                }
-
-                if (requiredPackagingIndex.TryGetValue(draft.ModuleName, out var pidx))
-                    requiredModulesDraftForPackaging[pidx] = draft;
-                else
-                {
-                    requiredPackagingIndex[draft.ModuleName] = requiredModulesDraftForPackaging.Count;
-                    requiredModulesDraftForPackaging.Add(draft);
-                }
-            }
+            // Source manifests seed descriptive metadata only. Dependency/export fields are rebuilt from
+            // configuration so stale PSD1 entries do not survive after build settings remove them.
 
             if (manifestBaseline.Manifest.CompatiblePSEditions is { Length: > 0 })
                 compatible = manifestBaseline.Manifest.CompatiblePSEditions;

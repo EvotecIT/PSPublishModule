@@ -58,7 +58,6 @@ public sealed partial class ModulePipelineRunner
         var ignoreFunctions = new HashSet<string>(plan.ModuleSkip?.IgnoreFunctionName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var commandModuleHints = BuildCommandModuleHintMap(plan.CommandModuleDependencies);
         var force = plan.ModuleSkip?.Force == true;
-        var strictMissing = plan.ModuleSkip?.FailOnMissingCommands == true;
 
         var apps = report.Summary
             .Where(c => string.Equals(c.CommandType, "Application", StringComparison.OrdinalIgnoreCase))
@@ -155,14 +154,8 @@ public sealed partial class ModulePipelineRunner
         if (failures.Count > 0 && !force)
         {
             var unique = failures.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            if (strictMissing)
-            {
-                throw new InvalidOperationException(
-                    $"Missing commands detected during merge. Resolve dependencies or configure ModuleSkip. Missing: {string.Join(", ", unique)}.");
-            }
-
-            _logger.Warn(
-                $"Missing commands detected during merge. Continuing because FailOnMissingCommands is disabled. Missing: {string.Join(", ", unique)}.");
+            throw new InvalidOperationException(
+                $"Missing commands detected during merge. Resolve dependencies or configure ModuleSkip. Missing: {string.Join(", ", unique)}.");
         }
     }
 

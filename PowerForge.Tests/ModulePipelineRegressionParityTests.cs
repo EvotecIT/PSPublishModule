@@ -408,12 +408,13 @@ public sealed class ModulePipelineRegressionParityTests
             var plan = runner.Plan(spec);
             var report = CreateMissingFunctionAnalysisResult("Get-ADUser");
 
-            InvokeValidateMissingFunctions(runner, report, plan);
+            var exception = AssertValidateMissingFunctionsFails(runner, report, plan);
 
             Assert.Contains(logger.Errors, e =>
                 e.Contains("Get-ADUser", StringComparison.OrdinalIgnoreCase) &&
                 e.Contains("ActiveDirectory", StringComparison.OrdinalIgnoreCase) &&
                 e.Contains("CommandModuleDependencies", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains("Get-ADUser", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -450,12 +451,13 @@ public sealed class ModulePipelineRegressionParityTests
             var plan = runner.Plan(spec);
             var report = CreateMissingFunctionAnalysisResult(commandName);
 
-            InvokeValidateMissingFunctions(runner, report, plan);
+            var exception = AssertValidateMissingFunctionsFails(runner, report, plan);
 
             Assert.Contains(logger.Errors, e =>
                 e.Contains(commandName, StringComparison.OrdinalIgnoreCase) &&
                 e.Contains(expectedModule, StringComparison.OrdinalIgnoreCase) &&
                 e.Contains("command pattern", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(commandName, exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -713,6 +715,19 @@ public sealed class ModulePipelineRegressionParityTests
         var method = typeof(ModulePipelineRunner).GetMethod("ValidateMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "ValidateMissingFunctions method signature may have changed.");
         method!.Invoke(runner, new object?[] { report, plan, dependentModules });
+    }
+
+    private static InvalidOperationException AssertValidateMissingFunctionsFails(
+        ModulePipelineRunner runner,
+        MissingFunctionAnalysisResult report,
+        ModulePipelinePlan plan,
+        IReadOnlyCollection<string>? dependentModules = null)
+    {
+        var exception = Record.Exception(() => InvokeValidateMissingFunctions(runner, report, plan, dependentModules));
+        if (exception is TargetInvocationException { InnerException: InvalidOperationException inner })
+            return inner;
+
+        return Assert.IsType<InvalidOperationException>(exception);
     }
 
     private static MissingFunctionAnalysisResult CreateMissingFunctionAnalysisResult(params string[] commandNames)

@@ -84,7 +84,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_ClearsStaleRequiredModules_WhenAllConfiguredRequiredAreFilteredByMergeMissing()
+    public void Run_ClearsSourceRequiredModules_WhenAllConfiguredRequiredAreFilteredByMergeMissing()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -146,8 +146,8 @@ public sealed class ModulePipelineApprovedModulesTests
             var result = runner.Run(spec, plan);
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
 
-            Assert.Contains("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
-            // Inbox modules are filtered out of generated RequiredModules metadata.
+            Assert.DoesNotContain("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
+            // Source manifest dependencies are not authoritative; build configuration owns the generated manifest.
             Assert.DoesNotContain("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
@@ -198,8 +198,8 @@ public sealed class ModulePipelineApprovedModulesTests
             var result = runner.Run(spec, plan);
 
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
-            Assert.Contains("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
-            // Inbox modules are filtered out of generated RequiredModules and ExternalModuleDependencies metadata.
+            Assert.DoesNotContain("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
+            // Source manifest dependencies are not authoritative; build configuration owns the generated manifest.
             Assert.DoesNotContain("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
 
             Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var externalDeps));

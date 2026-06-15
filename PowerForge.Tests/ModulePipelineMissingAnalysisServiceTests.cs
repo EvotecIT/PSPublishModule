@@ -77,6 +77,58 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
         }
     }
 
+    [Fact]
+    public void ValidateMissingFunctions_FailsByDefault_WhenModuleIsNotRequiredOrSkipped()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string missingModule = "Missing.Dependency";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var report = new MissingFunctionAnalysisResult(
+                summary: new[] { new MissingCommandReference("Get-MissingThing", missingModule, "Function", isAlias: false, isPrivate: false, error: string.Empty) },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeDependencyMetadataProvider(),
+                new FakeHostedOperations(),
+                new FakeManifestMutator(),
+                new RecordingMissingFunctionAnalysisService(report));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+
+            var plan = runner.Plan(spec);
+            var method = typeof(ModulePipelineRunner).GetMethod("ValidateMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(method is not null, "ValidateMissingFunctions method signature may have changed.");
+
+            var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(runner, new object?[] { report, plan, null }));
+            var inner = Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("Missing commands detected during merge", inner.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(missingModule, inner.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     internal static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);

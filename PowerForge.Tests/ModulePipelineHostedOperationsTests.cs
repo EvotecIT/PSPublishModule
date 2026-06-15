@@ -1336,7 +1336,7 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
-    public void Run_InstallsPSResourceGetBeforeManifestRequiredModuleOnlineResolution()
+    public void Run_IgnoresManifestRequiredModuleOnlineResolution_WhenNoModuleDependencySegmentIsConfigured()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1353,10 +1353,9 @@ public sealed class ModulePipelineHostedOperationsTests
                 FakeMetadataProvider.ThrowingOnlineResolver(),
                 hostedOperations);
 
-            Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            runner.Run(spec);
 
-            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
-            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
         }
         finally
         {
