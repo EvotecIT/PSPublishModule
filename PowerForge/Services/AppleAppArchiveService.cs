@@ -169,7 +169,7 @@ public sealed class AppleAppArchiveService
             throw new FileNotFoundException($"App Store Connect API key file was not found: {keyPath}", keyPath);
 
         args.Add("-authenticationKeyPath");
-        args.Add(keyPath);
+        args.Add(keyPath!);
         args.Add("-authenticationKeyID");
         args.Add(keyId!);
         args.Add("-authenticationKeyIssuerID");
