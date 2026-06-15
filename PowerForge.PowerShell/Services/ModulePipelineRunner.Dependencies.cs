@@ -38,6 +38,23 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        if (plan.EmbeddedModules is { Length: > 0 })
+        {
+            var known = new HashSet<string>(depList.Select(d => d.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var module in plan.EmbeddedModules)
+            {
+                if (module is null || string.IsNullOrWhiteSpace(module.ModuleName)) continue;
+                var name = module.ModuleName.Trim();
+                if (known.Contains(name)) continue;
+                known.Add(name);
+                depList.Add(new ModuleDependency(
+                    name,
+                    requiredVersion: module.RequiredVersion,
+                    minimumVersion: module.ModuleVersion,
+                    maximumVersion: module.MaximumVersion));
+            }
+        }
+
         var deps = depList.ToArray();
 
         if (deps.Length == 0)

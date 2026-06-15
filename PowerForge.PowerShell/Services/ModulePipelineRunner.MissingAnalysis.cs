@@ -53,6 +53,11 @@ public sealed partial class ModulePipelineRunner
         var required = new HashSet<string>(requiredModules, StringComparer.OrdinalIgnoreCase);
         var approved = new HashSet<string>(plan.ApprovedModules ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var external = new HashSet<string>(plan.ExternalModuleDependencies ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var embedded = new HashSet<string>(
+            (plan.EmbeddedModules ?? Array.Empty<RequiredModuleReference>())
+                .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+                .Select(static module => module.ModuleName.Trim()),
+            StringComparer.OrdinalIgnoreCase);
         var dependentRequiredModules = dependentModules ?? ResolveDependentRequiredModules(requiredModules, approved);
         var dependent = new HashSet<string>(dependentRequiredModules, StringComparer.OrdinalIgnoreCase);
         var ignoreModules = new HashSet<string>(plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
@@ -85,7 +90,7 @@ public sealed partial class ModulePipelineRunner
                 continue;
             if (IsBuiltInModule(moduleName))
                 continue;
-            if (IsDeclaredDependencyModule(moduleName, required, approved, dependent, external))
+            if (IsDeclaredDependencyModule(moduleName, required, approved, dependent, external, embedded))
                 continue;
 
             var allIgnored = group.All(c => ignoreFunctions.Contains(c.Name));
@@ -142,7 +147,7 @@ public sealed partial class ModulePipelineRunner
                     continue;
                 }
 
-                if (IsDeclaredDependencyModule(inferredModule, required, approved, dependent, external))
+                if (IsDeclaredDependencyModule(inferredModule, required, approved, dependent, external, embedded))
                 {
                     _logger.Verbose($"Unresolved command '{name}' likely maps to declared module '{inferredModule}' via {inferenceSource}.");
                     continue;
@@ -171,11 +176,13 @@ public sealed partial class ModulePipelineRunner
         HashSet<string> required,
         HashSet<string> approved,
         HashSet<string> dependent,
-        HashSet<string> external)
+        HashSet<string> external,
+        HashSet<string> embedded)
         => required.Contains(moduleName) ||
            approved.Contains(moduleName) ||
            dependent.Contains(moduleName) ||
-           external.Contains(moduleName);
+           external.Contains(moduleName) ||
+           embedded.Contains(moduleName);
 
     private static Dictionary<string, string[]> BuildCommandModuleHintMap(IReadOnlyDictionary<string, string[]> commandModuleDependencies)
     {

@@ -109,6 +109,8 @@ public sealed partial class ModulePipelineRunner
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var embeddedModulesDraft = new List<RequiredModuleDraft>();
+        var embeddedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var externalModules = new List<string>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -271,6 +273,30 @@ public sealed partial class ModulePipelineRunner
                     {
                         if (!TryAddExternalModuleDependency(name, externalIndex, externalModules))
                             break;
+                        break;
+                    }
+
+                    if (moduleSeg.Kind == ModuleDependencyKind.EmbeddedModule)
+                    {
+                        if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(name))
+                            break;
+
+                        var embeddedDraft = new RequiredModuleDraft(
+                            moduleName: name,
+                            moduleVersion: md.ModuleVersion,
+                            minimumVersion: md.MinimumVersion,
+                            requiredVersion: md.RequiredVersion,
+                            guid: md.Guid,
+                            versionSource: md.VersionSource);
+
+                        if (embeddedIndex.TryGetValue(name, out var embeddedIdx))
+                            embeddedModulesDraft[embeddedIdx] = embeddedDraft;
+                        else
+                        {
+                            embeddedIndex[name] = embeddedModulesDraft.Count;
+                            embeddedModulesDraft.Add(embeddedDraft);
+                        }
+
                         break;
                     }
 
@@ -651,6 +677,14 @@ public sealed partial class ModulePipelineRunner
             dependencyVersionSourceRepository);
         var requiredModules = requiredModuleSets.RequiredModules;
         var requiredModulesForPackaging = requiredModuleSets.RequiredModulesForPackaging;
+        var embeddedModules = ResolveRequiredModules(
+            embeddedModulesDraft,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            dependencyVersionSourceRepository);
 
         if (delivery?.Sign == true)
         {
@@ -808,7 +842,8 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesRepository: installMissingModulesRepository,
             installMissingModulesCredential: installMissingModulesCredential,
             stagingWasGenerated: stagingWasGenerated,
-            deleteGeneratedStagingAfterRun: deleteAfter);
+            deleteGeneratedStagingAfterRun: deleteAfter,
+            embeddedModules: embeddedModules);
     }
 
     private DependencyVersionSourceRepository? ResolvePublishDependencyVersionSource(ConfigurationPublishSegment[] enabledPublishes)

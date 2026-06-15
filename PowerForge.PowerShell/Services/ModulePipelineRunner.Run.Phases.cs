@@ -61,6 +61,8 @@ public sealed partial class ModulePipelineRunner
         if (!plan.BuildSpec.RefreshManifestOnly)
             ApplyPlaceholders(plan, buildResult);
 
+        EmbedModuleDependencies(plan, buildResult);
+
         ExecuteActions(ModulePipelineActionStage.BeforeManifest, plan, session, state);
         session.Start(session.ManifestStep);
         try

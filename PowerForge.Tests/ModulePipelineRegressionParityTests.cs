@@ -47,8 +47,65 @@ public sealed class ModulePipelineRegressionParityTests
             Assert.Equal("https://example.test/license", plan.Manifest.LicenseUri);
             Assert.Equal("preview1", plan.Manifest.Prerelease);
             Assert.Empty(plan.ExternalModuleDependencies);
+            Assert.Empty(plan.EmbeddedModules);
             Assert.Empty(plan.RequiredModules);
             Assert.Empty(plan.RequiredModulesForPackaging);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_TracksEmbeddedModulesSeparately_AndInboxModulesAreIgnored()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.Graph.Authentication",
+                            RequiredVersion = "2.25.0"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.PowerShell.Utility"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            var embedded = Assert.Single(plan.EmbeddedModules);
+            Assert.Equal("Microsoft.Graph.Authentication", embedded.ModuleName);
+            Assert.Equal("2.25.0", embedded.RequiredVersion);
+            Assert.Empty(plan.RequiredModules);
+            Assert.Empty(plan.RequiredModulesForPackaging);
+            Assert.Empty(plan.ExternalModuleDependencies);
         }
         finally
         {
@@ -554,6 +611,54 @@ public sealed class ModulePipelineRegressionParityTests
             var plan = runner.Plan(spec);
             var report = new MissingFunctionAnalysisResult(
                 summary: new[] { new MissingCommandReference("Connect-AzAccount", "Az.Accounts", "Function", isAlias: false, isPrivate: false, error: string.Empty) },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+
+            InvokeValidateMissingFunctions(runner, report, plan);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ValidateMissingFunctions_AllowsModuleCommand_WhenModuleIsEmbedded()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.Graph.Authentication"
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var report = new MissingFunctionAnalysisResult(
+                summary: new[] { new MissingCommandReference("Connect-MgGraph", "Microsoft.Graph.Authentication", "Function", isAlias: false, isPrivate: false, error: string.Empty) },
                 summaryFiltered: Array.Empty<MissingCommandReference>(),
                 functions: Array.Empty<string>(),
                 functionsTopLevelOnly: Array.Empty<string>());

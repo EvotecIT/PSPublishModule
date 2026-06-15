@@ -195,6 +195,8 @@ public enum ModuleDependencyKind
     RequiredModule,
     /// <summary>External module dependency (PSData.ExternalModuleDependencies).</summary>
     ExternalModule,
+    /// <summary>Embedded module dependency (bundled under Internals/Modules, not written to manifest RequiredModules).</summary>
+    EmbeddedModule,
     /// <summary>Approved module dependency (selectively copied during merge).</summary>
     ApprovedModule
 }

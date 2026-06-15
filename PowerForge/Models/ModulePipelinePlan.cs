@@ -73,6 +73,11 @@ public sealed class ModulePipelinePlan
     public RequiredModuleReference[] RequiredModulesForPackaging { get; }
 
     /// <summary>
+    /// Module dependencies bundled under Internals/Modules and imported explicitly by path.
+    /// </summary>
+    public RequiredModuleReference[] EmbeddedModules { get; }
+
+    /// <summary>
     /// Optional information configuration (include/exclude patterns) used for artefact packaging.
     /// </summary>
     public InformationConfiguration? Information { get; }
@@ -424,7 +429,8 @@ public sealed class ModulePipelinePlan
         string? installMissingModulesRepository,
         RepositoryCredential? installMissingModulesCredential,
         bool stagingWasGenerated,
-        bool deleteGeneratedStagingAfterRun)
+        bool deleteGeneratedStagingAfterRun,
+        RequiredModuleReference[]? embeddedModules = null)
     {
         ModuleName = moduleName;
         ProjectRoot = projectRoot;
@@ -439,6 +445,7 @@ public sealed class ModulePipelinePlan
         RequiredModules = requiredModules;
         ExternalModuleDependencies = externalModuleDependencies ?? Array.Empty<string>();
         RequiredModulesForPackaging = requiredModulesForPackaging;
+        EmbeddedModules = embeddedModules ?? Array.Empty<RequiredModuleReference>();
         Information = information;
         Documentation = documentation;
         Delivery = delivery;
