@@ -16,12 +16,6 @@ public sealed partial class ModulePipelineRunner
         if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
 
         var required = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
-        if (required.Length == 0)
-        {
-            _logger.Info("InstallMissingModules enabled, but no RequiredModules were found.");
-            return Array.Empty<ModuleDependencyInstallResult>();
-        }
-
         var depList = required
             .Where(r => !string.IsNullOrWhiteSpace(r.ModuleName))
             .Select(r => new ModuleDependency(

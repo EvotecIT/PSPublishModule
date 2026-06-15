@@ -335,6 +335,64 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsExternalModules_WhenNoRequiredModulesAreConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            InstallMissingModules = true
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Az.Accounts"
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Equal(2, result.Length);
+            Assert.Equal(2, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Az.Accounts", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void EnsureBuildDependenciesInstalledIfNeeded_HonorsModuleSkipForDeclaredDependencies()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
