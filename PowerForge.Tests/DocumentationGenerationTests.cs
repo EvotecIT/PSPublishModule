@@ -257,14 +257,23 @@ EXAMPLES
                                 Name = "FilePath",
                                 Type = "String",
                                 Required = true,
-                                ParameterSets = new List<string> { "ApiFromFile", "JFrog" }
+                                ParameterSets = new List<string> { "ApiFromFile", "JFrog" },
+                                ParameterSetRequired =
+                                {
+                                    ["ApiFromFile"] = true,
+                                    ["JFrog"] = false
+                                }
                             },
                             new()
                             {
                                 Name = "JFrogBaseUri",
                                 Type = "String",
                                 Required = true,
-                                ParameterSets = new List<string> { "JFrog" }
+                                ParameterSets = new List<string> { "JFrog" },
+                                ParameterSetRequired =
+                                {
+                                    ["JFrog"] = true
+                                }
                             }
                         }
                     }
@@ -283,6 +292,88 @@ EXAMPLES
             Assert.Equal("true", apiFilePath.Attribute("required")?.Value);
             Assert.Equal("false", jfrogFilePath.Attribute("required")?.Value);
             Assert.Equal("true", jfrogBaseUri.Attribute("required")?.Value);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void MamlHelpWriter_TreatsAllParameterSetsRequiredMetadataAsShared()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-maml-help-writer-all-required-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "TestModule",
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "New-Thing",
+                        CommandType = "Cmdlet",
+                        Synopsis = "Creates a thing.",
+                        Description = "Creates a thing.",
+                        Syntax = new List<DocumentationSyntaxHelp>
+                        {
+                            new() { Name = "ExplicitVersion", Text = "New-Thing [-Path] <String> -Version <String>" },
+                            new() { Name = "ResolvedVersion", Text = "New-Thing [-Path] <String> -FromManifest" }
+                        },
+                        Parameters = new List<DocumentationParameterHelp>
+                        {
+                            new()
+                            {
+                                Name = "Path",
+                                Type = "String",
+                                Required = true,
+                                ParameterSets = new List<string> { "__AllParameterSets" },
+                                ParameterSetRequired =
+                                {
+                                    ["__AllParameterSets"] = true
+                                }
+                            },
+                            new()
+                            {
+                                Name = "Version",
+                                Type = "String",
+                                Required = true,
+                                ParameterSets = new List<string> { "ExplicitVersion" },
+                                ParameterSetRequired =
+                                {
+                                    ["ExplicitVersion"] = true
+                                }
+                            },
+                            new()
+                            {
+                                Name = "FromManifest",
+                                Type = "SwitchParameter",
+                                Required = true,
+                                ParameterSets = new List<string> { "ResolvedVersion" },
+                                ParameterSetRequired =
+                                {
+                                    ["ResolvedVersion"] = true
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var path = new MamlHelpWriter().WriteExternalHelpFile(payload, "TestModule", root);
+            var doc = XDocument.Load(path);
+            XNamespace commandNs = "http://schemas.microsoft.com/maml/dev/command/2004/10";
+            XNamespace mamlNs = "http://schemas.microsoft.com/maml/2004/10";
+
+            var explicitPath = FindSyntaxParameter(doc, commandNs, mamlNs, "ExplicitVersion", "Path");
+            var resolvedPath = FindSyntaxParameter(doc, commandNs, mamlNs, "ResolvedVersion", "Path");
+
+            Assert.Equal("true", explicitPath.Attribute("required")?.Value);
+            Assert.Equal("true", resolvedPath.Attribute("required")?.Value);
         }
         finally
         {

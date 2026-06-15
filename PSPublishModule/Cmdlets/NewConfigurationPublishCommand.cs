@@ -116,16 +116,19 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Repository base URI (used for both source and publish unless overridden).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryUri { get; set; }
 
     /// <summary>Repository source URI (PowerShellGet SourceLocation).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositorySourceUri { get; set; }
 
     /// <summary>Repository publish URI (PowerShellGet PublishLocation).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryPublishUri { get; set; }
 
     /// <summary>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</summary>

@@ -1780,12 +1780,12 @@ PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session ca
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Destination JSON file path.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -6343,12 +6343,12 @@ across targets or configurations before uploading to App Store Connect.</maml:pa
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Get-XcodeProjectVersion</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -6558,13 +6558,13 @@ session-scoped and intentionally opt-in because it changes module-name resolutio
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Profile</maml:name>
           <maml:description>
             <maml:para>Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and&#xD;
 MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -6824,12 +6824,12 @@ Provider.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Source JSON file path.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7004,12 +7004,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
             <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7120,12 +7120,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Source JSON profile file exported with Export-ModuleRepositoryProfile.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7326,12 +7326,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
             <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7880,12 +7880,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Install-AppleApp</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>AppPath</maml:name>
           <maml:description>
             <maml:para>Path to the built .app bundle.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -8622,12 +8622,12 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="None">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module name to source scripts from (highest installed version is used by default).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -8652,12 +8652,12 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Destination folder to copy scripts into (created if missing).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -8781,12 +8781,12 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Destination folder to copy scripts into (created if missing).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -9090,12 +9090,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -9279,12 +9279,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -9500,12 +9500,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -9587,12 +9587,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -18484,12 +18484,12 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to the Xcode project or workspace.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -18897,12 +18897,12 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to the Xcode project or workspace.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -19618,13 +19618,13 @@ configuration for future read-only checks and publish/review commands.</maml:par
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -19743,13 +19743,13 @@ Relative paths resolve from the pipeline project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -34747,6 +34747,30 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryPublishUri</maml:name>
+          <maml:description>
+            <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositorySourceUri</maml:name>
+          <maml:description>
+            <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryTrusted</maml:name>
           <maml:description>
             <maml:para>Whether to mark the repository as trusted (avoids prompts). Default: true.</maml:para>
@@ -34754,6 +34778,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
             <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryUri</maml:name>
+          <maml:description>
+            <maml:para>Repository base URI (used for both source and publish unless overridden).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -37081,13 +37117,13 @@ sync with the build recipe.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -37121,13 +37157,13 @@ Relative paths resolve from the pipeline project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -37672,12 +37708,12 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>TopicName</maml:name>
           <maml:description>
             <maml:para>Topic name. The about_ prefix is added automatically when missing.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -37850,12 +37886,12 @@ Credential Provider session caches.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>OutputDirectory</maml:name>
           <maml:description>
             <maml:para>Destination directory for the generated bootstrap package.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -38694,12 +38730,12 @@ PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="Path,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="Path,FullName">
           <maml:name>ArchivePath</maml:name>
           <maml:description>
             <maml:para>Path to the .xcarchive to upload.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -39171,12 +39207,12 @@ PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to the Xcode project or workspace.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -39612,12 +39648,12 @@ PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Screenshot file path.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -41912,12 +41948,12 @@ repository and does not clear Azure Artifacts Credential Provider token caches.<
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Remove-ModuleRepositoryProfile</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Profile name to remove.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -43219,12 +43255,12 @@ Credential Provider so Entra ID/MFA is handled by the provider instead of storin
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Profile name used by connect, install, update, and publish commands.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -43918,12 +43954,12 @@ Connect metadata and build selection belong to higher-level Apple release comman
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -45603,12 +45639,12 @@ System.Management.Automation.PSModuleInfo</maml:name>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Start-AppleApp</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>BundleIdentifier</maml:name>
           <maml:description>
             <maml:para>Bundle identifier to launch.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -45943,12 +45979,12 @@ PowerForge.ModuleVersionStepResult</maml:name>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Sync-AppStoreConnectScreenshots</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>ConfigPath</maml:name>
           <maml:description>
             <maml:para>Path to the screenshot sync JSON configuration file.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -46220,12 +46256,12 @@ PowerForge.ModuleVersionStepResult</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -46474,12 +46510,12 @@ PowerForge.AppleAppReleaseDriftReport</maml:name>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Test-AppStoreConnectScreenshotSyncConfig</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
           <maml:name>ConfigPath</maml:name>
           <maml:description>
             <maml:para>Path to the screenshot sync JSON configuration file.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -46623,12 +46659,12 @@ generated wrapper.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Profile</maml:name>
           <maml:description>
             <maml:para>Name of the built-in isolation profile to validate.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -47683,12 +47719,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -47860,12 +47896,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -48069,12 +48105,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -48144,12 +48180,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />

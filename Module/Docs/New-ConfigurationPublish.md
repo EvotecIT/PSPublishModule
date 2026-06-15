@@ -21,7 +21,7 @@ New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName 
 
 ### JFrog
 ```powershell
-New-ConfigurationPublish -JFrogBaseUri <string> -JFrogRepository <string> [-Type <PublishDestination>] [-FilePath <string>] [-ApiKey <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-JFrogPlatformUri <string>] [-JFrogOidcProvider <string>] [-JFrogOidcTokenId <string>] [-JFrogOidcTokenIdEnvironmentVariable <string>] [-JFrogOidcProviderType <JFrogOidcProviderType>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [<CommonParameters>]
+New-ConfigurationPublish -JFrogBaseUri <string> -JFrogRepository <string> [-Type <PublishDestination>] [-FilePath <string>] [-ApiKey <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-JFrogPlatformUri <string>] [-JFrogOidcProvider <string>] [-JFrogOidcTokenId <string>] [-JFrogOidcTokenIdEnvironmentVariable <string>] [-JFrogOidcProviderType <JFrogOidcProviderType>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [<CommonParameters>]
 ```
 
 ### AzureArtifacts
@@ -535,7 +535,7 @@ Repository publish URI (PowerShellGet PublishLocation).
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, JFrog
 Aliases: None
 Possible values:
 
@@ -551,7 +551,7 @@ Repository source URI (PowerShellGet SourceLocation).
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, JFrog
 Aliases: None
 Possible values:
 
@@ -583,7 +583,7 @@ Repository base URI (used for both source and publish unless overridden).
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, JFrog
 Aliases: None
 Possible values:
 

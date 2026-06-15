@@ -1035,6 +1035,16 @@ Describe 'Private gallery command metadata' {
         $publish.Configuration.Repository.Credential.Secret | Should -Be 'token'
     }
 
+    It 'keeps direct JFrog parameters composable with repository URI overrides' {
+        $publish = New-ConfigurationPublish -Type PowerShellGallery -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryUri 'https://custom.example/v3/index.json' -RepositorySourceUri 'https://custom.example/v2/source' -RepositoryPublishUri 'https://custom.example/v2/publish' -RepositoryCredentialUserName 'publisher' -RepositoryCredentialSecret 'token' -Enabled
+
+        $publish.Configuration.Repository.Uri | Should -Be 'https://custom.example/v3/index.json'
+        $publish.Configuration.Repository.SourceUri | Should -Be 'https://custom.example/v2/source'
+        $publish.Configuration.Repository.PublishUri | Should -Be 'https://custom.example/v2/publish'
+        $publish.Configuration.Repository.Credential.UserName | Should -Be 'publisher'
+        $publish.Configuration.Repository.Credential.Secret | Should -Be 'token'
+    }
+
     It 'requires publish auth when enabling saved JFrog profiles for publish configuration' {
         Set-ModuleRepositoryProfile -Name 'JFrogCompanyNoAuth' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
 

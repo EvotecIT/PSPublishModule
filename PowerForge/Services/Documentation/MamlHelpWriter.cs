@@ -462,6 +462,7 @@ internal sealed class MamlHelpWriter
             if (string.IsNullOrWhiteSpace(s)) continue;
             var sn = s.Trim();
             if (sn.Equals("(All)", StringComparison.OrdinalIgnoreCase)) return true;
+            if (sn.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase)) return true;
             if (sn.Equals(setName, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
@@ -487,7 +488,9 @@ internal sealed class MamlHelpWriter
         foreach (var entry in setRequired)
         {
             if (string.IsNullOrWhiteSpace(entry.Key)) continue;
-            if (entry.Key.Trim().Equals("(All)", StringComparison.OrdinalIgnoreCase))
+            var key = entry.Key.Trim();
+            if (key.Equals("(All)", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase))
                 return entry.Value;
         }
 
