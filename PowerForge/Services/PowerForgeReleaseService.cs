@@ -155,6 +155,7 @@ internal sealed class PowerForgeReleaseService
         {
             if (UsesDotNetToolWorkflow(spec.Tools!))
             {
+                ApplyDotNetPublishProfileOverride(spec.Tools!);
                 var inlineMatches = ResolveOptionalDotNetToolTargetMatches(spec.Tools!.DotNetPublish, selectedTargets);
                 var selectedTargetsAreAppleOnly = runAppleApps &&
                                                   selectedTargets.Length > 0 &&
@@ -1770,6 +1771,14 @@ internal sealed class PowerForgeReleaseService
         return File.Exists(configPath);
     }
 
+    private static void ApplyDotNetPublishProfileOverride(PowerForgeToolReleaseSpec tools)
+    {
+        if (tools.DotNetPublish is null || string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
+            return;
+
+        tools.DotNetPublish.Profile = tools.DotNetPublishProfile!.Trim();
+    }
+
     private static (DotNetPublishSpec Spec, string SourceConfigPath) LoadDotNetToolsSpec(PowerForgeToolReleaseSpec tools, string releaseConfigPath)
     {
         if (tools.DotNetPublish is not null && !string.IsNullOrWhiteSpace(tools.DotNetPublishConfigPath))
@@ -1777,8 +1786,7 @@ internal sealed class PowerForgeReleaseService
 
         if (tools.DotNetPublish is not null)
         {
-            if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
-                tools.DotNetPublish.Profile = tools.DotNetPublishProfile!.Trim();
+            ApplyDotNetPublishProfileOverride(tools);
 
             return (tools.DotNetPublish, releaseConfigPath);
         }

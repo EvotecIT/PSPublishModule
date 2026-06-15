@@ -5,6 +5,18 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeProjectCmdletTests
 {
     [Fact]
+    public void InvokePowerForgeRelease_Configuration_DoesNotRestrictAppleBuildConfigurations()
+    {
+        var property = typeof(PSPublishModule.InvokePowerForgeReleaseCommand)
+            .GetProperty(nameof(PSPublishModule.InvokePowerForgeReleaseCommand.Configuration));
+
+        Assert.NotNull(property);
+        Assert.DoesNotContain(
+            property!.GetCustomAttributes(inherit: true),
+            attribute => attribute.GetType().FullName == "System.Management.Automation.ValidateSetAttribute");
+    }
+
+    [Fact]
     public void ExportConfigurationProject_ExistingFileWithoutForce_ReturnsResourceExistsError()
     {
         var tempRoot = CreateTempDirectory();

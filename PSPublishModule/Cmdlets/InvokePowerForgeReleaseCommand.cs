@@ -99,7 +99,6 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     /// Optional configuration override.
     /// </summary>
     [Parameter]
-    [ValidateSet("Release", "Debug")]
     public string? Configuration { get; set; }
 
     /// <summary>
