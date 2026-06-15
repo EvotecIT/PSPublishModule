@@ -204,7 +204,7 @@ public sealed class ModulePublisherRepositoryVersionTests
         {
             Directory.CreateDirectory(stagingRoot);
             Directory.CreateDirectory(toolRoot);
-            File.WriteAllText(Path.Combine(toolRoot, "jf.exe"), string.Empty);
+            File.WriteAllText(Path.Combine(toolRoot, Path.DirectorySeparatorChar == '\\' ? "jf.exe" : "jf"), string.Empty);
             Environment.SetEnvironmentVariable(
                 "PATH",
                 string.IsNullOrWhiteSpace(originalPath)
@@ -313,6 +313,418 @@ public sealed class ModulePublisherRepositoryVersionTests
         }
     }
 
+    [Fact]
+    public void Publish_PublishesMissingRequiredModulesWhenEnabled()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        var calls = new List<string>();
+        var dependencyPublished = false;
+        var otherDependencyPublished = false;
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(
+                manifestPath,
+                """
+                @{
+                    ModuleVersion = '3.0.13'
+                    GUID = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
+                    RootModule = 'PSPublishModule.psm1'
+                    RequiredModules = @(
+                        @{ ModuleName = 'DependencyModule'; ModuleVersion = '1.0.0'; MaximumVersion = '1.5.0' },
+                        @{ ModuleName = 'OtherDependency'; ModuleVersion = '1.0.0'; MaximumVersion = '1.5.0' }
+                    )
+                }
+                """);
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var runner = new StubPowerShellRunner(request =>
+            {
+                var script = File.ReadAllText(request.ScriptPath!);
+                if (script.Contains("Find-PSResource", StringComparison.Ordinal))
+                {
+                    var names = DecodeLines(request.Arguments[0]);
+                    var repositories = DecodeLines(request.Arguments[2]);
+
+                    if (names.Contains("PSPublishModule", StringComparer.OrdinalIgnoreCase))
+                    {
+                        calls.Add("find-main");
+                        Assert.Equal("CompanyGallery", Assert.Single(repositories));
+                        Assert.Equal("publisher", request.Arguments[4]);
+                        Assert.Equal("target-token", request.Arguments[5]);
+                        return new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "3.0.12"), string.Empty, "pwsh.exe");
+                    }
+
+                    if (names.Contains("DependencyModule", StringComparer.OrdinalIgnoreCase) &&
+                        repositories.Contains("CompanyGallery", StringComparer.OrdinalIgnoreCase))
+                    {
+                        Assert.Equal("0", request.Arguments[3]);
+                        Assert.Equal("publisher", request.Arguments[4]);
+                        Assert.Equal("target-token", request.Arguments[5]);
+                        if (string.Equals(request.Arguments[1], "[1.2.3]", StringComparison.Ordinal))
+                        {
+                            calls.Add("find-target-dependency-package");
+                            Assert.Equal("[1.2.3]", request.Arguments[1]);
+                            if (!dependencyPublished)
+                            {
+                                return new PowerShellRunResult(
+                                    1,
+                                    string.Empty,
+                                    "Package with name 'DependencyModule' could not be found in repository 'CompanyGallery'.",
+                                    "pwsh.exe");
+                            }
+
+                            return new PowerShellRunResult(
+                                0,
+                                VisibleRepositoryItem("DependencyModule", "1.2.3"),
+                                string.Empty,
+                                "pwsh.exe");
+                        }
+
+                        calls.Add("find-target-dependency");
+                        Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
+                        if (!dependencyPublished)
+                        {
+                            return new PowerShellRunResult(
+                                0,
+                                VisibleRepositoryItem("DependencyModule", "2.0.0", "preview1"),
+                                string.Empty,
+                                "pwsh.exe");
+                        }
+
+                        return new PowerShellRunResult(
+                            0,
+                            VisibleRepositoryItem("DependencyModule", "1.2.3"),
+                            string.Empty,
+                            "pwsh.exe");
+                    }
+
+                    if (names.Contains("OtherDependency", StringComparer.OrdinalIgnoreCase) &&
+                        repositories.Contains("CompanyGallery", StringComparer.OrdinalIgnoreCase))
+                    {
+                        Assert.Equal("0", request.Arguments[3]);
+                        Assert.Equal("publisher", request.Arguments[4]);
+                        Assert.Equal("target-token", request.Arguments[5]);
+                        if (string.Equals(request.Arguments[1], "[1.2.3]", StringComparison.Ordinal))
+                        {
+                            calls.Add("find-target-other-dependency-package");
+                            Assert.Equal("[1.2.3]", request.Arguments[1]);
+                            if (!otherDependencyPublished)
+                            {
+                                return new PowerShellRunResult(
+                                    1,
+                                    string.Empty,
+                                    "Package with name 'OtherDependency' could not be found in repository 'CompanyGallery'.",
+                                    "pwsh.exe");
+                            }
+
+                            return new PowerShellRunResult(
+                                0,
+                                VisibleRepositoryItem("OtherDependency", "1.2.3"),
+                                string.Empty,
+                                "pwsh.exe");
+                        }
+
+                        calls.Add("find-target-other-dependency");
+                        Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
+                        if (otherDependencyPublished)
+                        {
+                            return new PowerShellRunResult(
+                                0,
+                                VisibleRepositoryItem("OtherDependency", "1.2.3"),
+                                string.Empty,
+                                "pwsh.exe");
+                        }
+
+                        return new PowerShellRunResult(
+                            1,
+                            string.Empty,
+                            "Package with name 'OtherDependency' could not be found in repository 'CompanyGallery'.",
+                            "pwsh.exe");
+                    }
+
+                    if (names.Contains("DependencySupport", StringComparer.OrdinalIgnoreCase) &&
+                        repositories.Contains("CompanyGallery", StringComparer.OrdinalIgnoreCase))
+                    {
+                        calls.Add("find-target-transitive-dependency");
+                        Assert.Equal("[1.0.0]", request.Arguments[1]);
+                        Assert.Equal("0", request.Arguments[3]);
+                        Assert.Equal("publisher", request.Arguments[4]);
+                        Assert.Equal("target-token", request.Arguments[5]);
+                        return new PowerShellRunResult(
+                            0,
+                            VisibleRepositoryItem("DependencySupport", "1.0.0"),
+                            string.Empty,
+                            "pwsh.exe");
+                    }
+
+                    if (names.Contains("DependencyModule", StringComparer.OrdinalIgnoreCase) &&
+                        repositories.Contains("InternalUpstream", StringComparer.OrdinalIgnoreCase))
+                    {
+                        calls.Add("find-source-dependency");
+                        Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
+                        Assert.Equal("0", request.Arguments[3]);
+                        Assert.Equal(string.Empty, request.Arguments[4]);
+                        Assert.Equal(string.Empty, request.Arguments[5]);
+                        return new PowerShellRunResult(
+                            0,
+                            string.Join(Environment.NewLine, new[]
+                            {
+                                VisibleRepositoryItem("DependencyModule", "1.2.3"),
+                                VisibleRepositoryItem("DependencyModule", "1.6.0")
+                            }),
+                            string.Empty,
+                            "pwsh.exe");
+                    }
+
+                    if (names.Contains("OtherDependency", StringComparer.OrdinalIgnoreCase) &&
+                        repositories.Contains("InternalUpstream", StringComparer.OrdinalIgnoreCase))
+                    {
+                        calls.Add("find-source-other-dependency");
+                        Assert.Equal("[1.0.0,1.5.0]", request.Arguments[1]);
+                        Assert.Equal("0", request.Arguments[3]);
+                        Assert.Equal(string.Empty, request.Arguments[4]);
+                        Assert.Equal(string.Empty, request.Arguments[5]);
+                        return new PowerShellRunResult(
+                            0,
+                            string.Join(Environment.NewLine, new[]
+                            {
+                                VisibleRepositoryItem("OtherDependency", "1.2.3"),
+                                VisibleRepositoryItem("OtherDependency", "1.6.0")
+                            }),
+                            string.Empty,
+                            "pwsh.exe");
+                    }
+
+                    return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+                }
+
+                if (script.Contains("Save-PSResource", StringComparison.Ordinal))
+                {
+                    var savedName = request.Arguments[0];
+                    calls.Add(savedName.Equals("DependencyModule", StringComparison.OrdinalIgnoreCase)
+                        ? "save-dependency"
+                        : "save-other-dependency");
+                    Assert.Contains(savedName, new[] { "DependencyModule", "OtherDependency" });
+                    Assert.Equal("1.2.3", request.Arguments[1]);
+                    Assert.Equal("InternalUpstream", request.Arguments[2]);
+                    Assert.Equal("0", request.Arguments[6]);
+                    Assert.Equal(string.Empty, request.Arguments[9]);
+                    Assert.Equal(string.Empty, request.Arguments[10]);
+
+                    var transitiveModulePath = Path.Combine(request.Arguments[3], "DependencySupport", "1.0.0");
+                    Directory.CreateDirectory(transitiveModulePath);
+                    File.WriteAllText(Path.Combine(transitiveModulePath, "DependencySupport.psd1"), "@{ ModuleVersion = '1.0.0'; RootModule = 'DependencySupport.psm1' }");
+                    File.WriteAllText(Path.Combine(transitiveModulePath, "DependencySupport.psm1"), string.Empty);
+
+                    var savedModulePath = Path.Combine(request.Arguments[3], savedName, "1.2.3");
+                    Directory.CreateDirectory(savedModulePath);
+                    File.WriteAllText(Path.Combine(savedModulePath, $"{savedName}.psd1"), $"@{{ ModuleVersion = '1.2.3'; RootModule = '{savedName}.psm1' }}");
+                    File.WriteAllText(Path.Combine(savedModulePath, $"{savedName}.psm1"), string.Empty);
+
+                    return new PowerShellRunResult(
+                        0,
+                        string.Join(Environment.NewLine, new[]
+                        {
+                            SaveRepositoryItem(savedName, "1.2.3"),
+                            SaveRepositoryItem("DependencySupport", "1.0.0")
+                        }),
+                        string.Empty,
+                        "pwsh.exe");
+                }
+
+                if (script.Contains("Publish-PSResource", StringComparison.Ordinal))
+                {
+                    Assert.Equal("CompanyGallery", request.Arguments[2]);
+                    Assert.Equal("target-api-key", request.Arguments[3]);
+                    Assert.Equal("publisher", request.Arguments[7]);
+                    Assert.Equal("target-token", request.Arguments[8]);
+
+                    if (request.Arguments[0].Contains("DependencyModule", StringComparison.OrdinalIgnoreCase))
+                    {
+                        calls.Add("publish-dependency");
+                        dependencyPublished = true;
+                    }
+                    else if (request.Arguments[0].Contains("OtherDependency", StringComparison.OrdinalIgnoreCase))
+                    {
+                        calls.Add("publish-other-dependency");
+                        otherDependencyPublished = true;
+                    }
+                    else if (request.Arguments[0].Contains("DependencySupport", StringComparison.OrdinalIgnoreCase))
+                    {
+                        calls.Add("publish-transitive-dependency");
+                    }
+                    else
+                    {
+                        calls.Add("publish-main");
+                    }
+
+                    return new PowerShellRunResult(0, "PFPSRG::PUBLISH::OK", string.Empty, "pwsh.exe");
+                }
+
+                throw new InvalidOperationException("Unexpected PowerShell script invocation.");
+            });
+            var publisher = new ModulePublisher(new NullLogger(), runner);
+
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.PSResourceGet,
+                ApiKey = "target-api-key",
+                RepositoryName = "CompanyGallery",
+                PublishRequiredModules = true,
+                RequiredModuleSourceRepository = "InternalUpstream",
+                Repository = new PublishRepositoryConfiguration
+                {
+                    Name = "CompanyGallery",
+                    Credential = new RepositoryCredential
+                    {
+                        UserName = "publisher",
+                        Secret = "target-token"
+                    }
+                }
+            };
+            var plan = CreatePlan();
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var result = publisher.Publish(publish, plan, buildResult, Array.Empty<ArtefactBuildResult>());
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(
+                new[]
+                {
+                    "find-main",
+                    "find-target-dependency",
+                    "find-source-dependency",
+                    "save-dependency",
+                    "find-target-transitive-dependency",
+                    "find-target-dependency-package",
+                    "publish-dependency",
+                    "find-target-dependency",
+                    "find-target-other-dependency",
+                    "find-source-other-dependency",
+                    "save-other-dependency",
+                    "find-target-other-dependency-package",
+                    "publish-other-dependency",
+                    "find-target-other-dependency",
+                    "publish-main"
+                },
+                calls);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Publish_RejectsRequiredModulePublishingWithPowerShellGet()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '3.0.13'; GUID = 'eb76426a-1992-40a5-82cd-6480f883ef4d'; RootModule = 'PSPublishModule.psm1' }");
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var publisher = new ModulePublisher(
+                new NullLogger(),
+                new StubPowerShellRunner(new PowerShellRunResult(0, string.Empty, string.Empty, "powershell.exe")));
+
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.PowerShellGet,
+                ApiKey = "target-api-key",
+                RepositoryName = "CompanyGallery",
+                PublishRequiredModules = true,
+                RequiredModuleSourceRepository = "PSGallery"
+            };
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                publisher.Publish(publish, CreatePlan(), buildResult, Array.Empty<ArtefactBuildResult>()));
+
+            Assert.Contains("PublishRequiredModules requires PSResourceGet", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Publish_RejectsRequiredModulePublishingToPSGallery()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(
+                manifestPath,
+                """
+                @{
+                    ModuleVersion = '3.0.13'
+                    GUID = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
+                    RootModule = 'PSPublishModule.psm1'
+                    RequiredModules = @(@{ ModuleName = 'InternalDependency'; ModuleVersion = '1.0.0' })
+                }
+                """);
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var runner = new StubPowerShellRunner(request =>
+            {
+                var script = File.ReadAllText(request.ScriptPath!);
+                if (script.Contains("Find-PSResource", StringComparison.Ordinal))
+                    return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+
+                if (script.Contains("Publish-PSResource", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Publish-PSResource should not run when dependency mirroring targets PSGallery.");
+
+                return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+            });
+            var publisher = new ModulePublisher(new NullLogger(), runner);
+
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.PSResourceGet,
+                ApiKey = "target-api-key",
+                Force = true,
+                PublishRequiredModules = true,
+                RequiredModuleSourceRepository = "InternalUpstream"
+            };
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                publisher.Publish(publish, CreatePlan(), buildResult, Array.Empty<ArtefactBuildResult>()));
+
+            Assert.Contains("Refusing to mirror dependencies to PSGallery", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
     private static string Encode(string value)
         => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 
@@ -320,7 +732,7 @@ public sealed class ModulePublisherRepositoryVersionTests
         => Encoding.UTF8.GetString(Convert.FromBase64String(value))
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private static string VisibleRepositoryItem(string name, string version)
+    private static string VisibleRepositoryItem(string name, string version, string? preRelease = null)
         => string.Join("::", new[]
         {
             "PFPSRG::ITEM",
@@ -330,7 +742,15 @@ public sealed class ModulePublisherRepositoryVersionTests
             Encode("Przemyslaw Klys"),
             Encode(name),
             Encode(Guid.Empty.ToString()),
-            Encode(string.Empty)
+            Encode(preRelease ?? string.Empty)
+        });
+
+    private static string SaveRepositoryItem(string name, string version)
+        => string.Join("::", new[]
+        {
+            "PFPSRG::SAVE::ITEM",
+            Encode(name),
+            Encode(version)
         });
 
     private static ModulePipelinePlan CreatePlan()

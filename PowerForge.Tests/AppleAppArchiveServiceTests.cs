@@ -145,6 +145,33 @@ public sealed class AppleAppArchiveServiceTests
     }
 
     [Fact]
+    public async Task UploadArchiveAsync_omits_allow_provisioning_updates_when_disabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcarchive"));
+            var runner = new CapturingProcessRunner();
+            var service = new AppleAppArchiveService(runner);
+
+            var result = await service.UploadArchiveAsync(new AppleAppArchiveUploadRequest
+            {
+                ArchivePath = archive.FullName,
+                ExportPath = Path.Combine(root.FullName, "export"),
+                AllowProvisioningUpdates = false
+            });
+
+            Assert.True(result.Succeeded);
+            var request = Assert.Single(runner.Requests);
+            Assert.DoesNotContain("-allowProvisioningUpdates", request.Arguments);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task UploadArchiveAsync_defaults_export_options_plist_inside_export_path()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

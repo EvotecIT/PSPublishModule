@@ -223,6 +223,10 @@ internal sealed class PublishConfigurationFactory
                 DoNotMarkAsPreRelease = request.DoNotMarkAsPreRelease,
                 GenerateReleaseNotes = request.GenerateReleaseNotes,
                 UseAsDependencyVersionSource = request.UseAsDependencyVersionSource,
+                PublishRequiredModules = request.PublishRequiredModules,
+                RequiredModuleSourceRepository = string.IsNullOrWhiteSpace(request.RequiredModuleSourceRepository)
+                    ? "PSGallery"
+                    : request.RequiredModuleSourceRepository!.Trim(),
                 Verbose = request.Verbose
             }
         };

@@ -7132,12 +7132,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
             <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -9347,12 +9347,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Repository</maml:name>
           <maml:description>
             <maml:para>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -33980,6 +33980,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PublishRequiredModules</maml:name>
+          <maml:description>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryApiVersion</maml:name>
           <maml:description>
             <maml:para>Repository API version for PSResourceGet registration (v2/v3).</maml:para>
@@ -34109,6 +34121,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:name>RepositoryUri</maml:name>
           <maml:description>
             <maml:para>Repository base URI (used for both source and publish unless overridden).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepository</maml:name>
+          <maml:description>
+            <maml:para>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -34286,6 +34310,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PublishRequiredModules</maml:name>
+          <maml:description>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryApiVersion</maml:name>
           <maml:description>
             <maml:para>Repository API version for PSResourceGet registration (v2/v3).</maml:para>
@@ -34424,6 +34460,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepository</maml:name>
+          <maml:description>
+            <maml:para>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -34495,12 +34543,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="JFrog">
         <maml:name>New-ConfigurationPublish</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -34531,12 +34579,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FilePath</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -34657,6 +34705,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PublishRequiredModules</maml:name>
+          <maml:description>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryApiVersion</maml:name>
           <maml:description>
             <maml:para>Repository API version for PSResourceGet registration (v2/v3).</maml:para>
@@ -34795,6 +34855,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepository</maml:name>
+          <maml:description>
+            <maml:para>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -34811,12 +34883,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Type</maml:name>
           <maml:description>
             <maml:para>Choose between PowerShellGallery and GitHub.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">PublishDestination</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">PublishDestination</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PowerShellGallery</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
@@ -34939,6 +35011,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PublishRequiredModules</maml:name>
+          <maml:description>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryApiVersion</maml:name>
           <maml:description>
             <maml:para>Repository API version for PSResourceGet registration (v2/v3).</maml:para>
@@ -35041,6 +35125,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepository</maml:name>
+          <maml:description>
+            <maml:para>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -35084,12 +35180,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="Profile">
         <maml:name>New-ConfigurationPublish</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -35108,12 +35204,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FilePath</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -35152,6 +35248,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PublishRequiredModules</maml:name>
+          <maml:description>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -35196,6 +35304,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:name>RepositoryCredentialUserName</maml:name>
           <maml:description>
             <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepository</maml:name>
+          <maml:description>
+            <maml:para>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -35453,6 +35573,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PublishRequiredModules</maml:name>
+        <maml:description>
+          <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryApiVersion</maml:name>
         <maml:description>
           <maml:para>Repository API version for PSResourceGet registration (v2/v3).</maml:para>
@@ -35582,6 +35714,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <maml:name>RepositoryUri</maml:name>
         <maml:description>
           <maml:para>Repository base URI (used for both source and publish unless overridden).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredModuleSourceRepository</maml:name>
+        <maml:description>
+          <maml:para>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -35732,6 +35876,13 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:example>
         <maml:title>Publish to JFrog Artifactory with CI OIDC token exchange</maml:title>
         <dev:code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -JFrogOidcProvider 'azure-oidc' -JFrogOidcProviderType Azure -JFrogOidcTokenIdEnvironmentVariable 'JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID' -Enabled</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish missing RequiredModules into a private repository before publishing the module</maml:title>
+        <dev:code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -PublishRequiredModules -RequiredModuleSourceRepository PSGallery -Enabled</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -40246,12 +40397,12 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="Profile">
         <maml:name>Publish-NugetPackage</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -47964,12 +48115,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Repository</maml:name>
           <maml:description>
             <maml:para>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />

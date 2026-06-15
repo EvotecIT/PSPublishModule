@@ -55,6 +55,10 @@ namespace PSPublishModule;
 /// <summary>Publish to JFrog Artifactory with CI OIDC token exchange</summary>
 /// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -JFrogOidcProvider 'azure-oidc' -JFrogOidcProviderType Azure -JFrogOidcTokenIdEnvironmentVariable 'JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID' -Enabled</code>
 /// </example>
+/// <example>
+/// <summary>Publish missing RequiredModules into a private repository before publishing the module</summary>
+/// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -PublishRequiredModules -RequiredModuleSourceRepository PSGallery -Enabled</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationPublish", DefaultParameterSetName = "ApiFromFile")]
 public sealed class NewConfigurationPublishCommand : PSCmdlet
 {
@@ -272,6 +276,22 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter UseAsDependencyVersionSource { get; set; }
 
+    /// <summary>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
+    public SwitchParameter PublishRequiredModules { get; set; }
+
+    /// <summary>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
+    public string? RequiredModuleSourceRepository { get; set; }
+
     /// <summary>Emits publish configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -383,6 +403,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             DoNotMarkAsPreRelease = DoNotMarkAsPreRelease.IsPresent,
             GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
             UseAsDependencyVersionSource = UseAsDependencyVersionSource.IsPresent,
+            PublishRequiredModules = PublishRequiredModules.IsPresent,
+            RequiredModuleSourceRepository = RequiredModuleSourceRepository,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
         });
 

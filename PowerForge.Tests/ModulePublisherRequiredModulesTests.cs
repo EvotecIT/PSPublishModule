@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -90,6 +91,123 @@ public sealed class ModulePublisherRequiredModulesTests
         var shouldSkip = ModulePublisher.ShouldSkipRepositoryDependencyValidation(required, external);
 
         Assert.False(shouldSkip);
+    }
+
+    [Fact]
+    public void SelectRequiredModuleVersionForPublish_PicksHighestMatchingVersion()
+    {
+        var required = new RequiredModuleReference(
+            moduleName: "Microsoft.Graph.Authentication",
+            moduleVersion: "2.0.0",
+            maximumVersion: "2.10.0");
+
+        var selected = RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
+            required,
+            new[]
+            {
+                new PSResourceInfo("Microsoft.Graph.Authentication", "1.0.0", "PSGallery", null, null),
+                new PSResourceInfo("Microsoft.Graph.Authentication", "2.2.0", "PSGallery", null, null),
+                new PSResourceInfo("Microsoft.Graph.Authentication", "2.9.1", "PSGallery", null, null),
+                new PSResourceInfo("Microsoft.Graph.Authentication", "2.11.0", "PSGallery", null, null)
+            });
+
+        Assert.NotNull(selected);
+        Assert.Equal("2.9.1", selected!.Version);
+    }
+
+    [Fact]
+    public void SelectRequiredModuleVersionForPublish_PrefersStableWhenPrereleaseIsNotRequired()
+    {
+        var required = new RequiredModuleReference(
+            moduleName: "DependencyModule",
+            moduleVersion: "1.0.0");
+
+        var selected = RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
+            required,
+            new[]
+            {
+                new PSResourceInfo("DependencyModule", "1.9.0", "PSGallery", null, null),
+                new PSResourceInfo("DependencyModule", "2.0.0", "PSGallery", null, null, preRelease: "preview1")
+            });
+
+        Assert.NotNull(selected);
+        Assert.Equal("1.9.0", ModulePublisher.GetRepositoryVersionText(selected!));
+    }
+
+    [Theory]
+    [InlineData("1.2.3", null, null, "[1.2.3]")]
+    [InlineData(null, "1.0.0", "1.5.0", "[1.0.0,1.5.0]")]
+    [InlineData(null, "1.0.0", null, "[1.0.0,)")]
+    [InlineData(null, null, "1.5.0", "(,1.5.0]")]
+    public void BuildPSResourceGetVersionRange_UsesRequiredModuleConstraint(
+        string? requiredVersion,
+        string? moduleVersion,
+        string? maximumVersion,
+        string expected)
+    {
+        var required = new RequiredModuleReference(
+            moduleName: "DependencyModule",
+            requiredVersion: requiredVersion,
+            moduleVersion: moduleVersion,
+            maximumVersion: maximumVersion);
+
+        var range = RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(required);
+
+        Assert.Equal(expected, range);
+    }
+
+    [Fact]
+    public void FindSavedModulePath_ReturnsVersionFolderContainingManifest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var modulePath = Path.Combine(root.FullName, "Microsoft.Graph.Authentication", "2.9.1");
+            Directory.CreateDirectory(modulePath);
+            File.WriteAllText(Path.Combine(modulePath, "Microsoft.Graph.Authentication.psd1"), "@{ ModuleVersion = '2.9.1' }");
+
+            var selected = RequiredModuleRepositoryPublisher.FindSavedModulePath(
+                root.FullName,
+                "Microsoft.Graph.Authentication",
+                "2.9.1");
+
+            Assert.Equal(modulePath, selected);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void FindSavedModulePackagesForPublish_ReturnsSavedDependenciesBeforePrimaryModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var dependencyPath = Path.Combine(root.FullName, "DependencySupport", "1.0.0");
+            var primaryPath = Path.Combine(root.FullName, "DependencyModule", "1.2.3");
+            Directory.CreateDirectory(dependencyPath);
+            Directory.CreateDirectory(primaryPath);
+            File.WriteAllText(Path.Combine(dependencyPath, "DependencySupport.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(primaryPath, "DependencyModule.psd1"), "@{ ModuleVersion = '1.2.3' }");
+
+            var paths = RequiredModuleRepositoryPublisher.FindSavedModulePackagesForPublish(
+                root.FullName,
+                new[]
+                {
+                    new PSResourceInfo("DependencyModule", "1.2.3", "PSGallery", null, null),
+                    new PSResourceInfo("DependencySupport", "1.0.0", "PSGallery", null, null)
+                },
+                "DependencyModule",
+                "1.2.3");
+
+            Assert.Equal(new[] { dependencyPath, primaryPath }, paths.Select(path => path.Path));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 
     [Fact]
