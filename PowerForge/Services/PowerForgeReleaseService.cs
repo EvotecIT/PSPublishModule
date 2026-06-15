@@ -724,6 +724,19 @@ internal sealed class PowerForgeReleaseService
             if (missingArchive is not null)
                 throw new FileNotFoundException($"Apple app archive was not found for upload-only release: {missingArchive.ArchivePath}", missingArchive.ArchivePath);
         }
+        var appStoreConnectApiKeyPath = string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyPath) ? null : ResolveOutputPath(projectRoot, options.AppStoreConnectApiKeyPath!);
+        var appStoreConnectApiKeyId = string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyId) ? null : options.AppStoreConnectApiKeyId!.Trim();
+        var appStoreConnectApiIssuerId = string.IsNullOrWhiteSpace(options.AppStoreConnectApiIssuerId) ? null : options.AppStoreConnectApiIssuerId!.Trim();
+        var appStoreConnectApiConfiguredCount = (appStoreConnectApiKeyPath is null ? 0 : 1) + (appStoreConnectApiKeyId is null ? 0 : 1) + (appStoreConnectApiIssuerId is null ? 0 : 1);
+        if (appStoreConnectApiConfiguredCount != 0)
+        {
+            if (appStoreConnectApiConfiguredCount != 3)
+                throw new InvalidOperationException("AppleApps App Store Connect API-key authentication requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
+            if (!options.AllowProvisioningUpdates)
+                throw new InvalidOperationException("AppleApps App Store Connect API-key authentication requires AllowProvisioningUpdates=true so xcodebuild can use the credentials.");
+            if (!File.Exists(appStoreConnectApiKeyPath))
+                throw new FileNotFoundException($"AppleApps App Store Connect API key file was not found: {appStoreConnectApiKeyPath}", appStoreConnectApiKeyPath);
+        }
 
         return new PowerForgeAppleReleasePlan
         {
@@ -741,9 +754,9 @@ internal sealed class PowerForgeReleaseService
             UploadSymbols = options.UploadSymbols,
             GenerateAppStoreInformation = options.GenerateAppStoreInformation,
             SigningStyle = string.IsNullOrWhiteSpace(options.SigningStyle) ? "automatic" : options.SigningStyle!.Trim(),
-            AppStoreConnectApiKeyPath = string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyPath) ? null : ResolveOutputPath(projectRoot, options.AppStoreConnectApiKeyPath!),
-            AppStoreConnectApiKeyId = string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyId) ? null : options.AppStoreConnectApiKeyId!.Trim(),
-            AppStoreConnectApiIssuerId = string.IsNullOrWhiteSpace(options.AppStoreConnectApiIssuerId) ? null : options.AppStoreConnectApiIssuerId!.Trim(),
+            AppStoreConnectApiKeyPath = appStoreConnectApiKeyPath,
+            AppStoreConnectApiKeyId = appStoreConnectApiKeyId,
+            AppStoreConnectApiIssuerId = appStoreConnectApiIssuerId,
             Apps = apps
         };
     }

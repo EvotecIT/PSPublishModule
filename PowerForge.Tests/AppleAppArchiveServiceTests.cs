@@ -129,6 +129,35 @@ public sealed class AppleAppArchiveServiceTests
     }
 
     [Fact]
+    public async Task CreateArchiveAsync_rejects_api_key_auth_without_provisioning_updates()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var keyPath = Path.Combine(root.FullName, "AuthKey_ABC123DEFG.p8");
+            await File.WriteAllTextAsync(keyPath, "private-key");
+            var service = new AppleAppArchiveService(new CapturingProcessRunner());
+
+            await Assert.ThrowsAsync<ArgumentException>(() => service.CreateArchiveAsync(new AppleAppArchiveRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "Tactra",
+                ArchivePath = Path.Combine(root.FullName, "Tactra.xcarchive"),
+                AllowProvisioningUpdates = false,
+                AppStoreConnectApiKeyPath = keyPath,
+                AppStoreConnectApiKeyId = "ABC123DEFG",
+                AppStoreConnectApiIssuerId = "issuer-id"
+            }));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task UploadArchiveAsync_writes_export_options_and_runs_export_archive()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -259,6 +288,33 @@ public sealed class AppleAppArchiveServiceTests
                 ArchivePath = archive.FullName,
                 ExportPath = Path.Combine(root.FullName, "export"),
                 AppStoreConnectApiKeyId = "ABC123DEFG"
+            }));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task UploadArchiveAsync_rejects_api_key_auth_without_provisioning_updates()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcarchive"));
+            var keyPath = Path.Combine(root.FullName, "AuthKey_ABC123DEFG.p8");
+            await File.WriteAllTextAsync(keyPath, "private-key");
+            var service = new AppleAppArchiveService(new CapturingProcessRunner());
+
+            await Assert.ThrowsAsync<ArgumentException>(() => service.UploadArchiveAsync(new AppleAppArchiveUploadRequest
+            {
+                ArchivePath = archive.FullName,
+                ExportPath = Path.Combine(root.FullName, "export"),
+                AllowProvisioningUpdates = false,
+                AppStoreConnectApiKeyPath = keyPath,
+                AppStoreConnectApiKeyId = "ABC123DEFG",
+                AppStoreConnectApiIssuerId = "issuer-id"
             }));
         }
         finally

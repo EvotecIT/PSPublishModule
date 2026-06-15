@@ -67,6 +67,7 @@ public sealed class AppleAppArchiveService
             request.AppStoreConnectApiKeyPath,
             request.AppStoreConnectApiKeyId,
             request.AppStoreConnectApiIssuerId,
+            request.AllowProvisioningUpdates,
             args);
         args.Add("archive");
         args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
@@ -129,6 +130,7 @@ public sealed class AppleAppArchiveService
             request.AppStoreConnectApiKeyPath,
             request.AppStoreConnectApiKeyId,
             request.AppStoreConnectApiIssuerId,
+            request.AllowProvisioningUpdates,
             args);
         args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
 
@@ -153,6 +155,7 @@ public sealed class AppleAppArchiveService
         string? appStoreConnectApiKeyPath,
         string? appStoreConnectApiKeyId,
         string? appStoreConnectApiIssuerId,
+        bool allowProvisioningUpdates,
         List<string> args)
     {
         var keyPath = string.IsNullOrWhiteSpace(appStoreConnectApiKeyPath)
@@ -165,6 +168,8 @@ public sealed class AppleAppArchiveService
             return;
         if (configuredCount != 3)
             throw new ArgumentException("App Store Connect API-key authentication requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
+        if (!allowProvisioningUpdates)
+            throw new ArgumentException("App Store Connect API-key authentication requires AllowProvisioningUpdates=true so xcodebuild can use the credentials.");
         if (!File.Exists(keyPath))
             throw new FileNotFoundException($"App Store Connect API key file was not found: {keyPath}", keyPath);
 
