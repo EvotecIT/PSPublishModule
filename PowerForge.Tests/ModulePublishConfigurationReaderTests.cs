@@ -23,6 +23,8 @@ public sealed class ModulePublishConfigurationReaderTests
                 "ApiKey": "gallery-key",
                 "Enabled": true,
                 "RepositoryName": "PSGallery",
+                "PublishRequiredModules": true,
+                "RequiredModuleSourceRepository": "InternalUpstream",
                 "Repository": {
                   "Name": "PSGallery",
                   "Uri": "https://www.powershellgallery.com/api/v2",
@@ -68,6 +70,8 @@ public sealed class ModulePublishConfigurationReaderTests
         Assert.Equal(PublishTool.PSResourceGet, repositoryPublish.Tool);
         Assert.Equal("gallery-key", repositoryPublish.ApiKey);
         Assert.Equal("PSGallery", repositoryPublish.RepositoryName);
+        Assert.True(repositoryPublish.PublishRequiredModules);
+        Assert.Equal("InternalUpstream", repositoryPublish.RequiredModuleSourceRepository);
         Assert.NotNull(repositoryPublish.Repository);
         Assert.Equal("PSGallery", repositoryPublish.Repository!.Name);
         Assert.Equal("https://www.powershellgallery.com/api/v2", repositoryPublish.Repository.Uri);

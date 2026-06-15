@@ -60,6 +60,8 @@ public sealed class ModulePublishConfigurationReader
             RepositoryName = configuration.RepositoryName,
             Repository = CloneRepository(configuration.Repository),
             Force = configuration.Force,
+            PublishRequiredModules = configuration.PublishRequiredModules,
+            RequiredModuleSourceRepository = configuration.RequiredModuleSourceRepository,
             OverwriteTagName = configuration.OverwriteTagName,
             DoNotMarkAsPreRelease = configuration.DoNotMarkAsPreRelease,
             GenerateReleaseNotes = configuration.GenerateReleaseNotes,

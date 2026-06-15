@@ -380,4 +380,43 @@ public sealed class PublishConfigurationFactoryTests
         Assert.Contains("ContainerRegistry", ex.Message, StringComparison.Ordinal);
         Assert.Contains("Azure Artifacts", ex.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Create_sets_required_module_publish_source()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "token",
+            RepositoryName = "CompanyGallery",
+            Enabled = true,
+            PublishRequiredModules = true,
+            RequiredModuleSourceRepository = "InternalUpstream"
+        });
+
+        Assert.True(segment.Configuration.PublishRequiredModules);
+        Assert.Equal("InternalUpstream", segment.Configuration.RequiredModuleSourceRepository);
+    }
+
+    [Fact]
+    public void Create_defaults_required_module_publish_source_to_psgallery()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "token",
+            RepositoryName = "CompanyGallery",
+            Enabled = true,
+            PublishRequiredModules = true
+        });
+
+        Assert.True(segment.Configuration.PublishRequiredModules);
+        Assert.Equal("PSGallery", segment.Configuration.RequiredModuleSourceRepository);
+    }
 }

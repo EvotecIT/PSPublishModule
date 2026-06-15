@@ -123,6 +123,12 @@ internal sealed class PublishConfigurationRequest
     /// <summary>Whether this repository should be used as a dependency-version source.</summary>
     public bool UseAsDependencyVersionSource { get; set; }
 
+    /// <summary>Whether missing manifest RequiredModules should be published to the target repository first.</summary>
+    public bool PublishRequiredModules { get; set; }
+
+    /// <summary>Repository used as the source for publishing missing RequiredModules.</summary>
+    public string? RequiredModuleSourceRepository { get; set; }
+
     /// <summary>Whether verbose logging was requested by the cmdlet invocation.</summary>
     public bool Verbose { get; set; }
 }

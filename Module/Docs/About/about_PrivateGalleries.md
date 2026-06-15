@@ -6,406 +6,273 @@ schema: 1.0.0
 
 ## Short Description
 
-Explains the enterprise private gallery profile flow for Azure Artifacts and PSPublishModule.
+Explains how PSPublishModule consumes and publishes private PowerShell modules
+from NuGet-compatible feeds, Azure Artifacts, JFrog Artifactory, GitHub
+Packages, and Microsoft Artifact Registry.
 
 ## Long Description
 
-PSPublishModule supports an Entra-first private gallery workflow for Azure Artifacts feeds.
-The intended enterprise flow is:
+PSPublishModule treats private PowerShell galleries as NuGet-compatible
+repositories with a small set of reusable command shapes:
 
-1. Save or import non-secret feed settings in a local PSPublishModule profile.
-2. Let Microsoft.PowerShell.PSResourceGet and the Azure Artifacts Credential Provider own Entra ID, MFA,
-device login, and token/session caching.
-3. Use Initialize-ModuleRepository as the one-command workstation onboarding entry point.
-4. Use the saved profile for install, update, and publish configuration commands.
+- generic NuGet-compatible feeds when you know the source/publish URLs
+- Azure Artifacts profiles for Entra ID/MFA and the Azure Artifacts
+Credential Provider
+- JFrog Artifactory shortcuts that derive the NuGet URLs for you
+- GitHub Packages profiles for GitHub-hosted NuGet feeds
+- Microsoft Artifact Registry for read-only Microsoft package intake
 
-Profiles are created with Initialize-ModuleRepository or Set-ModuleRepositoryProfile. A profile stores feed
-identity and local behavior:
+Use PSResourceGet unless you have a specific reason to support an older
+PowerShellGet-only feed. Profiles store repository shape and local behavior
+only. They do not store PATs, passwords, Entra tokens, JFrog tokens, or
+credential-provider session caches.
 
-- Azure DevOps organization
-- optional Azure DevOps project
-- Azure Artifacts feed
-- local repository name
-- preferred repository tool
-- bootstrap mode
-- repository trust and priority settings
+STANDARD NUGET-COMPATIBLE FEEDS
 
-Profiles intentionally do not store PATs, passwords, or Entra tokens. The default Azure Artifacts profile uses:
+Use the generic NuGet-compatible path for feeds such as Nexus, ProGet,
+GitHub Packages, internal NuGet servers, or JFrog when you prefer to provide
+the URLs yourself.
+
+If the feed expects a NuGet API key for push:
 
 ```powershell
-Tool           = PSResourceGet
-BootstrapMode  = ExistingSession
-Authentication = AzureArtifactsCredentialProvider
+New-ConfigurationPublish -Type PowerShellGallery -RepositoryName 'CompanyModules' -Tool PSResourceGet -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' -RepositorySourceUri 'https://packages.company.test/nuget/v3/index.json' -RepositoryPublishUri 'https://packages.company.test/nuget/v3/index.json' -FilePath "$env:USERPROFILE\.secrets\company-nuget-api-key.txt" -Enabled
 ```
 
-When PSResourceGet registration supports it, PSPublishModule configures Azure Artifacts repositories with
-CredentialProvider = AzArtifacts. Older PSResourceGet versions fall back to their built-in Azure Artifacts URL
-detection.
-Install-prerequisite flows honor the selected bootstrap mode. For the default ExistingSession profile, they
-upgrade PSResourceGet to the ExistingSession-capable line before installing or refreshing the Azure Artifacts
-Credential Provider.
+If the feed uses basic/PAT credentials, create a non-secret profile and pass
+the credential when publishing:
+
+```powershell
+Set-ModuleRepositoryProfile -Name 'CompanyNuGet' -Provider NuGet -RepositoryName 'CompanyModules' -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' -RepositorySourceUri 'https://packages.company.test/nuget/v3/index.json' -RepositoryPublishUri 'https://packages.company.test/nuget/v3/index.json' -Tool PSResourceGet
+```
+
+```powershell
+New-ConfigurationPublish -ProfileName 'CompanyNuGet' -RepositoryCredentialUserName 'publisher' -RepositoryCredentialSecretEnvironmentVariable 'COMPANY_NUGET_TOKEN' -Enabled
+```
+
+AZURE ARTIFACTS
+
+Azure Artifacts is the preferred enterprise flow when users should
+authenticate through Entra ID/MFA instead of PATs. PSPublishModule stores
+the organization, project, feed, repository name, and tool/bootstrap
+preference. Authentication remains owned by PSResourceGet and the Azure
+Artifacts Credential Provider.
+
+Create a profile:
+
+```powershell
+Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules'
+```
+
+Onboard a workstation:
+
+```powershell
+Initialize-ModuleRepository -ProfileName 'Company' -InstallPrerequisites
+```
+
+Install and update modules:
+
+```powershell
+Install-PrivateModule -ProfileName 'Company' -Name 'Company.Tools' -InstallPrerequisites
+Update-PrivateModule  -ProfileName 'Company' -Name 'Company.Tools'
+```
+
+Publish a module:
+
+```powershell
+New-ConfigurationPublish -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -RepositoryName 'CompanyModules' -Tool PSResourceGet -Enabled
+```
+
+Or use the saved profile:
+
+```powershell
+New-ConfigurationPublish -ProfileName 'Company' -Enabled
+```
+
+Push plain NuGet packages through the same profile:
+
+```powershell
+Publish-NugetPackage -Path .\artifacts -ProfileName 'Company' -InstallPrerequisites -SkipDuplicate
+```
+
+PAT/basic parameters remain available for constrained environments, but
+they are a fallback. Prefer the Azure Artifacts Credential Provider when
+Azure DevOps Services and workstation policy allow it.
+
+JFROG ARTIFACTORY
+
+JFrog can be configured as a generic NuGet feed, or with JFrog shortcut
+parameters. Given:
+
+```powershell
+JFrogBaseUri    = https://company.jfrog.io/artifactory
+JFrogRepository = powershell-virtual
+```
+
+PSPublishModule derives:
+
+PSResourceGet v3:
+https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json
+
+PowerShellGet v2 source/publish:
+https://company.jfrog.io/artifactory/api/nuget/powershell-virtual
+
+For PAT/access-token publishing where the same token can read and push:
+
+```powershell
+New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -Enabled
+```
+
+For local testing, inline clear text works but must not be committed:
+
+```powershell
+New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecret 'temporary-pat' -Enabled
+```
+
+If Artifactory requires a separate NuGet API key for package push, add
+FilePath or ApiKey:
+
+```powershell
+New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -FilePath "$env:USERPROFILE\.secrets\jfrog-nuget-api-key.txt" -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled
+```
+
+For federated CI, use JFrog OIDC token exchange. PSPublishModule calls
+JFrog CLI at publish time and passes the exchanged short-lived credential
+to repository tooling:
+
+```powershell
+New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -JFrogOidcProvider 'azure-oidc' -JFrogOidcProviderType Azure -JFrogOidcTokenIdEnvironmentVariable 'JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID' -Enabled
+```
+
+For interactive workstation proof, use JFrog CLI bootstrap mode:
+
+```powershell
+Connect-ModuleRepository -Provider JFrog -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -Name 'JFrogPS' -Tool PSResourceGet -BootstrapMode JFrogCli -InstallPrerequisites -Verbose
+```
+
+This runs jf login and then probes whether PowerShell repository tooling can
+use that session. It is useful for troubleshooting, but it is not the default
+CI publish shape.
+
+PUBLISHING MISSING REQUIREDMODULES
+
+Private feeds often start empty. If a module manifest contains
+RequiredModules, publishing the main module can fail because the dependency
+is not yet in the target feed.
+
+Opt in to dependency mirroring:
+
+```powershell
+New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -PublishRequiredModules -RequiredModuleSourceRepository PSGallery -Enabled
+```
+
+Dependency mirroring requires PSResourceGet. If a configuration uses
+PublishRequiredModules with Tool PowerShellGet, the publish run fails early
+with a clear error instead of silently skipping dependency mirroring.
+
+The publish flow checks RequiredModules in the target feed, skips modules
+listed in PSData.ExternalModuleDependencies, saves a compatible dependency
+from RequiredModuleSourceRepository, publishes it to the target, verifies it
+is present, and then publishes the main module.
+
+This changes the target feed, so it is explicit. If the target repository
+returns 401 Unauthorized while checking a dependency, fix repository
+credentials first. Dependency mirroring only helps after the target feed can
+be read and written.
+
+MICROSOFT ARTIFACT REGISTRY
+
+Microsoft Artifact Registry is a read-only PSResourceGet
+container-registry repository for Microsoft-owned PowerShell packages.
+
+```powershell
+Register-ModuleRepository -MicrosoftArtifactRegistry
+Connect-ModuleRepository -MicrosoftArtifactRegistry
+Install-PrivateModule -MicrosoftArtifactRegistry -Name Microsoft.PowerShell.SecretManagement
+```
+
+Do not use MAR as a publish target. For production estates, promote approved
+Microsoft packages into your enterprise feed.
 
 PROFILE STORAGE
 
-Profile data is stored under the current user's local application data folder:
+User profiles:
 
 ```powershell
 %LOCALAPPDATA%\PowerForge\PrivateGalleries\profiles.json
 ```
 
-Machine-wide profile data is stored under the machine common application data folder:
+Machine profiles:
 
 ```powershell
 %ProgramData%\PowerForge\PrivateGalleries\profiles.json
 ```
 
-Commands that consume a profile read user profiles first and then machine-wide profiles. This lets desktop
-support register feed metadata once for all users without sharing credentials. Each user still authenticates as
-themselves through the Azure Artifacts Credential Provider and Entra/MFA.
+Commands read user profiles first, then machine profiles. This allows
+desktop support to deploy non-secret feed metadata while each user still
+authenticates as themselves.
 
-Set POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH when tests, managed desktop rollout tooling, or ephemeral build
-agents need to redirect user profile storage. Set POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH to redirect
-the machine-wide profile store for tests or managed deployment tooling.
-
-ENTERPRISE ROLLOUT CHECKLIST
-
-For a managed workstation estate, keep PSPublishModule as the wrapper and leave identity/session ownership with
-Microsoft tooling:
-
-1. Publish PSPublishModule through the approved bootstrap channel users already trust.
-2. Grant Azure DevOps feed access through Entra ID groups. Do not create PATs by default.
-3. Use Initialize-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet at the version
-required by the selected bootstrap mode and install the Azure Artifacts Credential Provider on Windows
-workstations. For locked-down estates, mirror PSPublishModule.Artefacts into the same private gallery as
-PSPublishModule so the provider ZIPs are delivered as a normal PowerShell module dependency. Pre-install
-the credential provider on non-Windows systems with Microsoft's installer. On Windows, prefer Microsoft's
-self-contained Microsoft.win-*.NuGet.CredentialProvider.zip packages over Microsoft.Net8.NuGet.CredentialProvider.zip
-when mirroring packages manually, because the Net8 package requires a separately installed .NET runtime.
-The netfx package is kept for Windows PowerShell 5.1/.NET Framework compatibility, but it is not
-self-contained either; it requires a supported .NET Framework runtime.
-4. Create the feed profile once with Set-ModuleRepositoryProfile. Use -Scope Machine from an elevated/admin
-deployment when the same non-secret feed definition should be visible to all users on the workstation.
-5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and ask users or
-desktop support to run Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite
--InstallPrerequisites once. This imports or refreshes the profile, registers the repository, probes
-access, and, when the first ExistingSession probe cannot use a cached token, invokes the Azure Artifacts
-Credential Provider interactively so the user can complete Entra/MFA and cache a session token.
-6. If the profile is already deployed into the profile store, use
+Useful commands:
 
 ```powershell
-Initialize-ModuleRepository -ProfileName <name> -InstallPrerequisites instead. Add -SkipConnect when you
-```
-
-only want profile/readiness output without repository registration or probing.
-7. Keep Set-ModuleRepositoryProfile, Test-ModuleRepositoryProfile, and Connect-ModuleRepository available as
-the advanced/manual flow for admins, diagnostics, and constrained rollouts.
-8. Standardize user commands around Install-PrivateModule -ProfileName <name> and
-
-```powershell
-Update-PrivateModule -ProfileName <name>. These commands refresh repository registration and perform the
-```
-
-same access probe/session-prime step before install/update, so an expired Azure Artifacts Credential
-Provider session can be renewed from the normal day-to-day command in an interactive shell.
-9. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
-
-```powershell
-Publish-NugetPackage -ProfileName <name> -InstallPrerequisites so publishing and consuming resolve the
-```
-
-same feed and can bootstrap the same Azure Artifacts credential-provider path.
-10. Run the opt-in live Pester flow against a real feed/module before announcing the feed as production-ready.
-
-RECOMMENDED WORKSTATION FLOW
-
-Create and connect a profile directly:
-
-```powershell
-Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
-```
-
-Import a managed profile file and connect the workstation:
-
-```powershell
-Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
-```
-
-Use Test-ModuleRepositoryProfile and Connect-ModuleRepository directly when separate readiness and
-connection/probe steps are desired. The readiness object includes RecommendedOnboardingCommand for the managed
-one-command path and RecommendedConnectCommand for the lower-level connection step.
-
-Install or update modules:
-
-```powershell
-Install-PrivateModule -ProfileName Company -Name ModuleA, ModuleB -InstallPrerequisites
-Update-PrivateModule -ProfileName Company -Name ModuleA, ModuleB
-```
-
-Use the same profile in publish configuration:
-
-```powershell
-New-ConfigurationPublish -ProfileName Company -Enabled
-```
-
-Direct NuGet package pushes can also resolve the feed from the profile:
-
-```powershell
-Publish-NugetPackage -Path .\artifacts -ProfileName Company -InstallPrerequisites -SkipDuplicate
-```
-
-MANAGED PROFILE DEPLOYMENT
-
-Profile files are configuration, not credentials. An administrator can create the profile once, export it, and
-deploy the JSON file with Intune, GPO, configuration management, or a bootstrap script:
-
-```powershell
-Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
-```
-
-For a machine-wide profile installed once by desktop support or software distribution, import or create it with
--Scope Machine:
-
-```powershell
+Test-ModuleRepositoryProfile -ProfileName 'Company'
+Export-ModuleRepositoryProfile -Name 'Company' -Path .\Company.profile.json -Force
 Import-ModuleRepositoryProfile -Path .\Company.profile.json -Scope Machine -Overwrite
-Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules -Scope Machine
+New-ModuleRepositoryBootstrap -ProfileName 'Company' -OutputDirectory .\CompanyGalleryBootstrap -InstallModule 'Company.Tools' -Force
 ```
 
-After that, any user on the workstation can run Install-PrivateModule -ProfileName Company -Name ModuleA.
-PSPublishModule reads the shared profile, but Azure Artifacts authentication remains per-user. If that user has
-no cached session yet, or the session expired, the normal install/update access probe can invoke the Azure
-Artifacts Credential Provider so the user signs in with their own Entra ID/MFA.
+VALIDATION
 
-For a deployable one-folder workstation package, use:
+Before calling a feed ready:
+
+1. Register/connect the repository from a clean shell.
+2. Install a known module with Install-PrivateModule.
+3. Update the module with Update-PrivateModule.
+4. Generate publish configuration and confirm secrets are not stored.
+5. Publish a disposable package or module version.
+6. If PublishRequiredModules is enabled, prove a missing dependency is
+promoted before the main module publish.
+
+Azure Artifacts live validation:
 
 ```powershell
-New-ModuleRepositoryBootstrap -ProfileName Company -OutputDirectory .\CompanyGalleryBootstrap -InstallModule ModuleA, ModuleB -Force
+.\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 -Organization contoso -Project Platform -Feed Modules -ModuleName Company.Tools -GenerateDisposablePackage -EvidenceFile .\private-gallery-live.evidence.json -Output Detailed -PassThru
 ```
 
-The generated package contains profiles.json and Initialize-PrivateGallery.ps1. The script imports PSPublishModule
-when needed, imports the bundled profile, installs missing private-gallery prerequisites unless
--SkipInstallPrerequisites is used, connects with Initialize-ModuleRepository, and can install approved modules
-through Install-PrivateModule -ProfileName <name>. The package remains non-secret: it contains feed identity and
-bootstrap commands only, not PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session caches.
-
-On the target workstation, import or refresh the profile and connect in one step:
+JFrog SSO/credential validation:
 
 ```powershell
-Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
+.\Module\Tests\Invoke-PrivateGalleryJFrogSsoValidation.ps1 -JFrogBaseUri https://company.jfrog.io/artifactory -Repository powershell-virtual -ModuleName Company.Tools -RunJFrogCliLogin -EvidenceFile .\jfrog-sso.evidence.json -MarkdownFile .\jfrog-sso.evidence.md
 ```
-
-The imported profile still does not contain PATs, passwords, or tokens. If the user has not signed in before,
-Initialize-ModuleRepository and Connect-ModuleRepository can prime the Azure Artifacts Credential Provider
-session for the feed URI. PSResourceGet calls the provider non-interactively after that, so the explicit priming
-step is what gives managed workstation onboarding a real Entra/MFA prompt/cache path.
-
-CREDENTIAL PROVIDER PACKAGE SOURCE
-
-PowerForge installs the Azure Artifacts Credential Provider from package ZIPs. It does not download and execute
-Microsoft's installer script at runtime.
-
-The preferred enterprise source is PSPublishModule.Artefacts, a companion package-carrier module that can be
-published to PSGallery or mirrored into a private PowerShell gallery. During -InstallPrerequisites,
-PSPublishModule looks for the module locally first, then tries to install it from the configured PowerShell
-repositories, and only then falls back to Microsoft's public release package URLs. This lets isolated networks
-approve and promote one PowerShell module instead of managing separate script downloads from github.com.
-The carrier manifest includes architecture-specific Windows netcore packages, and PSPublishModule selects the
-package matching the current Windows process architecture.
-
-```powershell
-.\Modules\PSPublishModule.Artefacts\Build\Build-Module.ps1
-Install-Module PSPublishModule.Artefacts -Repository CompanyGallery
-Initialize-ModuleRepository -ProfileName Company -InstallPrerequisites
-```
-
-Explicit package variables remain available as the override path for file shares, internal HTTP artifact caches,
-or emergency pinning. Configure these machine or user environment variables before running -InstallPrerequisites:
-
-```powershell
-POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE
-POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE
-POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_SHA256
-POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_SHA256
-```
-
-The package variables may point at local paths, UNC paths, or internal HTTPS mirror URLs. Use
-POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_PACKAGE only when the same ZIP contains every requested runtime
-folder. The runtime-specific variables are the preferred enterprise shape because Microsoft publishes the .NET
-and .NET Framework credential-provider packages as separate release assets.
-
-```powershell
-Install-PrivateModule -ProfileName <name> and Update-PrivateModule -ProfileName <name> also perform this access
-```
-
-probe/session-prime step before installing or updating modules. If the cached session expired after onboarding,
-or a different user receives the same non-secret profile, the first normal install/update command can invoke the
-Azure Artifacts Credential Provider again and then continue once Entra/MFA succeeds.
-
-PRODUCTION READINESS EVIDENCE
-
-Before calling a feed ready for users, prove:
-
-- Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 succeeds against the real feed/module
-and writes a non-secret evidence JSON file with -EvidenceFile. The evidence should include bootstrap package
-generation, non-secret package contents, bootstrap script execution, the access probe,
-credential-free publish configuration, install/update, and optional package-push checks.
-Missing or incomplete required evidence details make the helper fail so the JSON cannot look successful
-while omitting the proof operators need. For package-push proof, use -GenerateDisposablePackage or pass
-a prebuilt disposable package with -PublishPackagePath.
-- The manual GitHub Actions workflow named Private Gallery Live Validation succeeds on a runner that owns
-the enterprise Azure Artifacts credential-provider policy. Prefer runnerLabels = ["self-hosted","windows"]
-or another approved self-hosted runner because hosted runners usually cannot prove cached Entra-backed
-feed access. For managed repository defaults, define GitHub variables once and leave matching manual
-inputs blank during dispatch:
-
-```powershell
-PSPUBLISHMODULE_AZDO_ORGANIZATION
-PSPUBLISHMODULE_AZDO_PROJECT
-PSPUBLISHMODULE_AZDO_FEED
-PSPUBLISHMODULE_AZDO_MODULE_NAME
-PSPUBLISHMODULE_AZDO_PROFILE_NAME
-PSPUBLISHMODULE_AZDO_RUNNER_LABELS
-PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_NAME
-PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_VERSION
-```
-
-Workflow inputs override variables when both are provided. For unattended validation, configure the Azure
-Artifacts Credential Provider with
-ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS for access-token based automation or
-ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS for managed identity/service-principal based automation. Do
-not put those secrets in PSPublishModule profiles. The included workflows pass through these GitHub
-secrets when present:
-
-```powershell
-PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS -> ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS
-PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS -> ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS
-PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS -> VSS_NUGET_EXTERNAL_FEED_ENDPOINTS
-```
-
-The evidence JSON and step summary report only whether each unattended credential-provider endpoint
-variable was configured, never the secret value. The workflow writes a non-secret run summary and uploads
-the XML/evidence JSON artifacts for release records.
-- Before dispatching a live run, check the repository configuration without printing any secret values:
-
-```powershell
-.\Module\Tests\Test-PrivateGalleryGitHubLiveValidationConfiguration.ps1 `
--Repository EvotecIT/PSPublishModule `
--RequireUnattendedCredentialProviderSecret `
--Markdown
-```
-
-Use -NoFail for a report-only inventory. Without -NoFail, the helper fails when required variables are
-missing or, when -RequireUnattendedCredentialProviderSecret is used, when none of the supported Azure
-Artifacts Credential Provider secret names is present. The Markdown output includes suggested gh variable
-set, gh secret set, and gh workflow run command shapes with placeholders so operators can move from inventory
-to a live run without putting secret material in profiles, logs, or docs.
-- Before the new standalone workflow exists on the default branch, dispatch the existing Test & Build Module
-workflow against the feature branch with privateGalleryLiveValidation = true. That gated job uses the same
-helper, summary, and artifact path and does not run during normal push or pull request builds.
-- Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite -InstallPrerequisites
-succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True. If no cached token
-existed before the first probe, Connection.CredentialProviderSessionPrimeAttempted shows whether
-PSPublishModule invoked the provider to prime the Entra-backed session before retrying.
-- Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit
-credential parameters.
-- Update-PrivateModule -ProfileName <name> -Name <known module> succeeds for an installed private module.
-- New-ConfigurationPublish -ProfileName <name> -Enabled produces an Azure Artifacts v3 URI and no stored
-credential.
-- Publish-NugetPackage -ProfileName <name> succeeds for a disposable package when package-push validation
-is intentionally enabled with -GenerateDisposablePackage or -PublishPackagePath.
-
-PAT FALLBACK
-
-PAT/basic credential parameters remain available for legacy or constrained environments, but they are not the
-preferred enterprise path. Prefer the Azure Artifacts Credential Provider whenever Azure DevOps Services and
-workstation policy allow it.
-
-JFROG AND OTHER PRIVATE FEEDS
-
-JFrog and generic NuGet feeds use the same profile surface, but they do not use the Azure Artifacts
-Credential Provider. A JFrog profile can be created with:
-
-```powershell
-Set-ModuleRepositoryProfile -Name CompanyJfrog -Provider JFrog -Repository powershell-virtual -JFrogBaseUri https://company.jfrog.io/artifactory
-```
-
-For credential-based usage, pass CredentialUserName plus CredentialSecret/CredentialSecretFilePath, or prompt
-interactively. If the JFrog instance is SAML/SSO-backed, the web login may be used to obtain or refresh a
-JFrog token, but PowerShellGet and PSResourceGet still need NuGet-compatible authentication unless the local
-environment provides a working bridge.
-
-PSPublishModule also supports an explicit experimental JFrog CLI bridge mode:
-
-```powershell
-Initialize-ModuleRepository -ProfileName CompanyJfrog -Provider JFrog -Repository powershell-virtual -JFrogBaseUri https://company.jfrog.io/artifactory -BootstrapMode JFrogCli -InstallPrerequisites
-```
-
-This mode runs jf login interactively and then retries the repository probe. If JFrog CLI login succeeds but
-PSResourceGet still cannot read the NuGet feed, the connection result reports JFrogCliLoginSucceeded = True
-and AccessProbeSucceeded = False with a message explaining that the JFrog CLI session was not consumed by
-PowerShellGet/PSResourceGet. That gives support a precise error boundary instead of silently falling back.
-
-To prove whether JFrog CLI browser login can bridge to PSResourceGet on a real workstation, run:
-
-```powershell
-.\Module\Tests\Invoke-PrivateGalleryJFrogSsoValidation.ps1 -JFrogBaseUri https://company.jfrog.io/artifactory -Repository powershell-virtual -ModuleName ModuleA -RunJFrogCliLogin -EvidenceFile .\jfrog-sso.evidence.json -MarkdownFile .\jfrog-sso.evidence.md
-```
-
-The helper writes non-secret JSON/Markdown evidence showing whether jf login succeeded, whether PSResourceGet
-could find the module without explicit credentials, and whether the explicit credential fallback works when
-CredentialUserName plus CredentialSecret/CredentialSecretFilePath are supplied.
 
 ## Examples
 
 
 ```powershell
+PS> New-ConfigurationPublish -Type PowerShellGallery -RepositoryName CompanyModules -Tool PSResourceGet -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' -FilePath "$env:USERPROFILE\.secrets\company-nuget-api-key.txt" -Enabled
+```
+
+Configures a standard NuGet-compatible private feed that uses a NuGet API key for package push.
+
+```powershell
 PS> Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 ```
 
-Saves an Entra-first Azure Artifacts profile named Company, installs missing prerequisites if needed, registers
-the repository, and validates authenticated feed access.
+Creates and connects an Azure Artifacts profile with Entra/MFA-capable credential-provider authentication.
 
 ```powershell
-PS> Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
+PS> New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -Enabled
 ```
 
-Imports or refreshes a managed profile file, then registers and probes the repository.
+Configures JFrog Artifactory publishing with PAT/access-token authentication provided from an environment variable.
 
 ```powershell
-PS> Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+PS> New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -PublishRequiredModules -RequiredModuleSourceRepository PSGallery -Enabled
 ```
 
-Runs the lower-level connection/probe step for an already saved profile.
-
-```powershell
-PS> Test-ModuleRepositoryProfile -ProfileName Company
-```
-
-Checks saved profile and local prerequisite readiness without changing repository registrations.
-
-```powershell
-PS> Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
-```
-
-Exports the non-secret Company profile for managed rollout.
-
-```powershell
-PS> Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
-```
-
-Imports or refreshes managed profile settings on a workstation without connecting.
-
-```powershell
-PS> Install-PrivateModule -ProfileName Company -Name ModuleA -InstallPrerequisites
-```
-
-Installs ModuleA from the saved private gallery profile.
-
-```powershell
-PS> Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
-```
-
-Pushes local NuGet packages to the saved Azure Artifacts feed using credential-provider authentication.
+Configures JFrog publishing and opts in to pushing missing RequiredModules from PSGallery into the private target feed before publishing the main module.
 
 ## Notes
 
+The longer maintainer guide is Docs\PSPublishModule.PrivateGalleries.md.
 This file is source content for generated module documentation.
