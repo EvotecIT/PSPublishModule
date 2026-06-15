@@ -403,6 +403,10 @@ New-ConfigurationPublish `
     -Enabled
 ```
 
+Dependency mirroring requires `PSResourceGet`. If a configuration uses
+`-PublishRequiredModules -Tool PowerShellGet`, the publish run fails early with
+a clear error instead of silently skipping dependency mirroring.
+
 Behavior:
 
 1. PSPublishModule reads the built module manifest.

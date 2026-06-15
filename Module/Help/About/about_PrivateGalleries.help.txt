@@ -129,6 +129,10 @@ LONG DESCRIPTION
 
         New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -PublishRequiredModules -RequiredModuleSourceRepository PSGallery -Enabled
 
+    Dependency mirroring requires PSResourceGet. If a configuration uses
+    PublishRequiredModules with Tool PowerShellGet, the publish run fails early
+    with a clear error instead of silently skipping dependency mirroring.
+
     The publish flow checks RequiredModules in the target feed, skips modules
     listed in PSData.ExternalModuleDependencies, saves a compatible dependency
     from RequiredModuleSourceRepository, publishes it to the target, verifies it

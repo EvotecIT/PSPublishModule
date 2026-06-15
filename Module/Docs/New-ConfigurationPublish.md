@@ -425,7 +425,7 @@ Accept wildcard characters: True
 ```
 
 ### -PublishRequiredModules
-When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.
+When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.
 
 ```yaml
 Type: SwitchParameter

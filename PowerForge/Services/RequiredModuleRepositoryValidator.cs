@@ -53,7 +53,11 @@ internal sealed class RequiredModuleRepositoryValidator
                 continue;
             }
 
-            var versions = FindRequiredModuleVersionsInRepository(repositoryName, credential, requiredModule);
+            var versions = FindRequiredModuleVersionsInRepository(
+                repositoryName,
+                credential,
+                requiredModule,
+                treatNotFoundAsEmpty: publish.PublishRequiredModules);
 
             if (!ModulePublisher.HasMatchingRequiredModuleVersion(requiredModule, versions))
             {
@@ -67,7 +71,11 @@ internal sealed class RequiredModuleRepositoryValidator
                         repositoryForPublish,
                         sourceCredential: null);
 
-                    versions = FindRequiredModuleVersionsInRepository(repositoryName, credential, requiredModule);
+                    versions = FindRequiredModuleVersionsInRepository(
+                        repositoryName,
+                        credential,
+                        requiredModule,
+                        treatNotFoundAsEmpty: false);
                     if (ModulePublisher.HasMatchingRequiredModuleVersion(requiredModule, versions))
                         continue;
                 }
@@ -89,7 +97,8 @@ internal sealed class RequiredModuleRepositoryValidator
     private IReadOnlyList<string> FindRequiredModuleVersionsInRepository(
         string repositoryName,
         RepositoryCredential? credential,
-        RequiredModuleReference requiredModule)
+        RequiredModuleReference requiredModule,
+        bool treatNotFoundAsEmpty)
     {
         try
         {
@@ -109,6 +118,13 @@ internal sealed class RequiredModuleRepositoryValidator
         }
         catch (Exception ex)
         {
+            if (treatNotFoundAsEmpty &&
+                ModulePublisher.IsRepositoryPackageNotFound(requiredModule.ModuleName, ex))
+            {
+                _logger.Info($"Required dependency '{requiredModule.ModuleName}' is not present in repository '{repositoryName}' and will be mirrored.");
+                return Array.Empty<string>();
+            }
+
             throw new InvalidOperationException(
                 $"Failed to verify required dependency '{requiredModule.ModuleName}' in repository '{repositoryName}' before publish. {ex.Message}");
         }

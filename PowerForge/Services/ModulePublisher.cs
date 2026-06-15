@@ -131,6 +131,12 @@ public sealed class ModulePublisher
         PublishRepositoryConfiguration? repoConfig,
         bool includeScriptFolders)
     {
+        if (publish.PublishRequiredModules && tool == PublishTool.PowerShellGet)
+        {
+            throw new InvalidOperationException(
+                "PublishRequiredModules requires PSResourceGet because dependency mirroring saves and republishes dependency graphs before publishing the main module. Use Tool = PSResourceGet or disable PublishRequiredModules.");
+        }
+
         var credential = _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
         string? temporaryPublishPath = null;
         var repositoryCreated = false;
@@ -161,16 +167,13 @@ public sealed class ModulePublisher
 
             var modulePath = Path.GetFullPath(temporaryPublishPath);
 
-            if (tool != PublishTool.PowerShellGet)
-            {
-                _requiredModuleRepositoryValidator.Validate(
-                    publish,
-                    repositoryName,
-                    credential,
-                    repositoryForPublish,
-                    plan,
-                    buildResult);
-            }
+            _requiredModuleRepositoryValidator.Validate(
+                publish,
+                repositoryName,
+                credential,
+                repositoryForPublish,
+                plan,
+                buildResult);
 
             _repositoryPublisher.Publish(
                 new RepositoryPublishRequest

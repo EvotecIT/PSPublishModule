@@ -33982,7 +33982,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -34312,7 +34312,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -34707,7 +34707,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -35013,7 +35013,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -35255,7 +35255,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -35575,7 +35575,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>PublishRequiredModules</maml:name>
         <maml:description>
-          <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
+          <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

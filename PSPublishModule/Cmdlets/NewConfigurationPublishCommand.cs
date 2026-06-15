@@ -276,7 +276,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter UseAsDependencyVersionSource { get; set; }
 
-    /// <summary>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</summary>
+    /// <summary>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]

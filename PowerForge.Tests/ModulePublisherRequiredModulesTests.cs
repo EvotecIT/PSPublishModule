@@ -114,6 +114,28 @@ public sealed class ModulePublisherRequiredModulesTests
         Assert.Equal("2.9.1", selected!.Version);
     }
 
+    [Theory]
+    [InlineData("1.2.3", null, null, "[1.2.3]")]
+    [InlineData(null, "1.0.0", "1.5.0", "[1.0.0,1.5.0]")]
+    [InlineData(null, "1.0.0", null, "[1.0.0,)")]
+    [InlineData(null, null, "1.5.0", "(,1.5.0]")]
+    public void BuildPSResourceGetVersionRange_UsesRequiredModuleConstraint(
+        string? requiredVersion,
+        string? moduleVersion,
+        string? maximumVersion,
+        string expected)
+    {
+        var required = new RequiredModuleReference(
+            moduleName: "DependencyModule",
+            requiredVersion: requiredVersion,
+            moduleVersion: moduleVersion,
+            maximumVersion: maximumVersion);
+
+        var range = RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(required);
+
+        Assert.Equal(expected, range);
+    }
+
     [Fact]
     public void FindSavedModulePath_ReturnsVersionFolderContainingManifest()
     {
@@ -130,6 +152,32 @@ public sealed class ModulePublisherRequiredModulesTests
                 "2.9.1");
 
             Assert.Equal(modulePath, selected);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void FindSavedModulePathsForPublish_ReturnsDependenciesBeforePrimaryModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var dependencyPath = Path.Combine(root.FullName, "DependencySupport", "1.0.0");
+            var primaryPath = Path.Combine(root.FullName, "DependencyModule", "1.2.3");
+            Directory.CreateDirectory(dependencyPath);
+            Directory.CreateDirectory(primaryPath);
+            File.WriteAllText(Path.Combine(dependencyPath, "DependencySupport.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(primaryPath, "DependencyModule.psd1"), "@{ ModuleVersion = '1.2.3' }");
+
+            var paths = RequiredModuleRepositoryPublisher.FindSavedModulePathsForPublish(
+                root.FullName,
+                "DependencyModule",
+                "1.2.3");
+
+            Assert.Equal(new[] { dependencyPath, primaryPath }, paths);
         }
         finally
         {

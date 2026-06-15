@@ -46,7 +46,7 @@ internal sealed class RequiredModuleRepositoryPublisher
         var sourceItems = _psResourceGet.Find(
                 new PSResourceFindOptions(
                     names: new[] { moduleName },
-                    version: null,
+                    version: BuildPSResourceGetVersionRange(requiredModule),
                     prerelease: true,
                     repositories: new[] { sourceRepository },
                     credential: sourceCredential),
@@ -74,7 +74,7 @@ internal sealed class RequiredModuleRepositoryPublisher
                     repository: sourceRepository,
                     prerelease: true,
                     trustRepository: true,
-                    skipDependencyCheck: true,
+                    skipDependencyCheck: false,
                     acceptLicense: true,
                     quiet: true,
                     credential: sourceCredential),
@@ -84,19 +84,22 @@ internal sealed class RequiredModuleRepositoryPublisher
             if (savedModulePath is null)
                 throw new InvalidOperationException($"Save-PSResource completed for required module '{moduleName}' {selectedVersion}, but the saved module manifest was not found under '{tempRoot}'.");
 
-            _repositoryPublisher.Publish(
-                new RepositoryPublishRequest
-                {
-                    Path = savedModulePath,
-                    IsNupkg = false,
-                    RepositoryName = targetRepositoryNameValue,
-                    Tool = PublishTool.PSResourceGet,
-                    ApiKey = string.IsNullOrWhiteSpace(targetApiKey) ? null : targetApiKey,
-                    Repository = targetRepository,
-                    DestinationPath = null,
-                    SkipDependenciesCheck = true,
-                    SkipModuleManifestValidate = false
-                });
+            foreach (var modulePath in FindSavedModulePathsForPublish(tempRoot, moduleName, selectedVersion))
+            {
+                _repositoryPublisher.Publish(
+                    new RepositoryPublishRequest
+                    {
+                        Path = modulePath,
+                        IsNupkg = false,
+                        RepositoryName = targetRepositoryNameValue,
+                        Tool = PublishTool.PSResourceGet,
+                        ApiKey = string.IsNullOrWhiteSpace(targetApiKey) ? null : targetApiKey,
+                        Repository = targetRepository,
+                        DestinationPath = null,
+                        SkipDependenciesCheck = true,
+                        SkipModuleManifestValidate = false
+                    });
+            }
 
             _logger.Info($"Published required module '{moduleName}' {selectedVersion} to repository '{targetRepositoryNameValue}'.");
         }
@@ -112,6 +115,31 @@ internal sealed class RequiredModuleRepositoryPublisher
                 // best effort cleanup
             }
         }
+    }
+
+    internal static string? BuildPSResourceGetVersionRange(RequiredModuleReference requiredModule)
+    {
+        if (requiredModule is null)
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(requiredModule.RequiredVersion))
+            return $"[{requiredModule.RequiredVersion!.Trim()}]";
+
+        var minimum = string.IsNullOrWhiteSpace(requiredModule.ModuleVersion)
+            ? null
+            : requiredModule.ModuleVersion!.Trim();
+        var maximum = string.IsNullOrWhiteSpace(requiredModule.MaximumVersion)
+            ? null
+            : requiredModule.MaximumVersion!.Trim();
+
+        if (minimum is not null && maximum is not null)
+            return $"[{minimum},{maximum}]";
+        if (minimum is not null)
+            return $"[{minimum},)";
+        if (maximum is not null)
+            return $"(,{maximum}]";
+
+        return null;
     }
 
     internal static PSResourceInfo? SelectRequiredModuleVersionForPublish(
@@ -176,6 +204,32 @@ internal sealed class RequiredModuleRepositoryPublisher
 
         return manifests[0];
     }
+
+    internal static IReadOnlyList<string> FindSavedModulePathsForPublish(string rootPath, string primaryModuleName, string primaryVersionText)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+            return Array.Empty<string>();
+
+        var manifests = Directory
+            .EnumerateFiles(rootPath, "*.psd1", SearchOption.AllDirectories)
+            .Select(Path.GetDirectoryName)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var primary = FindSavedModulePath(rootPath, primaryModuleName, primaryVersionText);
+        var dependencies = manifests
+            .Where(path => primary is null || !string.Equals(path, primary, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (primary is not null)
+            dependencies.Add(primary);
+
+        return dependencies;
+    }
+
 
     private static int CompareRepositoryVersions(string? left, string? right)
     {
