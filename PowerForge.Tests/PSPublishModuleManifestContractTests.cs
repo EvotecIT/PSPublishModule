@@ -12,6 +12,12 @@ public sealed class PSPublishModuleManifestContractTests
         "Microsoft.PowerShell.PSResourceGet"
     };
 
+    private static readonly string[] EmbeddedDependencyCmdlets =
+    {
+        "Install-ModuleDependency",
+        "Import-ModuleDependency"
+    };
+
     [Fact]
     public void Manifest_does_not_require_feature_specific_tool_modules_at_import_time()
     {
@@ -42,6 +48,20 @@ public sealed class PSPublishModuleManifestContractTests
         {
             var pattern = $@"(?im)^\s*New-ConfigurationModule\b[^\r\n]*\b-Type\s+RequiredModule\b[^\r\n]*\b-Name\s+['""]?{Regex.Escape(optionalModule)}['""]?";
             Assert.DoesNotMatch(pattern, buildScript);
+        }
+    }
+
+    [Fact]
+    public void Module_exports_embedded_dependency_cmdlets()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var manifestText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psd1"));
+        var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
+
+        foreach (var cmdlet in EmbeddedDependencyCmdlets)
+        {
+            Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
+            Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
         }
     }
 }

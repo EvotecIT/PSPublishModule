@@ -114,6 +114,71 @@ public sealed class ModulePipelineRegressionParityTests
     }
 
     [Fact]
+    public void Run_EmbedsConfiguredModulesIntoBuiltModuleInternals()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "Z.Dependency";
+            const string dependencyVersion = "1.2.3";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Project"));
+            WriteMinimalModule(projectRoot.FullName, moduleName, "1.0.0");
+            var dependencyRoot = WriteDependencyModule(root.FullName, dependencyName, dependencyVersion);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            RequiredVersion = dependencyVersion
+                        }
+                    }
+                }
+            };
+
+            var provider = new InstalledMetadataProvider(
+                new InstalledModuleMetadata(dependencyName, dependencyVersion, guid: null, moduleBasePath: dependencyRoot));
+            var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null, provider);
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            var embeddedManifestPath = Path.Combine(result.BuildResult.StagingPath, "Internals", "Modules", "module-dependencies.json");
+            Assert.True(File.Exists(embeddedManifestPath));
+
+            var embeddedManifest = EmbeddedModuleDependencyService.ReadManifest(embeddedManifestPath);
+            var embedded = Assert.Single(embeddedManifest.Dependencies);
+            Assert.Equal(dependencyName, embedded.Name);
+            Assert.Equal(dependencyVersion, embedded.Version);
+            Assert.Equal("Z.Dependency/1.2.3", embedded.RelativePath);
+            Assert.True(File.Exists(Path.Combine(result.BuildResult.StagingPath, "Internals", "Modules", dependencyName, dependencyVersion, $"{dependencyName}.psd1")));
+
+            Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
+            Assert.Empty(required!);
+            Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var external));
+            Assert.Empty(external!);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_TracksExternalModulesSeparately_AndInboxModulesAreIgnored()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -877,6 +942,13 @@ public sealed class ModulePipelineRegressionParityTests
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
     }
 
+    private static string WriteDependencyModule(string root, string moduleName, string version)
+    {
+        var moduleRoot = Path.Combine(root, "Dependencies", moduleName, version);
+        WriteMinimalModule(moduleRoot, moduleName, version);
+        return moduleRoot;
+    }
+
     private static void WriteModuleWithManifestMetadata(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -983,6 +1055,31 @@ public sealed class ModulePipelineRegressionParityTests
         }
 
         return result;
+    }
+
+    private sealed class InstalledMetadataProvider : IModuleDependencyMetadataProvider
+    {
+        private readonly IReadOnlyDictionary<string, InstalledModuleMetadata> _installed;
+
+        public InstalledMetadataProvider(params InstalledModuleMetadata[] installed)
+        {
+            _installed = installed.ToDictionary(static module => module.Name, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
+            => (names ?? Array.Empty<string>())
+                .Where(name => !string.IsNullOrWhiteSpace(name) && _installed.ContainsKey(name))
+                .ToDictionary(static name => name, name => _installed[name], StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
+            => Array.Empty<RequiredModuleReference>();
+
+        public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
+            IReadOnlyCollection<string> names,
+            string? repository,
+            RepositoryCredential? credential,
+            bool prerelease)
+            => new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed class CollectingLogger : ILogger

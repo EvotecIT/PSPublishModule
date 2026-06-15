@@ -6,7 +6,7 @@ schema: 2.0.0
 ---
 # New-ConfigurationModuleSkip
 ## SYNOPSIS
-Provides a way to ignore certain commands or modules during build process and continue module building on errors.
+Provides a way to ignore certain commands or modules during build-time dependency validation.
 
 ## SYNTAX
 ### __AllParameterSets
@@ -15,8 +15,8 @@ New-ConfigurationModuleSkip [-IgnoreModuleName <string[]>] [-IgnoreFunctionName 
 ```
 
 ## DESCRIPTION
-Useful for optional dependencies where you want builds to succeed even if a tool module is not available
-(e.g. optional analyzers, formatters, helpers).
+Missing module-backed commands fail the build by default. Use this command for optional dependencies where you
+want selected missing modules or commands to be ignored. -Force keeps the legacy broad opt-out behavior.
 
 ## EXAMPLES
 
@@ -36,7 +36,7 @@ PS> New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security
 ## PARAMETERS
 
 ### -FailOnMissingCommands
-Fail build when unresolved commands are detected during merge.
+Fail build when unresolved commands are detected during merge. This is the default and is retained for compatibility.
 
 ```yaml
 Type: SwitchParameter
@@ -52,7 +52,7 @@ Accept wildcard characters: True
 ```
 
 ### -Force
-Force build process to continue even if the module or command is not available.
+Force the build process to continue even if modules or commands are not available.
 
 ```yaml
 Type: SwitchParameter
@@ -68,7 +68,7 @@ Accept wildcard characters: True
 ```
 
 ### -IgnoreFunctionName
-Ignore function name(s). If the function is not available it will be ignored.
+Ignore command/function name(s) during missing-command validation.
 
 ```yaml
 Type: String[]
@@ -84,7 +84,7 @@ Accept wildcard characters: True
 ```
 
 ### -IgnoreModuleName
-Ignore module name(s). If the module is not available it will be ignored.
+Ignore module name(s) during missing-command validation.
 
 ```yaml
 Type: String[]

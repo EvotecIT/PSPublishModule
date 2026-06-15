@@ -81,6 +81,9 @@ Imports a PowerShell-authored project release object from JSON.
 ### [Import-IsolatedModule](Import-IsolatedModule.md)
 Imports a known PowerShell module through a curated AssemblyLoadContext isolation profile.
 
+### [Import-ModuleDependency](Import-ModuleDependency.md)
+Imports embedded or installed module dependencies by exact manifest/path.
+
 ### [Import-ModuleRepositoryProfile](Import-ModuleRepositoryProfile.md)
 Imports private module repository profiles from a non-secret JSON file.
 
@@ -89,6 +92,9 @@ Performs one-command enterprise onboarding for a private module repository profi
 
 ### [Install-AppleApp](Install-AppleApp.md)
 Installs a built Apple .app bundle on a physical device.
+
+### [Install-ModuleDependency](Install-ModuleDependency.md)
+Installs embedded module dependencies from a module's Internals\Modules payload to an explicit folder.
 
 ### [Install-ModuleDocumentation](Install-ModuleDocumentation.md)
 Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.
@@ -232,10 +238,10 @@ Describes what to include/exclude in the module build and how libraries are orga
 Creates a configuration manifest for a PowerShell module.
 
 ### [New-ConfigurationModule](New-ConfigurationModule.md)
-Provides a way to configure required, external, or approved modules used in the project.
+Provides a way to configure required, external, embedded, or approved modules used in the project.
 
 ### [New-ConfigurationModuleSkip](New-ConfigurationModuleSkip.md)
-Provides a way to ignore certain commands or modules during build process and continue module building on errors.
+Provides a way to ignore certain commands or modules during build-time dependency validation.
 
 ### [New-ConfigurationPlaceHolder](New-ConfigurationPlaceHolder.md)
 Helps define custom placeholders replacing content within a script or module during the build process.
