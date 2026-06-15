@@ -470,6 +470,9 @@ public sealed class PowerForgeReleaseServiceTests
                         AllowProvisioningUpdates = false,
                         SigningStyle = "automatic",
                         ManageAppVersionAndBuildNumber = true,
+                        AppStoreConnectApiKeyPath = "secrets/AuthKey_ABC123DEFG.p8",
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
                         Apps = new[]
                         {
                             new AppleAppConfiguration
@@ -492,12 +495,18 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Equal("xcodebuild-test", archiveRequest.XcodeBuildExecutable);
             Assert.Equal(ApplePlatform.iPadOS, archiveRequest.Platform);
             Assert.Equal("generic/platform=iOS", archiveRequest.Destination);
+            Assert.EndsWith(Path.Combine("secrets", "AuthKey_ABC123DEFG.p8"), archiveRequest.AppStoreConnectApiKeyPath, StringComparison.Ordinal);
+            Assert.Equal("ABC123DEFG", archiveRequest.AppStoreConnectApiKeyId);
+            Assert.Equal("issuer-id", archiveRequest.AppStoreConnectApiIssuerId);
 
             var uploadRequest = Assert.Single(uploadRequests);
             Assert.Equal("TEAMID", uploadRequest.TeamId);
             Assert.Equal("xcodebuild-test", uploadRequest.XcodeBuildExecutable);
             Assert.False(uploadRequest.AllowProvisioningUpdates);
             Assert.True(uploadRequest.ManageAppVersionAndBuildNumber);
+            Assert.EndsWith(Path.Combine("secrets", "AuthKey_ABC123DEFG.p8"), uploadRequest.AppStoreConnectApiKeyPath, StringComparison.Ordinal);
+            Assert.Equal("ABC123DEFG", uploadRequest.AppStoreConnectApiKeyId);
+            Assert.Equal("issuer-id", uploadRequest.AppStoreConnectApiIssuerId);
 
             var appResult = Assert.Single(result.AppleApps);
             Assert.True(appResult.Success);

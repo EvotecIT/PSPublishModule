@@ -741,6 +741,9 @@ internal sealed class PowerForgeReleaseService
             UploadSymbols = options.UploadSymbols,
             GenerateAppStoreInformation = options.GenerateAppStoreInformation,
             SigningStyle = string.IsNullOrWhiteSpace(options.SigningStyle) ? "automatic" : options.SigningStyle!.Trim(),
+            AppStoreConnectApiKeyPath = string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyPath) ? null : ResolveOutputPath(projectRoot, options.AppStoreConnectApiKeyPath!),
+            AppStoreConnectApiKeyId = string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyId) ? null : options.AppStoreConnectApiKeyId!.Trim(),
+            AppStoreConnectApiIssuerId = string.IsNullOrWhiteSpace(options.AppStoreConnectApiIssuerId) ? null : options.AppStoreConnectApiIssuerId!.Trim(),
             Apps = apps
         };
     }
@@ -839,7 +842,10 @@ internal sealed class PowerForgeReleaseService
                     Destination = app.Destination,
                     ArchivePath = app.ArchivePath,
                     XcodeBuildExecutable = plan.XcodeBuildExecutable,
-                    AllowProvisioningUpdates = plan.AllowProvisioningUpdates
+                    AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
+                    AppStoreConnectApiKeyPath = plan.AppStoreConnectApiKeyPath,
+                    AppStoreConnectApiKeyId = plan.AppStoreConnectApiKeyId,
+                    AppStoreConnectApiIssuerId = plan.AppStoreConnectApiIssuerId
                 });
                 result.Archive = archive;
                 if (!archive.Succeeded)
@@ -863,6 +869,9 @@ internal sealed class PowerForgeReleaseService
                     ManageAppVersionAndBuildNumber = plan.ManageAppVersionAndBuildNumber,
                     UploadSymbols = plan.UploadSymbols,
                     GenerateAppStoreInformation = plan.GenerateAppStoreInformation,
+                    AppStoreConnectApiKeyPath = plan.AppStoreConnectApiKeyPath,
+                    AppStoreConnectApiKeyId = plan.AppStoreConnectApiKeyId,
+                    AppStoreConnectApiIssuerId = plan.AppStoreConnectApiIssuerId,
                     AllowProvisioningUpdates = plan.AllowProvisioningUpdates
                 });
                 result.Upload = upload;
@@ -2845,6 +2854,7 @@ internal sealed class PowerForgeReleaseService
                 plan.UploadSymbols,
                 plan.GenerateAppStoreInformation,
                 plan.SigningStyle,
+                AppStoreConnectApiKeyConfigured = !string.IsNullOrWhiteSpace(plan.AppStoreConnectApiKeyPath),
                 apps = plan.Apps.Select(app => new
                 {
                     app.Name,

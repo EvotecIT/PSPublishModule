@@ -302,6 +302,12 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string? SigningStyle { get; set; }
 
+    public string? AppStoreConnectApiKeyPath { get; set; }
+
+    public string? AppStoreConnectApiKeyId { get; set; }
+
+    public string? AppStoreConnectApiIssuerId { get; set; }
+
     public string? ScreenshotConfigPath { get; set; }
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
@@ -342,6 +348,12 @@ internal sealed class PowerForgeAppleReleasePlan
     public bool GenerateAppStoreInformation { get; set; } = true;
 
     public string SigningStyle { get; set; } = "automatic";
+
+    public string? AppStoreConnectApiKeyPath { get; set; }
+
+    public string? AppStoreConnectApiKeyId { get; set; }
+
+    public string? AppStoreConnectApiIssuerId { get; set; }
 
     public PowerForgeAppleAppReleaseTargetPlan[] Apps { get; set; } = Array.Empty<PowerForgeAppleAppReleaseTargetPlan>();
 }

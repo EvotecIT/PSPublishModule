@@ -253,6 +253,9 @@
         "UploadSymbols": { "type": "boolean" },
         "GenerateAppStoreInformation": { "type": "boolean" },
         "SigningStyle": { "type": [ "string", "null" ] },
+        "AppStoreConnectApiKeyPath": { "type": [ "string", "null" ] },
+        "AppStoreConnectApiKeyId": { "type": [ "string", "null" ] },
+        "AppStoreConnectApiIssuerId": { "type": [ "string", "null" ] },
         "ScreenshotConfigPath": { "type": [ "string", "null" ] },
         "ScreenshotConfigPaths": {
           "type": "array",

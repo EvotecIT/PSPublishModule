@@ -212,6 +212,19 @@ internal static partial class Program
                     cmdLogger.Info($"Run report: {result.DotNetTools.RunReportPath}");
             }
 
+            if (result.AppleAppPlan is not null)
+            {
+                var appCount = result.AppleAppPlan.Apps?.Length ?? 0;
+                var uploadLabel = result.AppleAppPlan.Upload ? "upload enabled" : "upload disabled";
+                cmdLogger.Success($"Apple apps: {(planOnly || validateOnly ? "planned" : "completed")} ({appCount} app(s), {uploadLabel}).");
+                foreach (var app in result.AppleAppPlan.Apps ?? Array.Empty<PowerForgeAppleAppReleaseTargetPlan>())
+                {
+                    cmdLogger.Info($" -> {app.Name} {app.Platform}: {app.ArchivePath}");
+                    if (result.AppleAppPlan.Upload)
+                        cmdLogger.Info($"    export: {app.ExportPath}");
+                }
+            }
+
             foreach (var release in result.ToolGitHubReleases)
             {
                 if (release.Success)

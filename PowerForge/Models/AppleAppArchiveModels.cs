@@ -35,6 +35,15 @@ public sealed class AppleAppArchiveRequest
     /// <summary>Allows Xcode to create or update signing assets during archive.</summary>
     public bool AllowProvisioningUpdates { get; set; } = true;
 
+    /// <summary>Path to an App Store Connect API private key used by xcodebuild archive authentication.</summary>
+    public string? AppStoreConnectApiKeyPath { get; set; }
+
+    /// <summary>App Store Connect API key identifier used by xcodebuild archive authentication.</summary>
+    public string? AppStoreConnectApiKeyId { get; set; }
+
+    /// <summary>App Store Connect API issuer identifier used by xcodebuild archive authentication.</summary>
+    public string? AppStoreConnectApiIssuerId { get; set; }
+
     /// <summary>Additional structured arguments appended to the archive command.</summary>
     public string[] AdditionalArguments { get; set; } = Array.Empty<string>();
 
@@ -97,6 +106,15 @@ public sealed class AppleAppArchiveUploadRequest
 
     /// <summary>Controls whether xcodebuild generates App Store information.</summary>
     public bool GenerateAppStoreInformation { get; set; } = true;
+
+    /// <summary>Path to an App Store Connect API private key used by xcodebuild upload authentication.</summary>
+    public string? AppStoreConnectApiKeyPath { get; set; }
+
+    /// <summary>App Store Connect API key identifier used by xcodebuild upload authentication.</summary>
+    public string? AppStoreConnectApiKeyId { get; set; }
+
+    /// <summary>App Store Connect API issuer identifier used by xcodebuild upload authentication.</summary>
+    public string? AppStoreConnectApiIssuerId { get; set; }
 
     /// <summary>xcodebuild executable name or path.</summary>
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
