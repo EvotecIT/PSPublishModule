@@ -30,7 +30,8 @@ internal sealed class RequiredModuleRepositoryPublisher
         string targetRepositoryName,
         string? targetApiKey,
         PublishRepositoryConfiguration? targetRepository,
-        RepositoryCredential? sourceCredential)
+        RepositoryCredential? sourceCredential,
+        ISet<string>? mirroredPackages = null)
     {
         if (requiredModule is null) throw new ArgumentNullException(nameof(requiredModule));
         if (string.IsNullOrWhiteSpace(requiredModule.ModuleName)) throw new ArgumentException("Required module name is required.", nameof(requiredModule));
@@ -47,7 +48,7 @@ internal sealed class RequiredModuleRepositoryPublisher
                 new PSResourceFindOptions(
                     names: new[] { moduleName },
                     version: BuildPSResourceGetVersionRange(requiredModule),
-                    prerelease: true,
+                    prerelease: AllowsPrerelease(requiredModule),
                     repositories: new[] { sourceRepository },
                     credential: sourceCredential),
                 timeout: TimeSpan.FromMinutes(2))
@@ -66,13 +67,13 @@ internal sealed class RequiredModuleRepositoryPublisher
         try
         {
             Directory.CreateDirectory(tempRoot);
-            _psResourceGet.Save(
+            var savedItems = _psResourceGet.Save(
                 new PSResourceSaveOptions(
                     name: moduleName,
                     destinationPath: tempRoot,
                     version: selectedVersion,
                     repository: sourceRepository,
-                    prerelease: true,
+                    prerelease: IsPrereleaseVersion(selectedVersion),
                     trustRepository: true,
                     skipDependencyCheck: false,
                     acceptLicense: true,
@@ -84,12 +85,19 @@ internal sealed class RequiredModuleRepositoryPublisher
             if (savedModulePath is null)
                 throw new InvalidOperationException($"Save-PSResource completed for required module '{moduleName}' {selectedVersion}, but the saved module manifest was not found under '{tempRoot}'.");
 
-            foreach (var modulePath in FindSavedModulePathsForPublish(tempRoot, moduleName, selectedVersion))
+            foreach (var package in FindSavedModulePackagesForPublish(tempRoot, savedItems, moduleName, selectedVersion))
             {
+                var packageKey = $"{package.Name}|{package.Version}";
+                if (mirroredPackages is not null && !mirroredPackages.Add(packageKey))
+                {
+                    _logger.Info($"Skipping already mirrored required module package '{package.Name}' {package.Version}.");
+                    continue;
+                }
+
                 _repositoryPublisher.Publish(
                     new RepositoryPublishRequest
                     {
-                        Path = modulePath,
+                        Path = package.Path,
                         IsNupkg = false,
                         RepositoryName = targetRepositoryNameValue,
                         Tool = PublishTool.PSResourceGet,
@@ -150,6 +158,7 @@ internal sealed class RequiredModuleRepositoryPublisher
             return null;
 
         PSResourceInfo? selected = null;
+        var allowPrerelease = AllowsPrerelease(requiredModule);
         foreach (var candidate in candidates)
         {
             if (candidate is null ||
@@ -159,6 +168,9 @@ internal sealed class RequiredModuleRepositoryPublisher
             }
 
             var versionText = ModulePublisher.GetRepositoryVersionText(candidate);
+            if (!allowPrerelease && IsPrereleaseVersion(versionText))
+                continue;
+
             if (!ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, versionText))
                 continue;
 
@@ -172,6 +184,16 @@ internal sealed class RequiredModuleRepositoryPublisher
         return selected;
     }
 
+    internal static bool AllowsPrerelease(RequiredModuleReference requiredModule)
+    {
+        if (requiredModule is null)
+            return false;
+
+        return IsPrereleaseVersion(requiredModule.RequiredVersion) ||
+               IsPrereleaseVersion(requiredModule.ModuleVersion) ||
+               IsPrereleaseVersion(requiredModule.MaximumVersion);
+    }
+
     internal static string? FindSavedModulePath(string rootPath, string moduleName, string versionText)
     {
         if (string.IsNullOrWhiteSpace(rootPath) ||
@@ -182,6 +204,14 @@ internal sealed class RequiredModuleRepositoryPublisher
         }
 
         var manifestFileName = moduleName.Trim() + ".psd1";
+        var normalizedVersion = (versionText ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedVersion))
+        {
+            var expectedPath = Path.Combine(rootPath, moduleName.Trim(), normalizedVersion);
+            if (File.Exists(Path.Combine(expectedPath, manifestFileName)))
+                return expectedPath;
+        }
+
         var manifests = Directory
             .EnumerateFiles(rootPath, "*.psd1", SearchOption.AllDirectories)
             .Where(path => string.Equals(Path.GetFileName(path), manifestFileName, StringComparison.OrdinalIgnoreCase))
@@ -193,7 +223,6 @@ internal sealed class RequiredModuleRepositoryPublisher
         if (manifests.Length == 0)
             return null;
 
-        var normalizedVersion = (versionText ?? string.Empty).Trim();
         if (!string.IsNullOrWhiteSpace(normalizedVersion))
         {
             var versionMatch = manifests.FirstOrDefault(path =>
@@ -205,23 +234,48 @@ internal sealed class RequiredModuleRepositoryPublisher
         return manifests[0];
     }
 
-    internal static IReadOnlyList<string> FindSavedModulePathsForPublish(string rootPath, string primaryModuleName, string primaryVersionText)
+    internal static IReadOnlyList<SavedRequiredModulePackage> FindSavedModulePackagesForPublish(
+        string rootPath,
+        IReadOnlyList<PSResourceInfo> savedItems,
+        string primaryModuleName,
+        string primaryVersionText)
     {
         if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
-            return Array.Empty<string>();
+            return Array.Empty<SavedRequiredModulePackage>();
 
-        var manifests = Directory
-            .EnumerateFiles(rootPath, "*.psd1", SearchOption.AllDirectories)
-            .Select(Path.GetDirectoryName)
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => path!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var packages = (savedItems ?? Array.Empty<PSResourceInfo>())
+            .Where(item => item is not null && !string.IsNullOrWhiteSpace(item.Name))
+            .Select(item =>
+            {
+                var version = ModulePublisher.GetRepositoryVersionText(item);
+                var path = FindSavedModulePath(rootPath, item.Name, version);
+                return path is null
+                    ? null
+                    : new SavedRequiredModulePackage(item.Name.Trim(), version, path);
+            })
+            .Where(package => package is not null)
+            .Select(package => package!)
+            .GroupBy(package => $"{package.Name}|{package.Version}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
 
-        var primary = FindSavedModulePath(rootPath, primaryModuleName, primaryVersionText);
-        var dependencies = manifests
-            .Where(path => primary is null || !string.Equals(path, primary, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+        var primary = packages.FirstOrDefault(package =>
+            string.Equals(package.Name, primaryModuleName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(package.Version, primaryVersionText, StringComparison.OrdinalIgnoreCase));
+        if (primary is null)
+        {
+            var primaryPath = FindSavedModulePath(rootPath, primaryModuleName, primaryVersionText);
+            if (primaryPath is not null)
+            {
+                primary = new SavedRequiredModulePackage(primaryModuleName.Trim(), primaryVersionText.Trim(), primaryPath);
+                packages.Add(primary);
+            }
+        }
+
+        var dependencies = packages
+            .Where(package => primary is null || !string.Equals(package.Path, primary.Path, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(package => package.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(package => package.Version, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (primary is not null)
@@ -230,6 +284,7 @@ internal sealed class RequiredModuleRepositoryPublisher
         return dependencies;
     }
 
+    internal sealed record SavedRequiredModulePackage(string Name, string Version, string Path);
 
     private static int CompareRepositoryVersions(string? left, string? right)
     {
@@ -268,6 +323,9 @@ internal sealed class RequiredModuleRepositoryPublisher
         version = parsed;
         return true;
     }
+
+    private static bool IsPrereleaseVersion(string? value)
+        => !string.IsNullOrWhiteSpace(value) && value!.IndexOf('-', StringComparison.Ordinal) >= 0;
 
     private static int ComparePreRelease(string left, string right)
     {

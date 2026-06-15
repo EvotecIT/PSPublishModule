@@ -44,6 +44,8 @@ internal sealed class RequiredModuleRepositoryValidator
         var externalModuleDependencies = GetExternalModulesForPublish(buildResult, plan);
         var missing = new List<string>();
         var sourceRepositoryName = ResolveRequiredModuleSourceRepository(publish);
+        var sourceCredential = ResolveRequiredModuleSourceCredential(sourceRepositoryName, credential);
+        var mirroredPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var requiredModule in requiredModules)
         {
@@ -69,7 +71,8 @@ internal sealed class RequiredModuleRepositoryValidator
                         repositoryName,
                         publish.ApiKey,
                         repositoryForPublish,
-                        sourceCredential: null);
+                        sourceCredential,
+                        mirroredPackages);
 
                     versions = FindRequiredModuleVersionsInRepository(
                         repositoryName,
@@ -105,7 +108,7 @@ internal sealed class RequiredModuleRepositoryValidator
             return _psResourceGet.Find(
                     new PSResourceFindOptions(
                         names: new[] { requiredModule.ModuleName },
-                        version: null,
+                        version: RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(requiredModule),
                         prerelease: true,
                         repositories: new[] { repositoryName },
                         credential: credential),
@@ -134,6 +137,19 @@ internal sealed class RequiredModuleRepositoryValidator
         => string.IsNullOrWhiteSpace(publish.RequiredModuleSourceRepository)
             ? "PSGallery"
             : publish.RequiredModuleSourceRepository!.Trim();
+
+    private static RepositoryCredential? ResolveRequiredModuleSourceCredential(
+        string sourceRepositoryName,
+        RepositoryCredential? targetCredential)
+    {
+        if (targetCredential is null)
+            return null;
+
+        if (string.Equals(sourceRepositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return targetCredential;
+    }
 
     private static HashSet<string> GetExternalModulesForPublish(
         ModuleBuildResult buildResult,

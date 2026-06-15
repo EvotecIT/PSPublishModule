@@ -167,13 +167,16 @@ public sealed class ModulePublisher
 
             var modulePath = Path.GetFullPath(temporaryPublishPath);
 
-            _requiredModuleRepositoryValidator.Validate(
-                publish,
-                repositoryName,
-                credential,
-                repositoryForPublish,
-                plan,
-                buildResult);
+            if (tool != PublishTool.PowerShellGet)
+            {
+                _requiredModuleRepositoryValidator.Validate(
+                    publish,
+                    repositoryName,
+                    credential,
+                    repositoryForPublish,
+                    plan,
+                    buildResult);
+            }
 
             _repositoryPublisher.Publish(
                 new RepositoryPublishRequest

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -114,6 +115,25 @@ public sealed class ModulePublisherRequiredModulesTests
         Assert.Equal("2.9.1", selected!.Version);
     }
 
+    [Fact]
+    public void SelectRequiredModuleVersionForPublish_PrefersStableWhenPrereleaseIsNotRequired()
+    {
+        var required = new RequiredModuleReference(
+            moduleName: "DependencyModule",
+            moduleVersion: "1.0.0");
+
+        var selected = RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
+            required,
+            new[]
+            {
+                new PSResourceInfo("DependencyModule", "1.9.0", "PSGallery", null, null),
+                new PSResourceInfo("DependencyModule", "2.0.0", "PSGallery", null, null, preRelease: "preview1")
+            });
+
+        Assert.NotNull(selected);
+        Assert.Equal("1.9.0", ModulePublisher.GetRepositoryVersionText(selected!));
+    }
+
     [Theory]
     [InlineData("1.2.3", null, null, "[1.2.3]")]
     [InlineData(null, "1.0.0", "1.5.0", "[1.0.0,1.5.0]")]
@@ -160,7 +180,7 @@ public sealed class ModulePublisherRequiredModulesTests
     }
 
     [Fact]
-    public void FindSavedModulePathsForPublish_ReturnsDependenciesBeforePrimaryModule()
+    public void FindSavedModulePackagesForPublish_ReturnsSavedDependenciesBeforePrimaryModule()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -172,12 +192,17 @@ public sealed class ModulePublisherRequiredModulesTests
             File.WriteAllText(Path.Combine(dependencyPath, "DependencySupport.psd1"), "@{ ModuleVersion = '1.0.0' }");
             File.WriteAllText(Path.Combine(primaryPath, "DependencyModule.psd1"), "@{ ModuleVersion = '1.2.3' }");
 
-            var paths = RequiredModuleRepositoryPublisher.FindSavedModulePathsForPublish(
+            var paths = RequiredModuleRepositoryPublisher.FindSavedModulePackagesForPublish(
                 root.FullName,
+                new[]
+                {
+                    new PSResourceInfo("DependencyModule", "1.2.3", "PSGallery", null, null),
+                    new PSResourceInfo("DependencySupport", "1.0.0", "PSGallery", null, null)
+                },
                 "DependencyModule",
                 "1.2.3");
 
-            Assert.Equal(new[] { dependencyPath, primaryPath }, paths);
+            Assert.Equal(new[] { dependencyPath, primaryPath }, paths.Select(path => path.Path));
         }
         finally
         {
