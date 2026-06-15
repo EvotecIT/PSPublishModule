@@ -422,6 +422,59 @@ public sealed class ModulePipelineRegressionParityTests
         }
     }
 
+    [Fact]
+    public void ValidateMissingFunctions_AllowsInferredCommand_WhenModuleIsRequired()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "ActiveDirectory",
+                            ModuleVersion = "1.0.0"
+                        }
+                    },
+                    new ConfigurationCommandSegment
+                    {
+                        Configuration = new CommandConfiguration
+                        {
+                            ModuleName = "ActiveDirectory",
+                            CommandName = new[] { "Get-ADUser" }
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var report = CreateMissingFunctionAnalysisResult("Get-ADUser");
+
+            InvokeValidateMissingFunctions(runner, report, plan);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData("Get-DnsServerZone", "DnsServer")]
     [InlineData("Get-DhcpServerv4Scope", "DhcpServer")]
@@ -458,6 +511,54 @@ public sealed class ModulePipelineRegressionParityTests
                 e.Contains(expectedModule, StringComparison.OrdinalIgnoreCase) &&
                 e.Contains("command pattern", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(commandName, exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ValidateMissingFunctions_AllowsModuleCommand_WhenModuleIsExternal()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Az.Accounts"
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var report = new MissingFunctionAnalysisResult(
+                summary: new[] { new MissingCommandReference("Connect-AzAccount", "Az.Accounts", "Function", isAlias: false, isPrivate: false, error: string.Empty) },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+
+            InvokeValidateMissingFunctions(runner, report, plan);
         }
         finally
         {

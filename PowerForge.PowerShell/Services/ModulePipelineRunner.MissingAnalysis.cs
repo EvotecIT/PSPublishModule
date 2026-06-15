@@ -52,6 +52,7 @@ public sealed partial class ModulePipelineRunner
 
         var required = new HashSet<string>(requiredModules, StringComparer.OrdinalIgnoreCase);
         var approved = new HashSet<string>(plan.ApprovedModules ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var external = new HashSet<string>(plan.ExternalModuleDependencies ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var dependentRequiredModules = dependentModules ?? ResolveDependentRequiredModules(requiredModules, approved);
         var dependent = new HashSet<string>(dependentRequiredModules, StringComparer.OrdinalIgnoreCase);
         var ignoreModules = new HashSet<string>(plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
@@ -84,7 +85,7 @@ public sealed partial class ModulePipelineRunner
                 continue;
             if (IsBuiltInModule(moduleName))
                 continue;
-            if (required.Contains(moduleName) || approved.Contains(moduleName) || dependent.Contains(moduleName))
+            if (IsDeclaredDependencyModule(moduleName, required, approved, dependent, external))
                 continue;
 
             var allIgnored = group.All(c => ignoreFunctions.Contains(c.Name));
@@ -141,6 +142,12 @@ public sealed partial class ModulePipelineRunner
                     continue;
                 }
 
+                if (IsDeclaredDependencyModule(inferredModule, required, approved, dependent, external))
+                {
+                    _logger.Verbose($"Unresolved command '{name}' likely maps to declared module '{inferredModule}' via {inferenceSource}.");
+                    continue;
+                }
+
                 failures.Add(name);
                 var hint = TryGetInstallHintForModule(inferredModule);
                 _logger.Error($"Unresolved command '{name}' (likely module '{inferredModule}' via {inferenceSource}).{(string.IsNullOrWhiteSpace(hint) ? string.Empty : " " + hint)}");
@@ -158,6 +165,17 @@ public sealed partial class ModulePipelineRunner
                 $"Missing commands detected during merge. Resolve dependencies or configure ModuleSkip. Missing: {string.Join(", ", unique)}.");
         }
     }
+
+    private static bool IsDeclaredDependencyModule(
+        string moduleName,
+        HashSet<string> required,
+        HashSet<string> approved,
+        HashSet<string> dependent,
+        HashSet<string> external)
+        => required.Contains(moduleName) ||
+           approved.Contains(moduleName) ||
+           dependent.Contains(moduleName) ||
+           external.Contains(moduleName);
 
     private static Dictionary<string, string[]> BuildCommandModuleHintMap(IReadOnlyDictionary<string, string[]> commandModuleDependencies)
     {

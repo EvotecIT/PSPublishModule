@@ -18,17 +18,6 @@ public sealed partial class ModulePipelineRunner
         var required = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
         if (required.Length == 0)
         {
-            var manifestPath = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
-            if (File.Exists(manifestPath))
-            {
-                var fromManifest = ModuleManifestValueReader.ReadRequiredModules(manifestPath);
-                if (fromManifest.Length > 0)
-                    required = fromManifest;
-            }
-        }
-
-        if (required.Length == 0)
-        {
             _logger.Info("InstallMissingModules enabled, but no RequiredModules were found.");
             return Array.Empty<ModuleDependencyInstallResult>();
         }
