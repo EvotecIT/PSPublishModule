@@ -41,6 +41,13 @@ internal sealed class RequiredModuleRepositoryValidator
         if (requiredModules.Length == 0)
             return;
 
+        if (publish.PublishRequiredModules &&
+            string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "PublishRequiredModules is only supported for private repository targets. Refusing to mirror dependencies to PSGallery.");
+        }
+
         var externalModuleDependencies = GetExternalModulesForPublish(buildResult, plan);
         var missing = new List<string>();
         var sourceRepositoryName = ResolveRequiredModuleSourceRepository(publish);

@@ -665,6 +665,66 @@ public sealed class ModulePublisherRepositoryVersionTests
         }
     }
 
+    [Fact]
+    public void Publish_RejectsRequiredModulePublishingToPSGallery()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(
+                manifestPath,
+                """
+                @{
+                    ModuleVersion = '3.0.13'
+                    GUID = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
+                    RootModule = 'PSPublishModule.psm1'
+                    RequiredModules = @(@{ ModuleName = 'InternalDependency'; ModuleVersion = '1.0.0' })
+                }
+                """);
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var runner = new StubPowerShellRunner(request =>
+            {
+                var script = File.ReadAllText(request.ScriptPath!);
+                if (script.Contains("Find-PSResource", StringComparison.Ordinal))
+                    return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+
+                if (script.Contains("Publish-PSResource", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Publish-PSResource should not run when dependency mirroring targets PSGallery.");
+
+                return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+            });
+            var publisher = new ModulePublisher(new NullLogger(), runner);
+
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.PSResourceGet,
+                ApiKey = "target-api-key",
+                Force = true,
+                PublishRequiredModules = true,
+                RequiredModuleSourceRepository = "InternalUpstream"
+            };
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                publisher.Publish(publish, CreatePlan(), buildResult, Array.Empty<ArtefactBuildResult>()));
+
+            Assert.Contains("Refusing to mirror dependencies to PSGallery", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
     private static string Encode(string value)
         => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 
