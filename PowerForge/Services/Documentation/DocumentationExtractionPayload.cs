@@ -211,6 +211,10 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "required")]
     public bool Required { get; set; }
 
+    /// <summary>Required flag by parameter set name for syntax rendering.</summary>
+    [DataMember(Name = "parameterSetRequired")]
+    public Dictionary<string, bool> ParameterSetRequired { get; set; } = new();
+
     /// <summary>Position information (Named/0/1/...).</summary>
     [DataMember(Name = "position")]
     public string Position { get; set; } = string.Empty;

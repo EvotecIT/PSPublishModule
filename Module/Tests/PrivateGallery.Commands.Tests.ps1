@@ -1022,6 +1022,29 @@ Describe 'Private gallery command metadata' {
         $publish.Configuration.Repository.Credential.Secret | Should -Be 'token'
     }
 
+    It 'uses direct JFrog parameters with a clear-text repository PAT without requiring FilePath' {
+        $publish = New-ConfigurationPublish -Type PowerShellGallery -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryCredentialUserName 'publisher' -RepositoryCredentialSecret 'token' -Enabled
+
+        $publish.Configuration.ApiKey | Should -Be ''
+        $publish.Configuration.RepositoryName | Should -Be 'powershell-virtual'
+        $publish.Configuration.Tool | Should -Be ([PowerForge.PublishTool]::Auto)
+        $publish.Configuration.Repository.Uri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json'
+        $publish.Configuration.Repository.SourceUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
+        $publish.Configuration.Repository.PublishUri | Should -Be 'https://company.jfrog.io/artifactory/api/nuget/powershell-virtual'
+        $publish.Configuration.Repository.Credential.UserName | Should -Be 'publisher'
+        $publish.Configuration.Repository.Credential.Secret | Should -Be 'token'
+    }
+
+    It 'keeps direct JFrog parameters composable with repository URI overrides' {
+        $publish = New-ConfigurationPublish -Type PowerShellGallery -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryUri 'https://custom.example/v3/index.json' -RepositorySourceUri 'https://custom.example/v2/source' -RepositoryPublishUri 'https://custom.example/v2/publish' -RepositoryCredentialUserName 'publisher' -RepositoryCredentialSecret 'token' -Enabled
+
+        $publish.Configuration.Repository.Uri | Should -Be 'https://custom.example/v3/index.json'
+        $publish.Configuration.Repository.SourceUri | Should -Be 'https://custom.example/v2/source'
+        $publish.Configuration.Repository.PublishUri | Should -Be 'https://custom.example/v2/publish'
+        $publish.Configuration.Repository.Credential.UserName | Should -Be 'publisher'
+        $publish.Configuration.Repository.Credential.Secret | Should -Be 'token'
+    }
+
     It 'requires publish auth when enabling saved JFrog profiles for publish configuration' {
         Set-ModuleRepositoryProfile -Name 'JFrogCompanyNoAuth' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
 

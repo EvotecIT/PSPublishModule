@@ -150,6 +150,49 @@ public sealed class DocumentationEngineSafetyTests
         }
     }
 
+    [Fact]
+    public void ExtractHelpPayload_ReadsSimpleDictionaryParameterSetRequired()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var manifestPath = Path.Combine(root.FullName, "TestModule.psd1");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1' }");
+
+            const string json = """
+{
+  "moduleName": "TestModule",
+  "commands": [
+    {
+      "name": "New-Thing",
+      "parameters": [
+        {
+          "name": "Path",
+          "parameterSetRequired": {
+            "__AllParameterSets": true,
+            "OptionalSet": false
+          }
+        }
+      ]
+    }
+  ]
+}
+""";
+
+            var engine = new DocumentationEngine(new RawJsonPowerShellRunner(json), new NullLogger());
+
+            var payload = engine.ExtractHelpPayload(root.FullName, manifestPath);
+
+            var parameter = Assert.Single(Assert.Single(payload.Commands).Parameters);
+            Assert.True(parameter.ParameterSetRequired["__AllParameterSets"]);
+            Assert.False(parameter.ParameterSetRequired["OptionalSet"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private sealed class PayloadPowerShellRunner : IPowerShellRunner
     {
         private readonly DocumentationExtractionPayload _payload;
@@ -165,6 +208,24 @@ public sealed class DocumentationEngineSafetyTests
             using var stream = File.Create(jsonPath);
             var serializer = new DataContractJsonSerializer(typeof(DocumentationExtractionPayload));
             serializer.WriteObject(stream, _payload);
+            return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
+        }
+    }
+
+    private sealed class RawJsonPowerShellRunner : IPowerShellRunner
+    {
+        private readonly string _json;
+
+        public RawJsonPowerShellRunner(string json)
+        {
+            _json = json;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+        {
+            var jsonPath = request.Arguments[2];
+            Directory.CreateDirectory(Path.GetDirectoryName(jsonPath)!);
+            File.WriteAllText(jsonPath, _json);
             return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
         }
     }

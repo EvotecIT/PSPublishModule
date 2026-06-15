@@ -311,6 +311,9 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
 
         if (ParameterSetName == "JFrog")
         {
+            if (MyInvocation.BoundParameters.ContainsKey(nameof(Type)) && Type != PowerForge.PublishDestination.PowerShellGallery)
+                throw new ArgumentException("JFrog publishing targets PowerShell repositories. Omit Type or use PowerShellGallery.", nameof(Type));
+
             type = PowerForge.PublishDestination.PowerShellGallery;
         }
 

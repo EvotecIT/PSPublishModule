@@ -115,13 +115,22 @@ internal sealed class AboutTopicWriter
         foreach (var source in additionalSourcePaths ?? Array.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(source)) continue;
-            if (Path.IsPathRooted(source))
-                AddRoot(source);
+            var normalized = NormalizeSourcePath(source);
+            if (Path.IsPathRooted(normalized))
+                AddRoot(normalized);
             else
-                AddRoot(Path.Combine(stagingPath, source));
+                AddRoot(Path.Combine(stagingPath, normalized));
         }
 
         return roots;
+    }
+
+    private static string NormalizeSourcePath(string path)
+    {
+        var trimmed = path.Trim().Trim('"');
+        return trimmed
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
     }
 
     private static IEnumerable<string> EnumerateAboutTopicFiles(string root)

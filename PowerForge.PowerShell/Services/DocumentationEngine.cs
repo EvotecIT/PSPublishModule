@@ -301,7 +301,12 @@ public sealed class DocumentationEngine
                 throw new FileNotFoundException("Documentation help extraction did not produce output JSON.", jsonPath);
 
             using var stream = File.OpenRead(jsonPath);
-            var serializer = new DataContractJsonSerializer(typeof(DocumentationExtractionPayload));
+            var serializer = new DataContractJsonSerializer(
+                typeof(DocumentationExtractionPayload),
+                new DataContractJsonSerializerSettings
+                {
+                    UseSimpleDictionaryFormat = true
+                });
             var payload = serializer.ReadObject(stream) as DocumentationExtractionPayload;
             return payload ?? new DocumentationExtractionPayload();
         }

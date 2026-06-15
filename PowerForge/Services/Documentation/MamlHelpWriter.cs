@@ -123,7 +123,7 @@ internal sealed class MamlHelpWriter
             var parameters = (cmd.Parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
                 .Where(p => ParameterInSet(p, setName))
                 .ToArray();
-            WriteSyntaxItem(writer, commandName, setName, parameters);
+            WriteSyntaxItem(writer, commandName, setName, parameters, set.Text);
         }
 
         writer.WriteEndElement(); // syntax
@@ -133,7 +133,8 @@ internal sealed class MamlHelpWriter
         XmlWriter writer,
         string commandName,
         string? setName,
-        IEnumerable<DocumentationParameterHelp>? parameters)
+        IEnumerable<DocumentationParameterHelp>? parameters,
+        string? syntaxText = null)
     {
         writer.WriteStartElement("command", "syntaxItem", CommandNs);
         if (setName is not null)
@@ -147,7 +148,7 @@ internal sealed class MamlHelpWriter
         foreach (var p in (parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
                      .Where(p => p is not null && !string.IsNullOrWhiteSpace(p.Name)))
         {
-            WriteParameter(writer, p, includeParameterValue: true);
+            WriteParameter(writer, p, includeParameterValue: true, setName: setName, syntaxText: syntaxText);
         }
 
         writer.WriteEndElement(); // syntaxItem
@@ -292,7 +293,7 @@ internal sealed class MamlHelpWriter
         writer.WriteEndElement(); // alertSet
     }
 
-    private static void WriteParameter(XmlWriter writer, DocumentationParameterHelp p, bool includeParameterValue)
+    private static void WriteParameter(XmlWriter writer, DocumentationParameterHelp p, bool includeParameterValue, string? setName = null, string? syntaxText = null)
     {
         var aliases = (p.Aliases ?? Enumerable.Empty<string>())
             .Where(a => !string.IsNullOrWhiteSpace(a))
@@ -304,9 +305,10 @@ internal sealed class MamlHelpWriter
 
         var typeName = string.IsNullOrWhiteSpace(p.Type) ? "Object" : p.Type.Trim();
         var isArray = typeName.EndsWith("[]", StringComparison.Ordinal);
+        var required = ParameterRequiredInSet(p, setName, syntaxText);
 
         writer.WriteStartElement("command", "parameter", CommandNs);
-        writer.WriteAttributeString("required", p.Required ? "true" : "false");
+        writer.WriteAttributeString("required", required ? "true" : "false");
         writer.WriteAttributeString("variableLength", isArray ? "true" : "false");
         writer.WriteAttributeString("globbing", p.AcceptWildcardCharacters ? "true" : "false");
         writer.WriteAttributeString("pipelineInput", string.IsNullOrWhiteSpace(p.PipelineInput) ? "False" : p.PipelineInput.Trim());
@@ -321,7 +323,7 @@ internal sealed class MamlHelpWriter
         if (includeParameterValue)
         {
             writer.WriteStartElement("command", "parameterValue", CommandNs);
-            writer.WriteAttributeString("required", p.Required ? "true" : "false");
+            writer.WriteAttributeString("required", required ? "true" : "false");
             writer.WriteAttributeString("variableLength", "false");
             writer.WriteString(typeName);
             writer.WriteEndElement(); // parameterValue
@@ -460,9 +462,80 @@ internal sealed class MamlHelpWriter
             if (string.IsNullOrWhiteSpace(s)) continue;
             var sn = s.Trim();
             if (sn.Equals("(All)", StringComparison.OrdinalIgnoreCase)) return true;
+            if (sn.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase)) return true;
             if (sn.Equals(setName, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
+    }
+
+    private static bool ParameterRequiredInSet(DocumentationParameterHelp p, string? setName, string? syntaxText)
+    {
+        if (p is null) return false;
+        if (string.IsNullOrWhiteSpace(setName)) return p.Required;
+
+        var setRequired = p.ParameterSetRequired;
+        if (setRequired is null || setRequired.Count == 0)
+            return TryResolveRequiredFromSyntax(syntaxText, p.Name) ?? p.Required;
+
+        var normalizedSetName = setName!.Trim();
+        foreach (var entry in setRequired)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Key)) continue;
+            if (entry.Key.Trim().Equals(normalizedSetName, StringComparison.OrdinalIgnoreCase))
+                return entry.Value;
+        }
+
+        foreach (var entry in setRequired)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Key)) continue;
+            var key = entry.Key.Trim();
+            if (key.Equals("(All)", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase))
+                return entry.Value;
+        }
+
+        return TryResolveRequiredFromSyntax(syntaxText, p.Name) ?? p.Required;
+    }
+
+    private static bool? TryResolveRequiredFromSyntax(string? syntaxText, string? parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(syntaxText) || string.IsNullOrWhiteSpace(parameterName))
+            return null;
+
+        var name = parameterName!.Trim();
+        var text = syntaxText!;
+        var depth = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var ch = text[i];
+            if (ch == '[')
+            {
+                depth++;
+                continue;
+            }
+
+            if (ch == ']')
+            {
+                if (depth > 0) depth--;
+                continue;
+            }
+
+            if (ch != '-') continue;
+            if (i > 0 && IsParameterNameCharacter(text[i - 1])) continue;
+            if (i + 1 + name.Length > text.Length) continue;
+            if (!text.AsSpan(i + 1, name.Length).Equals(name.AsSpan(), StringComparison.OrdinalIgnoreCase)) continue;
+
+            var after = i + 1 + name.Length;
+            if (after < text.Length && IsParameterNameCharacter(text[after])) continue;
+            return depth == 0;
+        }
+
+        return null;
+    }
+
+    private static bool IsParameterNameCharacter(char ch)
+    {
+        return char.IsLetterOrDigit(ch) || ch == '_' || ch == '-';
     }
 
     private static string NormalizePosition(string? position)

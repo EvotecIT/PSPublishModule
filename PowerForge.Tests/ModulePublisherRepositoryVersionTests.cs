@@ -204,7 +204,7 @@ public sealed class ModulePublisherRepositoryVersionTests
         {
             Directory.CreateDirectory(stagingRoot);
             Directory.CreateDirectory(toolRoot);
-            File.WriteAllText(Path.Combine(toolRoot, "jf.exe"), string.Empty);
+            File.WriteAllText(Path.Combine(toolRoot, Path.DirectorySeparatorChar == '\\' ? "jf.exe" : "jf"), string.Empty);
             Environment.SetEnvironmentVariable(
                 "PATH",
                 string.IsNullOrWhiteSpace(originalPath)
