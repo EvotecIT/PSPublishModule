@@ -1780,12 +1780,12 @@ PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session ca
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Destination JSON file path.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -6343,12 +6343,12 @@ across targets or configurations before uploading to App Store Connect.</maml:pa
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Get-XcodeProjectVersion</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -6558,13 +6558,13 @@ session-scoped and intentionally opt-in because it changes module-name resolutio
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Profile</maml:name>
           <maml:description>
             <maml:para>Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and&#xD;
 MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -6824,12 +6824,12 @@ Provider.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Source JSON file path.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7004,12 +7004,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
             <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7120,24 +7120,24 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Source JSON profile file exported with Export-ModuleRepositoryProfile.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
             <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7326,12 +7326,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
             <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7880,12 +7880,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Install-AppleApp</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>AppPath</maml:name>
           <maml:description>
             <maml:para>Path to the built .app bundle.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -8622,12 +8622,12 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="None">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module name to source scripts from (highest installed version is used by default).</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -8652,12 +8652,12 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Destination folder to copy scripts into (created if missing).</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -8781,12 +8781,12 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Destination folder to copy scripts into (created if missing).</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -9090,12 +9090,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -9279,12 +9279,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -9347,12 +9347,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Repository</maml:name>
           <maml:description>
             <maml:para>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -9500,12 +9500,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -9587,12 +9587,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -18484,12 +18484,12 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to the Xcode project or workspace.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -18897,12 +18897,12 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to the Xcode project or workspace.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -19618,13 +19618,13 @@ configuration for future read-only checks and publish/review commands.</maml:par
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -19743,13 +19743,13 @@ Relative paths resolve from the pipeline project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -33967,30 +33967,6 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>JFrogBaseUri</maml:name>
-          <maml:description>
-            <maml:para>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>JFrogRepository</maml:name>
-          <maml:description>
-            <maml:para>JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoints, for example powershell-virtual.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>OverwriteTagName</maml:name>
           <maml:description>
@@ -34297,30 +34273,6 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>JFrogBaseUri</maml:name>
-          <maml:description>
-            <maml:para>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>JFrogRepository</maml:name>
-          <maml:description>
-            <maml:para>JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoints, for example powershell-virtual.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>OverwriteTagName</maml:name>
           <maml:description>
@@ -34541,367 +34493,14 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
-      <command:syntaxItem parameterSetName="AzureArtifacts">
-        <maml:name>New-ConfigurationPublish</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>AzureArtifactsFeed</maml:name>
-          <maml:description>
-            <maml:para>Azure Artifacts feed name for the private gallery preset.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>AzureDevOpsOrganization</maml:name>
-          <maml:description>
-            <maml:para>Azure DevOps organization name for the Azure Artifacts preset.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>AzureDevOpsProject</maml:name>
-          <maml:description>
-            <maml:para>Optional Azure DevOps project name for project-scoped feeds.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Enabled</maml:name>
-          <maml:description>
-            <maml:para>Enable publishing to the chosen destination.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>EnsureRepositoryRegistered</maml:name>
-          <maml:description>
-            <maml:para>When true, registers/updates the repository before publishing. Default: true.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
-          <dev:type>
-            <maml:name>Boolean</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Force</maml:name>
-          <maml:description>
-            <maml:para>Allow publishing lower version of a module on a PowerShell repository.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ID</maml:name>
-          <maml:description>
-            <maml:para>Optional ID of the artefact used for publishing.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryApiVersion</maml:name>
-          <maml:description>
-            <maml:para>Repository API version for PSResourceGet registration (v2/v3).</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">RepositoryApiVersion</command:parameterValue>
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">V2</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">V3</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">ContainerRegistry</command:parameterValue>
-          </command:parameterValueGroup>
-          <dev:type>
-            <maml:name>RepositoryApiVersion</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryCredentialSecret</maml:name>
-          <maml:description>
-            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
-          <maml:description>
-            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryCredentialSecretFilePath</maml:name>
-          <maml:description>
-            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryCredentialUserName</maml:name>
-          <maml:description>
-            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryName</maml:name>
-          <maml:description>
-            <maml:para>Repository name override (GitHub or PowerShell repository name).</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryPriority</maml:name>
-          <maml:description>
-            <maml:para>Repository priority for PSResourceGet (lower is higher priority).</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
-          <dev:type>
-            <maml:name>Nullable`1</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryTrusted</maml:name>
-          <maml:description>
-            <maml:para>Whether to mark the repository as trusted (avoids prompts). Default: true.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
-          <dev:type>
-            <maml:name>Boolean</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Tool</maml:name>
-          <maml:description>
-            <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">PublishTool</command:parameterValue>
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
-          </command:parameterValueGroup>
-          <dev:type>
-            <maml:name>PublishTool</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>UnregisterRepositoryAfterPublish</maml:name>
-          <maml:description>
-            <maml:para>When set, unregisters the repository after publish if it was created by this run.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>UseAsDependencyVersionSource</maml:name>
-          <maml:description>
-            <maml:para>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-      <command:syntaxItem parameterSetName="Profile">
-        <maml:name>New-ConfigurationPublish</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ApiKey</maml:name>
-          <maml:description>
-            <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Enabled</maml:name>
-          <maml:description>
-            <maml:para>Enable publishing to the chosen destination.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>FilePath</maml:name>
-          <maml:description>
-            <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Force</maml:name>
-          <maml:description>
-            <maml:para>Allow publishing lower version of a module on a PowerShell repository.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ID</maml:name>
-          <maml:description>
-            <maml:para>Optional ID of the artefact used for publishing.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
-          <maml:name>ProfileName</maml:name>
-          <maml:description>
-            <maml:para>Saved private gallery profile name for Azure Artifacts publishing.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryCredentialSecret</maml:name>
-          <maml:description>
-            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
-          <maml:description>
-            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryCredentialSecretFilePath</maml:name>
-          <maml:description>
-            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>RepositoryCredentialUserName</maml:name>
-          <maml:description>
-            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
       <command:syntaxItem parameterSetName="JFrog">
         <maml:name>New-ConfigurationPublish</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -34932,12 +34531,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FilePath</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -35177,6 +34776,22 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Type</maml:name>
+          <maml:description>
+            <maml:para>Choose between PowerShellGallery and GitHub.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PublishDestination</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">PowerShellGallery</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PublishDestination</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UnregisterRepositoryAfterPublish</maml:name>
           <maml:description>
             <maml:para>When set, unregisters the repository after publish if it was created by this run.</maml:para>
@@ -35196,6 +34811,359 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="AzureArtifacts">
+        <maml:name>New-ConfigurationPublish</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AzureArtifactsFeed</maml:name>
+          <maml:description>
+            <maml:para>Azure Artifacts feed name for the private gallery preset.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AzureDevOpsOrganization</maml:name>
+          <maml:description>
+            <maml:para>Azure DevOps organization name for the Azure Artifacts preset.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AzureDevOpsProject</maml:name>
+          <maml:description>
+            <maml:para>Optional Azure DevOps project name for project-scoped feeds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enabled</maml:name>
+          <maml:description>
+            <maml:para>Enable publishing to the chosen destination.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EnsureRepositoryRegistered</maml:name>
+          <maml:description>
+            <maml:para>When true, registers/updates the repository before publishing. Default: true.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Allow publishing lower version of a module on a PowerShell repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ID</maml:name>
+          <maml:description>
+            <maml:para>Optional ID of the artefact used for publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryApiVersion</maml:name>
+          <maml:description>
+            <maml:para>Repository API version for PSResourceGet registration (v2/v3).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">RepositoryApiVersion</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">V2</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">V3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ContainerRegistry</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>RepositoryApiVersion</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Repository name override (GitHub or PowerShell repository name).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryPriority</maml:name>
+          <maml:description>
+            <maml:para>Repository priority for PSResourceGet (lower is higher priority).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryTrusted</maml:name>
+          <maml:description>
+            <maml:para>Whether to mark the repository as trusted (avoids prompts). Default: true.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PublishTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PublishTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UnregisterRepositoryAfterPublish</maml:name>
+          <maml:description>
+            <maml:para>When set, unregisters the repository after publish if it was created by this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseAsDependencyVersionSource</maml:name>
+          <maml:description>
+            <maml:para>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Profile">
+        <maml:name>New-ConfigurationPublish</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ApiKey</maml:name>
+          <maml:description>
+            <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enabled</maml:name>
+          <maml:description>
+            <maml:para>Enable publishing to the chosen destination.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FilePath</maml:name>
+          <maml:description>
+            <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Allow publishing lower version of a module on a PowerShell repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ID</maml:name>
+          <maml:description>
+            <maml:para>Optional ID of the artefact used for publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved private gallery profile name for Azure Artifacts publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Repository credential secret (password/token) in clear text. For JFrog PAT/basic-auth flows, this is the PAT or access token.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Environment variable containing the repository credential secret (password/token). For JFrog PAT/access-token flows, this can be JFROG_ACCESS_TOKEN or a CI secret variable.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Repository credential secret (password/token) in a clear-text file. For JFrog PAT/basic-auth flows, prefer this over inline token values.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryCredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Repository credential username (basic auth). For JFrog PAT/basic-auth flows, this is the JFrog user name or email.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -35700,6 +35668,13 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:example>
         <maml:title>Publish to JFrog Artifactory with PAT/basic authentication</maml:title>
         <dev:code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish to JFrog Artifactory with a clear-text PAT for local testing</maml:title>
+        <dev:code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecret 'temporary-pat' -Enabled</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -37106,13 +37081,13 @@ sync with the build recipe.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -37146,13 +37121,13 @@ Relative paths resolve from the pipeline project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -37697,12 +37672,12 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>TopicName</maml:name>
           <maml:description>
             <maml:para>Topic name. The about_ prefix is added automatically when missing.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -37875,12 +37850,12 @@ Credential Provider session caches.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>OutputDirectory</maml:name>
           <maml:description>
             <maml:para>Destination directory for the generated bootstrap package.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -38719,12 +38694,12 @@ PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="Path,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="Path,FullName">
           <maml:name>ArchivePath</maml:name>
           <maml:description>
             <maml:para>Path to the .xcarchive to upload.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -39196,12 +39171,12 @@ PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to the Xcode project or workspace.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -39637,12 +39612,12 @@ PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Screenshot file path.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -40235,12 +40210,12 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="Profile">
         <maml:name>Publish-NugetPackage</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -41937,12 +41912,12 @@ repository and does not clear Azure Artifacts Credential Provider token caches.<
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Remove-ModuleRepositoryProfile</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Profile name to remove.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -43244,12 +43219,12 @@ Credential Provider so Entra ID/MFA is handled by the provider instead of storin
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Profile name used by connect, install, update, and publish commands.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -43943,12 +43918,12 @@ Connect metadata and build selection belong to higher-level Apple release comman
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -45628,12 +45603,12 @@ System.Management.Automation.PSModuleInfo</maml:name>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Start-AppleApp</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>BundleIdentifier</maml:name>
           <maml:description>
             <maml:para>Bundle identifier to launch.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -45968,12 +45943,12 @@ PowerForge.ModuleVersionStepResult</maml:name>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Sync-AppStoreConnectScreenshots</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>ConfigPath</maml:name>
           <maml:description>
             <maml:para>Path to the screenshot sync JSON configuration file.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -46245,12 +46220,12 @@ PowerForge.ModuleVersionStepResult</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
             <maml:para>Path to a .xcodeproj directory or project.pbxproj file.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -46499,12 +46474,12 @@ PowerForge.AppleAppReleaseDriftReport</maml:name>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Test-AppStoreConnectScreenshotSyncConfig</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
           <maml:name>ConfigPath</maml:name>
           <maml:description>
             <maml:para>Path to the screenshot sync JSON configuration file.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -46648,12 +46623,12 @@ generated wrapper.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Profile</maml:name>
           <maml:description>
             <maml:para>Name of the built-in isolation profile to validate.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -47708,12 +47683,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -47885,12 +47860,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -47953,12 +47928,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Repository</maml:name>
           <maml:description>
             <maml:para>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -48094,12 +48069,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -48169,12 +48144,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />

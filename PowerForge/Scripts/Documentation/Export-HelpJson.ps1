@@ -133,6 +133,7 @@ try {
       $possibleValues = @()
 
       $required = $false
+      $parameterSetRequired = @{}
       $named = $true
       $pos = $null
       $pipeByValue = $false
@@ -145,6 +146,8 @@ try {
           foreach ($setEntry in @($pmeta.ParameterSets.GetEnumerator())) {
             $psm = $setEntry.Value
             if ($psm) {
+              $setName = [string]$setEntry.Key
+              if ($setName) { $parameterSetRequired[$setName] = [bool]$psm.IsMandatory }
               if ($psm.IsMandatory) { $required = $true }
               $pPos = [int]$psm.Position
               if ($pPos -ne -2147483648) {
@@ -245,6 +248,7 @@ try {
         aliases = @($aliases)
         possibleValues = @($possibleValues)
         required = [bool]$required
+        parameterSetRequired = $parameterSetRequired
         position = $positionText
         defaultValue = $defaultValue
         pipelineInput = $pipelineInput

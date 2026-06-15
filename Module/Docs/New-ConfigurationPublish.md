@@ -11,12 +11,17 @@ Provides a way to configure publishing to PowerShell Gallery, GitHub, JFrog Arti
 ## SYNTAX
 ### ApiFromFile (Default)
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> -FilePath <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> -FilePath <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [<CommonParameters>]
 ```
 
 ### ApiKey
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [<CommonParameters>]
+```
+
+### JFrog
+```powershell
+New-ConfigurationPublish -JFrogBaseUri <string> -JFrogRepository <string> [-Type <PublishDestination>] [-FilePath <string>] [-ApiKey <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-JFrogPlatformUri <string>] [-JFrogOidcProvider <string>] [-JFrogOidcTokenId <string>] [-JFrogOidcTokenIdEnvironmentVariable <string>] [-JFrogOidcProviderType <JFrogOidcProviderType>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [<CommonParameters>]
 ```
 
 ### AzureArtifacts
@@ -27,11 +32,6 @@ New-ConfigurationPublish -AzureDevOpsOrganization <string> -AzureArtifactsFeed <
 ### Profile
 ```powershell
 New-ConfigurationPublish -ProfileName <string> [-FilePath <string>] [-ApiKey <string>] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-Force] [-ID <string>] [<CommonParameters>]
-```
-
-### JFrog
-```powershell
-New-ConfigurationPublish -JFrogBaseUri <string> -JFrogRepository <string> [-FilePath <string>] [-ApiKey <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-JFrogPlatformUri <string>] [-JFrogOidcProvider <string>] [-JFrogOidcTokenId <string>] [-JFrogOidcTokenIdEnvironmentVariable <string>] [-JFrogOidcProviderType <JFrogOidcProviderType>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -74,17 +74,23 @@ New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -J
 
 ### EXAMPLE 5
 ```powershell
-New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -FilePath "$env:USERPROFILE\.secrets\jfrog-nuget-api-key.txt" -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled
+New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecret 'temporary-pat' -Enabled
 ```
 
 
 ### EXAMPLE 6
 ```powershell
-New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -Enabled
+New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -FilePath "$env:USERPROFILE\.secrets\jfrog-nuget-api-key.txt" -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled
 ```
 
 
 ### EXAMPLE 7
+```powershell
+New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -Enabled
+```
+
+
+### EXAMPLE 8
 ```powershell
 New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -JFrogOidcProvider 'azure-oidc' -JFrogOidcProviderType Azure -JFrogOidcTokenIdEnvironmentVariable 'JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID' -Enabled
 ```
@@ -97,7 +103,7 @@ API key to be used for publishing in clear text. For JFrog, use this only when t
 
 ```yaml
 Type: String
-Parameter Sets: ApiKey, Profile, JFrog
+Parameter Sets: ApiKey, JFrog, Profile
 Aliases: None
 Possible values:
 
@@ -177,7 +183,7 @@ Enable publishing to the chosen destination.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -193,7 +199,7 @@ When true, registers/updates the repository before publishing. Default: true.
 
 ```yaml
 Type: Boolean
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
 Possible values:
 
@@ -209,7 +215,7 @@ API key to be used for publishing in clear text in a file. For JFrog, use this o
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, Profile, JFrog
+Parameter Sets: ApiFromFile, JFrog, Profile
 Aliases: None
 Possible values:
 
@@ -225,7 +231,7 @@ Allow publishing lower version of a module on a PowerShell repository.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -257,7 +263,7 @@ Optional ID of the artefact used for publishing.
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -273,7 +279,7 @@ JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. Po
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, JFrog
+Parameter Sets: JFrog
 Aliases: None
 Possible values:
 
@@ -369,7 +375,7 @@ JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoi
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, JFrog
+Parameter Sets: JFrog
 Aliases: None
 Possible values:
 
@@ -417,7 +423,7 @@ Repository API version for PSResourceGet registration (v2/v3).
 
 ```yaml
 Type: RepositoryApiVersion
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
 Possible values: Auto, V2, V3, ContainerRegistry
 
@@ -433,7 +439,7 @@ Repository credential secret (password/token) in clear text. For JFrog PAT/basic
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -449,7 +455,7 @@ Environment variable containing the repository credential secret (password/token
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -465,7 +471,7 @@ Repository credential secret (password/token) in a clear-text file. For JFrog PA
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -481,7 +487,7 @@ Repository credential username (basic auth). For JFrog PAT/basic-auth flows, thi
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, Profile, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 
@@ -497,7 +503,7 @@ Repository name override (GitHub or PowerShell repository name).
 
 ```yaml
 Type: String
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
 Possible values:
 
@@ -513,7 +519,7 @@ Repository priority for PSResourceGet (lower is higher priority).
 
 ```yaml
 Type: Nullable`1
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
 Possible values:
 
@@ -561,7 +567,7 @@ Whether to mark the repository as trusted (avoids prompts). Default: true.
 
 ```yaml
 Type: Boolean
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
 Possible values:
 
@@ -593,7 +599,7 @@ Publishing tool/provider used for repository publishing. Ignored for GitHub publ
 
 ```yaml
 Type: PublishTool
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
 Possible values: Auto, PSResourceGet, PowerShellGet
 
@@ -609,7 +615,7 @@ Choose between PowerShellGallery and GitHub.
 
 ```yaml
 Type: PublishDestination
-Parameter Sets: ApiFromFile, ApiKey
+Parameter Sets: ApiFromFile, ApiKey, JFrog
 Aliases: None
 Possible values: PowerShellGallery, GitHub
 
@@ -625,7 +631,7 @@ When set, unregisters the repository after publish if it was created by this run
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
 Possible values:
 
@@ -641,7 +647,7 @@ Use this PowerShell repository as the source for resolving Auto/Latest dependenc
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: ApiFromFile, ApiKey, AzureArtifacts, JFrog
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
 Possible values:
 
