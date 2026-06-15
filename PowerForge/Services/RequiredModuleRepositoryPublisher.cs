@@ -284,7 +284,21 @@ internal sealed class RequiredModuleRepositoryPublisher
         return dependencies;
     }
 
-    internal sealed record SavedRequiredModulePackage(string Name, string Version, string Path);
+    internal sealed class SavedRequiredModulePackage
+    {
+        public SavedRequiredModulePackage(string name, string version, string path)
+        {
+            Name = name;
+            Version = version;
+            Path = path;
+        }
+
+        public string Name { get; }
+
+        public string Version { get; }
+
+        public string Path { get; }
+    }
 
     private static int CompareRepositoryVersions(string? left, string? right)
     {
@@ -325,7 +339,7 @@ internal sealed class RequiredModuleRepositoryPublisher
     }
 
     private static bool IsPrereleaseVersion(string? value)
-        => !string.IsNullOrWhiteSpace(value) && value!.IndexOf('-', StringComparison.Ordinal) >= 0;
+        => !string.IsNullOrWhiteSpace(value) && value!.IndexOf('-') >= 0;
 
     private static int ComparePreRelease(string left, string right)
     {
