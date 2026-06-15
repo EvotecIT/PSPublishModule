@@ -17,6 +17,8 @@ public sealed class ModulePublisher
     private readonly PowerShellGetClient _powerShellGet;
     private readonly GitHubReleasePublisher _gitHub;
     private readonly PowerShellGalleryVersionFeedClient _powerShellGalleryFeed;
+    private readonly RequiredModuleRepositoryPublisher _requiredModuleRepositoryPublisher;
+    private readonly RequiredModuleRepositoryValidator _requiredModuleRepositoryValidator;
 
     /// <summary>
     /// Creates a new publisher using the provided logger and the default out-of-process PowerShell runner.
@@ -42,6 +44,8 @@ public sealed class ModulePublisher
             ? new RepositoryPublisher(_logger, runner)
             : new RepositoryPublisher(_logger, runner, processRunner);
         _psResourceGet = new PSResourceGetClient(runner, _logger);
+        _requiredModuleRepositoryPublisher = new RequiredModuleRepositoryPublisher(_logger, _psResourceGet, _repositoryPublisher);
+        _requiredModuleRepositoryValidator = new RequiredModuleRepositoryValidator(_logger, _psResourceGet, _requiredModuleRepositoryPublisher);
         _powerShellGet = new PowerShellGetClient(runner, _logger);
         _gitHub = new GitHubReleasePublisher(_logger);
         _powerShellGalleryFeed = new PowerShellGalleryVersionFeedClient(_logger, client);
@@ -159,7 +163,13 @@ public sealed class ModulePublisher
 
             if (tool != PublishTool.PowerShellGet)
             {
-                ValidateRequiredModulesForRepositoryPublish(repositoryName, credential, plan, buildResult);
+                _requiredModuleRepositoryValidator.Validate(
+                    publish,
+                    repositoryName,
+                    credential,
+                    repositoryForPublish,
+                    plan,
+                    buildResult);
             }
 
             _repositoryPublisher.Publish(
@@ -255,83 +265,6 @@ public sealed class ModulePublisher
         {
             // best effort
         }
-    }
-
-    private void ValidateRequiredModulesForRepositoryPublish(
-        string repositoryName,
-        RepositoryCredential? credential,
-        ModulePipelinePlan plan,
-        ModuleBuildResult buildResult)
-    {
-        var requiredModules = GetRequiredModulesForPublish(buildResult, plan);
-        if (requiredModules.Length == 0)
-            return;
-        var externalModuleDependencies = GetExternalModulesForPublish(buildResult, plan);
-
-        var missing = new List<string>();
-
-        foreach (var requiredModule in requiredModules)
-        {
-            if (ShouldSkipRepositoryDependencyValidation(requiredModule, externalModuleDependencies))
-            {
-                _logger.Info($"Skipping repository dependency verification for required module '{requiredModule.ModuleName}' because it is listed in ExternalModuleDependencies.");
-                continue;
-            }
-
-            IReadOnlyList<string> versions;
-            try
-            {
-                versions = _psResourceGet.Find(
-                        new PSResourceFindOptions(
-                            names: new[] { requiredModule.ModuleName },
-                            version: null,
-                            prerelease: true,
-                            repositories: new[] { repositoryName },
-                            credential: credential),
-                        timeout: TimeSpan.FromMinutes(2))
-                    .Where(r => string.Equals(r.Name, requiredModule.ModuleName, StringComparison.OrdinalIgnoreCase))
-                    .Select(r => r.Version)
-                    .Where(v => !string.IsNullOrWhiteSpace(v))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to verify required dependency '{requiredModule.ModuleName}' in repository '{repositoryName}' before publish. {ex.Message}");
-            }
-
-            if (!HasMatchingRequiredModuleVersion(requiredModule, versions))
-            {
-                missing.Add($"{requiredModule.ModuleName} [{FormatRequiredModuleConstraint(requiredModule)}]");
-            }
-        }
-
-        if (missing.Count > 0)
-        {
-            throw new InvalidOperationException(
-                $"Required module dependency check failed for repository '{repositoryName}'. Missing or incompatible: {string.Join(", ", missing)}.");
-        }
-    }
-
-    private static HashSet<string> GetExternalModulesForPublish(
-        ModuleBuildResult buildResult,
-        ModulePipelinePlan plan)
-    {
-        if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
-            File.Exists(buildResult.ManifestPath) &&
-            ModuleManifestValueReader.ReadPsDataStringOrArray(buildResult.ManifestPath, "ExternalModuleDependencies") is { Length: > 0 } manifestExternalModules)
-        {
-            return manifestExternalModules
-                .Where(n => !string.IsNullOrWhiteSpace(n))
-                .Select(n => n.Trim())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        }
-
-        return (plan.ExternalModuleDependencies ?? Array.Empty<string>())
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .Select(n => n.Trim())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     internal static RequiredModuleReference[] GetRequiredModulesForPublish(

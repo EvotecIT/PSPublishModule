@@ -93,6 +93,51 @@ public sealed class ModulePublisherRequiredModulesTests
     }
 
     [Fact]
+    public void SelectRequiredModuleVersionForPublish_PicksHighestMatchingVersion()
+    {
+        var required = new RequiredModuleReference(
+            moduleName: "Microsoft.Graph.Authentication",
+            moduleVersion: "2.0.0",
+            maximumVersion: "2.10.0");
+
+        var selected = RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
+            required,
+            new[]
+            {
+                new PSResourceInfo("Microsoft.Graph.Authentication", "1.0.0", "PSGallery", null, null),
+                new PSResourceInfo("Microsoft.Graph.Authentication", "2.2.0", "PSGallery", null, null),
+                new PSResourceInfo("Microsoft.Graph.Authentication", "2.9.1", "PSGallery", null, null),
+                new PSResourceInfo("Microsoft.Graph.Authentication", "2.11.0", "PSGallery", null, null)
+            });
+
+        Assert.NotNull(selected);
+        Assert.Equal("2.9.1", selected!.Version);
+    }
+
+    [Fact]
+    public void FindSavedModulePath_ReturnsVersionFolderContainingManifest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var modulePath = Path.Combine(root.FullName, "Microsoft.Graph.Authentication", "2.9.1");
+            Directory.CreateDirectory(modulePath);
+            File.WriteAllText(Path.Combine(modulePath, "Microsoft.Graph.Authentication.psd1"), "@{ ModuleVersion = '2.9.1' }");
+
+            var selected = RequiredModuleRepositoryPublisher.FindSavedModulePath(
+                root.FullName,
+                "Microsoft.Graph.Authentication",
+                "2.9.1");
+
+            Assert.Equal(modulePath, selected);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void GetRequiredModulesForPublish_UsesExistingManifestEvenWhenRequiredModulesAreEmpty()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

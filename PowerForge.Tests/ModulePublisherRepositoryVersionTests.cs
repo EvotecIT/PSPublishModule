@@ -313,6 +313,169 @@ public sealed class ModulePublisherRepositoryVersionTests
         }
     }
 
+    [Fact]
+    public void Publish_PublishesMissingRequiredModulesWhenEnabled()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        var calls = new List<string>();
+        var dependencyPublished = false;
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(
+                manifestPath,
+                """
+                @{
+                    ModuleVersion = '3.0.13'
+                    GUID = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
+                    RootModule = 'PSPublishModule.psm1'
+                    RequiredModules = @(
+                        @{ ModuleName = 'DependencyModule'; ModuleVersion = '1.0.0'; MaximumVersion = '1.5.0' }
+                    )
+                }
+                """);
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var runner = new StubPowerShellRunner(request =>
+            {
+                var script = File.ReadAllText(request.ScriptPath!);
+                if (script.Contains("Find-PSResource", StringComparison.Ordinal))
+                {
+                    var names = DecodeLines(request.Arguments[0]);
+                    var repositories = DecodeLines(request.Arguments[2]);
+
+                    if (names.Contains("PSPublishModule", StringComparer.OrdinalIgnoreCase))
+                    {
+                        calls.Add("find-main");
+                        Assert.Equal("CompanyGallery", Assert.Single(repositories));
+                        Assert.Equal("publisher", request.Arguments[4]);
+                        Assert.Equal("target-token", request.Arguments[5]);
+                        return new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "3.0.12"), string.Empty, "pwsh.exe");
+                    }
+
+                    if (names.Contains("DependencyModule", StringComparer.OrdinalIgnoreCase) &&
+                        repositories.Contains("CompanyGallery", StringComparer.OrdinalIgnoreCase))
+                    {
+                        calls.Add("find-target-dependency");
+                        Assert.Equal("publisher", request.Arguments[4]);
+                        Assert.Equal("target-token", request.Arguments[5]);
+                        return new PowerShellRunResult(
+                            0,
+                            dependencyPublished ? VisibleRepositoryItem("DependencyModule", "1.2.3") : string.Empty,
+                            string.Empty,
+                            "pwsh.exe");
+                    }
+
+                    if (names.Contains("DependencyModule", StringComparer.OrdinalIgnoreCase) &&
+                        repositories.Contains("PSGallery", StringComparer.OrdinalIgnoreCase))
+                    {
+                        calls.Add("find-source-dependency");
+                        Assert.Equal(string.Empty, request.Arguments[4]);
+                        Assert.Equal(string.Empty, request.Arguments[5]);
+                        return new PowerShellRunResult(
+                            0,
+                            string.Join(Environment.NewLine, new[]
+                            {
+                                VisibleRepositoryItem("DependencyModule", "1.2.3"),
+                                VisibleRepositoryItem("DependencyModule", "1.6.0")
+                            }),
+                            string.Empty,
+                            "pwsh.exe");
+                    }
+
+                    return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+                }
+
+                if (script.Contains("Save-PSResource", StringComparison.Ordinal))
+                {
+                    calls.Add("save-dependency");
+                    Assert.Equal("DependencyModule", request.Arguments[0]);
+                    Assert.Equal("1.2.3", request.Arguments[1]);
+                    Assert.Equal("PSGallery", request.Arguments[2]);
+                    Assert.Equal(string.Empty, request.Arguments[9]);
+                    Assert.Equal(string.Empty, request.Arguments[10]);
+
+                    var savedModulePath = Path.Combine(request.Arguments[3], "DependencyModule", "1.2.3");
+                    Directory.CreateDirectory(savedModulePath);
+                    File.WriteAllText(Path.Combine(savedModulePath, "DependencyModule.psd1"), "@{ ModuleVersion = '1.2.3'; RootModule = 'DependencyModule.psm1' }");
+                    File.WriteAllText(Path.Combine(savedModulePath, "DependencyModule.psm1"), string.Empty);
+
+                    return new PowerShellRunResult(0, SaveRepositoryItem("DependencyModule", "1.2.3"), string.Empty, "pwsh.exe");
+                }
+
+                if (script.Contains("Publish-PSResource", StringComparison.Ordinal))
+                {
+                    Assert.Equal("CompanyGallery", request.Arguments[2]);
+                    Assert.Equal("target-api-key", request.Arguments[3]);
+                    Assert.Equal("publisher", request.Arguments[7]);
+                    Assert.Equal("target-token", request.Arguments[8]);
+
+                    if (request.Arguments[0].Contains("DependencyModule", StringComparison.OrdinalIgnoreCase))
+                    {
+                        calls.Add("publish-dependency");
+                        dependencyPublished = true;
+                    }
+                    else
+                    {
+                        calls.Add("publish-main");
+                    }
+
+                    return new PowerShellRunResult(0, "PFPSRG::PUBLISH::OK", string.Empty, "pwsh.exe");
+                }
+
+                throw new InvalidOperationException("Unexpected PowerShell script invocation.");
+            });
+            var publisher = new ModulePublisher(new NullLogger(), runner);
+
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.PSResourceGet,
+                ApiKey = "target-api-key",
+                RepositoryName = "CompanyGallery",
+                PublishRequiredModules = true,
+                RequiredModuleSourceRepository = "PSGallery",
+                Repository = new PublishRepositoryConfiguration
+                {
+                    Name = "CompanyGallery",
+                    Credential = new RepositoryCredential
+                    {
+                        UserName = "publisher",
+                        Secret = "target-token"
+                    }
+                }
+            };
+            var plan = CreatePlan();
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var result = publisher.Publish(publish, plan, buildResult, Array.Empty<ArtefactBuildResult>());
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(
+                new[]
+                {
+                    "find-main",
+                    "find-target-dependency",
+                    "find-source-dependency",
+                    "save-dependency",
+                    "publish-dependency",
+                    "find-target-dependency",
+                    "publish-main"
+                },
+                calls);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
     private static string Encode(string value)
         => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 
@@ -331,6 +494,14 @@ public sealed class ModulePublisherRepositoryVersionTests
             Encode(name),
             Encode(Guid.Empty.ToString()),
             Encode(string.Empty)
+        });
+
+    private static string SaveRepositoryItem(string name, string version)
+        => string.Join("::", new[]
+        {
+            "PFPSRG::SAVE::ITEM",
+            Encode(name),
+            Encode(version)
         });
 
     private static ModulePipelinePlan CreatePlan()

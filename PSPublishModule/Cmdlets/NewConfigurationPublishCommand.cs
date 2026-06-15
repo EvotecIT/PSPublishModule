@@ -40,6 +40,10 @@ namespace PSPublishModule;
 /// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled</code>
 /// </example>
 /// <example>
+/// <summary>Publish to JFrog Artifactory with a clear-text PAT for local testing</summary>
+/// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecret 'temporary-pat' -Enabled</code>
+/// </example>
+/// <example>
 /// <summary>Publish to JFrog Artifactory with a separate NuGet API key</summary>
 /// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -FilePath "$env:USERPROFILE\.secrets\jfrog-nuget-api-key.txt" -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\jfrog-pat.txt" -Enabled</code>
 /// </example>
@@ -51,12 +55,17 @@ namespace PSPublishModule;
 /// <summary>Publish to JFrog Artifactory with CI OIDC token exchange</summary>
 /// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -JFrogOidcProvider 'azure-oidc' -JFrogOidcProviderType Azure -JFrogOidcTokenIdEnvironmentVariable 'JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID' -Enabled</code>
 /// </example>
+/// <example>
+/// <summary>Publish missing RequiredModules into a private repository before publishing the module</summary>
+/// <code>New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -RepositoryName 'JFrogPS' -Tool PSResourceGet -RepositoryCredentialUserName 'name@company.com' -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' -PublishRequiredModules -RequiredModuleSourceRepository PSGallery -Enabled</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationPublish", DefaultParameterSetName = "ApiFromFile")]
 public sealed class NewConfigurationPublishCommand : PSCmdlet
 {
     /// <summary>Choose between PowerShellGallery and GitHub.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiKey")]
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public PowerForge.PublishDestination Type { get; set; }
 
     /// <summary>Azure DevOps organization name for the Azure Artifacts preset.</summary>
@@ -111,27 +120,26 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Repository base URI (used for both source and publish unless overridden).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryUri { get; set; }
 
     /// <summary>Repository source URI (PowerShellGet SourceLocation).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositorySourceUri { get; set; }
 
     /// <summary>Repository publish URI (PowerShellGet PublishLocation).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryPublishUri { get; set; }
 
     /// <summary>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory. PowerShellGet and PSResourceGet URLs are derived automatically.</summary>
-    [Parameter(ParameterSetName = "ApiKey")]
-    [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(Mandatory = true, ParameterSetName = "JFrog")]
     public string? JFrogBaseUri { get; set; }
 
     /// <summary>JFrog NuGet repository key used to derive PowerShellGet and PSResourceGet endpoints, for example powershell-virtual.</summary>
-    [Parameter(ParameterSetName = "ApiKey")]
-    [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(Mandatory = true, ParameterSetName = "JFrog")]
     public string? JFrogRepository { get; set; }
 
@@ -268,6 +276,22 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter UseAsDependencyVersionSource { get; set; }
 
+    /// <summary>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
+    public SwitchParameter PublishRequiredModules { get; set; }
+
+    /// <summary>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
+    public string? RequiredModuleSourceRepository { get; set; }
+
     /// <summary>Emits publish configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -376,6 +400,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             DoNotMarkAsPreRelease = DoNotMarkAsPreRelease.IsPresent,
             GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
             UseAsDependencyVersionSource = UseAsDependencyVersionSource.IsPresent,
+            PublishRequiredModules = PublishRequiredModules.IsPresent,
+            RequiredModuleSourceRepository = RequiredModuleSourceRepository,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
         });
 

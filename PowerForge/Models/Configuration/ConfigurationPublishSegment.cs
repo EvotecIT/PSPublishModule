@@ -63,6 +63,15 @@ public sealed class PublishConfiguration
     /// <summary>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</summary>
     public bool UseAsDependencyVersionSource { get; set; }
 
+    /// <summary>
+    /// When true, missing manifest RequiredModules are saved from <see cref="RequiredModuleSourceRepository"/>
+    /// and published to the target repository before the main module is published.
+    /// </summary>
+    public bool PublishRequiredModules { get; set; }
+
+    /// <summary>Repository used as the source when <see cref="PublishRequiredModules"/> mirrors dependencies.</summary>
+    public string? RequiredModuleSourceRepository { get; set; } = "PSGallery";
+
     /// <summary>Verbose mode requested.</summary>
     public bool Verbose { get; set; }
 }
