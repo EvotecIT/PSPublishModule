@@ -179,6 +179,45 @@ public sealed class ModulePipelineRegressionParityTests
     }
 
     [Fact]
+    public void Run_RemovesStaleEmbeddedPayloads_WhenNoEmbeddedModulesRemain()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Project"));
+            WriteMinimalModule(projectRoot.FullName, moduleName, "1.0.0");
+            var stalePayloadRoot = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Internals", "Modules", "Stale.Dependency", "1.0.0"));
+            File.WriteAllText(Path.Combine(stalePayloadRoot.FullName, "Stale.Dependency.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(projectRoot.FullName, "Internals", "Modules", "module-dependencies.json"), "{}");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            Assert.False(Directory.Exists(Path.Combine(result.BuildResult.StagingPath, "Internals", "Modules")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_TracksExternalModulesSeparately_AndInboxModulesAreIgnored()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

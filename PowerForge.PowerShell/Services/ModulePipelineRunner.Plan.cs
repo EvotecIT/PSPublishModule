@@ -701,6 +701,7 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesRepository,
             installMissingModulesCredential,
             dependencyVersionSourceRepository);
+        embeddedModules = OrderRequiredModulesByDependenciesFirst(embeddedModules);
 
         if (delivery?.Sign == true)
         {

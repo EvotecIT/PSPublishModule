@@ -40,18 +40,17 @@ public sealed partial class ModulePipelineRunner
 
         if (plan.EmbeddedModules is { Length: > 0 })
         {
-            var known = new HashSet<string>(depList.Select(d => d.Name), StringComparer.OrdinalIgnoreCase);
             foreach (var module in plan.EmbeddedModules)
             {
                 if (module is null || string.IsNullOrWhiteSpace(module.ModuleName)) continue;
                 var name = module.ModuleName.Trim();
-                if (known.Contains(name)) continue;
-                known.Add(name);
-                depList.Add(new ModuleDependency(
+                var dependency = new ModuleDependency(
                     name,
                     requiredVersion: module.RequiredVersion,
                     minimumVersion: module.ModuleVersion,
-                    maximumVersion: module.MaximumVersion));
+                    maximumVersion: module.MaximumVersion);
+                if (HasEquivalentDependencyInstallRequest(depList, dependency)) continue;
+                depList.Add(dependency);
             }
         }
 
@@ -91,6 +90,18 @@ public sealed partial class ModulePipelineRunner
 
         return results.ToArray();
     }
+
+    private static bool HasEquivalentDependencyInstallRequest(
+        IEnumerable<ModuleDependency> dependencies,
+        ModuleDependency candidate)
+        => (dependencies ?? Array.Empty<ModuleDependency>())
+            .Any(existing =>
+                existing is not null &&
+                candidate is not null &&
+                string.Equals(existing.Name?.Trim(), candidate.Name?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.RequiredVersion?.Trim(), candidate.RequiredVersion?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.MinimumVersion?.Trim(), candidate.MinimumVersion?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.MaximumVersion?.Trim(), candidate.MaximumVersion?.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private ModuleDependencyInstallResult[] EnsureFeatureToolDependenciesInstalled(
         ModulePipelinePlan plan,
@@ -297,7 +308,10 @@ public sealed partial class ModulePipelineRunner
             return false;
 
         var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(
-            candidates.Select(static dependency => dependency.Name.Trim()).ToArray());
+            candidates
+                .Select(static dependency => dependency.Name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray());
         return candidates.Any(dependency => RequiredModuleInstallNeedsRepositoryTool(dependency, installed));
     }
 

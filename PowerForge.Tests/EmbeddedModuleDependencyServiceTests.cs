@@ -293,6 +293,41 @@ public sealed class EmbeddedModuleDependencyServiceTests
     }
 
     [Fact]
+    public void Install_RejectsReceiptNamesEscapingDestinationRoot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var dependencyRoot = CreateModule(root.FullName, "Safe.Dependency", "1.0.0");
+            var provider = new Provider(new InstalledModuleMetadata(
+                "Safe.Dependency",
+                "1.0.0",
+                guid: null,
+                moduleBasePath: dependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            service.Embed(
+                moduleRoot.FullName,
+                new[] { new RequiredModuleReference("Safe.Dependency", requiredVersion: "1.0.0") },
+                provider);
+
+            var manifestPath = Path.Combine(moduleRoot.FullName, "Internals", "Modules", "module-dependencies.json");
+            var manifest = EmbeddedModuleDependencyService.ReadManifest(manifestPath);
+            manifest.Dependencies[0].Name = "..";
+            File.WriteAllText(manifestPath, System.Text.Json.JsonSerializer.Serialize(manifest));
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                service.Install(manifestPath, Path.Combine(root.FullName, "PrivateDeps")));
+            Assert.Contains("escapes", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Install_WithRootModule_CopiesPrivateRuntimeAndWritesRootReceipt()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

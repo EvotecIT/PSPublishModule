@@ -557,8 +557,7 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
             var spec = CreateEmbeddedParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Auto);
             var plan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec);
 
-            Assert.Contains(plan.EmbeddedModules, module => string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(plan.EmbeddedModules, module => string.Equals(module.ModuleName, "Child.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(new[] { "Child.Tools", "Parent.Tools" }, plan.EmbeddedModules.Select(static module => module.ModuleName));
             Assert.Empty(plan.RequiredModules);
             Assert.Empty(plan.RequiredModulesForPackaging);
         }

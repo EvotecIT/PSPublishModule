@@ -133,7 +133,7 @@ internal sealed class EmbeddedModuleDependencyService
                 RelativePath = NormalizeRelativePath(Path.Combine(rootModuleName!, rootVersion))
             };
 
-            var destinationPath = Path.Combine(destination, rootModule.Name, rootVersion);
+            var destinationPath = ResolveInstallDestinationPath(destination, rootModule.Name, rootVersion, "root module");
             var exists = Directory.Exists(destinationPath);
             var action = ResolveAction(exists, onExists, force);
 
@@ -173,7 +173,7 @@ internal sealed class EmbeddedModuleDependencyService
         foreach (var entry in FilterEntries(manifest, filters))
         {
             var sourcePath = ResolveEntryPath(manifestPath, entry);
-            var destinationPath = Path.Combine(destination, entry.Name, string.IsNullOrWhiteSpace(entry.Version) ? "Current" : entry.Version!);
+            var destinationPath = ResolveInstallDestinationPath(destination, entry.Name, entry.Version, "dependency");
             var exists = Directory.Exists(destinationPath);
             var action = ResolveAction(exists, onExists, force);
 
@@ -280,6 +280,22 @@ internal sealed class EmbeddedModuleDependencyService
         var candidate = Path.GetFullPath(Path.Combine(root, relativePath));
         if (!IsPathUnderRoot(root, candidate))
             throw new InvalidOperationException($"Embedded module dependency '{entry.Name}' path escapes the dependency manifest root.");
+
+        return candidate;
+    }
+
+    public static string ResolveInstallDestinationPath(string destinationRoot, string name, string? version, string kind)
+    {
+        if (string.IsNullOrWhiteSpace(destinationRoot))
+            throw new ArgumentException("Destination root is required.", nameof(destinationRoot));
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException($"Embedded module {kind} name is required.");
+
+        var root = Path.GetFullPath(destinationRoot);
+        var versionFolder = string.IsNullOrWhiteSpace(version) ? "Current" : version!.Trim();
+        var candidate = Path.GetFullPath(Path.Combine(root, name.Trim(), versionFolder));
+        if (!IsPathUnderRoot(root, candidate))
+            throw new InvalidOperationException($"Embedded module {kind} destination escapes the requested destination root.");
 
         return candidate;
     }

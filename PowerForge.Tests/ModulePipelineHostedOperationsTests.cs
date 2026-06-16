@@ -454,6 +454,76 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_PreservesEmbeddedVersionConstraintWhenRequiredModuleUsesDifferentVersion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            InstallMissingModules = true
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Tools.Dependency",
+                            RequiredVersion = "1.0.0"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Tools.Dependency",
+                            RequiredVersion = "2.0.0"
+                        }
+                    }
+                }
+            };
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            var requestedVersions = hostedOperations.LastDependencies
+                .Where(static dependency => string.Equals(dependency.Name, "Tools.Dependency", StringComparison.OrdinalIgnoreCase))
+                .Select(static dependency => dependency.RequiredVersion)
+                .ToArray();
+            Assert.Equal(new[] { "1.0.0", "2.0.0" }, requestedVersions);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void EnsureBuildDependenciesInstalledIfNeeded_HonorsModuleSkipForDeclaredDependencies()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

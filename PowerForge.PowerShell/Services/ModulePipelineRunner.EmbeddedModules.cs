@@ -12,13 +12,10 @@ public sealed partial class ModulePipelineRunner
         if (plan.BuildSpec.RefreshManifestOnly)
             return;
 
-        if (plan.EmbeddedModules is not { Length: > 0 })
-            return;
-
         var service = new EmbeddedModuleDependencyService(_logger);
         service.Embed(
             moduleRoot: buildResult.StagingPath,
-            modules: plan.EmbeddedModules,
+            modules: plan.EmbeddedModules ?? Array.Empty<RequiredModuleReference>(),
             metadataProvider: _moduleDependencyMetadataProvider,
             delivery: plan.Delivery);
     }
