@@ -100,6 +100,113 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void Plan_ApplyToPublishMsiVersions_AdvancesMonotonicStateAcrossCombinations()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            spec.Targets[0].Publish.Frameworks = new[] { "net10.0", "net8.0" };
+            spec.Targets[0].Publish.Style = DotNetPublishStyle.PortableCompat;
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app.msi",
+                    PrepareFromTarget = "app",
+                    Authoring = CreateSimpleAuthoring("ProductFiles"),
+                    Versioning = new DotNetPublishMsiVersionOptions
+                    {
+                        Enabled = true,
+                        Major = 26,
+                        Minor = 6,
+                        FloorDateUtc = "2026-06-01",
+                        Monotonic = true,
+                        StatePath = "Artifacts/version.state.json",
+                        ApplyToPublish = true
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var expectedPatch = DaysSince20000101(new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+            var versions = plan.MsiVersions.Values.OrderBy(value => value.Patch).ToArray();
+
+            Assert.Equal(2, versions.Length);
+            Assert.Equal(expectedPatch, versions[0].Patch);
+            Assert.Equal(expectedPatch + 1, versions[1].Patch);
+            Assert.Equal(versions[0].StatePath, versions[1].StatePath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void BuildPublishMsBuildProperties_ThrowsWhenApplyToPublishInstallersResolveDifferentVersions()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            spec.Targets[0].Publish.Style = DotNetPublishStyle.PortableCompat;
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app-a.msi",
+                    PrepareFromTarget = "app",
+                    Authoring = CreateSimpleAuthoring("ProductFiles"),
+                    Versioning = new DotNetPublishMsiVersionOptions
+                    {
+                        Enabled = true,
+                        Major = 26,
+                        Minor = 6,
+                        FloorDateUtc = "2026-06-01",
+                        Monotonic = false,
+                        ApplyToPublish = true
+                    }
+                },
+                new DotNetPublishInstaller
+                {
+                    Id = "app-b.msi",
+                    PrepareFromTarget = "app",
+                    Authoring = CreateSimpleAuthoring("ProductFiles"),
+                    Versioning = new DotNetPublishMsiVersionOptions
+                    {
+                        Enabled = true,
+                        Major = 27,
+                        Minor = 6,
+                        FloorDateUtc = "2026-06-01",
+                        Monotonic = false,
+                        ApplyToPublish = true
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var target = Assert.Single(plan.Targets);
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+                    plan,
+                    target,
+                    "net10.0",
+                    "win-x64",
+                    DotNetPublishStyle.PortableCompat));
+
+            Assert.Contains("resolved publish property 'Version'", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ResolveInstallerOutputDirectory_UsesConfiguredTemplate()
     {
         var root = CreateTempRoot();
@@ -1152,7 +1259,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         var method = typeof(DotNetPublishPipelineRunner).GetMethod("ResolveMsiVersion", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        var raw = method!.Invoke(runner, new object?[] { plan, installer, step });
+        var raw = method!.Invoke(runner, new object?[] { plan, installer, step, null });
         Assert.NotNull(raw);
 
         var t = raw!.GetType();

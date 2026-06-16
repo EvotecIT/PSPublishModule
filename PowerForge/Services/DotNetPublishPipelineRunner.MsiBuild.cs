@@ -535,7 +535,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private MsiVersionResolution ResolveMsiVersion(
         DotNetPublishPlan plan,
         DotNetPublishInstallerPlan? installer,
-        DotNetPublishStep step)
+        DotNetPublishStep step,
+        IReadOnlyDictionary<string, MsiVersionState>? stateOverrides = null)
     {
         if (installer?.Versioning is null || !installer.Versioning.Enabled)
             return MsiVersionResolution.None();
@@ -570,7 +571,9 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!plan.AllowOutputOutsideProjectRoot)
                 EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
 
-            var previous = ReadMsiVersionState(statePath);
+            var previous = stateOverrides is not null && stateOverrides.TryGetValue(statePath, out var plannedState)
+                ? plannedState
+                : ReadMsiVersionState(statePath);
             if (ShouldBumpMsiPatch(previous, major, minor, patch))
                 patch = Math.Min(patchCap, previous!.LastPatch + 1);
         }
@@ -635,7 +638,9 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string BuildFourPartVersion(string version)
     {
         var parts = (version ?? string.Empty)
-            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static part => part.Trim())
+            .Where(static part => part.Length > 0)
             .Take(4)
             .ToList();
         while (parts.Count < 4)

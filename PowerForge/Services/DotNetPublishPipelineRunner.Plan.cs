@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
@@ -1932,6 +1933,7 @@ public sealed partial class DotNetPublishPipelineRunner
             AllowOutputOutsideProjectRoot = allowOutputOutsideProjectRoot,
             Configuration = configuration
         };
+        var plannedStates = new Dictionary<string, MsiVersionState>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var target in targets ?? Array.Empty<DotNetPublishTargetPlan>())
         {
@@ -1939,6 +1941,9 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 foreach (var installer in installers.Where(i => string.Equals(i.PrepareFromTarget, target.Name, StringComparison.OrdinalIgnoreCase)))
                 {
+                    if (installer.Versioning?.ApplyToPublish != true)
+                        continue;
+
                     if (!InstallerMatchesCombo(installer, combo))
                         continue;
 
@@ -1950,7 +1955,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         Runtime = combo.Runtime,
                         Style = combo.Style
                     };
-                    var resolved = ResolveMsiVersion(probePlan, installer, step);
+                    var resolved = ResolveMsiVersion(probePlan, installer, step, plannedStates);
                     if (string.IsNullOrWhiteSpace(resolved.Version))
                         continue;
 
@@ -1963,6 +1968,16 @@ public sealed partial class DotNetPublishPipelineRunner
                         Patch = resolved.Patch,
                         StatePath = resolved.StatePath
                     };
+
+                    if (!string.IsNullOrWhiteSpace(resolved.StatePath) && resolved.Patch.HasValue)
+                    {
+                        plannedStates[resolved.StatePath!] = new MsiVersionState
+                        {
+                            LastPatch = resolved.Patch.Value,
+                            Version = resolved.Version!,
+                            UpdatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)
+                        };
+                    }
                 }
             }
         }
