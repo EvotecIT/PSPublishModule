@@ -28,7 +28,7 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
     }
 
     [Fact]
-    public void CallerWorkflow_ShouldFanOutAcrossLinuxRunnerSlots()
+    public void CallerWorkflow_ShouldFanOutAcrossNamedLinuxRunners()
     {
         var repoRoot = FindRepoRoot();
         var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "runner-housekeeping.yml");
@@ -41,9 +41,16 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         Assert.Contains("github.repository == 'EvotecIT/PSPublishModule' || github.event.repository.private", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("apply: ${{ github.event_name != 'workflow_dispatch' || inputs.apply == 'true' }}", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("fail-fast: false", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("slot: [1, 2, 3, 4]", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("runner_labels_json: '[\"self-hosted\",\"linux\"]'", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("runner-housekeeping-reports-${{ matrix.slot }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("name: github-runner-linux", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("name: github-runner-linux-01", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("name: github-runner-linux-03", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("name: github-runner-linux-05", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("\"runner-github-runner-linux\"", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("\"runner-github-runner-linux-01\"", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("\"runner-github-runner-linux-03\"", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("\"runner-github-runner-linux-05\"", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("runner_labels_json: ${{ matrix.runner.labels }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("runner-housekeeping-${{ matrix.runner.name }}", workflowYaml, StringComparison.Ordinal);
     }
 
     [Fact]
