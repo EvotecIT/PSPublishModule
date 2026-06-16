@@ -23,6 +23,10 @@ internal static class ModuleDependencyCommandHelpers
         {
             // Try manifest-scoped Delivery.InternalsPath below.
         }
+        catch (DirectoryNotFoundException)
+        {
+            // Try manifest-scoped Delivery.InternalsPath below.
+        }
 
         var manifestPath = Directory.GetFiles(moduleBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
         if (string.IsNullOrWhiteSpace(manifestPath))

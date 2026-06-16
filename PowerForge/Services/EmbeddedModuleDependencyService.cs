@@ -51,12 +51,12 @@ internal sealed class EmbeddedModuleDependencyService
 
         Directory.CreateDirectory(modulesRoot);
 
-        var latest = metadataProvider.GetLatestInstalledModules(references.Select(static module => module.ModuleName).ToArray());
+        var installedModules = ResolveInstalledModules(references, metadataProvider);
         var entries = new List<EmbeddedModuleDependencyEntry>();
 
         foreach (var reference in references)
         {
-            if (!latest.TryGetValue(reference.ModuleName, out var installed) ||
+            if (!installedModules.TryGetValue(reference.ModuleName, out var installed) ||
                 installed is null ||
                 string.IsNullOrWhiteSpace(installed.ModuleBasePath) ||
                 !Directory.Exists(installed.ModuleBasePath))
@@ -65,6 +65,7 @@ internal sealed class EmbeddedModuleDependencyService
                     $"Embedded module dependency '{reference.ModuleName}' is not available locally. Enable InstallMissingModules or install the module before building.");
             }
 
+            ValidateInstalledVersion(reference, installed);
             var version = ResolveVersion(reference, installed);
             var relativePath = string.IsNullOrWhiteSpace(version)
                 ? reference.ModuleName
@@ -142,8 +143,13 @@ internal sealed class EmbeddedModuleDependencyService
                 {
                     if (onExists == OnExistsOption.Stop)
                         throw new IOException($"Destination module folder exists: {destinationPath}");
-                    if (onExists == OnExistsOption.Skip || (onExists == OnExistsOption.Merge && !force))
+                    if (onExists == OnExistsOption.Skip)
                     {
+                        results.Add(CreateInstallResult(rootModule, rootModuleBasePath!, destinationPath, action, Path.Combine(destination, ManifestFileName), "RootModule"));
+                    }
+                    else if (onExists == OnExistsOption.Merge)
+                    {
+                        MergeDirectory(rootModuleBasePath!, destinationPath, overwriteFiles: force);
                         results.Add(CreateInstallResult(rootModule, rootModuleBasePath!, destinationPath, action, Path.Combine(destination, ManifestFileName), "RootModule"));
                     }
                     else
@@ -177,8 +183,14 @@ internal sealed class EmbeddedModuleDependencyService
                 {
                     if (onExists == OnExistsOption.Stop)
                         throw new IOException($"Destination dependency folder exists: {destinationPath}");
-                    if (onExists == OnExistsOption.Skip || (onExists == OnExistsOption.Merge && !force))
+                    if (onExists == OnExistsOption.Skip)
                     {
+                        results.Add(CreateInstallResult(entry, sourcePath, destinationPath, action, Path.Combine(destination, ManifestFileName), "Dependency"));
+                        continue;
+                    }
+                    if (onExists == OnExistsOption.Merge)
+                    {
+                        MergeDirectory(sourcePath, destinationPath, overwriteFiles: force);
                         results.Add(CreateInstallResult(entry, sourcePath, destinationPath, action, Path.Combine(destination, ManifestFileName), "Dependency"));
                         continue;
                     }
@@ -289,6 +301,20 @@ internal sealed class EmbeddedModuleDependencyService
         return manifest.RootModule;
     }
 
+    public static EmbeddedModuleDependencyEntry ResolveRootModuleEntry(EmbeddedModuleDependencyManifest manifest)
+    {
+        if (manifest is null) throw new ArgumentNullException(nameof(manifest));
+
+        if (manifest.RootModule is null ||
+            string.IsNullOrWhiteSpace(manifest.RootModule.Name) ||
+            string.IsNullOrWhiteSpace(manifest.RootModule.RelativePath))
+        {
+            throw new InvalidOperationException("Dependency receipt does not contain a root module entry.");
+        }
+
+        return manifest.RootModule;
+    }
+
     public static string ResolveModuleImportPath(string modulePath, string moduleName)
     {
         if (string.IsNullOrWhiteSpace(modulePath) || !Directory.Exists(modulePath))
@@ -351,8 +377,49 @@ internal sealed class EmbeddedModuleDependencyService
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .Select(static name => name.Trim()), StringComparer.OrdinalIgnoreCase);
 
+    private static IReadOnlyDictionary<string, InstalledModuleMetadata> ResolveInstalledModules(
+        IReadOnlyList<RequiredModuleReference> references,
+        IModuleDependencyMetadataProvider metadataProvider)
+        => metadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
+            ? versionedProvider.GetInstalledModules(references)
+            : metadataProvider.GetLatestInstalledModules(references.Select(static module => module.ModuleName).ToArray());
+
     private static string ResolveVersion(RequiredModuleReference reference, InstalledModuleMetadata installed)
         => installed.Version ?? reference.RequiredVersion ?? reference.ModuleVersion ?? "Current";
+
+    private static void ValidateInstalledVersion(RequiredModuleReference reference, InstalledModuleMetadata installed)
+    {
+        if (string.IsNullOrWhiteSpace(installed.Version))
+            return;
+
+        if (!string.IsNullOrWhiteSpace(reference.RequiredVersion) &&
+            !string.Equals(installed.Version, reference.RequiredVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Embedded module dependency '{reference.ModuleName}' resolved version {installed.Version}, but RequiredVersion {reference.RequiredVersion} was requested.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(reference.ModuleVersion) &&
+            TryParseVersion(installed.Version, out var installedVersion) &&
+            TryParseVersion(reference.ModuleVersion, out var minimumVersion) &&
+            installedVersion < minimumVersion)
+        {
+            throw new InvalidOperationException(
+                $"Embedded module dependency '{reference.ModuleName}' resolved version {installed.Version}, but minimum version {reference.ModuleVersion} was requested.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(reference.MaximumVersion) &&
+            TryParseVersion(installed.Version, out installedVersion) &&
+            TryParseVersion(reference.MaximumVersion, out var maximumVersion) &&
+            installedVersion > maximumVersion)
+        {
+            throw new InvalidOperationException(
+                $"Embedded module dependency '{reference.ModuleName}' resolved version {installed.Version}, but maximum version {reference.MaximumVersion} was requested.");
+        }
+    }
+
+    private static bool TryParseVersion(string? value, out Version version)
+        => Version.TryParse(value, out version!);
 
     private static string ResolveInternalsRoot(string moduleRoot, DeliveryOptionsConfiguration? delivery)
     {
@@ -383,7 +450,7 @@ internal sealed class EmbeddedModuleDependencyService
         return onExists switch
         {
             OnExistsOption.Overwrite => "Overwrite",
-            OnExistsOption.Merge when force => "Overwrite",
+            OnExistsOption.Merge => force ? "MergeOverwrite" : "Merge",
             OnExistsOption.Skip => "Skip",
             OnExistsOption.Stop => "Stop",
             _ => "Keep"
@@ -415,6 +482,30 @@ internal sealed class EmbeddedModuleDependencyService
             var target = Path.Combine(destinationDirectory, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target, overwrite: true);
+        }
+    }
+
+    private static void MergeDirectory(string sourceDirectory, string destinationDirectory, bool overwriteFiles)
+    {
+        if (!Directory.Exists(sourceDirectory))
+            throw new DirectoryNotFoundException($"Directory not found: {sourceDirectory}");
+
+        Directory.CreateDirectory(destinationDirectory);
+        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relative = ComputeRelativePath(sourceDirectory, directory);
+            Directory.CreateDirectory(Path.Combine(destinationDirectory, relative));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relative = ComputeRelativePath(sourceDirectory, file);
+            var target = Path.Combine(destinationDirectory, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            if (!overwriteFiles && File.Exists(target))
+                continue;
+
+            File.Copy(file, target, overwrite: overwriteFiles);
         }
     }
 

@@ -11,7 +11,7 @@ Imports a module runtime by exact paths, with dependencies loaded before the roo
 ## SYNTAX
 ### ByName (Default)
 ```powershell
-Import-ModuleDependency [-Name] <string> [[-Path] <string>] [-RequiredVersion <version>] [-DependencyName <string[]>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Import-ModuleDependency [[-Name] <string>] [[-Path] <string>] [-RequiredVersion <version>] [-DependencyName <string[]>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### ByModule
@@ -102,7 +102,7 @@ Parameter Sets: ByName
 Aliases: ModuleName
 Possible values:
 
-Required: True
+Required: False
 Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName)

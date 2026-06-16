@@ -27,7 +27,7 @@ namespace PSPublishModule;
 public sealed class ImportModuleDependencyCommand : PSCmdlet
 {
     /// <summary>Module containing embedded dependencies.</summary>
-    [Parameter(Mandatory = true, Position = 0, ParameterSetName = "ByName", ValueFromPipelineByPropertyName = true)]
+    [Parameter(Position = 0, ParameterSetName = "ByName", ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string Name { get; set; } = string.Empty;
@@ -82,7 +82,12 @@ public sealed class ImportModuleDependencyCommand : PSCmdlet
 
         if (string.IsNullOrWhiteSpace(rootImportPath))
         {
-            var rootEntry = EmbeddedModuleDependencyService.ResolveRootModuleEntry(manifest, rootModuleName);
+            if (string.IsNullOrWhiteSpace(rootModuleName) && manifest.RootModule is null)
+                return;
+
+            var rootEntry = string.IsNullOrWhiteSpace(rootModuleName)
+                ? EmbeddedModuleDependencyService.ResolveRootModuleEntry(manifest)
+                : EmbeddedModuleDependencyService.ResolveRootModuleEntry(manifest, rootModuleName);
             ValidateRootModuleVersion(rootEntry);
             var rootPath = EmbeddedModuleDependencyService.ResolveEntryPath(context.ManifestPath, rootEntry);
             rootImportPath = EmbeddedModuleDependencyService.ResolveModuleImportPath(rootPath, rootEntry.Name);
@@ -94,12 +99,15 @@ public sealed class ImportModuleDependencyCommand : PSCmdlet
 
     private ImportContext ResolveImportContext()
     {
-        if (string.Equals(ParameterSetName, "ByPath", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(ParameterSetName, "ByPath", StringComparison.OrdinalIgnoreCase) ||
+            (Module is null && string.IsNullOrWhiteSpace(Name) && !string.IsNullOrWhiteSpace(Path)))
+        {
             return new ImportContext(
                 EmbeddedModuleDependencyService.ResolveManifestPath(SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path)),
-                importRootModule: false,
+                importRootModule: true,
                 rootModuleName: string.Empty,
                 rootImportPath: null);
+        }
 
         if (!string.IsNullOrWhiteSpace(Path))
         {
@@ -117,6 +125,9 @@ public sealed class ImportModuleDependencyCommand : PSCmdlet
                 rootModuleName: rootModuleName!,
                 rootImportPath: null);
         }
+
+        if (string.IsNullOrWhiteSpace(Name) && Module is null)
+            throw new ArgumentException("Specify -Name, -Module, or -Path.");
 
         var resolver = new ModuleResolver(this);
         var module = Module is not null
@@ -153,8 +164,8 @@ public sealed class ImportModuleDependencyCommand : PSCmdlet
 
         var script = InvokeCommand.NewScriptBlock(
             "param($p, [bool]$force, [bool]$passThru) " +
-            "if ($passThru) { Import-Module -Name $p -Force:$force -PassThru } " +
-            "else { Import-Module -Name $p -Force:$force }");
+            "if ($passThru) { Import-Module -Name $p -Force:$force -PassThru -ErrorAction Stop } " +
+            "else { Import-Module -Name $p -Force:$force -ErrorAction Stop }");
         var output = script.Invoke(importPath, Force.IsPresent, PassThru.IsPresent);
         if (PassThru)
         {

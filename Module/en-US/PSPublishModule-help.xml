@@ -6835,12 +6835,12 @@ the private runtime copy without relying on PSModulePath discovery.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module containing embedded dependencies.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -7048,12 +7048,12 @@ the private runtime copy without relying on PSModulePath discovery.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
         <maml:name>Name</maml:name>
         <maml:description>
           <maml:para>Module containing embedded dependencies.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -32086,8 +32086,8 @@ is merge-only.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">RequiredModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ExternalModule</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">EmbeddedModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ApprovedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">EmbeddedModule</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleDependencyKind</maml:name>
@@ -32193,8 +32193,8 @@ is merge-only.</maml:para>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">RequiredModule</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ExternalModule</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">EmbeddedModule</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ApprovedModule</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">EmbeddedModule</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ModuleDependencyKind</maml:name>

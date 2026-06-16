@@ -164,7 +164,7 @@ is merge-only.
 Type: ModuleDependencyKind
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: RequiredModule, ExternalModule, EmbeddedModule, ApprovedModule
+Possible values: RequiredModule, ExternalModule, ApprovedModule, EmbeddedModule
 
 Required: False
 Position: named
