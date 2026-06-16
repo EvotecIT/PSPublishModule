@@ -43,11 +43,15 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         Assert.Contains("fail-fast: false", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("name: github-runner-linux", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("name: github-runner-linux-01", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("name: github-runner-linux-02", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("name: github-runner-linux-03", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("name: github-runner-linux-04", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("name: github-runner-linux-05", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("\"runner-github-runner-linux\"", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("\"runner-github-runner-linux-01\"", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("\"runner-github-runner-linux-02\"", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("\"runner-github-runner-linux-03\"", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("\"runner-github-runner-linux-04\"", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("\"runner-github-runner-linux-05\"", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner_labels_json: ${{ matrix.runner.labels }}", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner-housekeeping-${{ matrix.runner.name }}", workflowYaml, StringComparison.Ordinal);
