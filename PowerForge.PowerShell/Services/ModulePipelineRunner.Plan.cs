@@ -641,10 +641,10 @@ public sealed partial class ModulePipelineRunner
         if (roots.Length == 0 && compatible is { Length: > 0 })
             roots = ModulePipelinePlanningHelpers.ResolveInstallRootsFromCompatiblePSEditions(compatible);
 
-        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft))
+        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft.Concat(embeddedModulesDraft)))
         {
             resolveMissingModulesOnline = true;
-            _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because RequiredModules use Auto/Latest/Guid Auto.");
+            _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because module dependencies use Auto/Latest/Guid Auto.");
         }
 
         var enabledPublishes = publishes
@@ -679,6 +679,22 @@ public sealed partial class ModulePipelineRunner
         var requiredModulesForPackaging = requiredModuleSets.RequiredModulesForPackaging;
         var embeddedModules = ResolveRequiredModules(
             embeddedModulesDraft,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            dependencyVersionSourceRepository);
+        var embeddedSourceDrafts = BuildRequiredModuleDraftMap(embeddedModulesDraft);
+        var embeddedRoots = embeddedModulesDraft
+            .Select(static draft => draft.ModuleName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        embeddedModules = IncludeTransitiveRequiredModules(
+            embeddedModules,
+            embeddedRoots,
+            embeddedSourceDrafts,
             resolveMissingModulesOnline,
             warnIfRequiredModulesOutdated,
             installMissingModulesPrerelease,

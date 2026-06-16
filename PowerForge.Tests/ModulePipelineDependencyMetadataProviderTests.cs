@@ -538,6 +538,37 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void Plan_IncludesTransitiveDependenciesForEmbeddedModules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[] { new RequiredModuleReference("Child.Tools", moduleVersion: "2.0.0") }
+                });
+
+            var spec = CreateEmbeddedParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Auto);
+            var plan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec);
+
+            Assert.Contains(plan.EmbeddedModules, module => string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(plan.EmbeddedModules, module => string.Equals(module.ModuleName, "Child.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(plan.RequiredModules);
+            Assert.Empty(plan.RequiredModulesForPackaging);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_IgnoresRuntimeProvidedTransitiveDependenciesForPackaging_WhenParentRemainsRequired()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -770,6 +801,38 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                 new ConfigurationModuleSegment
                 {
                     Kind = ModuleDependencyKind.RequiredModule,
+                    Configuration = new ModuleDependencyConfiguration
+                    {
+                        ModuleName = "Parent.Tools",
+                        ModuleVersion = "1.0.0",
+                        VersionSource = versionSource
+                    }
+                }
+            }
+        };
+    }
+
+    private static ModulePipelineSpec CreateEmbeddedParentSpec(
+        string sourcePath,
+        string moduleName,
+        ModuleDependencyVersionSource versionSource)
+    {
+        return new ModulePipelineSpec
+        {
+            Build = new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = sourcePath,
+                Version = "1.0.0",
+                CsprojPath = null,
+                KeepStaging = true
+            },
+            Install = new ModulePipelineInstallOptions { Enabled = false },
+            Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.EmbeddedModule,
                     Configuration = new ModuleDependencyConfiguration
                     {
                         ModuleName = "Parent.Tools",

@@ -105,6 +105,45 @@ public sealed class EmbeddedModuleDependencyServiceTests
     }
 
     [Fact]
+    public void Embed_ClearsStalePayloadFoldersBeforeWritingManifest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var currentDependencyRoot = CreateModule(root.FullName, "Current.Dependency", "1.0.0");
+            var staleDependencyRoot = CreateModule(root.FullName, "Stale.Dependency", "1.0.0");
+            var provider = new Provider(
+                new InstalledModuleMetadata("Current.Dependency", "1.0.0", guid: null, moduleBasePath: currentDependencyRoot),
+                new InstalledModuleMetadata("Stale.Dependency", "1.0.0", guid: null, moduleBasePath: staleDependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            service.Embed(
+                moduleRoot.FullName,
+                new[]
+                {
+                    new RequiredModuleReference("Current.Dependency", requiredVersion: "1.0.0"),
+                    new RequiredModuleReference("Stale.Dependency", requiredVersion: "1.0.0")
+                },
+                provider);
+
+            var manifest = service.Embed(
+                moduleRoot.FullName,
+                new[] { new RequiredModuleReference("Current.Dependency", requiredVersion: "1.0.0") },
+                provider);
+
+            var entry = Assert.Single(manifest.Dependencies);
+            Assert.Equal("Current.Dependency", entry.Name);
+            Assert.True(File.Exists(Path.Combine(moduleRoot.FullName, "Internals", "Modules", "Current.Dependency", "1.0.0", "Current.Dependency.psd1")));
+            Assert.False(Directory.Exists(Path.Combine(moduleRoot.FullName, "Internals", "Modules", "Stale.Dependency")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Install_CopiesEmbeddedPayloadToExplicitVersionFolderAndWritesReceipt()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -175,6 +214,77 @@ public sealed class EmbeddedModuleDependencyServiceTests
             Assert.True(File.Exists(Path.Combine(destinationModule, "existing.txt")));
             Assert.True(File.Exists(Path.Combine(destinationModule, "new-file.txt")));
             Assert.True(File.Exists(Path.Combine(destinationModule, "Microsoft.Graph.Authentication.psd1")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Install_WithDependencyFilter_PreservesUnselectedExistingReceiptEntries()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var aDependencyRoot = CreateModule(root.FullName, "A.Dependency", "1.0.0");
+            var bDependencyRoot = CreateModule(root.FullName, "B.Dependency", "1.0.0");
+            var provider = new Provider(
+                new InstalledModuleMetadata("A.Dependency", "1.0.0", guid: null, moduleBasePath: aDependencyRoot),
+                new InstalledModuleMetadata("B.Dependency", "1.0.0", guid: null, moduleBasePath: bDependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            var manifestPath = Path.Combine(moduleRoot.FullName, "Internals", "Modules", "module-dependencies.json");
+            service.Embed(
+                moduleRoot.FullName,
+                new[]
+                {
+                    new RequiredModuleReference("A.Dependency", requiredVersion: "1.0.0"),
+                    new RequiredModuleReference("B.Dependency", requiredVersion: "1.0.0")
+                },
+                provider);
+
+            var destinationRoot = Path.Combine(root.FullName, "PrivateDeps");
+            service.Install(manifestPath, destinationRoot);
+
+            var results = service.Install(
+                manifestPath,
+                destinationRoot,
+                dependencyNames: new[] { "A.Dependency" });
+
+            var result = Assert.Single(results);
+            Assert.Equal("A.Dependency", result.Name);
+            var receipt = EmbeddedModuleDependencyService.ReadManifest(Path.Combine(destinationRoot, "module-dependencies.json"));
+            Assert.Equal(new[] { "A.Dependency", "B.Dependency" }, receipt.Dependencies.Select(static entry => entry.Name));
+            Assert.True(File.Exists(Path.Combine(destinationRoot, "B.Dependency", "1.0.0", "B.Dependency.psd1")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolveEntryPath_RejectsPathsEscapingManifestRoot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var manifestRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule", "Internals", "Modules"));
+            var manifestPath = Path.Combine(manifestRoot.FullName, "module-dependencies.json");
+            File.WriteAllText(manifestPath, "{}");
+
+            var entry = new EmbeddedModuleDependencyEntry
+            {
+                Name = "Bad.Dependency",
+                Version = "1.0.0",
+                RelativePath = "../Bad.Dependency"
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                EmbeddedModuleDependencyService.ResolveEntryPath(manifestPath, entry));
+            Assert.Contains("escapes", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

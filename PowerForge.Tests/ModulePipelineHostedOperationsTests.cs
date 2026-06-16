@@ -1276,6 +1276,136 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void RunPreflight_InstallsPSResourceGetForRepositorySourcedEmbeddedTransitiveMetadata()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            ResolveMissingModulesOnline = false
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Parent.Tools",
+                            ModuleVersion = "1.0.0",
+                            Guid = "11111111-1111-1111-1111-111111111111",
+                            VersionSource = ModuleDependencyVersionSource.PSGallery
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var provider = new FakeMetadataProvider(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[]
+                    {
+                        new RequiredModuleReference("Child.Tools")
+                    }
+                });
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunPreflight_RefreshesRepositorySourcedEmbeddedPrecomputedPlans()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            ResolveMissingModulesOnline = false
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Parent.Tools",
+                            ModuleVersion = "1.0.0",
+                            VersionSource = ModuleDependencyVersionSource.PSGallery
+                        }
+                    }
+                }
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Parent.Tools"] = new[]
+                        {
+                            new RequiredModuleReference("Child.Tools")
+                        }
+                    }),
+                new FakeHostedOperations());
+
+            var plan = runner.Plan(spec);
+
+            Assert.True(InvokeShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(runner, spec, plan));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void RunPreflight_UsesConfigurationOverrideBeforeManifestRequiredModules()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
