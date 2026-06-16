@@ -48,7 +48,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var installerConfig = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
             .FirstOrDefault(i => string.Equals(i.Id, installerId, StringComparison.OrdinalIgnoreCase));
-        var versionResolution = ResolveMsiVersion(plan, installerConfig, step);
+        var versionResolution = ResolveMsiVersionForStep(plan, installerConfig, step);
         var licenseResolution = ResolveInstallerClientLicense(plan, installerConfig, step);
         var isGeneratedInstallerProject = IsGeneratedInstallerProject(step, installerConfig);
 
@@ -535,7 +535,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private MsiVersionResolution ResolveMsiVersion(
         DotNetPublishPlan plan,
         DotNetPublishInstallerPlan? installer,
-        DotNetPublishStep step)
+        DotNetPublishStep step,
+        IReadOnlyDictionary<string, MsiVersionState>? stateOverrides = null)
     {
         if (installer?.Versioning is null || !installer.Versioning.Enabled)
             return MsiVersionResolution.None();
@@ -570,7 +571,9 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!plan.AllowOutputOutsideProjectRoot)
                 EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
 
-            var previous = ReadMsiVersionState(statePath);
+            var previous = stateOverrides is not null && stateOverrides.TryGetValue(statePath, out var plannedState)
+                ? plannedState
+                : ReadMsiVersionState(statePath);
             if (ShouldBumpMsiPatch(previous, major, minor, patch))
                 patch = Math.Min(patchCap, previous!.LastPatch + 1);
         }
@@ -584,6 +587,97 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var version = $"{major}.{minor}.{patch}";
         return new MsiVersionResolution(version, propertyName, patch, statePath);
+    }
+
+    private MsiVersionResolution ResolveMsiVersionForStep(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan? installer,
+        DotNetPublishStep step)
+    {
+        if (installer is not null)
+        {
+            var cached = FindResolvedMsiVersion(plan, installer.Id, step.TargetName, step.Framework, step.Runtime, step.Style);
+            if (cached is not null)
+            {
+                ReserveMsiVersionState(cached, $"MSI build for installer '{installer.Id}'");
+                return new MsiVersionResolution(cached.Version, cached.VersionPropertyName, cached.Patch, cached.StatePath);
+            }
+        }
+
+        return ResolveMsiVersion(plan, installer, step);
+    }
+
+    private static DotNetPublishMsiVersionPlan? FindResolvedMsiVersion(
+        DotNetPublishPlan plan,
+        string? installerId,
+        string? targetName,
+        string? framework,
+        string? runtime,
+        DotNetPublishStyle? style)
+    {
+        if (plan.MsiVersions is null || plan.MsiVersions.Count == 0 || !style.HasValue)
+            return null;
+
+        var key = BuildMsiVersionKey(installerId, targetName, framework, runtime, style.Value);
+        return plan.MsiVersions.TryGetValue(key, out var version) ? version : null;
+    }
+
+    private static string BuildMsiVersionKey(
+        string? installerId,
+        string? targetName,
+        string? framework,
+        string? runtime,
+        DotNetPublishStyle style)
+    {
+        return string.Join(
+            "|",
+            installerId?.Trim() ?? string.Empty,
+            targetName?.Trim() ?? string.Empty,
+            framework?.Trim() ?? string.Empty,
+            runtime?.Trim() ?? string.Empty,
+            style.ToString());
+    }
+
+    private static string BuildFourPartVersion(string version)
+    {
+        var parts = (version ?? string.Empty)
+            .Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static part => part.Trim())
+            .Where(static part => part.Length > 0)
+            .Take(4)
+            .ToList();
+        while (parts.Count < 4)
+            parts.Add("0");
+
+        return string.Join(".", parts);
+    }
+
+    private static void ReserveMsiVersionState(DotNetPublishMsiVersionPlan version, string context)
+    {
+        if (version is null || string.IsNullOrWhiteSpace(version.StatePath) || !version.Patch.HasValue)
+            return;
+
+        if (!TryParseMsiVersion(version.Version, out var major, out var minor, out var patch))
+            return;
+
+        var previous = ReadMsiVersionState(version.StatePath!);
+        if (previous is not null
+            && previous.LastPatch == patch
+            && string.Equals(previous.Version, version.Version, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (ShouldBumpMsiPatch(previous, major, minor, patch))
+        {
+            var previousVersion = string.IsNullOrWhiteSpace(previous?.Version)
+                ? previous?.LastPatch.ToString(CultureInfo.InvariantCulture)
+                : previous!.Version;
+            throw new InvalidOperationException(
+                $"MSI version state '{version.StatePath}' advanced to '{previousVersion}' before {context} could reserve '{version.Version}'. Re-plan or rerun the publish to avoid duplicate MSI versions.");
+        }
+
+        WriteMsiVersionState(version.StatePath!, patch, version.Version);
     }
 
     private static int ResolveMsiVersionSegments(DotNetPublishMsiVersionOptions options, ref int major, ref int minor)

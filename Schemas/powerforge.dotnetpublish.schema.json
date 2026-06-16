@@ -128,6 +128,11 @@
         "Monotonic": { "type": "boolean" },
         "StatePath": { "type": ["string", "null"] },
         "PropertyName": { "type": ["string", "null"] },
+        "ApplyToPublish": { "type": "boolean" },
+        "PublishProperties": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
         "PatchCap": { "type": "integer", "minimum": 1, "maximum": 65535 }
       }
     },

@@ -733,6 +733,17 @@ public sealed class DotNetPublishMsiVersionOptions
     public string? PropertyName { get; set; } = "ProductVersion";
 
     /// <summary>
+    /// When true, applies the resolved MSI version to the source publish MSBuild properties before packaging.
+    /// </summary>
+    public bool ApplyToPublish { get; set; }
+
+    /// <summary>
+    /// Optional publish MSBuild property names populated from the resolved MSI version.
+    /// Defaults to <c>Version</c>, <c>PackageVersion</c>, <c>FileVersion</c>, <c>AssemblyVersion</c>, and <c>InformationalVersion</c>.
+    /// </summary>
+    public string[] PublishProperties { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Maximum allowed patch segment. Default: 65535.
     /// </summary>
     public int PatchCap { get; set; } = 65535;

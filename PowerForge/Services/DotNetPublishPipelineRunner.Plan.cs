@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
@@ -198,6 +199,12 @@ public sealed partial class DotNetPublishPipelineRunner
         var bundles = BuildBundlePlans(spec.Bundles, targets, projectRoot, spec.SigningProfiles);
         targets = OrderTargetsForBundleIncludes(targets, bundles);
         var installers = BuildInstallerPlans(spec.Installers, bundles, targets, projectCatalog, projectRoot, spec.SigningProfiles);
+        var msiVersions = ResolveMsiVersionPlans(
+            projectRoot,
+            spec.DotNet.AllowOutputOutsideProjectRoot,
+            cfg,
+            installers,
+            targets);
         var storePackages = BuildStorePackagePlans(spec.StorePackages, targets, projectCatalog, projectRoot);
 
         var outputs = new DotNetPublishOutputs
@@ -544,6 +551,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Targets = targets.ToArray(),
             Bundles = bundles,
             Installers = installers,
+            MsiVersions = msiVersions,
             StorePackages = storePackages,
             BenchmarkGates = benchmarkGates,
             Outputs = outputs,
@@ -1333,6 +1341,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Monotonic = versioning.Monotonic,
             StatePath = versioning.StatePath,
             PropertyName = versioning.PropertyName,
+            ApplyToPublish = versioning.ApplyToPublish,
+            PublishProperties = versioning.PublishProperties?.ToArray() ?? Array.Empty<string>(),
             PatchCap = versioning.PatchCap
         };
     }
@@ -1907,6 +1917,72 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return plans.ToArray();
+    }
+
+    private Dictionary<string, DotNetPublishMsiVersionPlan> ResolveMsiVersionPlans(
+        string projectRoot,
+        bool allowOutputOutsideProjectRoot,
+        string configuration,
+        DotNetPublishInstallerPlan[] installers,
+        IEnumerable<DotNetPublishTargetPlan> targets)
+    {
+        var versions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase);
+        var probePlan = new DotNetPublishPlan
+        {
+            ProjectRoot = projectRoot,
+            AllowOutputOutsideProjectRoot = allowOutputOutsideProjectRoot,
+            Configuration = configuration
+        };
+        var plannedStates = new Dictionary<string, MsiVersionState>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var target in targets ?? Array.Empty<DotNetPublishTargetPlan>())
+        {
+            foreach (var combo in target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            {
+                foreach (var installer in installers.Where(i => string.Equals(i.PrepareFromTarget, target.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (installer.Versioning?.ApplyToPublish != true)
+                        continue;
+
+                    if (!InstallerMatchesCombo(installer, combo))
+                        continue;
+
+                    var step = new DotNetPublishStep
+                    {
+                        InstallerId = installer.Id,
+                        TargetName = target.Name,
+                        Framework = combo.Framework,
+                        Runtime = combo.Runtime,
+                        Style = combo.Style
+                    };
+                    var resolved = ResolveMsiVersion(probePlan, installer, step, plannedStates);
+                    if (string.IsNullOrWhiteSpace(resolved.Version))
+                        continue;
+
+                    var key = BuildMsiVersionKey(installer.Id, target.Name, combo.Framework, combo.Runtime, combo.Style);
+                    versions[key] = new DotNetPublishMsiVersionPlan
+                    {
+                        Version = resolved.Version!,
+                        VersionPropertyName = resolved.PropertyName,
+                        AssemblyVersion = BuildFourPartVersion(resolved.Version!),
+                        Patch = resolved.Patch,
+                        StatePath = resolved.StatePath
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(resolved.StatePath) && resolved.Patch.HasValue)
+                    {
+                        plannedStates[resolved.StatePath!] = new MsiVersionState
+                        {
+                            LastPatch = resolved.Patch.Value,
+                            Version = resolved.Version!,
+                            UpdatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)
+                        };
+                    }
+                }
+            }
+        }
+
+        return versions;
     }
 
     private static DotNetPublishInstallerPlan[] BuildInstallerPlans(
@@ -2690,6 +2766,7 @@ public sealed partial class DotNetPublishPipelineRunner
             clone.PropertyName = "ProductVersion";
         else
             clone.PropertyName = clone.PropertyName!.Trim();
+        clone.PublishProperties = NormalizeStrings(clone.PublishProperties);
 
         return clone;
     }
