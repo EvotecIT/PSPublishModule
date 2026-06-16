@@ -99,7 +99,11 @@ jobs:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+      POWERFORGE_RUNNER_CACHE_ROOT: ${{ github.workspace }}/.cache/powerforge-runner
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/powerforge-runner/ms-playwright
+      DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/dotnet-bundle
+      BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/bun-install-cache
+      NPM_CONFIG_CACHE: ${{ github.workspace }}/.cache/powerforge-runner/npm-cache
     steps:
       - name: Checkout website
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -160,11 +164,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Initialize Playwright cache directory
-        if: ${{ inputs.use_playwright_cache }}
+      - name: Initialize transient tool cache directories
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path $env:PLAYWRIGHT_BROWSERS_PATH | Out-Null
+          foreach ($path in @(
+            $env:POWERFORGE_RUNNER_CACHE_ROOT,
+            $env:PLAYWRIGHT_BROWSERS_PATH,
+            $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR,
+            $env:BUN_INSTALL_CACHE_DIR,
+            $env:NPM_CONFIG_CACHE
+          )) {
+            if (-not [string]::IsNullOrWhiteSpace($path)) {
+              New-Item -ItemType Directory -Force -Path $path | Out-Null
+            }
+          }
 
       - name: Run website pipeline
         shell: pwsh
@@ -207,12 +220,15 @@ jobs:
             ./${{ inputs.website_root }}/_site/_reports/**
           if-no-files-found: ignore
 
-      - name: Cleanup Playwright cache before Pages artifact
-        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact) && inputs.use_playwright_cache }}
+      - name: Cleanup transient tool caches before Pages artifact
+        if: ${{ inputs.upload_pages_artifact || inputs.validate_pages_artifact }}
         shell: pwsh
         run: |
-          if (-not [string]::IsNullOrWhiteSpace($env:PLAYWRIGHT_BROWSERS_PATH) -and (Test-Path -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH)) {
-            Remove-Item -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH -Recurse -Force
+          $cacheRoot = [System.IO.Path]::GetFullPath($env:POWERFORGE_RUNNER_CACHE_ROOT)
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+          $workspacePrefix = $workspace + [System.IO.Path]::DirectorySeparatorChar
+          if ($cacheRoot.StartsWith($workspacePrefix, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $cacheRoot)) {
+            Remove-Item -LiteralPath $cacheRoot -Recurse -Force
           }
 
       - name: Archive Pages artifact
@@ -293,10 +309,13 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Cleanup Playwright cache
-        if: ${{ always() && inputs.use_playwright_cache }}
+      - name: Cleanup transient tool caches
+        if: ${{ always() }}
         shell: pwsh
         run: |
-          if (-not [string]::IsNullOrWhiteSpace($env:PLAYWRIGHT_BROWSERS_PATH) -and (Test-Path -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH)) {
-            Remove-Item -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH -Recurse -Force
+          $cacheRoot = [System.IO.Path]::GetFullPath($env:POWERFORGE_RUNNER_CACHE_ROOT)
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+          $workspacePrefix = $workspace + [System.IO.Path]::DirectorySeparatorChar
+          if ($cacheRoot.StartsWith($workspacePrefix, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $cacheRoot)) {
+            Remove-Item -LiteralPath $cacheRoot -Recurse -Force
           }
