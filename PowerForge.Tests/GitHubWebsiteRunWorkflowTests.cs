@@ -1,0 +1,53 @@
+namespace PowerForge.Tests;
+
+public sealed class GitHubWebsiteRunWorkflowTests
+{
+    [Fact]
+    public void WebsiteRunWorkflow_ShouldKeepTransientToolCachesInsideWorkspace()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("POWERFORGE_RUNNER_CACHE_ROOT: ${{ github.workspace }}/.cache/powerforge-runner", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/powerforge-runner/ms-playwright", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/dotnet-bundle", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/bun-install-cache", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("NPM_CONFIG_CACHE: ${{ github.workspace }}/.cache/powerforge-runner/npm-cache", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WebsiteRunWorkflow_ShouldRemoveTransientToolCacheRoot()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("Initialize transient tool cache directories", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("Cleanup transient tool caches before Pages artifact", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("Cleanup transient tool caches", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("GetFullPath($env:POWERFORGE_RUNNER_CACHE_ROOT)", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("GetFullPath($env:GITHUB_WORKSPACE)", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("Remove-Item -LiteralPath $cacheRoot -Recurse -Force", workflowYaml, StringComparison.Ordinal);
+    }
+
+    private static string FindRepoRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var i = 0; i < 12 && current is not null; i++)
+        {
+            var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
+            if (File.Exists(marker))
+                return current.FullName;
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Unable to locate repository root for GitHub website workflow tests.");
+    }
+}
