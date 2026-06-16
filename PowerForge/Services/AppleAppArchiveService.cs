@@ -63,6 +63,12 @@ public sealed class AppleAppArchiveService
         if (request.AllowProvisioningUpdates)
             args.Add("-allowProvisioningUpdates");
 
+        AddAppStoreConnectAuthenticationArguments(
+            request.AppStoreConnectApiKeyPath,
+            request.AppStoreConnectApiKeyId,
+            request.AppStoreConnectApiIssuerId,
+            request.AllowProvisioningUpdates,
+            args);
         args.Add("archive");
         args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
 
@@ -120,6 +126,12 @@ public sealed class AppleAppArchiveService
         if (request.AllowProvisioningUpdates)
             args.Add("-allowProvisioningUpdates");
 
+        AddAppStoreConnectAuthenticationArguments(
+            request.AppStoreConnectApiKeyPath,
+            request.AppStoreConnectApiKeyId,
+            request.AppStoreConnectApiIssuerId,
+            request.AllowProvisioningUpdates,
+            args);
         args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
 
         var result = await _processRunner.RunAsync(
@@ -137,6 +149,36 @@ public sealed class AppleAppArchiveService
             ExportOptionsPlistPath = plistPath,
             ProcessResult = result
         };
+    }
+
+    private static void AddAppStoreConnectAuthenticationArguments(
+        string? appStoreConnectApiKeyPath,
+        string? appStoreConnectApiKeyId,
+        string? appStoreConnectApiIssuerId,
+        bool allowProvisioningUpdates,
+        List<string> args)
+    {
+        var keyPath = string.IsNullOrWhiteSpace(appStoreConnectApiKeyPath)
+            ? null
+            : Path.GetFullPath(appStoreConnectApiKeyPath!);
+        var keyId = string.IsNullOrWhiteSpace(appStoreConnectApiKeyId) ? null : appStoreConnectApiKeyId!.Trim();
+        var issuerId = string.IsNullOrWhiteSpace(appStoreConnectApiIssuerId) ? null : appStoreConnectApiIssuerId!.Trim();
+        var configuredCount = (keyPath is null ? 0 : 1) + (keyId is null ? 0 : 1) + (issuerId is null ? 0 : 1);
+        if (configuredCount == 0)
+            return;
+        if (configuredCount != 3)
+            throw new ArgumentException("App Store Connect API-key authentication requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
+        if (!allowProvisioningUpdates)
+            throw new ArgumentException("App Store Connect API-key authentication requires AllowProvisioningUpdates=true so xcodebuild can use the credentials.");
+        if (!File.Exists(keyPath))
+            throw new FileNotFoundException($"App Store Connect API key file was not found: {keyPath}", keyPath);
+
+        args.Add("-authenticationKeyPath");
+        args.Add(keyPath!);
+        args.Add("-authenticationKeyID");
+        args.Add(keyId!);
+        args.Add("-authenticationKeyIssuerID");
+        args.Add(issuerId!);
     }
 
     /// <summary>

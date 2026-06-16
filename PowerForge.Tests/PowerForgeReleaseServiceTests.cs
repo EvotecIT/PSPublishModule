@@ -424,6 +424,8 @@ public sealed class PowerForgeReleaseServiceTests
         try
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
+            Directory.CreateDirectory(Path.Combine(root, "secrets"));
+            File.WriteAllText(Path.Combine(root, "secrets", "AuthKey_ABC123DEFG.p8"), "private-key");
             var archiveRequests = new List<AppleAppArchiveRequest>();
             var uploadRequests = new List<AppleAppArchiveUploadRequest>();
 
@@ -467,9 +469,12 @@ public sealed class PowerForgeReleaseServiceTests
                         Upload = true,
                         TeamId = "TEAMID",
                         XcodeBuildExecutable = "xcodebuild-test",
-                        AllowProvisioningUpdates = false,
+                        AllowProvisioningUpdates = true,
                         SigningStyle = "automatic",
                         ManageAppVersionAndBuildNumber = true,
+                        AppStoreConnectApiKeyPath = "secrets/AuthKey_ABC123DEFG.p8",
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
                         Apps = new[]
                         {
                             new AppleAppConfiguration
@@ -492,12 +497,18 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Equal("xcodebuild-test", archiveRequest.XcodeBuildExecutable);
             Assert.Equal(ApplePlatform.iPadOS, archiveRequest.Platform);
             Assert.Equal("generic/platform=iOS", archiveRequest.Destination);
+            Assert.EndsWith(Path.Combine("secrets", "AuthKey_ABC123DEFG.p8"), archiveRequest.AppStoreConnectApiKeyPath, StringComparison.Ordinal);
+            Assert.Equal("ABC123DEFG", archiveRequest.AppStoreConnectApiKeyId);
+            Assert.Equal("issuer-id", archiveRequest.AppStoreConnectApiIssuerId);
 
             var uploadRequest = Assert.Single(uploadRequests);
             Assert.Equal("TEAMID", uploadRequest.TeamId);
             Assert.Equal("xcodebuild-test", uploadRequest.XcodeBuildExecutable);
-            Assert.False(uploadRequest.AllowProvisioningUpdates);
+            Assert.True(uploadRequest.AllowProvisioningUpdates);
             Assert.True(uploadRequest.ManageAppVersionAndBuildNumber);
+            Assert.EndsWith(Path.Combine("secrets", "AuthKey_ABC123DEFG.p8"), uploadRequest.AppStoreConnectApiKeyPath, StringComparison.Ordinal);
+            Assert.Equal("ABC123DEFG", uploadRequest.AppStoreConnectApiKeyId);
+            Assert.Equal("issuer-id", uploadRequest.AppStoreConnectApiIssuerId);
 
             var appResult = Assert.Single(result.AppleApps);
             Assert.True(appResult.Success);
@@ -2062,6 +2073,133 @@ public sealed class PowerForgeReleaseServiceTests
                 }));
 
             Assert.Contains("Missing.xcodeproj", ex.FileName, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedToolsAndAppleApps_ValidatesPartialApiKeyBeforePublishingTools()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tool planning should not run before Apple API-key validation succeeds."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run before Apple API-key validation succeeds."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run after validation failure."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        Targets = new[]
+                        {
+                            new PowerForgeToolReleaseTarget
+                            {
+                                Name = "PowerForge"
+                            }
+                        }
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                }));
+
+            Assert.Contains("AppStoreConnectApiKeyPath", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_MixedToolsAndAppleApps_ValidatesApiKeyProvisioningUpdatesBeforePublishingTools()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tool planning should not run before Apple API-key validation succeeds."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run before Apple API-key validation succeeds."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run after validation failure."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        Targets = new[]
+                        {
+                            new PowerForgeToolReleaseTarget
+                            {
+                                Name = "PowerForge"
+                            }
+                        }
+                    },
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        AllowProvisioningUpdates = false,
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                }));
+
+            Assert.Contains("AllowProvisioningUpdates=true", ex.Message, StringComparison.Ordinal);
         }
         finally
         {
