@@ -115,6 +115,9 @@ internal sealed class EmbeddedModuleDependencyService
         var results = new List<EmbeddedModuleDependencyInstallResult>();
         EmbeddedModuleDependencyEntry? rootModule = null;
 
+        if (!string.IsNullOrWhiteSpace(rootModuleBasePath))
+            ValidateDestinationOutsideSourceRoot(destination, rootModuleBasePath!);
+
         if (!listOnly)
             Directory.CreateDirectory(destination);
 
@@ -260,9 +263,26 @@ internal sealed class EmbeddedModuleDependencyService
         IReadOnlyCollection<string>? dependencyNames)
     {
         var filters = NormalizeNameFilter(dependencyNames);
-        return (manifest.Dependencies ?? Array.Empty<EmbeddedModuleDependencyEntry>())
+        var entries = (manifest.Dependencies ?? Array.Empty<EmbeddedModuleDependencyEntry>())
             .Where(static entry => entry is not null && !string.IsNullOrWhiteSpace(entry.Name) && !string.IsNullOrWhiteSpace(entry.RelativePath))
-            .Where(entry => filters.Count == 0 || filters.Contains(entry.Name))
+            .ToArray();
+        if (filters.Count == 0)
+            return entries;
+
+        var matched = new HashSet<string>(
+            entries
+                .Where(entry => filters.Contains(entry.Name))
+                .Select(static entry => entry.Name),
+            StringComparer.OrdinalIgnoreCase);
+        var missing = filters
+            .Where(filter => !matched.Contains(filter))
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (missing.Length > 0)
+            throw new InvalidOperationException($"Embedded module dependency filter did not match manifest entries: {string.Join(", ", missing)}.");
+
+        return entries
+            .Where(entry => filters.Contains(entry.Name))
             .ToArray();
     }
 
@@ -456,6 +476,14 @@ internal sealed class EmbeddedModuleDependencyService
 
     private static void ValidateInstalledVersion(RequiredModuleReference reference, InstalledModuleMetadata installed)
     {
+        if (!string.IsNullOrWhiteSpace(reference.Guid) &&
+            !reference.Guid!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(installed.Guid?.Trim(), reference.Guid.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Embedded module dependency '{reference.ModuleName}' resolved GUID '{installed.Guid ?? "<none>"}', but GUID '{reference.Guid}' was requested.");
+        }
+
         if (string.IsNullOrWhiteSpace(installed.Version))
             return;
 
@@ -507,11 +535,33 @@ internal sealed class EmbeddedModuleDependencyService
 
     private static bool IsPathUnderRoot(string root, string candidate)
     {
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
         var normalizedRoot = Path.GetFullPath(root)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
             Path.DirectorySeparatorChar;
         var normalizedCandidate = Path.GetFullPath(candidate);
-        return normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+        return normalizedCandidate.StartsWith(normalizedRoot, comparison);
+    }
+
+    private static void ValidateDestinationOutsideSourceRoot(string destinationRoot, string sourceRoot)
+    {
+        if (string.IsNullOrWhiteSpace(sourceRoot))
+            return;
+
+        var source = Path.GetFullPath(sourceRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var destination = Path.GetFullPath(destinationRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(source, destination, comparison) ||
+            destination.StartsWith(source + Path.DirectorySeparatorChar, comparison))
+        {
+            throw new InvalidOperationException("Private runtime destination must not be inside the source module path.");
+        }
     }
 
     private static void WriteManifest(string manifestPath, EmbeddedModuleDependencyManifest manifest)

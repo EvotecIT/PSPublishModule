@@ -105,6 +105,40 @@ public sealed class EmbeddedModuleDependencyServiceTests
     }
 
     [Fact]
+    public void Embed_RejectsInstalledModuleWithMismatchedGuid()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var dependencyRoot = CreateModule(root.FullName, "Pinned.Dependency", "1.0.0");
+            var provider = new Provider(new InstalledModuleMetadata(
+                "Pinned.Dependency",
+                "1.0.0",
+                guid: "11111111-1111-1111-1111-111111111111",
+                moduleBasePath: dependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Embed(
+                moduleRoot.FullName,
+                new[]
+                {
+                    new RequiredModuleReference(
+                        "Pinned.Dependency",
+                        requiredVersion: "1.0.0",
+                        guid: "22222222-2222-2222-2222-222222222222")
+                },
+                provider));
+            Assert.Contains("GUID", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Embed_ClearsStalePayloadFoldersBeforeWritingManifest()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -266,6 +300,39 @@ public sealed class EmbeddedModuleDependencyServiceTests
     }
 
     [Fact]
+    public void Install_WithUnknownDependencyFilterFails()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var dependencyRoot = CreateModule(root.FullName, "A.Dependency", "1.0.0");
+            var provider = new Provider(new InstalledModuleMetadata(
+                "A.Dependency",
+                "1.0.0",
+                guid: null,
+                moduleBasePath: dependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            var manifestPath = Path.Combine(moduleRoot.FullName, "Internals", "Modules", "module-dependencies.json");
+            service.Embed(
+                moduleRoot.FullName,
+                new[] { new RequiredModuleReference("A.Dependency", requiredVersion: "1.0.0") },
+                provider);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Install(
+                manifestPath,
+                Path.Combine(root.FullName, "PrivateDeps"),
+                dependencyNames: new[] { "Typo.Dependency" }));
+            Assert.Contains("Typo.Dependency", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ResolveEntryPath_RejectsPathsEscapingManifestRoot()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -280,6 +347,38 @@ public sealed class EmbeddedModuleDependencyServiceTests
                 Name = "Bad.Dependency",
                 Version = "1.0.0",
                 RelativePath = "../Bad.Dependency"
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                EmbeddedModuleDependencyService.ResolveEntryPath(manifestPath, entry));
+            Assert.Contains("escapes", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolveEntryPath_RejectsCaseVariantSiblingEscapeOnCaseSensitiveFilesystems()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var manifestRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule", "Internals", "Modules"));
+            var siblingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule", "Internals", "modules", "Bad.Dependency"));
+            var manifestPath = Path.Combine(manifestRoot.FullName, "module-dependencies.json");
+            File.WriteAllText(manifestPath, "{}");
+            File.WriteAllText(Path.Combine(siblingRoot.FullName, "Bad.Dependency.psd1"), string.Empty);
+
+            var entry = new EmbeddedModuleDependencyEntry
+            {
+                Name = "Bad.Dependency",
+                Version = "1.0.0",
+                RelativePath = "../modules/Bad.Dependency"
             };
 
             var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -368,6 +467,42 @@ public sealed class EmbeddedModuleDependencyServiceTests
             var dependency = Assert.Single(receipt.Dependencies);
             Assert.Equal("Microsoft.Graph.Authentication", dependency.Name);
             Assert.Equal("Microsoft.Graph.Authentication/2.25.0", dependency.RelativePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Install_WithRootModuleRejectsDestinationInsideSourceModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = CreateModuleAt(Path.Combine(root.FullName, "Installed", "OurModule", "1.2.3"), "OurModule", "1.2.3");
+            var dependencyRoot = CreateModule(root.FullName, "Microsoft.Graph.Authentication", "2.25.0");
+            var provider = new Provider(new InstalledModuleMetadata(
+                "Microsoft.Graph.Authentication",
+                "2.25.0",
+                guid: null,
+                moduleBasePath: dependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            service.Embed(
+                moduleRoot,
+                new[] { new RequiredModuleReference("Microsoft.Graph.Authentication", requiredVersion: "2.25.0") },
+                provider);
+
+            var destinationRoot = Path.Combine(moduleRoot, "PrivateRuntime");
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Install(
+                Path.Combine(moduleRoot, "Internals", "Modules", "module-dependencies.json"),
+                destinationRoot,
+                rootModuleName: "OurModule",
+                rootModuleVersion: "1.2.3",
+                rootModuleBasePath: moduleRoot));
+            Assert.Contains("source module", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(destinationRoot));
         }
         finally
         {
