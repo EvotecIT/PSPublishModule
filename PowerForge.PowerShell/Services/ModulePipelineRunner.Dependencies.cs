@@ -16,23 +16,6 @@ public sealed partial class ModulePipelineRunner
         if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
 
         var required = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
-        if (required.Length == 0)
-        {
-            var manifestPath = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
-            if (File.Exists(manifestPath))
-            {
-                var fromManifest = ModuleManifestValueReader.ReadRequiredModules(manifestPath);
-                if (fromManifest.Length > 0)
-                    required = fromManifest;
-            }
-        }
-
-        if (required.Length == 0)
-        {
-            _logger.Info("InstallMissingModules enabled, but no RequiredModules were found.");
-            return Array.Empty<ModuleDependencyInstallResult>();
-        }
-
         var depList = required
             .Where(r => !string.IsNullOrWhiteSpace(r.ModuleName))
             .Select(r => new ModuleDependency(
@@ -52,6 +35,22 @@ public sealed partial class ModulePipelineRunner
                 if (known.Contains(trimmed)) continue;
                 known.Add(trimmed);
                 depList.Add(new ModuleDependency(trimmed, requiredVersion: null, minimumVersion: null, maximumVersion: null));
+            }
+        }
+
+        if (plan.EmbeddedModules is { Length: > 0 })
+        {
+            foreach (var module in plan.EmbeddedModules)
+            {
+                if (module is null || string.IsNullOrWhiteSpace(module.ModuleName)) continue;
+                var name = module.ModuleName.Trim();
+                var dependency = new ModuleDependency(
+                    name,
+                    requiredVersion: module.RequiredVersion,
+                    minimumVersion: module.ModuleVersion,
+                    maximumVersion: module.MaximumVersion);
+                if (HasEquivalentDependencyInstallRequest(depList, dependency)) continue;
+                depList.Add(dependency);
             }
         }
 
@@ -91,6 +90,18 @@ public sealed partial class ModulePipelineRunner
 
         return results.ToArray();
     }
+
+    private static bool HasEquivalentDependencyInstallRequest(
+        IEnumerable<ModuleDependency> dependencies,
+        ModuleDependency candidate)
+        => (dependencies ?? Array.Empty<ModuleDependency>())
+            .Any(existing =>
+                existing is not null &&
+                candidate is not null &&
+                string.Equals(existing.Name?.Trim(), candidate.Name?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.RequiredVersion?.Trim(), candidate.RequiredVersion?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.MinimumVersion?.Trim(), candidate.MinimumVersion?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.MaximumVersion?.Trim(), candidate.MaximumVersion?.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private ModuleDependencyInstallResult[] EnsureFeatureToolDependenciesInstalled(
         ModulePipelinePlan plan,
@@ -239,6 +250,7 @@ public sealed partial class ModulePipelineRunner
     private void EnsureRequiredModuleOnlineResolutionToolInstalledIfNeeded(
         IReadOnlyList<RequiredModuleDraft> requiredModules,
         IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
+        IReadOnlyList<RequiredModuleDraft> embeddedModules,
         bool resolveMissingModulesOnline,
         bool warnIfRequiredModulesOutdated,
         DependencyVersionSourceRepository? publishVersionSource,
@@ -250,6 +262,7 @@ public sealed partial class ModulePipelineRunner
         if (!RequiresRequiredModuleOnlineResolutionTool(
                 requiredModules,
                 requiredModulesForPackaging,
+                embeddedModules,
                 resolveMissingModulesOnline,
                 warnIfRequiredModulesOutdated,
                 publishVersionSource))
@@ -295,7 +308,10 @@ public sealed partial class ModulePipelineRunner
             return false;
 
         var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(
-            candidates.Select(static dependency => dependency.Name.Trim()).ToArray());
+            candidates
+                .Select(static dependency => dependency.Name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray());
         return candidates.Any(dependency => RequiredModuleInstallNeedsRepositoryTool(dependency, installed));
     }
 
@@ -349,12 +365,14 @@ public sealed partial class ModulePipelineRunner
     private bool RequiresRequiredModuleOnlineResolutionTool(
         IReadOnlyList<RequiredModuleDraft> requiredModules,
         IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
+        IReadOnlyList<RequiredModuleDraft> embeddedModules,
         bool resolveMissingModulesOnline,
         bool warnIfRequiredModulesOutdated,
         DependencyVersionSourceRepository? publishVersionSource)
     {
         var drafts = (requiredModules ?? Array.Empty<RequiredModuleDraft>())
             .Concat(requiredModulesForPackaging ?? Array.Empty<RequiredModuleDraft>())
+            .Concat(embeddedModules ?? Array.Empty<RequiredModuleDraft>())
             .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
             .ToArray();
         if (drafts.Length == 0)
@@ -423,7 +441,7 @@ public sealed partial class ModulePipelineRunner
         if (!source.PreferOnlineMetadata)
             return false;
 
-        var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(moduleName.Trim());
+        var required = GetRequiredModulesForInstalledModule(new RequiredModuleReference(moduleName.Trim()));
         foreach (var dep in required ?? Array.Empty<RequiredModuleReference>())
         {
             if (dep is null || string.IsNullOrWhiteSpace(dep.ModuleName))
@@ -462,7 +480,8 @@ public sealed partial class ModulePipelineRunner
             return false;
 
         if (HasOnlineResolvableRequiredModuleReferences(plan.RequiredModules) ||
-            HasOnlineResolvableRequiredModuleReferences(plan.RequiredModulesForPackaging))
+            HasOnlineResolvableRequiredModuleReferences(plan.RequiredModulesForPackaging) ||
+            HasOnlineResolvableRequiredModuleReferences(plan.EmbeddedModules))
         {
             return true;
         }
@@ -471,6 +490,7 @@ public sealed partial class ModulePipelineRunner
         return RequiresRequiredModuleOnlineResolutionTool(
             input.RequiredModules,
             input.RequiredModulesForPackaging,
+            input.EmbeddedModules,
             input.ResolveMissingModulesOnline,
             input.WarnIfRequiredModulesOutdated,
             input.PublishVersionSource);
@@ -640,29 +660,6 @@ public sealed partial class ModulePipelineRunner
         return true;
     }
 
-    private static RequiredModuleDraft[] ReadRequiredModuleDraftsFromManifest(ModulePipelineSpec spec)
-    {
-        var moduleName = spec?.Build?.Name;
-        var sourcePath = spec?.Build?.SourcePath;
-        if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(sourcePath))
-            return Array.Empty<RequiredModuleDraft>();
-
-        var manifestPath = Path.Combine(sourcePath, $"{moduleName}.psd1");
-        if (!File.Exists(manifestPath))
-            return Array.Empty<RequiredModuleDraft>();
-
-        return ModuleManifestValueReader.ReadRequiredModules(manifestPath)
-            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
-            .Select(static module => new RequiredModuleDraft(
-                moduleName: module.ModuleName.Trim(),
-                moduleVersion: module.ModuleVersion,
-                minimumVersion: module.ModuleVersion,
-                requiredVersion: module.RequiredVersion,
-                guid: module.Guid,
-                versionSource: ModuleDependencyVersionSource.Auto))
-            .ToArray();
-    }
-
     private void EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(ModulePipelineSpec spec)
     {
         if (spec is null) return;
@@ -674,6 +671,7 @@ public sealed partial class ModulePipelineRunner
         EnsureRequiredModuleOnlineResolutionToolInstalledIfNeeded(
             input.RequiredModules,
             input.RequiredModulesForPackaging,
+            input.EmbeddedModules,
             input.ResolveMissingModulesOnline,
             input.WarnIfRequiredModulesOutdated,
             input.PublishVersionSource,
@@ -692,6 +690,8 @@ public sealed partial class ModulePipelineRunner
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var embeddedModulesDraft = new List<RequiredModuleDraft>();
+        var embeddedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var publishes = new List<ConfigurationPublishSegment>();
         var resolveMissingModulesOnline = false;
         var resolveMissingModulesOnlineSet = false;
@@ -701,12 +701,6 @@ public sealed partial class ModulePipelineRunner
         var installMissingModulesPrerelease = false;
         string? installMissingModulesRepository = null;
         RepositoryCredential? installMissingModulesCredential = null;
-
-        foreach (var draft in ReadRequiredModuleDraftsFromManifest(spec))
-        {
-            AddOrReplaceRequiredModuleDraft(requiredModulesDraft, requiredIndex, draft);
-            AddOrReplaceRequiredModuleDraft(requiredModulesDraftForPackaging, requiredPackagingIndex, draft);
-        }
 
         foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
         {
@@ -738,7 +732,8 @@ public sealed partial class ModulePipelineRunner
                 case ConfigurationModuleSegment moduleSeg:
                 {
                     var cfg = moduleSeg.Configuration;
-                    if (moduleSeg.Kind != ModuleDependencyKind.RequiredModule ||
+                    if ((moduleSeg.Kind != ModuleDependencyKind.RequiredModule &&
+                         moduleSeg.Kind != ModuleDependencyKind.EmbeddedModule) ||
                         cfg is null ||
                         string.IsNullOrWhiteSpace(cfg.ModuleName) ||
                         ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(cfg.ModuleName))
@@ -753,8 +748,15 @@ public sealed partial class ModulePipelineRunner
                         requiredVersion: cfg.RequiredVersion,
                         guid: cfg.Guid,
                         versionSource: cfg.VersionSource);
-                    AddOrReplaceRequiredModuleDraft(requiredModulesDraft, requiredIndex, draft);
-                    AddOrReplaceRequiredModuleDraft(requiredModulesDraftForPackaging, requiredPackagingIndex, draft);
+                    if (moduleSeg.Kind == ModuleDependencyKind.EmbeddedModule)
+                    {
+                        AddOrReplaceRequiredModuleDraft(embeddedModulesDraft, embeddedIndex, draft);
+                    }
+                    else
+                    {
+                        AddOrReplaceRequiredModuleDraft(requiredModulesDraft, requiredIndex, draft);
+                        AddOrReplaceRequiredModuleDraft(requiredModulesDraftForPackaging, requiredPackagingIndex, draft);
+                    }
                     break;
                 }
                 case ConfigurationPublishSegment publish:
@@ -763,7 +765,7 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
-        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft))
+        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft.Concat(embeddedModulesDraft)))
             resolveMissingModulesOnline = true;
 
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(
@@ -781,7 +783,8 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesPrerelease,
             refreshPsd1Only,
             requiredModulesDraft.ToArray(),
-            requiredModulesDraftForPackaging.ToArray());
+            requiredModulesDraftForPackaging.ToArray(),
+            embeddedModulesDraft.ToArray());
     }
 
     private static void AddOrReplaceRequiredModuleDraft(
@@ -814,7 +817,8 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesPrerelease: false,
             refreshPsd1Only: false,
             requiredModules: Array.Empty<RequiredModuleDraft>(),
-            requiredModulesForPackaging: Array.Empty<RequiredModuleDraft>());
+            requiredModulesForPackaging: Array.Empty<RequiredModuleDraft>(),
+            embeddedModules: Array.Empty<RequiredModuleDraft>());
 
         public bool ResolveMissingModulesOnline { get; }
         public bool WarnIfRequiredModulesOutdated { get; }
@@ -826,6 +830,7 @@ public sealed partial class ModulePipelineRunner
         public bool RefreshPsd1Only { get; }
         public RequiredModuleDraft[] RequiredModules { get; }
         public RequiredModuleDraft[] RequiredModulesForPackaging { get; }
+        public RequiredModuleDraft[] EmbeddedModules { get; }
 
         public RequiredModulePreflightInput(
             bool resolveMissingModulesOnline,
@@ -837,7 +842,8 @@ public sealed partial class ModulePipelineRunner
             bool installMissingModulesPrerelease,
             bool refreshPsd1Only,
             RequiredModuleDraft[] requiredModules,
-            RequiredModuleDraft[] requiredModulesForPackaging)
+            RequiredModuleDraft[] requiredModulesForPackaging,
+            RequiredModuleDraft[] embeddedModules)
         {
             ResolveMissingModulesOnline = resolveMissingModulesOnline;
             WarnIfRequiredModulesOutdated = warnIfRequiredModulesOutdated;
@@ -849,6 +855,7 @@ public sealed partial class ModulePipelineRunner
             RefreshPsd1Only = refreshPsd1Only;
             RequiredModules = requiredModules ?? Array.Empty<RequiredModuleDraft>();
             RequiredModulesForPackaging = requiredModulesForPackaging ?? Array.Empty<RequiredModuleDraft>();
+            EmbeddedModules = embeddedModules ?? Array.Empty<RequiredModuleDraft>();
         }
     }
 

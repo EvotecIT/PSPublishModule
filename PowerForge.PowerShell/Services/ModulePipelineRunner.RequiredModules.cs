@@ -243,10 +243,17 @@ public sealed partial class ModulePipelineRunner
         var discoveredIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var rootsByName = output
+            .GroupBy(static module => module.ModuleName!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
+
         foreach (var root in NormalizeStringArray(rootModules))
         {
             var source = ResolveInheritedDependencyVersionSource(root, sourceDrafts, ModuleDependencyVersionSource.Auto);
-            CollectTransitiveRequiredModules(root, source, sourceDrafts, known, discoveredIndex, visited, discovered);
+            var rootReference = rootsByName.TryGetValue(root, out var resolvedRoot)
+                ? resolvedRoot
+                : new RequiredModuleReference(root);
+            CollectTransitiveRequiredModules(rootReference, source, sourceDrafts, known, discoveredIndex, visited, discovered);
         }
 
         if (discovered.Count == 0)
@@ -308,7 +315,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private void CollectTransitiveRequiredModules(
-        string moduleName,
+        RequiredModuleReference module,
         ModuleDependencyVersionSource inheritedVersionSource,
         IReadOnlyDictionary<string, RequiredModuleDraft> sourceDrafts,
         HashSet<string> known,
@@ -316,13 +323,13 @@ public sealed partial class ModulePipelineRunner
         HashSet<string> visited,
         List<(RequiredModuleReference Reference, ModuleDependencyVersionSource VersionSource)> discovered)
     {
-        if (string.IsNullOrWhiteSpace(moduleName))
+        if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
             return;
-        var normalizedModuleName = moduleName.Trim();
+        var normalizedModuleName = module.ModuleName.Trim();
         if (!visited.Add(normalizedModuleName))
             return;
 
-        var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(normalizedModuleName);
+        var required = GetRequiredModulesForInstalledModule(module);
         foreach (var dep in required ?? Array.Empty<RequiredModuleReference>())
         {
             if (dep is null || string.IsNullOrWhiteSpace(dep.ModuleName))
@@ -345,8 +352,73 @@ public sealed partial class ModulePipelineRunner
                     childVersionSource));
             }
 
-            CollectTransitiveRequiredModules(depName, childVersionSource, sourceDrafts, known, discoveredIndex, visited, discovered);
+            CollectTransitiveRequiredModules(dep, childVersionSource, sourceDrafts, known, discoveredIndex, visited, discovered);
         }
+    }
+
+    private RequiredModuleReference[] OrderRequiredModulesByDependenciesFirst(IEnumerable<RequiredModuleReference> modules)
+    {
+        var byName = (modules ?? Array.Empty<RequiredModuleReference>())
+            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+            .GroupBy(static module => module.ModuleName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
+        if (byName.Count < 2)
+            return byName.Values.ToArray();
+
+        var ordered = new List<RequiredModuleReference>();
+        var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var module in modules ?? Array.Empty<RequiredModuleReference>())
+        {
+            if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
+                continue;
+
+            VisitRequiredModuleDependencyFirst(module.ModuleName.Trim(), byName, visiting, visited, ordered);
+        }
+
+        return ordered.ToArray();
+    }
+
+    private void VisitRequiredModuleDependencyFirst(
+        string moduleName,
+        IReadOnlyDictionary<string, RequiredModuleReference> modulesByName,
+        HashSet<string> visiting,
+        HashSet<string> visited,
+        List<RequiredModuleReference> ordered)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName) || visited.Contains(moduleName))
+            return;
+        if (!visiting.Add(moduleName))
+            return;
+
+        var current = modulesByName.TryGetValue(moduleName, out var reference)
+            ? reference
+            : new RequiredModuleReference(moduleName);
+        var required = GetRequiredModulesForInstalledModule(current);
+        foreach (var dep in required ?? Array.Empty<RequiredModuleReference>())
+        {
+            if (dep is null || string.IsNullOrWhiteSpace(dep.ModuleName))
+                continue;
+
+            var depName = dep.ModuleName.Trim();
+            if (modulesByName.ContainsKey(depName))
+                VisitRequiredModuleDependencyFirst(depName, modulesByName, visiting, visited, ordered);
+        }
+
+        visiting.Remove(moduleName);
+        if (visited.Add(moduleName) && modulesByName.TryGetValue(moduleName, out var module))
+            ordered.Add(module);
+    }
+
+    private IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(RequiredModuleReference reference)
+    {
+        if (reference is null || string.IsNullOrWhiteSpace(reference.ModuleName))
+            return Array.Empty<RequiredModuleReference>();
+
+        return _moduleDependencyMetadataProvider is IModuleDependencyReferenceMetadataProvider referenceProvider
+            ? referenceProvider.GetRequiredModulesForInstalledModule(reference)
+            : _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(reference.ModuleName.Trim());
     }
 
     private static ModuleDependencyVersionSource ResolveInheritedDependencyVersionSource(

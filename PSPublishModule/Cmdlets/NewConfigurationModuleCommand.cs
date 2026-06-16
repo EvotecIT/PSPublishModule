@@ -6,7 +6,7 @@ using PSPublishModule.Services;
 namespace PSPublishModule;
 
 /// <summary>
-/// Provides a way to configure required, external, or approved modules used in the project.
+/// Provides a way to configure required, external, embedded, or approved modules used in the project.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,12 +16,15 @@ namespace PSPublishModule;
 /// <para>
 /// Use <c>RequiredModule</c> for dependencies that should appear in the manifest and can also be bundled into build
 /// artefacts when <c>New-ConfigurationArtefact -AddRequiredModules</c> is enabled. Use <c>ExternalModule</c> for
-/// dependencies that must exist on the target system but should not be bundled into artefacts.
+/// dependencies that must exist on the target system but should not be bundled into artefacts. Use
+/// <c>EmbeddedModule</c> for dependencies that should be bundled under Internals\Modules and installed/imported
+/// later by explicit path with <c>Install-ModuleDependency</c> / <c>Import-ModuleDependency</c>.
 /// </para>
 /// <para>
 /// <c>RequiredModule</c> entries are written to the manifest <c>RequiredModules</c>. <c>ExternalModule</c> entries
-/// are written to <c>PrivateData.PSData.ExternalModuleDependencies</c>. <c>ApprovedModule</c> entries are used by
-/// merge/missing-function workflows and are not emitted as manifest dependencies.
+/// are written to <c>PrivateData.PSData.ExternalModuleDependencies</c>. <c>EmbeddedModule</c> entries are copied
+/// into the built module internals and are not emitted as manifest dependencies. <c>ApprovedModule</c> entries are
+/// used by merge/missing-function workflows and are not emitted as manifest dependencies.
 /// </para>
 /// <para>
 /// Built-in <c>Microsoft.PowerShell.*</c> modules are ignored during manifest refresh because they are inbox runtime
@@ -57,6 +60,12 @@ namespace PSPublishModule;
 /// <para>Uses RequiredVersion when an exact match is required.</para>
 /// </example>
 /// <example>
+/// <summary>Embed a dependency for explicit private-path import later</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationModule -Type EmbeddedModule -Name 'Microsoft.Graph.Authentication' -RequiredVersion '2.25.0'</code>
+/// <para>Bundles the dependency under Internals\Modules without adding it to PSD1 RequiredModules.</para>
+/// </example>
+/// <example>
 /// <summary>Declare an approved helper module for merge-time reuse</summary>
 /// <prefix>PS&gt; </prefix>
 /// <code>New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods','PSWriteColor'</code>
@@ -72,9 +81,10 @@ namespace PSPublishModule;
 public sealed class NewConfigurationModuleCommand : PSCmdlet
 {
     /// <summary>
-    /// Choose between <c>RequiredModule</c>, <c>ExternalModule</c>, and <c>ApprovedModule</c>.
-    /// <c>RequiredModule</c> is used for manifest and optional packaging, <c>ExternalModule</c> is install-only, and
-    /// <c>ApprovedModule</c> is merge-only.
+    /// Choose between <c>RequiredModule</c>, <c>ExternalModule</c>, <c>EmbeddedModule</c>, and <c>ApprovedModule</c>.
+    /// <c>RequiredModule</c> is used for manifest and optional packaging, <c>ExternalModule</c> is install-only,
+    /// <c>EmbeddedModule</c> is bundled under Internals for explicit install/import by path, and <c>ApprovedModule</c>
+    /// is merge-only.
     /// </summary>
     [Parameter] public PowerForge.ModuleDependencyKind Type { get; set; } = PowerForge.ModuleDependencyKind.RequiredModule;
 

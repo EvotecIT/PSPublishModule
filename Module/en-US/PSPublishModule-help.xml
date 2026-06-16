@@ -6796,6 +6796,347 @@ isolated copy instead of the original installed module.</maml:para>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Import-ModuleDependency</command:name>
+      <command:verb>Import</command:verb>
+      <command:noun>ModuleDependency</command:noun>
+      <maml:description>
+        <maml:para>Imports a module runtime by exact paths, with dependencies loaded before the root module.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Use -Name to import dependencies directly from a module's bundled Internals\Modules payload and&#xD;
+then import that module by exact path. Add -Path after Install-ModuleDependency to import&#xD;
+the private runtime copy without relying on PSModulePath discovery.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="ByName">
+        <maml:name>Import-ModuleDependency</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DependencyName</maml:name>
+          <maml:description>
+            <maml:para>Dependency names to import. When omitted, imports all dependencies in the receipt.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Force re-import of modules already loaded in the session.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Module containing embedded dependencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Return imported module information from Import-Module -PassThru.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Installed dependency root or module-dependencies.json receipt path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredVersion</maml:name>
+          <maml:description>
+            <maml:para>Optional exact source module version when using -Name or -Module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Version</command:parameterValue>
+          <dev:type>
+            <maml:name>Version</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="ByModule">
+        <maml:name>Import-ModuleDependency</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DependencyName</maml:name>
+          <maml:description>
+            <maml:para>Dependency names to import. When omitted, imports all dependencies in the receipt.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Force re-import of modules already loaded in the session.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Module</maml:name>
+          <maml:description>
+            <maml:para>Specific module object containing embedded dependencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">PSObject</command:parameterValue>
+          <dev:type>
+            <maml:name>PSObject</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Return imported module information from Import-Module -PassThru.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Installed dependency root or module-dependencies.json receipt path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredVersion</maml:name>
+          <maml:description>
+            <maml:para>Optional exact source module version when using -Name or -Module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Version</command:parameterValue>
+          <dev:type>
+            <maml:name>Version</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="ByPath">
+        <maml:name>Import-ModuleDependency</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DependencyName</maml:name>
+          <maml:description>
+            <maml:para>Dependency names to import. When omitted, imports all dependencies in the receipt.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Force re-import of modules already loaded in the session.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Return imported module information from Import-Module -PassThru.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Installed dependency root or module-dependencies.json receipt path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DependencyName</maml:name>
+        <maml:description>
+          <maml:para>Dependency names to import. When omitted, imports all dependencies in the receipt.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Force re-import of modules already loaded in the session.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Module</maml:name>
+        <maml:description>
+          <maml:para>Specific module object containing embedded dependencies.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">PSObject</command:parameterValue>
+        <dev:type>
+          <maml:name>PSObject</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Module containing embedded dependencies.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Return imported module information from Import-Module -PassThru.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Installed dependency root or module-dependencies.json receipt path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredVersion</maml:name>
+        <maml:description>
+          <maml:para>Optional exact source module version when using -Name or -Module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Version</command:parameterValue>
+        <dev:type>
+          <maml:name>Version</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String&#xD;
+System.Management.Automation.PSObject</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Object</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Import dependencies bundled inside a module, then import the module</maml:title>
+        <dev:code>Import-ModuleDependency -Name EntraIDConfig</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Import a private runtime folder created by Install-ModuleDependency</maml:title>
+        <dev:code>Import-ModuleDependency -Name EntraIDConfig -Path C:\PrivateDeps</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Import-ModuleRepositoryProfile</command:name>
       <command:verb>Import</command:verb>
       <command:noun>ModuleRepositoryProfile</command:noun>
@@ -8027,6 +8368,350 @@ authenticated access through the selected bootstrap mode.</maml:para>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
         <dev:code>Install-AppleApp -AppPath 'C:\Path'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Install-ModuleDependency</command:name>
+      <command:verb>Install</command:verb>
+      <command:noun>ModuleDependency</command:noun>
+      <maml:description>
+        <maml:para>Installs a module and its embedded dependencies to an explicit private runtime folder.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>The command reads the dependency manifest produced by New-ConfigurationModule -Type EmbeddedModule&#xD;
+and copies the root module plus each dependency payload to the requested path. Modules are not installed&#xD;
+into PSModulePath unless the chosen path is already part of PSModulePath.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="ByName">
+        <maml:name>Install-ModuleDependency</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DependencyName</maml:name>
+          <maml:description>
+            <maml:para>Dependency names to install. When omitted, installs all embedded dependencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Overwrite existing dependency folders when merge or overwrite behavior requires it.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ListOnly</maml:name>
+          <maml:description>
+            <maml:para>Preview planned dependency copies without writing files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Module containing embedded dependencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OnExists</maml:name>
+          <maml:description>
+            <maml:para>Conflict handling when a dependency version folder already exists.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>OnExistsOption</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Destination folder. The root module and dependencies are copied under Name\Version folders.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredVersion</maml:name>
+          <maml:description>
+            <maml:para>Optional exact source module version.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Version</command:parameterValue>
+          <dev:type>
+            <maml:name>Version</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="ByModule">
+        <maml:name>Install-ModuleDependency</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DependencyName</maml:name>
+          <maml:description>
+            <maml:para>Dependency names to install. When omitted, installs all embedded dependencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Overwrite existing dependency folders when merge or overwrite behavior requires it.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ListOnly</maml:name>
+          <maml:description>
+            <maml:para>Preview planned dependency copies without writing files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Module</maml:name>
+          <maml:description>
+            <maml:para>Specific module object containing embedded dependencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">PSObject</command:parameterValue>
+          <dev:type>
+            <maml:name>PSObject</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OnExists</maml:name>
+          <maml:description>
+            <maml:para>Conflict handling when a dependency version folder already exists.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>OnExistsOption</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Destination folder. The root module and dependencies are copied under Name\Version folders.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredVersion</maml:name>
+          <maml:description>
+            <maml:para>Optional exact source module version.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Version</command:parameterValue>
+          <dev:type>
+            <maml:name>Version</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DependencyName</maml:name>
+        <maml:description>
+          <maml:para>Dependency names to install. When omitted, installs all embedded dependencies.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Overwrite existing dependency folders when merge or overwrite behavior requires it.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ListOnly</maml:name>
+        <maml:description>
+          <maml:para>Preview planned dependency copies without writing files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Module</maml:name>
+        <maml:description>
+          <maml:para>Specific module object containing embedded dependencies.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">PSObject</command:parameterValue>
+        <dev:type>
+          <maml:name>PSObject</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Module containing embedded dependencies.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OnExists</maml:name>
+        <maml:description>
+          <maml:para>Conflict handling when a dependency version folder already exists.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>OnExistsOption</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Destination folder. The root module and dependencies are copied under Name\Version folders.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredVersion</maml:name>
+        <maml:description>
+          <maml:para>Optional exact source module version.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Version</command:parameterValue>
+        <dev:type>
+          <maml:name>Version</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String&#xD;
+System.Management.Automation.PSObject</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.EmbeddedModuleDependencyInstallResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Install a module and all embedded dependencies to a private runtime folder</maml:title>
+        <dev:code>Install-ModuleDependency -Name EntraIDConfig -Path C:\PrivateDeps</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Install only selected dependencies</maml:title>
+        <dev:code>Install-ModuleDependency -Name EntraIDConfig -DependencyName Microsoft.Graph.Authentication -Path C:\PrivateDeps -Force</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -31310,7 +31995,7 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
       <command:verb>New</command:verb>
       <command:noun>ConfigurationModule</command:noun>
       <maml:description>
-        <maml:para>Provides a way to configure required, external, or approved modules used in the project.</maml:para>
+        <maml:para>Provides a way to configure required, external, embedded, or approved modules used in the project.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
@@ -31318,10 +32003,13 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
 install/package dependencies during a build.</maml:para>
       <maml:para>Use RequiredModule for dependencies that should appear in the manifest and can also be bundled into build&#xD;
 artefacts when New-ConfigurationArtefact -AddRequiredModules is enabled. Use ExternalModule for&#xD;
-dependencies that must exist on the target system but should not be bundled into artefacts.</maml:para>
+dependencies that must exist on the target system but should not be bundled into artefacts. Use&#xD;
+EmbeddedModule for dependencies that should be bundled under Internals\Modules and installed/imported&#xD;
+later by explicit path with Install-ModuleDependency / Import-ModuleDependency.</maml:para>
       <maml:para>RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries&#xD;
-are written to PrivateData.PSData.ExternalModuleDependencies. ApprovedModule entries are used by&#xD;
-merge/missing-function workflows and are not emitted as manifest dependencies.</maml:para>
+are written to PrivateData.PSData.ExternalModuleDependencies. EmbeddedModule entries are copied&#xD;
+into the built module internals and are not emitted as manifest dependencies. ApprovedModule entries are&#xD;
+used by merge/missing-function workflows and are not emitted as manifest dependencies.</maml:para>
       <maml:para>Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime&#xD;
 modules, not gallery-resolvable dependencies.</maml:para>
       <maml:para>Version and Guid values set to Auto or Latest are resolved from installed modules by default. When&#xD;
@@ -31389,15 +32077,17 @@ exact same version.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Type</maml:name>
           <maml:description>
-            <maml:para>Choose between RequiredModule, ExternalModule, and ApprovedModule.&#xD;
-RequiredModule is used for manifest and optional packaging, ExternalModule is install-only, and&#xD;
-ApprovedModule is merge-only.</maml:para>
+            <maml:para>Choose between RequiredModule, ExternalModule, EmbeddedModule, and ApprovedModule.&#xD;
+RequiredModule is used for manifest and optional packaging, ExternalModule is install-only,&#xD;
+EmbeddedModule is bundled under Internals for explicit install/import by path, and ApprovedModule&#xD;
+is merge-only.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">ModuleDependencyKind</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">RequiredModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ExternalModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ApprovedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">EmbeddedModule</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleDependencyKind</maml:name>
@@ -31494,15 +32184,17 @@ exact same version.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Type</maml:name>
         <maml:description>
-          <maml:para>Choose between RequiredModule, ExternalModule, and ApprovedModule.&#xD;
-RequiredModule is used for manifest and optional packaging, ExternalModule is install-only, and&#xD;
-ApprovedModule is merge-only.</maml:para>
+          <maml:para>Choose between RequiredModule, ExternalModule, EmbeddedModule, and ApprovedModule.&#xD;
+RequiredModule is used for manifest and optional packaging, ExternalModule is install-only,&#xD;
+EmbeddedModule is bundled under Internals for explicit install/import by path, and ApprovedModule&#xD;
+is merge-only.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">ModuleDependencyKind</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">RequiredModule</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ExternalModule</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ApprovedModule</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">EmbeddedModule</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ModuleDependencyKind</maml:name>
@@ -31593,6 +32285,16 @@ ApprovedModule is merge-only.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
+        <maml:title>Embed a dependency for explicit private-path import later</maml:title>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationModule -Type EmbeddedModule -Name 'Microsoft.Graph.Authentication' -RequiredVersion '2.25.0'</dev:code>
+        <dev:remarks>
+          <maml:para>Bundles the dependency under Internals\Modules without adding it to PSD1 RequiredModules.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
         <maml:title>Declare an approved helper module for merge-time reuse</maml:title>
         <maml:introduction>
           <maml:para>PS&gt; </maml:para>
@@ -31621,12 +32323,12 @@ ApprovedModule is merge-only.</maml:para>
       <command:verb>New</command:verb>
       <command:noun>ConfigurationModuleSkip</command:noun>
       <maml:description>
-        <maml:para>Provides a way to ignore certain commands or modules during build process and continue module building on errors.</maml:para>
+        <maml:para>Provides a way to ignore certain commands or modules during build-time dependency validation.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Useful for optional dependencies where you want builds to succeed even if a tool module is not available&#xD;
-(e.g. optional analyzers, formatters, helpers).</maml:para>
+      <maml:para>Missing module-backed commands fail the build by default. Use this command for optional dependencies where you&#xD;
+want selected missing modules or commands to be ignored. -Force keeps the legacy broad opt-out behavior.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -31634,7 +32336,7 @@ ApprovedModule is merge-only.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FailOnMissingCommands</maml:name>
           <maml:description>
-            <maml:para>Fail build when unresolved commands are detected during merge.</maml:para>
+            <maml:para>Fail build when unresolved commands are detected during merge. This is the default and is retained for compatibility.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -31646,7 +32348,7 @@ ApprovedModule is merge-only.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Force</maml:name>
           <maml:description>
-            <maml:para>Force build process to continue even if the module or command is not available.</maml:para>
+            <maml:para>Force the build process to continue even if modules or commands are not available.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -31658,7 +32360,7 @@ ApprovedModule is merge-only.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>IgnoreFunctionName</maml:name>
           <maml:description>
-            <maml:para>Ignore function name(s). If the function is not available it will be ignored.</maml:para>
+            <maml:para>Ignore command/function name(s) during missing-command validation.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -31670,7 +32372,7 @@ ApprovedModule is merge-only.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>IgnoreModuleName</maml:name>
           <maml:description>
-            <maml:para>Ignore module name(s). If the module is not available it will be ignored.</maml:para>
+            <maml:para>Ignore module name(s) during missing-command validation.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -31685,7 +32387,7 @@ ApprovedModule is merge-only.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>FailOnMissingCommands</maml:name>
         <maml:description>
-          <maml:para>Fail build when unresolved commands are detected during merge.</maml:para>
+          <maml:para>Fail build when unresolved commands are detected during merge. This is the default and is retained for compatibility.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -31697,7 +32399,7 @@ ApprovedModule is merge-only.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Force</maml:name>
         <maml:description>
-          <maml:para>Force build process to continue even if the module or command is not available.</maml:para>
+          <maml:para>Force the build process to continue even if modules or commands are not available.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -31709,7 +32411,7 @@ ApprovedModule is merge-only.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>IgnoreFunctionName</maml:name>
         <maml:description>
-          <maml:para>Ignore function name(s). If the function is not available it will be ignored.</maml:para>
+          <maml:para>Ignore command/function name(s) during missing-command validation.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
@@ -31721,7 +32423,7 @@ ApprovedModule is merge-only.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>IgnoreModuleName</maml:name>
         <maml:description>
-          <maml:para>Ignore module name(s). If the module is not available it will be ignored.</maml:para>
+          <maml:para>Ignore module name(s) during missing-command validation.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>

@@ -103,16 +103,16 @@ public sealed class ConfigurationModuleSkipSegment : IConfigurationSegment
 /// </summary>
 public sealed class ModuleSkipConfiguration
 {
-    /// <summary>Ignore module name(s). If the module is not available it will be ignored.</summary>
+    /// <summary>Ignore module name(s) during missing-command validation.</summary>
     public string[]? IgnoreModuleName { get; set; }
 
-    /// <summary>Ignore function name(s). If the function is not available it will be ignored.</summary>
+    /// <summary>Ignore command/function name(s) during missing-command validation.</summary>
     public string[]? IgnoreFunctionName { get; set; }
 
     /// <summary>Continue build even if modules/commands are not available.</summary>
     public bool Force { get; set; }
 
-    /// <summary>Fail build when unresolved commands are detected during merge.</summary>
+    /// <summary>Fail build when unresolved commands are detected during merge. This is the default and is retained for compatibility.</summary>
     public bool FailOnMissingCommands { get; set; }
 }
 

@@ -47,7 +47,7 @@ public sealed class ModulePipelineManifestRefreshTests
 
             Assert.Contains(manifestMutator.TopLevelVersionWrites, static write => write.NewVersion == "3.0.0");
             Assert.Contains(manifestMutator.TopLevelStringWrites, static write => write.Key == "RootModule" && write.Value == "TestModule.psm1");
-            Assert.Contains(manifestMutator.RequiredModulesWrites, static write => write.Modules.Length == 1 && write.Modules[0].ModuleName == "LegacyOnly");
+            Assert.Contains(manifestMutator.RequiredModulesWrites, static write => write.Modules.Length == 0);
             Assert.Contains(manifestMutator.RemovedTopLevelKeys, static key => string.Equals(key, "CommandModuleDependencies", StringComparison.Ordinal));
         }
         finally
@@ -127,10 +127,9 @@ public sealed class ModulePipelineManifestRefreshTests
             Assert.False(ManifestEditor.TryGetPsDataStringArray(manifestPath, "Tags", out _));
 
             Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? requiredModules));
-            var required = Assert.Single(requiredModules!);
-            Assert.Equal("LegacyOnly", required.ModuleName);
+            Assert.Empty(requiredModules!);
             Assert.True(ManifestEditor.TryGetPsDataStringArray(manifestPath, "ExternalModuleDependencies", out var externalModules));
-            Assert.Equal(new[] { "Old.External" }, externalModules);
+            Assert.Empty(externalModules!);
 
             var content = File.ReadAllText(manifestPath);
             Assert.DoesNotContain("CommandModuleDependencies", content, StringComparison.Ordinal);
@@ -382,14 +381,13 @@ public sealed class ModulePipelineManifestRefreshTests
 
             Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? requiredModules));
             Assert.NotNull(requiredModules);
-            Assert.Single(requiredModules!);
-            Assert.Contains(requiredModules, module => string.Equals(module.ModuleName, "LegacyOnly", StringComparison.OrdinalIgnoreCase));
-            // Inbox and externally-classified modules are filtered out of generated RequiredModules metadata.
+            Assert.Empty(requiredModules!);
+            // Source manifest dependencies are not authoritative; build configuration owns the generated manifest.
             Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
 
             Assert.True(ManifestEditor.TryGetPsDataStringArray(manifestPath, "ExternalModuleDependencies", out var externalModules));
-            Assert.Equal(new[] { "Az.Accounts" }, externalModules);
+            Assert.Empty(externalModules!);
         }
         finally
         {
@@ -438,7 +436,7 @@ public sealed class ModulePipelineManifestRefreshTests
             var manifestPath = result.BuildResult.ManifestPath;
 
             Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? requiredModules));
-            Assert.Contains(requiredModules!, module => string.Equals(module.ModuleName, "LegacyOnly", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(requiredModules!, module => string.Equals(module.ModuleName, "LegacyOnly", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(requiredModules!, module => string.Equals(module.ModuleName, "Fresh.Required", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(requiredModules!, module => string.Equals(module.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
 

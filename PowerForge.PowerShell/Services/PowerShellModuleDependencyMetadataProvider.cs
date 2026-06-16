@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 
 namespace PowerForge;
 
-internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDependencyMetadataProvider
+internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDependencyVersionedMetadataProvider, IModuleDependencyReferenceMetadataProvider
 {
     private readonly IPowerShellRunner _powerShellRunner;
     private readonly ILogger _logger;
@@ -36,47 +37,69 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
             return new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
         }
 
-        var map = new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
-        foreach (var line in SplitLines(result.StdOut))
+        return ParseInstalledModuleMetadata(result.StdOut, list);
+    }
+
+    public IReadOnlyDictionary<string, InstalledModuleMetadata> GetInstalledModules(IReadOnlyList<RequiredModuleReference> references)
+    {
+        var list = (references ?? Array.Empty<RequiredModuleReference>())
+            .Where(static reference => reference is not null && !string.IsNullOrWhiteSpace(reference.ModuleName))
+            .ToArray();
+        if (list.Length == 0)
+            return new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
+
+        var names = list
+            .Select(static reference => reference.ModuleName.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var referenceJson = JsonSerializer.Serialize(list.Select(static reference => new
         {
-            if (!line.StartsWith("PFMODINFO::ITEM::", StringComparison.Ordinal))
-                continue;
+            Name = reference.ModuleName.Trim(),
+            reference.ModuleVersion,
+            reference.RequiredVersion,
+            reference.MaximumVersion,
+            reference.Guid
+        }));
 
-            var parts = line.Split(new[] { "::" }, StringSplitOptions.None);
-            if (parts.Length < 6)
-                continue;
+        var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-InstalledModuleInfo.ps1");
+        var args = new List<string>(2) { EncodeLines(names), EncodeText(referenceJson) };
+        var result = RunScript(script, args, TimeSpan.FromMinutes(2));
 
-            var name = Decode(parts[2]);
-            var version = EmptyToNull(Decode(parts[3]));
-            var guid = EmptyToNull(Decode(parts[4]));
-            var moduleBasePath = EmptyToNull(Decode(parts[5]));
-            if (string.IsNullOrWhiteSpace(name))
-                continue;
-
-            map[name] = new InstalledModuleMetadata(name, version, guid, moduleBasePath);
+        if (result.ExitCode != 0)
+        {
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            return new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
         }
 
-        foreach (var name in list)
-        {
-            if (!map.ContainsKey(name))
-                map[name] = new InstalledModuleMetadata(name, null, null, null);
-        }
-
-        return map;
+        return ParseInstalledModuleMetadata(result.StdOut, names);
     }
 
     public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
+        => string.IsNullOrWhiteSpace(moduleName)
+            ? Array.Empty<RequiredModuleReference>()
+            : GetRequiredModulesForInstalledModule(new RequiredModuleReference(moduleName.Trim()));
+
+    public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(RequiredModuleReference reference)
     {
-        if (string.IsNullOrWhiteSpace(moduleName))
+        if (reference is null || string.IsNullOrWhiteSpace(reference.ModuleName))
             return Array.Empty<RequiredModuleReference>();
 
         try
         {
             var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-RequiredModules.ps1");
-            var result = RunScript(script, new[] { moduleName.Trim() }, TimeSpan.FromMinutes(1));
+            var referenceJson = JsonSerializer.Serialize(new
+            {
+                Name = reference.ModuleName.Trim(),
+                reference.ModuleVersion,
+                reference.RequiredVersion,
+                reference.MaximumVersion,
+                reference.Guid
+            });
+            var result = RunScript(script, new[] { reference.ModuleName.Trim(), EncodeText(referenceJson) }, TimeSpan.FromMinutes(1));
             if (result.ExitCode != 0)
             {
-                _logger.Warn($"Failed to resolve required modules for '{moduleName}'.");
+                _logger.Warn($"Failed to resolve required modules for '{reference.ModuleName}'.");
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
                 return Array.Empty<RequiredModuleReference>();
@@ -91,7 +114,7 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
         }
         catch (Exception ex)
         {
-            _logger.Warn($"Failed to resolve required modules for '{moduleName}': {ex.Message}");
+            _logger.Warn($"Failed to resolve required modules for '{reference.ModuleName}': {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             return Array.Empty<RequiredModuleReference>();
         }
@@ -205,7 +228,41 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
     private static string EncodeLines(IEnumerable<string> lines)
     {
         var joined = string.Join("\n", lines ?? Array.Empty<string>());
-        return Convert.ToBase64String(Encoding.UTF8.GetBytes(joined));
+        return EncodeText(joined);
+    }
+
+    private static string EncodeText(string text)
+        => Convert.ToBase64String(Encoding.UTF8.GetBytes(text ?? string.Empty));
+
+    private static IReadOnlyDictionary<string, InstalledModuleMetadata> ParseInstalledModuleMetadata(string? output, IReadOnlyList<string> requestedNames)
+    {
+        var map = new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in SplitLines(output))
+        {
+            if (!line.StartsWith("PFMODINFO::ITEM::", StringComparison.Ordinal))
+                continue;
+
+            var parts = line.Split(new[] { "::" }, StringSplitOptions.None);
+            if (parts.Length < 6)
+                continue;
+
+            var name = Decode(parts[2]);
+            var version = EmptyToNull(Decode(parts[3]));
+            var guid = EmptyToNull(Decode(parts[4]));
+            var moduleBasePath = EmptyToNull(Decode(parts[5]));
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            map[name] = new InstalledModuleMetadata(name, version, guid, moduleBasePath);
+        }
+
+        foreach (var name in requestedNames ?? Array.Empty<string>())
+        {
+            if (!map.ContainsKey(name))
+                map[name] = new InstalledModuleMetadata(name, null, null, null);
+        }
+
+        return map;
     }
 
     private static string Decode(string? b64)

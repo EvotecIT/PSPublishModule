@@ -47,8 +47,169 @@ public sealed class ModulePipelineRegressionParityTests
             Assert.Equal("https://example.test/license", plan.Manifest.LicenseUri);
             Assert.Equal("preview1", plan.Manifest.Prerelease);
             Assert.Empty(plan.ExternalModuleDependencies);
+            Assert.Empty(plan.EmbeddedModules);
             Assert.Empty(plan.RequiredModules);
             Assert.Empty(plan.RequiredModulesForPackaging);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_TracksEmbeddedModulesSeparately_AndInboxModulesAreIgnored()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.Graph.Authentication",
+                            RequiredVersion = "2.25.0"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.PowerShell.Utility"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            var embedded = Assert.Single(plan.EmbeddedModules);
+            Assert.Equal("Microsoft.Graph.Authentication", embedded.ModuleName);
+            Assert.Equal("2.25.0", embedded.RequiredVersion);
+            Assert.Empty(plan.RequiredModules);
+            Assert.Empty(plan.RequiredModulesForPackaging);
+            Assert.Empty(plan.ExternalModuleDependencies);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_EmbedsConfiguredModulesIntoBuiltModuleInternals()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "Z.Dependency";
+            const string dependencyVersion = "1.2.3";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Project"));
+            WriteMinimalModule(projectRoot.FullName, moduleName, "1.0.0");
+            var dependencyRoot = WriteDependencyModule(root.FullName, dependencyName, dependencyVersion);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            RequiredVersion = dependencyVersion
+                        }
+                    }
+                }
+            };
+
+            var provider = new InstalledMetadataProvider(
+                new InstalledModuleMetadata(dependencyName, dependencyVersion, guid: null, moduleBasePath: dependencyRoot));
+            var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null, provider);
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            var embeddedManifestPath = Path.Combine(result.BuildResult.StagingPath, "Internals", "Modules", "module-dependencies.json");
+            Assert.True(File.Exists(embeddedManifestPath));
+
+            var embeddedManifest = EmbeddedModuleDependencyService.ReadManifest(embeddedManifestPath);
+            var embedded = Assert.Single(embeddedManifest.Dependencies);
+            Assert.Equal(dependencyName, embedded.Name);
+            Assert.Equal(dependencyVersion, embedded.Version);
+            Assert.Equal("Z.Dependency/1.2.3", embedded.RelativePath);
+            Assert.True(File.Exists(Path.Combine(result.BuildResult.StagingPath, "Internals", "Modules", dependencyName, dependencyVersion, $"{dependencyName}.psd1")));
+
+            Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
+            Assert.Empty(required!);
+            Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var external));
+            Assert.Empty(external!);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_RemovesStaleEmbeddedPayloads_WhenNoEmbeddedModulesRemain()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Project"));
+            WriteMinimalModule(projectRoot.FullName, moduleName, "1.0.0");
+            var stalePayloadRoot = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Internals", "Modules", "Stale.Dependency", "1.0.0"));
+            File.WriteAllText(Path.Combine(stalePayloadRoot.FullName, "Stale.Dependency.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(projectRoot.FullName, "Internals", "Modules", "module-dependencies.json"), "{}");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            Assert.False(Directory.Exists(Path.Combine(result.BuildResult.StagingPath, "Internals", "Modules")));
         }
         finally
         {
@@ -408,12 +569,66 @@ public sealed class ModulePipelineRegressionParityTests
             var plan = runner.Plan(spec);
             var report = CreateMissingFunctionAnalysisResult("Get-ADUser");
 
-            InvokeValidateMissingFunctions(runner, report, plan);
+            var exception = AssertValidateMissingFunctionsFails(runner, report, plan);
 
             Assert.Contains(logger.Errors, e =>
                 e.Contains("Get-ADUser", StringComparison.OrdinalIgnoreCase) &&
                 e.Contains("ActiveDirectory", StringComparison.OrdinalIgnoreCase) &&
                 e.Contains("CommandModuleDependencies", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains("Get-ADUser", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ValidateMissingFunctions_AllowsInferredCommand_WhenModuleIsRequired()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "ActiveDirectory",
+                            ModuleVersion = "1.0.0"
+                        }
+                    },
+                    new ConfigurationCommandSegment
+                    {
+                        Configuration = new CommandConfiguration
+                        {
+                            ModuleName = "ActiveDirectory",
+                            CommandName = new[] { "Get-ADUser" }
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var report = CreateMissingFunctionAnalysisResult("Get-ADUser");
+
+            InvokeValidateMissingFunctions(runner, report, plan);
         }
         finally
         {
@@ -450,12 +665,109 @@ public sealed class ModulePipelineRegressionParityTests
             var plan = runner.Plan(spec);
             var report = CreateMissingFunctionAnalysisResult(commandName);
 
-            InvokeValidateMissingFunctions(runner, report, plan);
+            var exception = AssertValidateMissingFunctionsFails(runner, report, plan);
 
             Assert.Contains(logger.Errors, e =>
                 e.Contains(commandName, StringComparison.OrdinalIgnoreCase) &&
                 e.Contains(expectedModule, StringComparison.OrdinalIgnoreCase) &&
                 e.Contains("command pattern", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(commandName, exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ValidateMissingFunctions_AllowsModuleCommand_WhenModuleIsExternal()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Az.Accounts"
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var report = new MissingFunctionAnalysisResult(
+                summary: new[] { new MissingCommandReference("Connect-AzAccount", "Az.Accounts", "Function", isAlias: false, isPrivate: false, error: string.Empty) },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+
+            InvokeValidateMissingFunctions(runner, report, plan);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ValidateMissingFunctions_AllowsModuleCommand_WhenModuleIsEmbedded()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.Graph.Authentication"
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var report = new MissingFunctionAnalysisResult(
+                summary: new[] { new MissingCommandReference("Connect-MgGraph", "Microsoft.Graph.Authentication", "Function", isAlias: false, isPrivate: false, error: string.Empty) },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+
+            InvokeValidateMissingFunctions(runner, report, plan);
         }
         finally
         {
@@ -669,6 +981,13 @@ public sealed class ModulePipelineRegressionParityTests
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
     }
 
+    private static string WriteDependencyModule(string root, string moduleName, string version)
+    {
+        var moduleRoot = Path.Combine(root, "Dependencies", moduleName, version);
+        WriteMinimalModule(moduleRoot, moduleName, version);
+        return moduleRoot;
+    }
+
     private static void WriteModuleWithManifestMetadata(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -713,6 +1032,19 @@ public sealed class ModulePipelineRegressionParityTests
         var method = typeof(ModulePipelineRunner).GetMethod("ValidateMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "ValidateMissingFunctions method signature may have changed.");
         method!.Invoke(runner, new object?[] { report, plan, dependentModules });
+    }
+
+    private static InvalidOperationException AssertValidateMissingFunctionsFails(
+        ModulePipelineRunner runner,
+        MissingFunctionAnalysisResult report,
+        ModulePipelinePlan plan,
+        IReadOnlyCollection<string>? dependentModules = null)
+    {
+        var exception = Record.Exception(() => InvokeValidateMissingFunctions(runner, report, plan, dependentModules));
+        if (exception is TargetInvocationException { InnerException: InvalidOperationException inner })
+            return inner;
+
+        return Assert.IsType<InvalidOperationException>(exception);
     }
 
     private static MissingFunctionAnalysisResult CreateMissingFunctionAnalysisResult(params string[] commandNames)
@@ -762,6 +1094,31 @@ public sealed class ModulePipelineRegressionParityTests
         }
 
         return result;
+    }
+
+    private sealed class InstalledMetadataProvider : IModuleDependencyMetadataProvider
+    {
+        private readonly IReadOnlyDictionary<string, InstalledModuleMetadata> _installed;
+
+        public InstalledMetadataProvider(params InstalledModuleMetadata[] installed)
+        {
+            _installed = installed.ToDictionary(static module => module.Name, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
+            => (names ?? Array.Empty<string>())
+                .Where(name => !string.IsNullOrWhiteSpace(name) && _installed.ContainsKey(name))
+                .ToDictionary(static name => name, name => _installed[name], StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
+            => Array.Empty<RequiredModuleReference>();
+
+        public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
+            IReadOnlyCollection<string> names,
+            string? repository,
+            RepositoryCredential? credential,
+            bool prerelease)
+            => new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed class CollectingLogger : ILogger

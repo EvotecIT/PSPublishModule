@@ -422,6 +422,11 @@ This is intentionally opt-in. It changes the target feed by adding dependency
 packages. Use it only when your release process is allowed to promote those
 dependencies.
 
+For the broader dependency model, including when to use `RequiredModule`,
+`ExternalModule`, or `EmbeddedModule` plus `Install-ModuleDependency` /
+`Import-ModuleDependency`, see
+[PSPublishModule Module Dependency Story](PSPublishModule.ModuleDependencies.md).
+
 If the target repository returns `401 Unauthorized` while checking a dependency,
 that is still a repository credential/read-access problem. Dependency mirroring
 only helps after the target feed can be read and written.

@@ -73,6 +73,11 @@ public sealed class ModulePipelinePlan
     public RequiredModuleReference[] RequiredModulesForPackaging { get; }
 
     /// <summary>
+    /// Module dependencies bundled under Internals/Modules and imported explicitly by path.
+    /// </summary>
+    public RequiredModuleReference[] EmbeddedModules { get; }
+
+    /// <summary>
     /// Optional information configuration (include/exclude patterns) used for artefact packaging.
     /// </summary>
     public InformationConfiguration? Information { get; }
@@ -425,6 +430,118 @@ public sealed class ModulePipelinePlan
         RepositoryCredential? installMissingModulesCredential,
         bool stagingWasGenerated,
         bool deleteGeneratedStagingAfterRun)
+        : this(
+            moduleName,
+            projectRoot,
+            expectedVersion,
+            resolvedVersion,
+            preRelease,
+            manifest,
+            buildSpec,
+            resolvedCsprojPath,
+            syncNETProjectVersion,
+            compatiblePSEditions,
+            requiredModules,
+            externalModuleDependencies,
+            requiredModulesForPackaging,
+            information,
+            documentation,
+            delivery,
+            documentationBuild,
+            compatibilitySettings,
+            fileConsistencySettings,
+            validationSettings,
+            formatting,
+            importModules,
+            placeHolders,
+            placeHolderOption,
+            commandModuleDependencies,
+            testsAfterMerge,
+            actions,
+            appleApps,
+            xcodeProjectVersions,
+            mergeModule,
+            mergeMissing,
+            doNotAttemptToFixRelativePaths,
+            approvedModules,
+            moduleSkip,
+            signModule,
+            signing,
+            publishes,
+            artefacts,
+            installEnabled,
+            installStrategy,
+            installKeepVersions,
+            installRoots,
+            installLegacyFlatHandling,
+            installPreserveVersions,
+            installMissingModules,
+            installMissingModulesForce,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            stagingWasGenerated,
+            deleteGeneratedStagingAfterRun,
+            embeddedModules: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new plan instance.
+    /// </summary>
+    public ModulePipelinePlan(
+        string moduleName,
+        string projectRoot,
+        string expectedVersion,
+        string resolvedVersion,
+        string? preRelease,
+        ManifestConfiguration? manifest,
+        ModuleBuildSpec buildSpec,
+        string? resolvedCsprojPath,
+        bool syncNETProjectVersion,
+        string[] compatiblePSEditions,
+        RequiredModuleReference[] requiredModules,
+        string[] externalModuleDependencies,
+        RequiredModuleReference[] requiredModulesForPackaging,
+        InformationConfiguration? information,
+        DocumentationConfiguration? documentation,
+        DeliveryOptionsConfiguration? delivery,
+        BuildDocumentationConfiguration? documentationBuild,
+        CompatibilitySettings? compatibilitySettings,
+        FileConsistencySettings? fileConsistencySettings,
+        ModuleValidationSettings? validationSettings,
+        ConfigurationFormattingSegment? formatting,
+        ImportModulesConfiguration? importModules,
+        PlaceHolderReplacement[] placeHolders,
+        PlaceHolderOptionConfiguration? placeHolderOption,
+        IReadOnlyDictionary<string, string[]> commandModuleDependencies,
+        TestConfiguration[] testsAfterMerge,
+        ConfigurationActionSegment[] actions,
+        ConfigurationAppleAppSegment[] appleApps,
+        ConfigurationXcodeProjectVersionSegment[] xcodeProjectVersions,
+        bool mergeModule,
+        bool mergeMissing,
+        bool doNotAttemptToFixRelativePaths,
+        string[] approvedModules,
+        ModuleSkipConfiguration? moduleSkip,
+        bool signModule,
+        SigningOptionsConfiguration? signing,
+        ConfigurationPublishSegment[] publishes,
+        ConfigurationArtefactSegment[] artefacts,
+        bool installEnabled,
+        InstallationStrategy installStrategy,
+        int installKeepVersions,
+        string[] installRoots,
+        LegacyFlatModuleHandling installLegacyFlatHandling,
+        string[] installPreserveVersions,
+        bool installMissingModules,
+        bool installMissingModulesForce,
+        bool installMissingModulesPrerelease,
+        string? installMissingModulesRepository,
+        RepositoryCredential? installMissingModulesCredential,
+        bool stagingWasGenerated,
+        bool deleteGeneratedStagingAfterRun,
+        RequiredModuleReference[]? embeddedModules = null)
     {
         ModuleName = moduleName;
         ProjectRoot = projectRoot;
@@ -439,6 +556,7 @@ public sealed class ModulePipelinePlan
         RequiredModules = requiredModules;
         ExternalModuleDependencies = externalModuleDependencies ?? Array.Empty<string>();
         RequiredModulesForPackaging = requiredModulesForPackaging;
+        EmbeddedModules = embeddedModules ?? Array.Empty<RequiredModuleReference>();
         Information = information;
         Documentation = documentation;
         Delivery = delivery;

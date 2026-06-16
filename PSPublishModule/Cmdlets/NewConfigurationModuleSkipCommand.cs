@@ -4,12 +4,12 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Provides a way to ignore certain commands or modules during build process and continue module building on errors.
+/// Provides a way to ignore certain commands or modules during build-time dependency validation.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Useful for optional dependencies where you want builds to succeed even if a tool module is not available
-/// (e.g. optional analyzers, formatters, helpers).
+/// Missing module-backed commands fail the build by default. Use this command for optional dependencies where you
+/// want selected missing modules or commands to be ignored. <c>-Force</c> keeps the legacy broad opt-out behavior.
 /// </para>
 /// </remarks>
 /// <example>
@@ -26,16 +26,16 @@ namespace PSPublishModule;
 [Cmdlet(VerbsCommon.New, "ConfigurationModuleSkip")]
 public sealed class NewConfigurationModuleSkipCommand : PSCmdlet
 {
-    /// <summary>Ignore module name(s). If the module is not available it will be ignored.</summary>
+    /// <summary>Ignore module name(s) during missing-command validation.</summary>
     [Parameter] public string[]? IgnoreModuleName { get; set; }
 
-    /// <summary>Ignore function name(s). If the function is not available it will be ignored.</summary>
+    /// <summary>Ignore command/function name(s) during missing-command validation.</summary>
     [Parameter] public string[]? IgnoreFunctionName { get; set; }
 
-    /// <summary>Force build process to continue even if the module or command is not available.</summary>
+    /// <summary>Force the build process to continue even if modules or commands are not available.</summary>
     [Parameter] public SwitchParameter Force { get; set; }
 
-    /// <summary>Fail build when unresolved commands are detected during merge.</summary>
+    /// <summary>Fail build when unresolved commands are detected during merge. This is the default and is retained for compatibility.</summary>
     [Parameter] public SwitchParameter FailOnMissingCommands { get; set; }
 
     /// <summary>Emits module-skip configuration for the build pipeline.</summary>

@@ -192,11 +192,13 @@ public enum RepositoryApiVersion
 public enum ModuleDependencyKind
 {
     /// <summary>Required module dependency (manifest RequiredModules).</summary>
-    RequiredModule,
+    RequiredModule = 0,
     /// <summary>External module dependency (PSData.ExternalModuleDependencies).</summary>
-    ExternalModule,
+    ExternalModule = 1,
     /// <summary>Approved module dependency (selectively copied during merge).</summary>
-    ApprovedModule
+    ApprovedModule = 2,
+    /// <summary>Embedded module dependency (bundled under Internals/Modules, not written to manifest RequiredModules).</summary>
+    EmbeddedModule = 3
 }
 
 /// <summary>

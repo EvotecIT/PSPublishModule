@@ -1,9 +1,46 @@
-param($name)
+param($name, $ReferenceB64)
 $ErrorActionPreference = 'Stop'
 
 function Encode([string]$value) {
   if ($null -eq $value) { $value = '' }
   return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$value))
+}
+
+function DecodeText([string]$b64) {
+  if ([string]::IsNullOrWhiteSpace($b64)) { return '' }
+  return [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
+}
+
+function Get-ReferenceSpec {
+  param(
+    [string]$FallbackName,
+    [string]$B64
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($B64)) {
+    try {
+      $json = DecodeText $B64
+      $item = $json | ConvertFrom-Json
+      if ($null -ne $item -and -not [string]::IsNullOrWhiteSpace($item.Name)) {
+        return $item
+      }
+    } catch {
+      # Fall back to name-only lookup below.
+    }
+  }
+
+  [pscustomobject]@{
+    Name = $FallbackName
+    ModuleVersion = ''
+    RequiredVersion = ''
+    MaximumVersion = ''
+    Guid = ''
+  }
+}
+
+function Convert-VersionOrNull([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) { return $null }
+  try { return [version]$value } catch { return $null }
 }
 
 function Get-ManifestPath {
@@ -114,7 +151,21 @@ function Write-RequiredModuleRecord {
   Write-Output ('PFREQMOD::ITEM::' + ($fields -join '::'))
 }
 
-$mod = Get-Module -ListAvailable -Name $name |
+$ref = Get-ReferenceSpec -FallbackName $name -B64 $ReferenceB64
+$moduleName = [string]$ref.Name
+$modules = @(Get-Module -ListAvailable -Name $moduleName)
+$required = Convert-VersionOrNull ([string]$ref.RequiredVersion)
+$minimum = Convert-VersionOrNull ([string]$ref.ModuleVersion)
+$maximum = Convert-VersionOrNull ([string]$ref.MaximumVersion)
+$guid = [string]$ref.Guid
+if ($required) { $modules = @($modules | Where-Object { $_.Version -eq $required }) }
+if ($minimum) { $modules = @($modules | Where-Object { $_.Version -ge $minimum }) }
+if ($maximum) { $modules = @($modules | Where-Object { $_.Version -le $maximum }) }
+if (-not [string]::IsNullOrWhiteSpace($guid) -and $guid -ne 'Auto') {
+  $modules = @($modules | Where-Object { [string]$_.Guid -ieq $guid })
+}
+
+$mod = $modules |
   Sort-Object Version -Descending |
   Select-Object -First 1
 if ($null -eq $mod) { return @() }

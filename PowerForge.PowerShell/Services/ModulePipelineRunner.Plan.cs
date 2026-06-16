@@ -109,75 +109,21 @@ public sealed partial class ModulePipelineRunner
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var embeddedModulesDraft = new List<RequiredModuleDraft>();
+        var embeddedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var externalModules = new List<string>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var baselineExternalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
             .Where(static segment => segment is not null)
             .ToArray();
-        var externalDependencyConfigurationIsAuthoritative = segments.Any(static segment =>
-            segment is ConfigurationModuleSegment moduleSegment &&
-            moduleSegment.Kind is ModuleDependencyKind.RequiredModule or ModuleDependencyKind.ExternalModule);
 
         var manifestBaseline = TryReadProjectManifestBaseline(projectRoot, moduleName);
         if (manifestBaseline is not null)
         {
             manifestConfiguration = manifestBaseline.Manifest;
-
-            foreach (var external in manifestBaseline.ExternalModuleDependencies)
-            {
-                if (string.IsNullOrWhiteSpace(external))
-                    continue;
-                if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(external))
-                    continue;
-
-                baselineExternalIndex.Add(external.Trim());
-            }
-
-            if (!externalDependencyConfigurationIsAuthoritative)
-            {
-                foreach (var external in baselineExternalIndex)
-                {
-                    TryAddExternalModuleDependency(external, externalIndex, externalModules);
-                }
-            }
-
-            foreach (var module in manifestBaseline.RequiredModules)
-            {
-                if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
-                    continue;
-
-                var requiredModuleName = module.ModuleName.Trim();
-                if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(requiredModuleName))
-                    continue;
-                if (externalIndex.Contains(requiredModuleName) || baselineExternalIndex.Contains(requiredModuleName))
-                    continue;
-
-                var draft = new RequiredModuleDraft(
-                    moduleName: requiredModuleName,
-                    moduleVersion: module.ModuleVersion,
-                    minimumVersion: module.ModuleVersion,
-                    requiredVersion: module.RequiredVersion,
-                    guid: module.Guid,
-                    versionSource: ModuleDependencyVersionSource.Auto);
-
-                if (requiredIndex.TryGetValue(draft.ModuleName, out var idx))
-                    requiredModulesDraft[idx] = draft;
-                else
-                {
-                    requiredIndex[draft.ModuleName] = requiredModulesDraft.Count;
-                    requiredModulesDraft.Add(draft);
-                }
-
-                if (requiredPackagingIndex.TryGetValue(draft.ModuleName, out var pidx))
-                    requiredModulesDraftForPackaging[pidx] = draft;
-                else
-                {
-                    requiredPackagingIndex[draft.ModuleName] = requiredModulesDraftForPackaging.Count;
-                    requiredModulesDraftForPackaging.Add(draft);
-                }
-            }
+            // Source manifests seed descriptive metadata only. Dependency/export fields are rebuilt from
+            // configuration so stale PSD1 entries do not survive after build settings remove them.
 
             if (manifestBaseline.Manifest.CompatiblePSEditions is { Length: > 0 })
                 compatible = manifestBaseline.Manifest.CompatiblePSEditions;
@@ -327,6 +273,30 @@ public sealed partial class ModulePipelineRunner
                     {
                         if (!TryAddExternalModuleDependency(name, externalIndex, externalModules))
                             break;
+                        break;
+                    }
+
+                    if (moduleSeg.Kind == ModuleDependencyKind.EmbeddedModule)
+                    {
+                        if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(name))
+                            break;
+
+                        var embeddedDraft = new RequiredModuleDraft(
+                            moduleName: name,
+                            moduleVersion: md.ModuleVersion,
+                            minimumVersion: md.MinimumVersion,
+                            requiredVersion: md.RequiredVersion,
+                            guid: md.Guid,
+                            versionSource: md.VersionSource);
+
+                        if (embeddedIndex.TryGetValue(name, out var embeddedIdx))
+                            embeddedModulesDraft[embeddedIdx] = embeddedDraft;
+                        else
+                        {
+                            embeddedIndex[name] = embeddedModulesDraft.Count;
+                            embeddedModulesDraft.Add(embeddedDraft);
+                        }
+
                         break;
                     }
 
@@ -671,10 +641,10 @@ public sealed partial class ModulePipelineRunner
         if (roots.Length == 0 && compatible is { Length: > 0 })
             roots = ModulePipelinePlanningHelpers.ResolveInstallRootsFromCompatiblePSEditions(compatible);
 
-        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft))
+        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft.Concat(embeddedModulesDraft)))
         {
             resolveMissingModulesOnline = true;
-            _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because RequiredModules use Auto/Latest/Guid Auto.");
+            _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because module dependencies use Auto/Latest/Guid Auto.");
         }
 
         var enabledPublishes = publishes
@@ -707,6 +677,31 @@ public sealed partial class ModulePipelineRunner
             dependencyVersionSourceRepository);
         var requiredModules = requiredModuleSets.RequiredModules;
         var requiredModulesForPackaging = requiredModuleSets.RequiredModulesForPackaging;
+        var embeddedModules = ResolveRequiredModules(
+            embeddedModulesDraft,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            dependencyVersionSourceRepository);
+        var embeddedSourceDrafts = BuildRequiredModuleDraftMap(embeddedModulesDraft);
+        var embeddedRoots = embeddedModulesDraft
+            .Select(static draft => draft.ModuleName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        embeddedModules = IncludeTransitiveRequiredModules(
+            embeddedModules,
+            embeddedRoots,
+            embeddedSourceDrafts,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            dependencyVersionSourceRepository);
+        embeddedModules = OrderRequiredModulesByDependenciesFirst(embeddedModules);
 
         if (delivery?.Sign == true)
         {
@@ -864,7 +859,8 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesRepository: installMissingModulesRepository,
             installMissingModulesCredential: installMissingModulesCredential,
             stagingWasGenerated: stagingWasGenerated,
-            deleteGeneratedStagingAfterRun: deleteAfter);
+            deleteGeneratedStagingAfterRun: deleteAfter,
+            embeddedModules: embeddedModules);
     }
 
     private DependencyVersionSourceRepository? ResolvePublishDependencyVersionSource(ConfigurationPublishSegment[] enabledPublishes)

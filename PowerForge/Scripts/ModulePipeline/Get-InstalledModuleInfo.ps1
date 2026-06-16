@@ -1,5 +1,6 @@
-﻿param(
-  [string]$NamesB64
+param(
+  [string]$NamesB64,
+  [string]$ReferencesB64
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -10,10 +11,52 @@ function DecodeLines([string]$b64) {
   return $text -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 }
 
-$names = DecodeLines $NamesB64
-foreach ($n in $names) {
+function DecodeText([string]$b64) {
+  if ([string]::IsNullOrWhiteSpace($b64)) { return '' }
+  return [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
+}
+
+function Get-ReferenceSpecs([string]$b64, [string[]]$fallbackNames) {
+  if ([string]::IsNullOrWhiteSpace($b64)) {
+    return @($fallbackNames | ForEach-Object {
+      [pscustomobject]@{ Name = $_; ModuleVersion = ''; RequiredVersion = ''; MaximumVersion = ''; Guid = '' }
+    })
+  }
+
   try {
-    $m = Get-Module -ListAvailable -Name $n | Sort-Object Version -Descending | Select-Object -First 1
+    $json = DecodeText $b64
+    $items = @($json | ConvertFrom-Json)
+    return @($items | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) })
+  } catch {
+    return @($fallbackNames | ForEach-Object {
+      [pscustomobject]@{ Name = $_; ModuleVersion = ''; RequiredVersion = ''; MaximumVersion = ''; Guid = '' }
+    })
+  }
+}
+
+function Convert-VersionOrNull([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) { return $null }
+  try { return [version]$value } catch { return $null }
+}
+
+$names = DecodeLines $NamesB64
+$references = Get-ReferenceSpecs $ReferencesB64 $names
+foreach ($ref in $references) {
+  $n = [string]$ref.Name
+  try {
+    $modules = @(Get-Module -ListAvailable -Name $n)
+    $required = Convert-VersionOrNull ([string]$ref.RequiredVersion)
+    $minimum = Convert-VersionOrNull ([string]$ref.ModuleVersion)
+    $maximum = Convert-VersionOrNull ([string]$ref.MaximumVersion)
+    $guid = [string]$ref.Guid
+    if ($required) { $modules = @($modules | Where-Object { $_.Version -eq $required }) }
+    if ($minimum) { $modules = @($modules | Where-Object { $_.Version -ge $minimum }) }
+    if ($maximum) { $modules = @($modules | Where-Object { $_.Version -le $maximum }) }
+    if (-not [string]::IsNullOrWhiteSpace($guid) -and $guid -ne 'Auto') {
+      $modules = @($modules | Where-Object { [string]$_.Guid -ieq $guid })
+    }
+
+    $m = $modules | Sort-Object Version -Descending | Select-Object -First 1
     $ver = if ($m) { [string]$m.Version } else { '' }
     $guid = if ($m) { [string]$m.Guid } else { '' }
     $moduleBase = if ($m) { [string]$m.ModuleBase } else { '' }

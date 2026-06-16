@@ -6,7 +6,7 @@ schema: 2.0.0
 ---
 # New-ConfigurationModule
 ## SYNOPSIS
-Provides a way to configure required, external, or approved modules used in the project.
+Provides a way to configure required, external, embedded, or approved modules used in the project.
 
 ## SYNTAX
 ### __AllParameterSets
@@ -20,11 +20,14 @@ install/package dependencies during a build.
 
 Use RequiredModule for dependencies that should appear in the manifest and can also be bundled into build
 artefacts when New-ConfigurationArtefact -AddRequiredModules is enabled. Use ExternalModule for
-dependencies that must exist on the target system but should not be bundled into artefacts.
+dependencies that must exist on the target system but should not be bundled into artefacts. Use
+EmbeddedModule for dependencies that should be bundled under Internals\Modules and installed/imported
+later by explicit path with Install-ModuleDependency / Import-ModuleDependency.
 
 RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries
-are written to PrivateData.PSData.ExternalModuleDependencies. ApprovedModule entries are used by
-merge/missing-function workflows and are not emitted as manifest dependencies.
+are written to PrivateData.PSData.ExternalModuleDependencies. EmbeddedModule entries are copied
+into the built module internals and are not emitted as manifest dependencies. ApprovedModule entries are
+used by merge/missing-function workflows and are not emitted as manifest dependencies.
 
 Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime
 modules, not gallery-resolvable dependencies.
@@ -62,12 +65,19 @@ Uses RequiredVersion when an exact match is required.
 
 ### EXAMPLE 4
 ```powershell
+PS> New-ConfigurationModule -Type EmbeddedModule -Name 'Microsoft.Graph.Authentication' -RequiredVersion '2.25.0'
+```
+
+Bundles the dependency under Internals\Modules without adding it to PSD1 RequiredModules.
+
+### EXAMPLE 5
+```powershell
 PS> New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods','PSWriteColor'
 ```
 
 Allows approved helper functions to be copied into the built module when they are actually used.
 
-### EXAMPLE 5
+### EXAMPLE 6
 ```powershell
 PS> New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
 ```
@@ -145,15 +155,16 @@ Accept wildcard characters: True
 ```
 
 ### -Type
-Choose between RequiredModule, ExternalModule, and ApprovedModule.
-RequiredModule is used for manifest and optional packaging, ExternalModule is install-only, and
-ApprovedModule is merge-only.
+Choose between RequiredModule, ExternalModule, EmbeddedModule, and ApprovedModule.
+RequiredModule is used for manifest and optional packaging, ExternalModule is install-only,
+EmbeddedModule is bundled under Internals for explicit install/import by path, and ApprovedModule
+is merge-only.
 
 ```yaml
 Type: ModuleDependencyKind
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: RequiredModule, ExternalModule, ApprovedModule
+Possible values: RequiredModule, ExternalModule, ApprovedModule, EmbeddedModule
 
 Required: False
 Position: named
