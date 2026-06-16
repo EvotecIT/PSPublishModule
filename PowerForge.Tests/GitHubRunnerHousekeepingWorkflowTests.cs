@@ -38,10 +38,29 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         var workflowYaml = File.ReadAllText(workflowPath);
 
         Assert.Contains("cron: \"17 2 * * *\"", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("github.repository == 'EvotecIT/PSPublishModule' || github.event.repository.private", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("apply: ${{ github.event_name != 'workflow_dispatch' || inputs.apply == 'true' }}", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("fail-fast: false", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("slot: [1, 2, 3, 4]", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner_labels_json: '[\"self-hosted\",\"linux\"]'", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner-housekeeping-reports-${{ matrix.slot }}", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CallerConfig_ShouldAggressivelyCleanCentralRunnerWorkspaces()
+    {
+        var repoRoot = FindRepoRoot();
+        var configPath = Path.Combine(repoRoot, ".powerforge", "runner-housekeeping.json");
+
+        Assert.True(File.Exists(configPath), $"Runner housekeeping config not found: {configPath}");
+
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(configPath));
+        var runner = document.RootElement.GetProperty("Runner");
+
+        Assert.True(runner.GetProperty("Enabled").GetBoolean());
+        Assert.Equal(20, runner.GetProperty("MinFreeGb").GetInt32());
+        Assert.True(runner.GetProperty("CleanWorkspaces").GetBoolean());
+        Assert.Equal(0, runner.GetProperty("WorkspacesRetentionDays").GetInt32());
     }
 
     private static string FindRepoRoot()
