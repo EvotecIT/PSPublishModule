@@ -15,28 +15,18 @@ internal static class ModuleDependencyCommandHelpers
 
     public static string ResolveEmbeddedManifestPath(PSCmdlet cmdlet, string moduleBase)
     {
-        try
-        {
-            return EmbeddedModuleDependencyService.FindManifestForModuleBase(moduleBase);
-        }
-        catch (FileNotFoundException)
-        {
-            // Try manifest-scoped Delivery.InternalsPath below.
-        }
-        catch (DirectoryNotFoundException)
-        {
-            // Try manifest-scoped Delivery.InternalsPath below.
-        }
-
         var manifestPath = Directory.GetFiles(moduleBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(manifestPath))
-            return EmbeddedModuleDependencyService.FindManifestForModuleBase(moduleBase);
+        if (!string.IsNullOrWhiteSpace(manifestPath))
+        {
+            var internalsPath = ReadDeliveryInternalsPath(cmdlet, manifestPath!);
+            if (!string.IsNullOrWhiteSpace(internalsPath))
+            {
+                var modulesRoot = EmbeddedModuleDependencyService.ResolveInternalsModulesRoot(moduleBase, internalsPath!);
+                return EmbeddedModuleDependencyService.ResolveManifestPath(modulesRoot);
+            }
+        }
 
-        var internalsPath = ReadDeliveryInternalsPath(cmdlet, manifestPath!);
-        if (string.IsNullOrWhiteSpace(internalsPath))
-            return EmbeddedModuleDependencyService.FindManifestForModuleBase(moduleBase);
-
-        return EmbeddedModuleDependencyService.ResolveManifestPath(Path.Combine(moduleBase, internalsPath!, "Modules"));
+        return EmbeddedModuleDependencyService.FindManifestForModuleBase(moduleBase);
     }
 
     private static string? ReadDeliveryInternalsPath(PSCmdlet cmdlet, string manifestPath)

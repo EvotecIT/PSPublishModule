@@ -243,10 +243,17 @@ public sealed partial class ModulePipelineRunner
         var discoveredIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var rootsByName = output
+            .GroupBy(static module => module.ModuleName!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
+
         foreach (var root in NormalizeStringArray(rootModules))
         {
             var source = ResolveInheritedDependencyVersionSource(root, sourceDrafts, ModuleDependencyVersionSource.Auto);
-            CollectTransitiveRequiredModules(root, source, sourceDrafts, known, discoveredIndex, visited, discovered);
+            var rootReference = rootsByName.TryGetValue(root, out var resolvedRoot)
+                ? resolvedRoot
+                : new RequiredModuleReference(root);
+            CollectTransitiveRequiredModules(rootReference, source, sourceDrafts, known, discoveredIndex, visited, discovered);
         }
 
         if (discovered.Count == 0)
@@ -308,7 +315,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private void CollectTransitiveRequiredModules(
-        string moduleName,
+        RequiredModuleReference module,
         ModuleDependencyVersionSource inheritedVersionSource,
         IReadOnlyDictionary<string, RequiredModuleDraft> sourceDrafts,
         HashSet<string> known,
@@ -316,13 +323,13 @@ public sealed partial class ModulePipelineRunner
         HashSet<string> visited,
         List<(RequiredModuleReference Reference, ModuleDependencyVersionSource VersionSource)> discovered)
     {
-        if (string.IsNullOrWhiteSpace(moduleName))
+        if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
             return;
-        var normalizedModuleName = moduleName.Trim();
+        var normalizedModuleName = module.ModuleName.Trim();
         if (!visited.Add(normalizedModuleName))
             return;
 
-        var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(normalizedModuleName);
+        var required = GetRequiredModulesForInstalledModule(module);
         foreach (var dep in required ?? Array.Empty<RequiredModuleReference>())
         {
             if (dep is null || string.IsNullOrWhiteSpace(dep.ModuleName))
@@ -345,7 +352,7 @@ public sealed partial class ModulePipelineRunner
                     childVersionSource));
             }
 
-            CollectTransitiveRequiredModules(depName, childVersionSource, sourceDrafts, known, discoveredIndex, visited, discovered);
+            CollectTransitiveRequiredModules(dep, childVersionSource, sourceDrafts, known, discoveredIndex, visited, discovered);
         }
     }
 
@@ -385,7 +392,10 @@ public sealed partial class ModulePipelineRunner
         if (!visiting.Add(moduleName))
             return;
 
-        var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(moduleName);
+        var current = modulesByName.TryGetValue(moduleName, out var reference)
+            ? reference
+            : new RequiredModuleReference(moduleName);
+        var required = GetRequiredModulesForInstalledModule(current);
         foreach (var dep in required ?? Array.Empty<RequiredModuleReference>())
         {
             if (dep is null || string.IsNullOrWhiteSpace(dep.ModuleName))
@@ -399,6 +409,16 @@ public sealed partial class ModulePipelineRunner
         visiting.Remove(moduleName);
         if (visited.Add(moduleName) && modulesByName.TryGetValue(moduleName, out var module))
             ordered.Add(module);
+    }
+
+    private IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(RequiredModuleReference reference)
+    {
+        if (reference is null || string.IsNullOrWhiteSpace(reference.ModuleName))
+            return Array.Empty<RequiredModuleReference>();
+
+        return _moduleDependencyMetadataProvider is IModuleDependencyReferenceMetadataProvider referenceProvider
+            ? referenceProvider.GetRequiredModulesForInstalledModule(reference)
+            : _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(reference.ModuleName.Trim());
     }
 
     private static ModuleDependencyVersionSource ResolveInheritedDependencyVersionSource(

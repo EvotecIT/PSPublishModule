@@ -6,3 +6,8 @@ internal interface IModuleDependencyVersionedMetadataProvider : IModuleDependenc
 {
     IReadOnlyDictionary<string, InstalledModuleMetadata> GetInstalledModules(IReadOnlyList<RequiredModuleReference> references);
 }
+
+internal interface IModuleDependencyReferenceMetadataProvider : IModuleDependencyMetadataProvider
+{
+    IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(RequiredModuleReference reference);
+}

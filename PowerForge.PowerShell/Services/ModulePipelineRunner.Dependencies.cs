@@ -441,7 +441,7 @@ public sealed partial class ModulePipelineRunner
         if (!source.PreferOnlineMetadata)
             return false;
 
-        var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(moduleName.Trim());
+        var required = GetRequiredModulesForInstalledModule(new RequiredModuleReference(moduleName.Trim()));
         foreach (var dep in required ?? Array.Empty<RequiredModuleReference>())
         {
             if (dep is null || string.IsNullOrWhiteSpace(dep.ModuleName))

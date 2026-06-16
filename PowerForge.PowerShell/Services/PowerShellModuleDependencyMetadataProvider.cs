@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace PowerForge;
 
-internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDependencyVersionedMetadataProvider
+internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDependencyVersionedMetadataProvider, IModuleDependencyReferenceMetadataProvider
 {
     private readonly IPowerShellRunner _powerShellRunner;
     private readonly ILogger _logger;
@@ -57,7 +57,8 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
             Name = reference.ModuleName.Trim(),
             reference.ModuleVersion,
             reference.RequiredVersion,
-            reference.MaximumVersion
+            reference.MaximumVersion,
+            reference.Guid
         }));
 
         var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-InstalledModuleInfo.ps1");
@@ -75,17 +76,30 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
     }
 
     public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
+        => string.IsNullOrWhiteSpace(moduleName)
+            ? Array.Empty<RequiredModuleReference>()
+            : GetRequiredModulesForInstalledModule(new RequiredModuleReference(moduleName.Trim()));
+
+    public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(RequiredModuleReference reference)
     {
-        if (string.IsNullOrWhiteSpace(moduleName))
+        if (reference is null || string.IsNullOrWhiteSpace(reference.ModuleName))
             return Array.Empty<RequiredModuleReference>();
 
         try
         {
             var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-RequiredModules.ps1");
-            var result = RunScript(script, new[] { moduleName.Trim() }, TimeSpan.FromMinutes(1));
+            var referenceJson = JsonSerializer.Serialize(new
+            {
+                Name = reference.ModuleName.Trim(),
+                reference.ModuleVersion,
+                reference.RequiredVersion,
+                reference.MaximumVersion,
+                reference.Guid
+            });
+            var result = RunScript(script, new[] { reference.ModuleName.Trim(), EncodeText(referenceJson) }, TimeSpan.FromMinutes(1));
             if (result.ExitCode != 0)
             {
-                _logger.Warn($"Failed to resolve required modules for '{moduleName}'.");
+                _logger.Warn($"Failed to resolve required modules for '{reference.ModuleName}'.");
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
                 return Array.Empty<RequiredModuleReference>();
@@ -100,7 +114,7 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
         }
         catch (Exception ex)
         {
-            _logger.Warn($"Failed to resolve required modules for '{moduleName}': {ex.Message}");
+            _logger.Warn($"Failed to resolve required modules for '{reference.ModuleName}': {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             return Array.Empty<RequiredModuleReference>();
         }

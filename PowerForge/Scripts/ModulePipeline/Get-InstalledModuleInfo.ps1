@@ -19,7 +19,7 @@ function DecodeText([string]$b64) {
 function Get-ReferenceSpecs([string]$b64, [string[]]$fallbackNames) {
   if ([string]::IsNullOrWhiteSpace($b64)) {
     return @($fallbackNames | ForEach-Object {
-      [pscustomobject]@{ Name = $_; ModuleVersion = ''; RequiredVersion = ''; MaximumVersion = '' }
+      [pscustomobject]@{ Name = $_; ModuleVersion = ''; RequiredVersion = ''; MaximumVersion = ''; Guid = '' }
     })
   }
 
@@ -29,7 +29,7 @@ function Get-ReferenceSpecs([string]$b64, [string[]]$fallbackNames) {
     return @($items | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) })
   } catch {
     return @($fallbackNames | ForEach-Object {
-      [pscustomobject]@{ Name = $_; ModuleVersion = ''; RequiredVersion = ''; MaximumVersion = '' }
+      [pscustomobject]@{ Name = $_; ModuleVersion = ''; RequiredVersion = ''; MaximumVersion = ''; Guid = '' }
     })
   }
 }
@@ -48,9 +48,13 @@ foreach ($ref in $references) {
     $required = Convert-VersionOrNull ([string]$ref.RequiredVersion)
     $minimum = Convert-VersionOrNull ([string]$ref.ModuleVersion)
     $maximum = Convert-VersionOrNull ([string]$ref.MaximumVersion)
+    $guid = [string]$ref.Guid
     if ($required) { $modules = @($modules | Where-Object { $_.Version -eq $required }) }
     if ($minimum) { $modules = @($modules | Where-Object { $_.Version -ge $minimum }) }
     if ($maximum) { $modules = @($modules | Where-Object { $_.Version -le $maximum }) }
+    if (-not [string]::IsNullOrWhiteSpace($guid) -and $guid -ne 'Auto') {
+      $modules = @($modules | Where-Object { [string]$_.Guid -ieq $guid })
+    }
 
     $m = $modules | Sort-Object Version -Descending | Select-Object -First 1
     $ver = if ($m) { [string]$m.Version } else { '' }

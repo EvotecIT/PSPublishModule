@@ -333,6 +333,31 @@ public sealed class EmbeddedModuleDependencyServiceTests
     }
 
     [Fact]
+    public void Install_WithMalformedDependencyEntryFails()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var manifestRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule", "Internals", "Modules"));
+            var manifestPath = Path.Combine(manifestRoot.FullName, "module-dependencies.json");
+            File.WriteAllText(
+                manifestPath,
+                "{\"Dependencies\":[{\"Name\":\"Broken.Dependency\",\"Version\":\"1.0.0\",\"RelativePath\":\"\"}]}");
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Install(
+                manifestPath,
+                Path.Combine(root.FullName, "PrivateDeps")));
+            Assert.Contains("Broken.Dependency", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("incomplete", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ResolveEntryPath_RejectsPathsEscapingManifestRoot()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -503,6 +528,85 @@ public sealed class EmbeddedModuleDependencyServiceTests
                 rootModuleBasePath: moduleRoot));
             Assert.Contains("source module", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(Directory.Exists(destinationRoot));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Install_WithRootModuleRejectsComputedDestinationMatchingSourceModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var modulesRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Modules"));
+            var moduleRoot = CreateModuleAt(Path.Combine(modulesRoot.FullName, "OurModule", "1.2.3"), "OurModule", "1.2.3");
+            var dependencyRoot = CreateModule(root.FullName, "Microsoft.Graph.Authentication", "2.25.0");
+            var provider = new Provider(new InstalledModuleMetadata(
+                "Microsoft.Graph.Authentication",
+                "2.25.0",
+                guid: null,
+                moduleBasePath: dependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            service.Embed(
+                moduleRoot,
+                new[] { new RequiredModuleReference("Microsoft.Graph.Authentication", requiredVersion: "2.25.0") },
+                provider);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Install(
+                Path.Combine(moduleRoot, "Internals", "Modules", "module-dependencies.json"),
+                modulesRoot.FullName,
+                rootModuleName: "OurModule",
+                rootModuleVersion: "1.2.3",
+                rootModuleBasePath: moduleRoot,
+                onExists: OnExistsOption.Overwrite,
+                force: true));
+            Assert.Contains("source module", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(moduleRoot, "OurModule.psd1")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolveInternalsModulesRoot_RejectsEscapingCaseVariantPathOnCaseSensitiveFilesystems()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "builtmodule", "Internals"));
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                EmbeddedModuleDependencyService.ResolveInternalsModulesRoot(moduleRoot.FullName, "../builtmodule/Internals"));
+            Assert.Contains("module root", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolveInternalsModulesRoot_RejectsAbsoluteInternalsPath()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var absolute = Path.Combine(root.FullName, "OtherInternals");
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                EmbeddedModuleDependencyService.ResolveInternalsModulesRoot(moduleRoot.FullName, absolute));
+            Assert.Contains("relative", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -568,6 +570,92 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void Plan_UsesResolvedEmbeddedRootReference_WhenExpandingTransitiveDependencies()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new("Parent.Tools", "1.0.0", "11111111-1111-1111-1111-111111111111", @"C:\Modules\Parent.Tools\1.0.0")
+                },
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[] { new RequiredModuleReference("Child.Tools", moduleVersion: "2.0.0") }
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.EmbeddedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Parent.Tools",
+                            RequiredVersion = "1.0.0",
+                            Guid = "11111111-1111-1111-1111-111111111111"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec);
+
+            Assert.Equal(new[] { "Child.Tools", "Parent.Tools" }, plan.EmbeddedModules.Select(static module => module.ModuleName));
+            Assert.Contains(provider.RequiredModuleReferenceLookups, module =>
+                string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(module.RequiredVersion, "1.0.0", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(module.Guid, "11111111-1111-1111-1111-111111111111", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellProvider_SerializesGuidConstraintsForInstalledModuleLookup()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new CapturingPowerShellRunner(request =>
+        {
+            captured = request;
+            return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+        });
+        var provider = new PowerShellModuleDependencyMetadataProvider(runner, new NullLogger());
+
+        provider.GetInstalledModules(new[]
+        {
+            new RequiredModuleReference(
+                "Parent.Tools",
+                requiredVersion: "1.0.0",
+                guid: "11111111-1111-1111-1111-111111111111")
+        });
+
+        Assert.NotNull(captured);
+        Assert.True(captured!.Arguments.Count >= 2);
+        var json = Encoding.UTF8.GetString(Convert.FromBase64String(captured.Arguments[1]));
+        using var document = JsonDocument.Parse(json);
+        var item = Assert.Single(document.RootElement.EnumerateArray());
+        Assert.Equal("11111111-1111-1111-1111-111111111111", item.GetProperty("Guid").GetString());
+    }
+
+    [Fact]
     public void Plan_IgnoresRuntimeProvidedTransitiveDependenciesForPackaging_WhenParentRemainsRequired()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -894,7 +982,7 @@ public sealed class Marker
         return assemblyPath;
     }
 
-    private sealed class FakeModuleDependencyMetadataProvider : IModuleDependencyMetadataProvider
+    private sealed class FakeModuleDependencyMetadataProvider : IModuleDependencyMetadataProvider, IModuleDependencyReferenceMetadataProvider
     {
         private readonly IReadOnlyDictionary<string, InstalledModuleMetadata> _installedModules;
         private readonly IReadOnlyDictionary<string, (string? Version, string? Guid)> _onlineModules;
@@ -903,6 +991,7 @@ public sealed class Marker
         internal int InstalledLookups { get; private set; }
         internal int OnlineLookups { get; private set; }
         internal int RequiredModuleLookups { get; private set; }
+        internal List<RequiredModuleReference> RequiredModuleReferenceLookups { get; } = new();
         internal string? LastOnlineRepository { get; private set; }
 
         internal FakeModuleDependencyMetadataProvider(
@@ -941,6 +1030,18 @@ public sealed class Marker
                 : Array.Empty<RequiredModuleReference>();
         }
 
+        public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(RequiredModuleReference reference)
+        {
+            RequiredModuleLookups++;
+            if (reference is null || string.IsNullOrWhiteSpace(reference.ModuleName))
+                return Array.Empty<RequiredModuleReference>();
+
+            RequiredModuleReferenceLookups.Add(reference);
+            return _installedRequiredModules.TryGetValue(reference.ModuleName, out var modules)
+                ? modules
+                : Array.Empty<RequiredModuleReference>();
+        }
+
         public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
             IReadOnlyCollection<string> names,
             string? repository,
@@ -964,6 +1065,19 @@ public sealed class Marker
     {
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => throw new InvalidOperationException("PowerShell runner should not be used when dependency metadata provider is injected.");
+    }
+
+    private sealed class CapturingPowerShellRunner : IPowerShellRunner
+    {
+        private readonly Func<PowerShellRunRequest, PowerShellRunResult> _run;
+
+        public CapturingPowerShellRunner(Func<PowerShellRunRequest, PowerShellRunResult> run)
+        {
+            _run = run;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+            => _run(request);
     }
 
     private sealed class CollectingLogger : ILogger

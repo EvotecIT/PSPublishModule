@@ -137,6 +137,7 @@ internal sealed class EmbeddedModuleDependencyService
             };
 
             var destinationPath = ResolveInstallDestinationPath(destination, rootModule.Name, rootVersion, "root module");
+            ValidateDestinationOutsideSourceRoot(destinationPath, rootModuleBasePath!);
             var exists = Directory.Exists(destinationPath);
             var action = ResolveAction(exists, onExists, force);
 
@@ -258,13 +259,32 @@ internal sealed class EmbeddedModuleDependencyService
     public static string FindManifestForModuleBase(string moduleBase)
         => ResolveManifestPath(Path.Combine(moduleBase, "Internals", "Modules"));
 
+    public static string ResolveInternalsModulesRoot(string moduleRoot, string internalsPath)
+    {
+        if (string.IsNullOrWhiteSpace(moduleRoot))
+            throw new ArgumentException("Module root is required.", nameof(moduleRoot));
+        if (string.IsNullOrWhiteSpace(internalsPath))
+            throw new ArgumentException("Internals path is required.", nameof(internalsPath));
+
+        var relative = internalsPath.Trim();
+        if (Path.IsPathRooted(relative))
+            throw new InvalidOperationException("Delivery.InternalsPath must be relative when resolving embedded module dependencies.");
+
+        var root = Path.GetFullPath(moduleRoot);
+        var internalsRoot = Path.GetFullPath(Path.Combine(root, relative));
+        if (!IsPathUnderRoot(root, internalsRoot))
+            throw new InvalidOperationException("Delivery.InternalsPath must stay inside the module root.");
+
+        return Path.Combine(internalsRoot, "Modules");
+    }
+
     public static EmbeddedModuleDependencyEntry[] FilterEntries(
         EmbeddedModuleDependencyManifest manifest,
         IReadOnlyCollection<string>? dependencyNames)
     {
         var filters = NormalizeNameFilter(dependencyNames);
-        var entries = (manifest.Dependencies ?? Array.Empty<EmbeddedModuleDependencyEntry>())
-            .Where(static entry => entry is not null && !string.IsNullOrWhiteSpace(entry.Name) && !string.IsNullOrWhiteSpace(entry.RelativePath))
+        var entries = ValidateDependencyEntries(manifest)
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name) && !string.IsNullOrWhiteSpace(entry.RelativePath))
             .ToArray();
         if (filters.Count == 0)
             return entries;
@@ -522,15 +542,30 @@ internal sealed class EmbeddedModuleDependencyService
             ? "Internals"
             : delivery!.InternalsPath.Trim();
 
-        if (Path.IsPathRooted(relative))
-            throw new InvalidOperationException("Delivery.InternalsPath must be relative when embedding module dependencies.");
+        return Path.GetDirectoryName(ResolveInternalsModulesRoot(moduleRoot, relative))!;
+    }
 
-        var root = Path.GetFullPath(moduleRoot);
-        var internalsRoot = Path.GetFullPath(Path.Combine(root, relative));
-        if (!internalsRoot.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Delivery.InternalsPath must stay inside the module root.");
+    private static EmbeddedModuleDependencyEntry[] ValidateDependencyEntries(EmbeddedModuleDependencyManifest manifest)
+    {
+        var valid = new List<EmbeddedModuleDependencyEntry>();
+        foreach (var entry in manifest.Dependencies ?? Array.Empty<EmbeddedModuleDependencyEntry>())
+        {
+            if (entry is null)
+                continue;
 
-        return internalsRoot;
+            var hasName = !string.IsNullOrWhiteSpace(entry.Name);
+            var hasRelativePath = !string.IsNullOrWhiteSpace(entry.RelativePath);
+            if (hasName != hasRelativePath)
+            {
+                var name = hasName ? entry.Name : "<unnamed>";
+                throw new InvalidOperationException($"Embedded module dependency '{name}' has an incomplete manifest entry.");
+            }
+
+            if (hasName)
+                valid.Add(entry);
+        }
+
+        return valid.ToArray();
     }
 
     private static bool IsPathUnderRoot(string root, string candidate)
