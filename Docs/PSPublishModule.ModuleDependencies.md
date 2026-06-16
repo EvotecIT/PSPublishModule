@@ -136,13 +136,20 @@ After the built module is installed from PSGallery or a private feed, deploy the
 module plus embedded dependencies to an explicit folder:
 
 ```powershell
-Install-Module Company.Tools -RequiredVersion 1.0.0
+Install-PrivateModule `
+    -Name Company.Tools `
+    -ProfileName JFrogPS `
+    -InstallPrerequisites
 
 Install-ModuleDependency `
     -Name Company.Tools `
     -RequiredVersion 1.0.0 `
     -Path C:\PrivateDeps
 ```
+
+Use raw `Install-Module` only for the generic public-gallery path. For private
+feeds, prefer `Install-PrivateModule` so repository registration, credentials,
+profiles, and prerequisites follow the PSPublishModule private-gallery contract.
 
 The destination becomes:
 
@@ -243,4 +250,3 @@ Use `ApprovedModule` when:
 - the module is a build helper
 - selected functions may be merged
 - there should be no runtime dependency declaration
-
