@@ -10,10 +10,10 @@
   },
   "Runner": {
     "Enabled": true,
-    "MinFreeGb": 15,
+    "MinFreeGb": 20,
     "DiagnosticsRetentionDays": 14,
     "ActionsRetentionDays": 7,
-    "WorkspacesRetentionDays": 3,
+    "WorkspacesRetentionDays": 0,
     "CleanWorkspaces": true,
     "ToolCacheRetentionDays": 30
   }
