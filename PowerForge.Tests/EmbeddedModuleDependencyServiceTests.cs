@@ -110,9 +110,78 @@ public sealed class EmbeddedModuleDependencyServiceTests
         }
     }
 
-    private static string CreateModule(string root, string name, string version)
+    [Fact]
+    public void Install_WithRootModule_CopiesPrivateRuntimeAndWritesRootReceipt()
     {
-        var moduleRoot = Path.Combine(root, "Dependencies", name, version);
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = CreateModuleAt(Path.Combine(root.FullName, "Installed", "OurModule", "1.2.3"), "OurModule", "1.2.3");
+            var dependencyRoot = CreateModule(root.FullName, "Microsoft.Graph.Authentication", "2.25.0");
+            var provider = new Provider(new InstalledModuleMetadata(
+                "Microsoft.Graph.Authentication",
+                "2.25.0",
+                guid: null,
+                moduleBasePath: dependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            service.Embed(
+                moduleRoot,
+                new[] { new RequiredModuleReference("Microsoft.Graph.Authentication", requiredVersion: "2.25.0") },
+                provider);
+
+            var destinationRoot = Path.Combine(root.FullName, "PrivateDeps");
+            var results = service.Install(
+                Path.Combine(moduleRoot, "Internals", "Modules", "module-dependencies.json"),
+                destinationRoot,
+                rootModuleName: "OurModule",
+                rootModuleVersion: "1.2.3",
+                rootModuleBasePath: moduleRoot);
+
+            Assert.Equal(new[] { "RootModule", "Dependency" }, results.Select(static result => result.Kind));
+            Assert.True(File.Exists(Path.Combine(destinationRoot, "module-dependencies.json")));
+            Assert.True(File.Exists(Path.Combine(destinationRoot, "OurModule", "1.2.3", "OurModule.psd1")));
+            Assert.True(File.Exists(Path.Combine(destinationRoot, "Microsoft.Graph.Authentication", "2.25.0", "Microsoft.Graph.Authentication.psd1")));
+
+            var receipt = EmbeddedModuleDependencyService.ReadManifest(Path.Combine(destinationRoot, "module-dependencies.json"));
+            Assert.NotNull(receipt.RootModule);
+            Assert.Equal("OurModule", receipt.RootModule!.Name);
+            Assert.Equal("1.2.3", receipt.RootModule.Version);
+            Assert.Equal("OurModule/1.2.3", receipt.RootModule.RelativePath);
+            var dependency = Assert.Single(receipt.Dependencies);
+            Assert.Equal("Microsoft.Graph.Authentication", dependency.Name);
+            Assert.Equal("Microsoft.Graph.Authentication/2.25.0", dependency.RelativePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolveRootModuleEntry_RequiresMatchingRootModule()
+    {
+        var manifest = new EmbeddedModuleDependencyManifest
+        {
+            RootModule = new EmbeddedModuleDependencyEntry
+            {
+                Name = "OurModule",
+                Version = "1.2.3",
+                RelativePath = "OurModule/1.2.3"
+            }
+        };
+
+        var entry = EmbeddedModuleDependencyService.ResolveRootModuleEntry(manifest, "OurModule");
+        Assert.Equal("OurModule", entry.Name);
+
+        Assert.Throws<InvalidOperationException>(() => EmbeddedModuleDependencyService.ResolveRootModuleEntry(manifest, "OtherModule"));
+    }
+
+    private static string CreateModule(string root, string name, string version)
+        => CreateModuleAt(Path.Combine(root, "Dependencies", name, version), name, version);
+
+    private static string CreateModuleAt(string moduleRoot, string name, string version)
+    {
         Directory.CreateDirectory(moduleRoot);
         File.WriteAllText(Path.Combine(moduleRoot, $"{name}.psm1"), string.Empty);
         File.WriteAllText(

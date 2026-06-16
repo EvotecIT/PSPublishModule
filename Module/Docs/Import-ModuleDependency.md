@@ -6,17 +6,17 @@ schema: 2.0.0
 ---
 # Import-ModuleDependency
 ## SYNOPSIS
-Imports embedded or installed module dependencies by exact manifest/path.
+Imports a module runtime by exact paths, with dependencies loaded before the root module.
 
 ## SYNTAX
 ### ByName (Default)
 ```powershell
-Import-ModuleDependency [-Name] <string> [-RequiredVersion <version>] [-DependencyName <string[]>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Import-ModuleDependency [-Name] <string> [[-Path] <string>] [-RequiredVersion <version>] [-DependencyName <string[]>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### ByModule
 ```powershell
-Import-ModuleDependency -Module <psobject> [-RequiredVersion <version>] [-DependencyName <string[]>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Import-ModuleDependency [[-Path] <string>] -Module <psobject> [-RequiredVersion <version>] [-DependencyName <string[]>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### ByPath
@@ -25,9 +25,9 @@ Import-ModuleDependency [-Path] <string> [-DependencyName <string[]>] [-Force] [
 ```
 
 ## DESCRIPTION
-Use -Name to import dependencies directly from a module's bundled Internals\Modules payload.
-Use -Path after Install-ModuleDependency to import from a private dependency folder without
-relying on PSModulePath discovery.
+Use -Name to import dependencies directly from a module's bundled Internals\Modules payload and
+then import that module by exact path. Add -Path after Install-ModuleDependency to import
+the private runtime copy without relying on PSModulePath discovery.
 
 ## EXAMPLES
 
@@ -39,7 +39,7 @@ Import-ModuleDependency -Name EntraIDConfig
 
 ### EXAMPLE 2
 ```powershell
-Import-ModuleDependency -Path C:\PrivateDeps -DependencyName Microsoft.Graph.Authentication
+Import-ModuleDependency -Name EntraIDConfig -Path C:\PrivateDeps
 ```
 
 
@@ -99,7 +99,7 @@ Module containing embedded dependencies.
 ```yaml
 Type: String
 Parameter Sets: ByName
-Aliases: None
+Aliases: ModuleName
 Possible values:
 
 Required: True
@@ -130,7 +130,7 @@ Installed dependency root or module-dependencies.json receipt path.
 
 ```yaml
 Type: String
-Parameter Sets: ByPath
+Parameter Sets: ByName, ByModule, ByPath
 Aliases: None
 Possible values:
 

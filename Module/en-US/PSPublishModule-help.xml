@@ -6800,13 +6800,13 @@ isolated copy instead of the original installed module.</maml:para>
       <command:verb>Import</command:verb>
       <command:noun>ModuleDependency</command:noun>
       <maml:description>
-        <maml:para>Imports embedded or installed module dependencies by exact manifest/path.</maml:para>
+        <maml:para>Imports a module runtime by exact paths, with dependencies loaded before the root module.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Use -Name to import dependencies directly from a module's bundled Internals\Modules payload.&#xD;
-Use -Path after Install-ModuleDependency to import from a private dependency folder without&#xD;
-relying on PSModulePath discovery.</maml:para>
+      <maml:para>Use -Name to import dependencies directly from a module's bundled Internals\Modules payload and&#xD;
+then import that module by exact path. Add -Path after Install-ModuleDependency to import&#xD;
+the private runtime copy without relying on PSModulePath discovery.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="ByName">
@@ -6835,7 +6835,7 @@ relying on PSModulePath discovery.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module containing embedded dependencies.</maml:para>
@@ -6855,6 +6855,18 @@ relying on PSModulePath discovery.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Installed dependency root or module-dependencies.json receipt path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -6918,6 +6930,18 @@ relying on PSModulePath discovery.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Installed dependency root or module-dependencies.json receipt path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7024,7 +7048,7 @@ relying on PSModulePath discovery.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="None">
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
         <maml:name>Name</maml:name>
         <maml:description>
           <maml:para>Module containing embedded dependencies.</maml:para>
@@ -7095,15 +7119,15 @@ System.Management.Automation.PSObject</maml:name>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Import dependencies bundled inside a module</maml:title>
+        <maml:title>Import dependencies bundled inside a module, then import the module</maml:title>
         <dev:code>Import-ModuleDependency -Name EntraIDConfig</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>Import dependencies from an explicit private folder</maml:title>
-        <dev:code>Import-ModuleDependency -Path C:\PrivateDeps -DependencyName Microsoft.Graph.Authentication</dev:code>
+        <maml:title>Import a private runtime folder created by Install-ModuleDependency</maml:title>
+        <dev:code>Import-ModuleDependency -Name EntraIDConfig -Path C:\PrivateDeps</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -8357,13 +8381,13 @@ authenticated access through the selected bootstrap mode.</maml:para>
       <command:verb>Install</command:verb>
       <command:noun>ModuleDependency</command:noun>
       <maml:description>
-        <maml:para>Installs embedded module dependencies from a module's Internals\Modules payload to an explicit folder.</maml:para>
+        <maml:para>Installs a module and its embedded dependencies to an explicit private runtime folder.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
       <maml:para>The command reads the dependency manifest produced by New-ConfigurationModule -Type EmbeddedModule&#xD;
-and copies each dependency payload to the requested path. Dependencies are not installed into PSModulePath&#xD;
-unless the chosen path is already part of PSModulePath.</maml:para>
+and copies the root module plus each dependency payload to the requested path. Modules are not installed&#xD;
+into PSModulePath unless the chosen path is already part of PSModulePath.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="ByName">
@@ -8404,7 +8428,7 @@ unless the chosen path is already part of PSModulePath.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="None">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module containing embedded dependencies.</maml:para>
@@ -8437,7 +8461,7 @@ unless the chosen path is already part of PSModulePath.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
-            <maml:para>Destination folder. Dependencies are copied under Name\Version folders.</maml:para>
+            <maml:para>Destination folder. The root module and dependencies are copied under Name\Version folders.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -8530,7 +8554,7 @@ unless the chosen path is already part of PSModulePath.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
-            <maml:para>Destination folder. Dependencies are copied under Name\Version folders.</maml:para>
+            <maml:para>Destination folder. The root module and dependencies are copied under Name\Version folders.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -8602,7 +8626,7 @@ unless the chosen path is already part of PSModulePath.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="None">
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
         <maml:name>Name</maml:name>
         <maml:description>
           <maml:para>Module containing embedded dependencies.</maml:para>
@@ -8635,7 +8659,7 @@ unless the chosen path is already part of PSModulePath.</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="None">
         <maml:name>Path</maml:name>
         <maml:description>
-          <maml:para>Destination folder. Dependencies are copied under Name\Version folders.</maml:para>
+          <maml:para>Destination folder. The root module and dependencies are copied under Name\Version folders.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -8679,7 +8703,7 @@ System.Management.Automation.PSObject</maml:name>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Install all embedded dependencies to a private dependency folder</maml:title>
+        <maml:title>Install a module and all embedded dependencies to a private runtime folder</maml:title>
         <dev:code>Install-ModuleDependency -Name EntraIDConfig -Path C:\PrivateDeps</dev:code>
         <dev:remarks>
           <maml:para></maml:para>

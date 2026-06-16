@@ -95,6 +95,9 @@ internal sealed class EmbeddedModuleDependencyService
     public EmbeddedModuleDependencyInstallResult[] Install(
         string dependencyManifestPath,
         string destinationRoot,
+        string? rootModuleName = null,
+        string? rootModuleVersion = null,
+        string? rootModuleBasePath = null,
         IReadOnlyCollection<string>? dependencyNames = null,
         OnExistsOption onExists = OnExistsOption.Merge,
         bool force = false,
@@ -109,9 +112,57 @@ internal sealed class EmbeddedModuleDependencyService
         var filters = NormalizeNameFilter(dependencyNames);
         var destination = Path.GetFullPath(destinationRoot);
         var results = new List<EmbeddedModuleDependencyInstallResult>();
+        EmbeddedModuleDependencyEntry? rootModule = null;
 
         if (!listOnly)
             Directory.CreateDirectory(destination);
+
+        if (!string.IsNullOrWhiteSpace(rootModuleName) || !string.IsNullOrWhiteSpace(rootModuleBasePath))
+        {
+            if (string.IsNullOrWhiteSpace(rootModuleName))
+                throw new ArgumentException("Root module name is required when installing a private runtime.", nameof(rootModuleName));
+            if (string.IsNullOrWhiteSpace(rootModuleBasePath) || !Directory.Exists(rootModuleBasePath))
+                throw new DirectoryNotFoundException($"Root module path not found: {rootModuleBasePath}");
+
+            var rootVersion = string.IsNullOrWhiteSpace(rootModuleVersion) ? "Current" : rootModuleVersion!;
+            rootModule = new EmbeddedModuleDependencyEntry
+            {
+                Name = rootModuleName!,
+                Version = rootVersion,
+                RelativePath = NormalizeRelativePath(Path.Combine(rootModuleName!, rootVersion))
+            };
+
+            var destinationPath = Path.Combine(destination, rootModule.Name, rootVersion);
+            var exists = Directory.Exists(destinationPath);
+            var action = ResolveAction(exists, onExists, force);
+
+            if (!listOnly)
+            {
+                if (exists)
+                {
+                    if (onExists == OnExistsOption.Stop)
+                        throw new IOException($"Destination module folder exists: {destinationPath}");
+                    if (onExists == OnExistsOption.Skip || (onExists == OnExistsOption.Merge && !force))
+                    {
+                        results.Add(CreateInstallResult(rootModule, rootModuleBasePath!, destinationPath, action, Path.Combine(destination, ManifestFileName), "RootModule"));
+                    }
+                    else
+                    {
+                        CopyDirectory(rootModuleBasePath!, destinationPath, overwrite: true);
+                        results.Add(CreateInstallResult(rootModule, rootModuleBasePath!, destinationPath, action, Path.Combine(destination, ManifestFileName), "RootModule"));
+                    }
+                }
+                else
+                {
+                    CopyDirectory(rootModuleBasePath!, destinationPath, overwrite: true);
+                    results.Add(CreateInstallResult(rootModule, rootModuleBasePath!, destinationPath, action, Path.Combine(destination, ManifestFileName), "RootModule"));
+                }
+            }
+            else
+            {
+                results.Add(CreateInstallResult(rootModule, rootModuleBasePath!, destinationPath, action, Path.Combine(destination, ManifestFileName), "RootModule"));
+            }
+        }
 
         foreach (var entry in FilterEntries(manifest, filters))
         {
@@ -128,7 +179,7 @@ internal sealed class EmbeddedModuleDependencyService
                         throw new IOException($"Destination dependency folder exists: {destinationPath}");
                     if (onExists == OnExistsOption.Skip || (onExists == OnExistsOption.Merge && !force))
                     {
-                        results.Add(CreateInstallResult(entry, sourcePath, destinationPath, action, manifestPath));
+                        results.Add(CreateInstallResult(entry, sourcePath, destinationPath, action, Path.Combine(destination, ManifestFileName), "Dependency"));
                         continue;
                     }
                 }
@@ -136,13 +187,15 @@ internal sealed class EmbeddedModuleDependencyService
                 CopyDirectory(sourcePath, destinationPath, overwrite: true);
             }
 
-            results.Add(CreateInstallResult(entry, sourcePath, destinationPath, action, Path.Combine(destination, ManifestFileName)));
+            results.Add(CreateInstallResult(entry, sourcePath, destinationPath, action, Path.Combine(destination, ManifestFileName), "Dependency"));
         }
 
         if (!listOnly)
             WriteManifest(Path.Combine(destination, ManifestFileName), new EmbeddedModuleDependencyManifest
             {
+                RootModule = rootModule,
                 Dependencies = results
+                    .Where(static result => !string.Equals(result.Kind, "RootModule", StringComparison.OrdinalIgnoreCase))
                     .Select(static result => new EmbeddedModuleDependencyEntry
                     {
                         Name = result.Name,
@@ -216,6 +269,26 @@ internal sealed class EmbeddedModuleDependencyService
         return Path.Combine(root, FromPortableRelativePath(entry.RelativePath));
     }
 
+    public static EmbeddedModuleDependencyEntry ResolveRootModuleEntry(EmbeddedModuleDependencyManifest manifest, string moduleName)
+    {
+        if (manifest is null) throw new ArgumentNullException(nameof(manifest));
+        if (string.IsNullOrWhiteSpace(moduleName))
+            throw new ArgumentException("Module name is required.", nameof(moduleName));
+
+        if (manifest.RootModule is null ||
+            string.IsNullOrWhiteSpace(manifest.RootModule.Name) ||
+            string.IsNullOrWhiteSpace(manifest.RootModule.RelativePath))
+        {
+            throw new InvalidOperationException(
+                $"Dependency receipt does not contain a root module entry for '{moduleName}'. Reinstall with Install-ModuleDependency -Name {moduleName} -Path <path>.");
+        }
+
+        if (!string.Equals(manifest.RootModule.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Dependency receipt root module is '{manifest.RootModule.Name}', not '{moduleName}'.");
+
+        return manifest.RootModule;
+    }
+
     public static string ResolveModuleImportPath(string modulePath, string moduleName)
     {
         if (string.IsNullOrWhiteSpace(modulePath) || !Directory.Exists(modulePath))
@@ -239,7 +312,8 @@ internal sealed class EmbeddedModuleDependencyService
         string sourcePath,
         string destinationPath,
         string action,
-        string receiptPath)
+        string receiptPath,
+        string kind)
         => new()
         {
             Name = entry.Name,
@@ -247,6 +321,7 @@ internal sealed class EmbeddedModuleDependencyService
             SourcePath = sourcePath,
             DestinationPath = destinationPath,
             Action = action,
+            Kind = kind,
             ReceiptPath = Path.Combine(Path.GetDirectoryName(receiptPath)!, ManifestFileName)
         };
 
@@ -381,6 +456,9 @@ public sealed class EmbeddedModuleDependencyManifest
     /// <summary>Relative folder that contains dependency payloads.</summary>
     public string ModulesRoot { get; set; } = "Modules";
 
+    /// <summary>Root module entry for a private runtime receipt.</summary>
+    public EmbeddedModuleDependencyEntry? RootModule { get; set; }
+
     /// <summary>Embedded dependency entries.</summary>
     public EmbeddedModuleDependencyEntry[] Dependencies { get; set; } = Array.Empty<EmbeddedModuleDependencyEntry>();
 }
@@ -419,6 +497,9 @@ public sealed class EmbeddedModuleDependencyInstallResult
 
     /// <summary>Planned or performed action.</summary>
     public string Action { get; set; } = string.Empty;
+
+    /// <summary>Entry kind, such as RootModule or Dependency.</summary>
+    public string Kind { get; set; } = string.Empty;
 
     /// <summary>Dependency receipt path.</summary>
     public string ReceiptPath { get; set; } = string.Empty;

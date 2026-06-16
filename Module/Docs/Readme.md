@@ -82,7 +82,7 @@ Imports a PowerShell-authored project release object from JSON.
 Imports a known PowerShell module through a curated AssemblyLoadContext isolation profile.
 
 ### [Import-ModuleDependency](Import-ModuleDependency.md)
-Imports embedded or installed module dependencies by exact manifest/path.
+Imports a module runtime by exact paths, with dependencies loaded before the root module.
 
 ### [Import-ModuleRepositoryProfile](Import-ModuleRepositoryProfile.md)
 Imports private module repository profiles from a non-secret JSON file.
@@ -94,7 +94,7 @@ Performs one-command enterprise onboarding for a private module repository profi
 Installs a built Apple .app bundle on a physical device.
 
 ### [Install-ModuleDependency](Install-ModuleDependency.md)
-Installs embedded module dependencies from a module's Internals\Modules payload to an explicit folder.
+Installs a module and its embedded dependencies to an explicit private runtime folder.
 
 ### [Install-ModuleDocumentation](Install-ModuleDocumentation.md)
 Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.

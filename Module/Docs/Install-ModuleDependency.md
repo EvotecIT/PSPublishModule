@@ -6,7 +6,7 @@ schema: 2.0.0
 ---
 # Install-ModuleDependency
 ## SYNOPSIS
-Installs embedded module dependencies from a module's Internals\Modules payload to an explicit folder.
+Installs a module and its embedded dependencies to an explicit private runtime folder.
 
 ## SYNTAX
 ### ByName (Default)
@@ -21,8 +21,8 @@ Install-ModuleDependency [-Path] <string> -Module <psobject> [-RequiredVersion <
 
 ## DESCRIPTION
 The command reads the dependency manifest produced by New-ConfigurationModule -Type EmbeddedModule
-and copies each dependency payload to the requested path. Dependencies are not installed into PSModulePath
-unless the chosen path is already part of PSModulePath.
+and copies the root module plus each dependency payload to the requested path. Modules are not installed
+into PSModulePath unless the chosen path is already part of PSModulePath.
 
 ## EXAMPLES
 
@@ -110,7 +110,7 @@ Module containing embedded dependencies.
 ```yaml
 Type: String
 Parameter Sets: ByName
-Aliases: None
+Aliases: ModuleName
 Possible values:
 
 Required: True
@@ -137,7 +137,7 @@ Accept wildcard characters: True
 ```
 
 ### -Path
-Destination folder. Dependencies are copied under Name\Version folders.
+Destination folder. The root module and dependencies are copied under Name\Version folders.
 
 ```yaml
 Type: String

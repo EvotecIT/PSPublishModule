@@ -6,28 +6,29 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Imports embedded or installed module dependencies by exact manifest/path.
+/// Imports a module runtime by exact paths, with dependencies loaded before the root module.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Use <c>-Name</c> to import dependencies directly from a module's bundled Internals\Modules payload.
-/// Use <c>-Path</c> after <c>Install-ModuleDependency</c> to import from a private dependency folder without
-/// relying on PSModulePath discovery.
+/// Use <c>-Name</c> to import dependencies directly from a module's bundled Internals\Modules payload and
+/// then import that module by exact path. Add <c>-Path</c> after <c>Install-ModuleDependency</c> to import
+/// the private runtime copy without relying on PSModulePath discovery.
 /// </para>
 /// </remarks>
 /// <example>
-/// <summary>Import dependencies bundled inside a module</summary>
+/// <summary>Import dependencies bundled inside a module, then import the module</summary>
 /// <code>Import-ModuleDependency -Name EntraIDConfig</code>
 /// </example>
 /// <example>
-/// <summary>Import dependencies from an explicit private folder</summary>
-/// <code>Import-ModuleDependency -Path C:\PrivateDeps -DependencyName Microsoft.Graph.Authentication</code>
+/// <summary>Import a private runtime folder created by Install-ModuleDependency</summary>
+/// <code>Import-ModuleDependency -Name EntraIDConfig -Path C:\PrivateDeps</code>
 /// </example>
 [Cmdlet(VerbsData.Import, "ModuleDependency", DefaultParameterSetName = "ByName", SupportsShouldProcess = true)]
 public sealed class ImportModuleDependencyCommand : PSCmdlet
 {
     /// <summary>Module containing embedded dependencies.</summary>
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = "ByName", ValueFromPipelineByPropertyName = true)]
+    [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string Name { get; set; } = string.Empty;
 
@@ -36,6 +37,8 @@ public sealed class ImportModuleDependencyCommand : PSCmdlet
     public PSObject Module { get; set; } = default!;
 
     /// <summary>Installed dependency root or module-dependencies.json receipt path.</summary>
+    [Parameter(Position = 1, ParameterSetName = "ByName")]
+    [Parameter(Position = 1, ParameterSetName = "ByModule")]
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = "ByPath")]
     [ValidateNotNullOrEmpty]
     public string Path { get; set; } = string.Empty;
@@ -57,38 +60,63 @@ public sealed class ImportModuleDependencyCommand : PSCmdlet
     [Parameter]
     public SwitchParameter PassThru { get; set; }
 
-    /// <summary>Imports selected dependency modules by exact path.</summary>
+    /// <summary>Imports selected dependency modules and then the root module by exact path.</summary>
     protected override void ProcessRecord()
     {
-        var manifestPath = ResolveDependencyManifestPath();
-        var manifest = EmbeddedModuleDependencyService.ReadManifest(manifestPath);
+        var context = ResolveImportContext();
+        var manifest = EmbeddedModuleDependencyService.ReadManifest(context.ManifestPath);
         var entries = EmbeddedModuleDependencyService.FilterEntries(manifest, DependencyName);
 
         foreach (var entry in entries)
         {
-            var modulePath = EmbeddedModuleDependencyService.ResolveEntryPath(manifestPath, entry);
+            var modulePath = EmbeddedModuleDependencyService.ResolveEntryPath(context.ManifestPath, entry);
             var importPath = EmbeddedModuleDependencyService.ResolveModuleImportPath(modulePath, entry.Name);
-
-            if (!ShouldProcess(entry.Name, $"Import module dependency from '{importPath}'"))
-                continue;
-
-            var script = InvokeCommand.NewScriptBlock(
-                "param($p, [bool]$force, [bool]$passThru) " +
-                "if ($passThru) { Import-Module -LiteralPath $p -Force:$force -PassThru } " +
-                "else { Import-Module -LiteralPath $p -Force:$force }");
-            var output = script.Invoke(importPath, Force.IsPresent, PassThru.IsPresent);
-            if (PassThru)
-            {
-                foreach (var item in output)
-                    WriteObject(item);
-            }
+            ImportModuleByPath(entry.Name, importPath, "Import module dependency");
         }
+
+        if (!context.ImportRootModule)
+            return;
+
+        var rootImportPath = context.RootImportPath;
+        var rootModuleName = context.RootModuleName;
+
+        if (string.IsNullOrWhiteSpace(rootImportPath))
+        {
+            var rootEntry = EmbeddedModuleDependencyService.ResolveRootModuleEntry(manifest, rootModuleName);
+            ValidateRootModuleVersion(rootEntry);
+            var rootPath = EmbeddedModuleDependencyService.ResolveEntryPath(context.ManifestPath, rootEntry);
+            rootImportPath = EmbeddedModuleDependencyService.ResolveModuleImportPath(rootPath, rootEntry.Name);
+            rootModuleName = rootEntry.Name;
+        }
+
+        ImportModuleByPath(rootModuleName, rootImportPath!, "Import root module");
     }
 
-    private string ResolveDependencyManifestPath()
+    private ImportContext ResolveImportContext()
     {
         if (string.Equals(ParameterSetName, "ByPath", StringComparison.OrdinalIgnoreCase))
-            return EmbeddedModuleDependencyService.ResolveManifestPath(SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path));
+            return new ImportContext(
+                EmbeddedModuleDependencyService.ResolveManifestPath(SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path)),
+                importRootModule: false,
+                rootModuleName: string.Empty,
+                rootImportPath: null);
+
+        if (!string.IsNullOrWhiteSpace(Path))
+        {
+            var rootModuleName = string.Equals(ParameterSetName, "ByModule", StringComparison.OrdinalIgnoreCase)
+                ? ModuleDependencyCommandHelpers.GetProperty(PSObject.AsPSObject(Module), "Name") ??
+                  ModuleDependencyCommandHelpers.GetProperty(PSObject.AsPSObject(Module), "ModuleName")
+                : Name;
+
+            if (string.IsNullOrWhiteSpace(rootModuleName))
+                throw new ArgumentException("Module name could not be determined from -Name or -Module.");
+
+            return new ImportContext(
+                EmbeddedModuleDependencyService.ResolveManifestPath(SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path)),
+                importRootModule: true,
+                rootModuleName: rootModuleName!,
+                rootImportPath: null);
+        }
 
         var resolver = new ModuleResolver(this);
         var module = Module is not null
@@ -102,6 +130,52 @@ public sealed class ImportModuleDependencyCommand : PSCmdlet
         if (string.IsNullOrWhiteSpace(moduleBase) || !Directory.Exists(moduleBase))
             throw new DirectoryNotFoundException($"Module base path not found for '{moduleName}'.");
 
-        return ModuleDependencyCommandHelpers.ResolveEmbeddedManifestPath(this, moduleBase!);
+        return new ImportContext(
+            ModuleDependencyCommandHelpers.ResolveEmbeddedManifestPath(this, moduleBase!),
+            importRootModule: true,
+            rootModuleName: moduleName,
+            rootImportPath: EmbeddedModuleDependencyService.ResolveModuleImportPath(moduleBase!, moduleName));
+    }
+
+    private void ValidateRootModuleVersion(EmbeddedModuleDependencyEntry rootEntry)
+    {
+        if (RequiredVersion is null)
+            return;
+
+        if (!string.Equals(rootEntry.Version, RequiredVersion.ToString(), StringComparison.OrdinalIgnoreCase))
+            throw new ItemNotFoundException($"Dependency receipt root module '{rootEntry.Name}' is version {rootEntry.Version}, not required version {RequiredVersion}.");
+    }
+
+    private void ImportModuleByPath(string moduleName, string importPath, string action)
+    {
+        if (!ShouldProcess(moduleName, $"{action} from '{importPath}'"))
+            return;
+
+        var script = InvokeCommand.NewScriptBlock(
+            "param($p, [bool]$force, [bool]$passThru) " +
+            "if ($passThru) { Import-Module -Name $p -Force:$force -PassThru } " +
+            "else { Import-Module -Name $p -Force:$force }");
+        var output = script.Invoke(importPath, Force.IsPresent, PassThru.IsPresent);
+        if (PassThru)
+        {
+            foreach (var item in output)
+                WriteObject(item);
+        }
+    }
+
+    private sealed class ImportContext
+    {
+        public ImportContext(string manifestPath, bool importRootModule, string rootModuleName, string? rootImportPath)
+        {
+            ManifestPath = manifestPath;
+            ImportRootModule = importRootModule;
+            RootModuleName = rootModuleName;
+            RootImportPath = rootImportPath;
+        }
+
+        public string ManifestPath { get; }
+        public bool ImportRootModule { get; }
+        public string RootModuleName { get; }
+        public string? RootImportPath { get; }
     }
 }

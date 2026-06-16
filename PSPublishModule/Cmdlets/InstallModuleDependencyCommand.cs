@@ -6,17 +6,17 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Installs embedded module dependencies from a module's Internals\Modules payload to an explicit folder.
+/// Installs a module and its embedded dependencies to an explicit private runtime folder.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The command reads the dependency manifest produced by <c>New-ConfigurationModule -Type EmbeddedModule</c>
-/// and copies each dependency payload to the requested path. Dependencies are not installed into PSModulePath
-/// unless the chosen path is already part of PSModulePath.
+/// and copies the root module plus each dependency payload to the requested path. Modules are not installed
+/// into PSModulePath unless the chosen path is already part of PSModulePath.
 /// </para>
 /// </remarks>
 /// <example>
-/// <summary>Install all embedded dependencies to a private dependency folder</summary>
+/// <summary>Install a module and all embedded dependencies to a private runtime folder</summary>
 /// <code>Install-ModuleDependency -Name EntraIDConfig -Path C:\PrivateDeps</code>
 /// </example>
 /// <example>
@@ -29,6 +29,7 @@ public sealed class InstallModuleDependencyCommand : PSCmdlet
 {
     /// <summary>Module containing embedded dependencies.</summary>
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = "ByName", ValueFromPipelineByPropertyName = true)]
+    [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string Name { get; set; } = string.Empty;
 
@@ -44,7 +45,7 @@ public sealed class InstallModuleDependencyCommand : PSCmdlet
     [Parameter]
     public string[]? DependencyName { get; set; }
 
-    /// <summary>Destination folder. Dependencies are copied under Name\Version folders.</summary>
+    /// <summary>Destination folder. The root module and dependencies are copied under Name\Version folders.</summary>
     [Parameter(Mandatory = true, Position = 1)]
     [ValidateNotNullOrEmpty]
     public string Path { get; set; } = string.Empty;
@@ -61,7 +62,7 @@ public sealed class InstallModuleDependencyCommand : PSCmdlet
     [Parameter]
     public SwitchParameter ListOnly { get; set; }
 
-    /// <summary>Copies embedded dependency payloads and writes install results.</summary>
+    /// <summary>Copies the module runtime payload and writes install results.</summary>
     protected override void ProcessRecord()
     {
         var resolver = new ModuleResolver(this);
@@ -80,12 +81,17 @@ public sealed class InstallModuleDependencyCommand : PSCmdlet
         var destination = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
         var service = new EmbeddedModuleDependencyService(new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose")));
 
-        if (!ListOnly && !ShouldProcess(moduleName, $"Install embedded module dependencies to '{destination}'"))
+        var moduleVersion = ModuleDependencyCommandHelpers.GetProperty(module, "Version");
+
+        if (!ListOnly && !ShouldProcess(moduleName, $"Install module runtime to '{destination}'"))
             return;
 
         var results = service.Install(
             dependencyManifestPath: manifestPath,
             destinationRoot: destination,
+            rootModuleName: moduleName,
+            rootModuleVersion: moduleVersion,
+            rootModuleBasePath: moduleBase,
             dependencyNames: DependencyName,
             onExists: OnExists,
             force: Force.IsPresent,
