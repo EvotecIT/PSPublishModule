@@ -112,7 +112,7 @@ Optional configuration override.
 Type: String
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: Release, Debug
+Possible values:
 
 Required: False
 Position: named

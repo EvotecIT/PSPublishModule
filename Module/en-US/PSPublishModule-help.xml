@@ -7132,12 +7132,12 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
             <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -9347,12 +9347,12 @@ the requested modules.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Repository</maml:name>
           <maml:description>
             <maml:para>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -14387,10 +14387,6 @@ and parent directories for standard release config file names.</maml:para>
             <maml:para>Optional configuration override.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
-          </command:parameterValueGroup>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -15208,10 +15204,6 @@ and parent directories for standard release config file names.</maml:para>
             <maml:para>Optional configuration override.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
-          </command:parameterValueGroup>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -16054,10 +16046,6 @@ and parent directories for standard release config file names.</maml:para>
           <maml:para>Optional configuration override.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <command:parameterValueGroup>
-          <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
-        </command:parameterValueGroup>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -34543,12 +34531,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="JFrog">
         <maml:name>New-ConfigurationPublish</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -34579,12 +34567,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FilePath</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -34883,12 +34871,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Type</maml:name>
           <maml:description>
             <maml:para>Choose between PowerShellGallery and GitHub.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">PublishDestination</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PublishDestination</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PowerShellGallery</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
@@ -35180,12 +35168,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="Profile">
         <maml:name>New-ConfigurationPublish</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -35204,12 +35192,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FilePath</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -40397,12 +40385,12 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="Profile">
         <maml:name>Publish-NugetPackage</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -48115,12 +48103,12 @@ are provided, the repository registration is refreshed before the update is atte
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Repository</maml:name>
           <maml:description>
             <maml:para>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
