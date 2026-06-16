@@ -100,6 +100,54 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void BuildPublishArguments_OmitsNoBuildWhenApplyToPublishRequiresPayloadStamping()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            spec.DotNet.NoBuildInPublish = true;
+            spec.Targets[0].Publish.Style = DotNetPublishStyle.PortableCompat;
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app.msi",
+                    PrepareFromTarget = "app",
+                    Authoring = CreateSimpleAuthoring("ProductFiles"),
+                    Versioning = new DotNetPublishMsiVersionOptions
+                    {
+                        Enabled = true,
+                        Major = 26,
+                        Minor = 6,
+                        FloorDateUtc = "2026-06-01",
+                        Monotonic = false,
+                        ApplyToPublish = true
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var target = Assert.Single(plan.Targets);
+            var args = DotNetPublishPipelineRunner.BuildPublishArguments(
+                plan,
+                target,
+                "net10.0",
+                "win-x64",
+                DotNetPublishStyle.PortableCompat,
+                Path.Combine(root, "publish"));
+
+            Assert.DoesNotContain("--no-build", args);
+            Assert.Contains(args, arg => arg.Contains("Version=26.6.", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ApplyToPublishMsiVersions_AdvancesMonotonicStateAcrossCombinations()
     {
         var root = CreateTempRoot();

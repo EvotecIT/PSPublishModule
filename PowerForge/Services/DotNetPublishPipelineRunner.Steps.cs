@@ -214,27 +214,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (PlanUsesPublishMsiVersionProperties(plan))
         {
-            foreach (var target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
-            {
-                var combinations = (target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
-                    .Where(combination => string.IsNullOrWhiteSpace(runtime)
-                                          || string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
-                    .GroupBy(
-                        combination => string.Join("|", combination.Framework, combination.Runtime, combination.Style.ToString()),
-                        StringComparer.OrdinalIgnoreCase)
-                    .Select(group => group.First())
-                    .ToArray();
-
-                if (combinations.Length == 0)
-                {
-                    BuildTargetProject(plan, target, runtime, target.Publish.Framework, target.Publish.Style);
-                    continue;
-                }
-
-                foreach (var combination in combinations)
-                    BuildTargetProject(plan, target, combination.Runtime, combination.Framework, combination.Style);
-            }
-
+            _logger.Info("Build skipped because one or more installers apply resolved MSI versions to publish; publish steps will build isolated payloads.");
             return;
         }
 
@@ -426,10 +406,11 @@ public sealed partial class DotNetPublishPipelineRunner
         };
 
         if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
-        if (plan.NoBuildInPublish) publishArgs.Add("--no-build");
+        if (plan.NoBuildInPublish && !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
+            publishArgs.Add("--no-build");
 
         AppendPublishStyleArgs(publishArgs, target.Publish, style);
-        publishArgs.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan, target, framework, runtime, style)));
+        publishArgs.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildPropertiesForRun(plan, target, framework, runtime, style)));
         return publishArgs;
     }
 
@@ -469,13 +450,29 @@ public sealed partial class DotNetPublishPipelineRunner
         return merged;
     }
 
+    private static Dictionary<string, string> BuildPublishMsBuildPropertiesForRun(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+
+        var merged = BuildPublishMsBuildProperties(plan, target, framework, runtime, style);
+        ApplyPublishMsiVersionProperties(merged, plan, target.Name, framework, runtime, style, reserveMonotonicVersions: true);
+        return merged;
+    }
+
     private static void ApplyPublishMsiVersionProperties(
         Dictionary<string, string> properties,
         DotNetPublishPlan plan,
         string targetName,
         string framework,
         string runtime,
-        DotNetPublishStyle style)
+        DotNetPublishStyle style,
+        bool reserveMonotonicVersions = false)
     {
         foreach (var installer in plan.Installers.Where(i =>
                      string.Equals(i.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase)))
@@ -487,6 +484,9 @@ public sealed partial class DotNetPublishPipelineRunner
             var resolved = FindResolvedMsiVersion(plan, installer.Id, targetName, framework, runtime, style);
             if (resolved is null)
                 continue;
+
+            if (reserveMonotonicVersions)
+                ReserveMsiVersionState(resolved, $"publish for installer '{installer.Id}'");
 
             foreach (var propertyName in ResolvePublishVersionProperties(versioning))
             {
@@ -511,35 +511,24 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private void BuildTargetProject(
-        DotNetPublishPlan plan,
-        DotNetPublishTargetPlan target,
-        string? runtime,
-        string? framework,
-        DotNetPublishStyle style)
-    {
-        var args = new List<string> { "build", target.ProjectPath, "-c", plan.Configuration, "--nologo" };
-        if (!string.IsNullOrWhiteSpace(framework))
-            args.AddRange(new[] { "-f", framework! });
-        if (!string.IsNullOrWhiteSpace(runtime))
-            args.AddRange(new[] { "-r", runtime! });
-        if (plan.Restore) args.Add("--no-restore");
-
-        args.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(
-            plan,
-            target,
-            framework ?? target.Publish.Framework,
-            runtime ?? string.Empty,
-            style)));
-
-        var label = string.IsNullOrWhiteSpace(runtime) ? framework : $"{runtime}, {framework}";
-        _logger.Info($"Build ({label}) -> {target.ProjectPath}");
-        RunDotnet(plan.ProjectRoot, args, plan.EnvironmentVariables);
-    }
-
     private static bool PlanUsesPublishMsiVersionProperties(DotNetPublishPlan plan)
         => (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
             .Any(installer => installer.Versioning?.Enabled == true && installer.Versioning.ApplyToPublish);
+
+    private static bool TargetUsesPublishMsiVersionProperties(
+        DotNetPublishPlan plan,
+        string targetName,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style)
+    {
+        return (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+            .Where(installer => string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase))
+            .Any(installer =>
+                installer.Versioning?.Enabled == true
+                && installer.Versioning.ApplyToPublish
+                && FindResolvedMsiVersion(plan, installer.Id, targetName, framework, runtime, style) is not null);
+    }
 
     private static string[] ResolvePublishVersionProperties(DotNetPublishMsiVersionOptions versioning)
     {

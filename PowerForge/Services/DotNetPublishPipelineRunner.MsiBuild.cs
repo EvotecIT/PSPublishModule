@@ -598,7 +598,10 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             var cached = FindResolvedMsiVersion(plan, installer.Id, step.TargetName, step.Framework, step.Runtime, step.Style);
             if (cached is not null)
+            {
+                ReserveMsiVersionState(cached, $"MSI build for installer '{installer.Id}'");
                 return new MsiVersionResolution(cached.Version, cached.VersionPropertyName, cached.Patch, cached.StatePath);
+            }
         }
 
         return ResolveMsiVersion(plan, installer, step);
@@ -647,6 +650,34 @@ public sealed partial class DotNetPublishPipelineRunner
             parts.Add("0");
 
         return string.Join(".", parts);
+    }
+
+    private static void ReserveMsiVersionState(DotNetPublishMsiVersionPlan version, string context)
+    {
+        if (version is null || string.IsNullOrWhiteSpace(version.StatePath) || !version.Patch.HasValue)
+            return;
+
+        if (!TryParseMsiVersion(version.Version, out var major, out var minor, out var patch))
+            return;
+
+        var previous = ReadMsiVersionState(version.StatePath!);
+        if (previous is not null
+            && previous.LastPatch == patch
+            && string.Equals(previous.Version, version.Version, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (ShouldBumpMsiPatch(previous, major, minor, patch))
+        {
+            var previousVersion = string.IsNullOrWhiteSpace(previous?.Version)
+                ? previous?.LastPatch.ToString(CultureInfo.InvariantCulture)
+                : previous!.Version;
+            throw new InvalidOperationException(
+                $"MSI version state '{version.StatePath}' advanced to '{previousVersion}' before {context} could reserve '{version.Version}'. Re-plan or rerun the publish to avoid duplicate MSI versions.");
+        }
+
+        WriteMsiVersionState(version.StatePath!, patch, version.Version);
     }
 
     private static int ResolveMsiVersionSegments(DotNetPublishMsiVersionOptions options, ref int major, ref int minor)
