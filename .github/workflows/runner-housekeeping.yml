@@ -35,8 +35,12 @@ jobs:
             labels: '["self-hosted","linux","runner-github-runner-linux"]'
           - name: github-runner-linux-01
             labels: '["self-hosted","linux","runner-github-runner-linux-01"]'
+          - name: github-runner-linux-02
+            labels: '["self-hosted","linux","runner-github-runner-linux-02"]'
           - name: github-runner-linux-03
             labels: '["self-hosted","linux","runner-github-runner-linux-03"]'
+          - name: github-runner-linux-04
+            labels: '["self-hosted","linux","runner-github-runner-linux-04"]'
           - name: github-runner-linux-05
             labels: '["self-hosted","linux","runner-github-runner-linux-05"]'
     name: ${{ matrix.runner.name }}
