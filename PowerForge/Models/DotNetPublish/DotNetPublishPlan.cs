@@ -59,6 +59,9 @@ public sealed class DotNetPublishPlan
     /// <summary>Resolved installer definitions.</summary>
     public DotNetPublishInstallerPlan[] Installers { get; set; } = Array.Empty<DotNetPublishInstallerPlan>();
 
+    /// <summary>Resolved MSI versions keyed by installer, target, framework, runtime, and style.</summary>
+    public Dictionary<string, DotNetPublishMsiVersionPlan> MsiVersions { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Resolved Microsoft Store / MSIX packaging definitions.</summary>
     public DotNetPublishStorePackagePlan[] StorePackages { get; set; } = Array.Empty<DotNetPublishStorePackagePlan>();
 
@@ -178,6 +181,27 @@ public sealed class DotNetPublishInstallerPlan
 
     /// <summary>Optional client-license injection options used by MSI build steps.</summary>
     public DotNetPublishMsiClientLicenseOptions? ClientLicense { get; set; }
+}
+
+/// <summary>
+/// Resolved MSI version for a concrete installer/target/framework/runtime/style combination.
+/// </summary>
+public sealed class DotNetPublishMsiVersionPlan
+{
+    /// <summary>MSI product version value, for example <c>26.6.9661</c>.</summary>
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>MSBuild property name used by the MSI project, usually <c>ProductVersion</c>.</summary>
+    public string? VersionPropertyName { get; set; }
+
+    /// <summary>Four-part assembly/file version derived from <see cref="Version"/>.</summary>
+    public string AssemblyVersion { get; set; } = string.Empty;
+
+    /// <summary>Resolved patch segment.</summary>
+    public int? Patch { get; set; }
+
+    /// <summary>Resolved monotonic state path when configured.</summary>
+    public string? StatePath { get; set; }
 }
 
 /// <summary>

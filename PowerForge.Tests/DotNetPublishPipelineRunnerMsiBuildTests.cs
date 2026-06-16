@@ -49,6 +49,57 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void BuildPublishMsBuildProperties_AppliesResolvedMsiVersion_WhenInstallerOptsIn()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            spec.Targets[0].Publish.Style = DotNetPublishStyle.PortableCompat;
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app.msi",
+                    PrepareFromTarget = "app",
+                    Authoring = CreateSimpleAuthoring("ProductFiles"),
+                    Versioning = new DotNetPublishMsiVersionOptions
+                    {
+                        Enabled = true,
+                        Major = 26,
+                        Minor = 6,
+                        FloorDateUtc = "2026-06-01",
+                        Monotonic = false,
+                        ApplyToPublish = true
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var target = Assert.Single(plan.Targets);
+            var expectedVersion = $"26.6.{DaysSince20000101(new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc))}";
+
+            var properties = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+                plan,
+                target,
+                "net10.0",
+                "win-x64",
+                DotNetPublishStyle.PortableCompat);
+
+            Assert.Equal(expectedVersion, properties["Version"]);
+            Assert.Equal(expectedVersion, properties["PackageVersion"]);
+            Assert.Equal($"{expectedVersion}.0", properties["FileVersion"]);
+            Assert.Equal($"{expectedVersion}.0", properties["AssemblyVersion"]);
+            Assert.Equal(expectedVersion, properties["InformationalVersion"]);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ResolveInstallerOutputDirectory_UsesConfiguredTemplate()
     {
         var root = CreateTempRoot();
