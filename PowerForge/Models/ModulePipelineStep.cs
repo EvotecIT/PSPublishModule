@@ -29,6 +29,8 @@ public enum ModulePipelineStepKind
     Cleanup = 5,
     /// <summary>Run a configured lifecycle action.</summary>
     Action = 11,
+    /// <summary>Build repository packages before the module lane.</summary>
+    PackageBuild = 12,
 }
 
 /// <summary>
@@ -59,6 +61,12 @@ public sealed class ModulePipelineStep
     /// <summary>Optional Apple app segment associated with the step.</summary>
     public ConfigurationAppleAppSegment? AppleAppSegment { get; }
 
+    /// <summary>Optional project-build JSON segment associated with the step.</summary>
+    public ConfigurationProjectBuildSegment? ProjectBuildSegment { get; }
+
+    /// <summary>Optional inline package-build segment associated with the step.</summary>
+    public ConfigurationPackageBuildSegment? PackageBuildSegment { get; }
+
     /// <summary>Optional lifecycle action associated with the step.</summary>
     public ConfigurationActionSegment? ActionSegment { get; }
 
@@ -70,6 +78,8 @@ public sealed class ModulePipelineStep
         ConfigurationPublishSegment? publishSegment = null,
         ConfigurationXcodeProjectVersionSegment? xcodeProjectVersionSegment = null,
         ConfigurationAppleAppSegment? appleAppSegment = null,
+        ConfigurationProjectBuildSegment? projectBuildSegment = null,
+        ConfigurationPackageBuildSegment? packageBuildSegment = null,
         ConfigurationActionSegment? actionSegment = null)
     {
         Kind = kind;
@@ -79,6 +89,8 @@ public sealed class ModulePipelineStep
         PublishSegment = publishSegment;
         XcodeProjectVersionSegment = xcodeProjectVersionSegment;
         AppleAppSegment = appleAppSegment;
+        ProjectBuildSegment = projectBuildSegment;
+        PackageBuildSegment = packageBuildSegment;
         ActionSegment = actionSegment;
     }
 
@@ -93,6 +105,7 @@ public sealed class ModulePipelineStep
 
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDependencies);
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterDependencies);
+        AddPackageBuildSteps(steps, plan);
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeVersioning);
         if (plan.AppleApps is { Length: > 0 })
         {
@@ -379,6 +392,53 @@ public sealed class ModulePipelineStep
                 key: $"action:{stage}:{i + 1:00}",
                 title: $"Run action ({label})",
                 actionSegment: action));
+        }
+    }
+
+    private static void AddPackageBuildSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan)
+    {
+        if (plan.ProjectBuilds is { Length: > 0 })
+        {
+            for (var i = 0; i < plan.ProjectBuilds.Length; i++)
+            {
+                var segment = plan.ProjectBuilds[i];
+                if (segment?.Configuration?.BuildBeforeModule != true)
+                    continue;
+
+                var name = segment.Configuration.Name;
+                var label = "Build packages";
+                if (!string.IsNullOrWhiteSpace(name))
+                    label += $" ({name})";
+                else if (!string.IsNullOrWhiteSpace(segment.Configuration.ConfigPath))
+                    label += $" ({Path.GetFileName(segment.Configuration.ConfigPath)})";
+
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.PackageBuild,
+                    key: $"package:project:{i + 1:00}",
+                    title: label,
+                    projectBuildSegment: segment));
+            }
+        }
+
+        if (plan.PackageBuilds is { Length: > 0 })
+        {
+            for (var i = 0; i < plan.PackageBuilds.Length; i++)
+            {
+                var segment = plan.PackageBuilds[i];
+                if (segment?.Configuration?.BuildBeforeModule != true)
+                    continue;
+
+                var name = segment.Configuration.Name;
+                var label = string.IsNullOrWhiteSpace(name)
+                    ? "Build packages (inline)"
+                    : $"Build packages ({name})";
+
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.PackageBuild,
+                    key: $"package:inline:{i + 1:00}",
+                    title: label,
+                    packageBuildSegment: segment));
+            }
         }
     }
 }

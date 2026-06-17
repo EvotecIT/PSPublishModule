@@ -1,4 +1,7 @@
+using System.Collections;
 using System.Management.Automation;
+using System.Reflection;
+using System.Text.Json;
 
 namespace PowerForge.Tests;
 
@@ -98,6 +101,119 @@ public sealed class PowerForgeProjectCmdletTests
         }
     }
 
+    [Fact]
+    public void NewConfigurationProjectBuild_EmitsSegment()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationProjectBuild")
+            .AddParameter("Name", "Libraries")
+            .AddParameter("ConfigPath", ".\\Build\\project.build.json")
+            .AddParameter("BuildBeforeModule")
+            .AddParameter("UseAsReleaseVersionSource")
+            .AddParameter("ProvideLocalNuGetFeed");
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationProjectBuildSegment>(Assert.Single(results).BaseObject);
+        Assert.Equal("Libraries", segment.Configuration.Name);
+        Assert.Equal(".\\Build\\project.build.json", segment.Configuration.ConfigPath);
+        Assert.True(segment.Configuration.BuildBeforeModule);
+        Assert.True(segment.Configuration.UseAsReleaseVersionSource);
+        Assert.True(segment.Configuration.ProvideLocalNuGetFeed);
+        Assert.True(segment.Configuration.Enabled);
+    }
+
+    [Fact]
+    public void NewConfigurationPackageBuild_EmitsInlineSegment()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationPackageBuild")
+            .AddParameter("RootPath", ".\\Sources")
+            .AddParameter("ExpectedVersionMap", new Hashtable { ["HtmlTinkerX"] = "2.0.X" })
+            .AddParameter("VersionTracks", new Hashtable
+            {
+                ["Core"] = new Hashtable
+                {
+                    ["ExpectedVersion"] = "2.0.X",
+                    ["Projects"] = new[] { "HtmlTinkerX" },
+                    ["IncludePrerelease"] = true
+                }
+            })
+            .AddParameter("BuildBeforeModule")
+            .AddParameter("PublishNuget", false)
+            .AddParameter("GitHubIncludeProjectNameInTag", false);
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationPackageBuildSegment>(Assert.Single(results).BaseObject);
+        Assert.Equal(".\\Sources", segment.Configuration.RootPath);
+        Assert.Equal("2.0.X", segment.Configuration.ExpectedVersionMap?["HtmlTinkerX"]);
+        Assert.True(segment.Configuration.BuildBeforeModule);
+        Assert.False(segment.Configuration.PublishNuget);
+        Assert.False(segment.Configuration.GitHubIncludeProjectNameInTag);
+        Assert.NotNull(segment.Configuration.VersionTracks);
+        var track = segment.Configuration.VersionTracks!["Core"];
+        Assert.Equal("2.0.X", track.ExpectedVersion);
+        Assert.Equal(new[] { "HtmlTinkerX" }, track.Projects);
+        Assert.True(track.IncludePrerelease);
+    }
+
+    [Fact]
+    public void NewConfigurationPackageBuild_MirrorsProjectBuildJsonOptions()
+    {
+        var schemaPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "Schemas",
+            "project.build.schema.json"));
+
+        using var schema = JsonDocument.Parse(File.ReadAllText(schemaPath));
+        var schemaProperties = schema.RootElement
+            .GetProperty("properties")
+            .EnumerateObject()
+            .Select(property => property.Name)
+            .Where(static name => name != "$schema")
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        var projectBuildProperties = WritablePropertyNames(typeof(ProjectBuildConfiguration));
+        var packageBuildProperties = WritablePropertyNames(typeof(PackageBuildConfiguration));
+        var cmdletProperties = WritablePropertyNames(typeof(PSPublishModule.NewConfigurationPackageBuildCommand));
+
+        Assert.Equal(schemaProperties, projectBuildProperties);
+        Assert.Empty(projectBuildProperties.Except(packageBuildProperties, StringComparer.Ordinal));
+        Assert.Empty(packageBuildProperties.Except(cmdletProperties, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void NewConfigurationRelease_EmitsSegment()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationRelease")
+            .AddParameter("StageRoot", ".\\Artifacts\\Release")
+            .AddParameter("VersionSource", ReleaseVersionSource.PackageBuild)
+            .AddParameter("PrimaryProject", "HtmlTinkerX")
+            .AddParameter("BuildOrder", new[] { "PackageBuild", "Module" })
+            .AddParameter("PublishOrder", new[] { "NuGet", "PowerShellGallery", "GitHub" })
+            .AddParameter("FailFast");
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationReleaseSegment>(Assert.Single(results).BaseObject);
+        Assert.Equal(".\\Artifacts\\Release", segment.Configuration.StageRoot);
+        Assert.Equal(ReleaseVersionSource.PackageBuild, segment.Configuration.VersionSource);
+        Assert.Equal("HtmlTinkerX", segment.Configuration.PrimaryProject);
+        Assert.Equal(new[] { "PackageBuild", "Module" }, segment.Configuration.BuildOrder);
+        Assert.Equal(new[] { "NuGet", "PowerShellGallery", "GitHub" }, segment.Configuration.PublishOrder);
+        Assert.True(segment.Configuration.FailFast);
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
@@ -110,6 +226,15 @@ public sealed class PowerForgeProjectCmdletTests
 
         ps.Commands.Clear();
         return ps;
+    }
+
+    private static string[] WritablePropertyNames(Type type)
+    {
+        return type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(static property => property.CanRead && property.CanWrite)
+            .Select(static property => property.Name)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static string CreateTempDirectory()

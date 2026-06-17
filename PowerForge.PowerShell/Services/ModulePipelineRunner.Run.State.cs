@@ -34,6 +34,9 @@ public sealed partial class ModulePipelineRunner
         public BuildDiagnostic[] AutomaticBinaryConflictDiagnostics { get; set; } = Array.Empty<BuildDiagnostic>();
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
         public List<ModulePublishResult> PublishResults { get; } = new();
+        public List<ProjectBuildHostExecutionResult> ProjectBuildResults { get; } = new();
+        public List<ReleaseVersionCandidate> ReleaseVersionCandidates { get; } = new();
+        public ModuleReleaseCoordinationResult? ReleaseCoordinationResult { get; set; }
         public List<ModulePipelineActionResult> ActionResults { get; } = new();
         public List<XcodeProjectVersionUpdateResult> XcodeProjectVersionResults { get; } = new();
         public List<AppleAppReleasePreparationResult> AppleAppResults { get; } = new();
@@ -48,5 +51,25 @@ public sealed partial class ModulePipelineRunner
 
         public ModuleBuildPipeline.StagingResult RequireStaged()
             => Staged ?? throw new InvalidOperationException("Staging result is not available for the current pipeline state.");
+    }
+
+    private sealed class ReleaseVersionCandidate
+    {
+        public ReleaseVersionCandidate(
+            ReleaseVersionSource source,
+            string label,
+            bool explicitSource,
+            ProjectBuildHostExecutionResult result)
+        {
+            Source = source;
+            Label = label;
+            ExplicitSource = explicitSource;
+            Result = result ?? throw new ArgumentNullException(nameof(result));
+        }
+
+        public ReleaseVersionSource Source { get; }
+        public string Label { get; }
+        public bool ExplicitSource { get; }
+        public ProjectBuildHostExecutionResult Result { get; }
     }
 }

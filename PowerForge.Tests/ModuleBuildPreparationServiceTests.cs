@@ -234,6 +234,147 @@ public sealed class ModuleBuildPreparationServiceTests
     }
 
     [Fact]
+    public void WritePipelineSpecJson_keeps_package_build_paths_relative_to_project_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-packages-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
+            var projectConfig = Path.Combine(root.FullName, "Build", "project.build.json");
+            var packageRoot = Path.Combine(root.FullName, "Sources");
+            var stagingRoot = Path.Combine(root.FullName, "Artifacts", "Packages", "Staging");
+            var releaseRoot = Path.Combine(root.FullName, "Artifacts", "Release");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = root.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = projectConfig,
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            RootPath = packageRoot,
+                            StagingPath = stagingRoot,
+                            OutputPath = Path.Combine(root.FullName, "Artifacts", "Packages", "NuGet"),
+                            PlanOutputPath = Path.Combine(root.FullName, "Artifacts", "Packages", "plan.json")
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = releaseRoot,
+                            VersionSource = ReleaseVersionSource.PackageBuild
+                        }
+                    }
+                }
+            };
+
+            var service = new ModuleBuildPreparationService();
+            service.WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"ConfigPath\": \"Build/project.build.json\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"RootPath\": \"Sources\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"StagingPath\": \"Artifacts/Packages/Staging\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"PlanOutputPath\": \"Artifacts/Packages/plan.json\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"StageRoot\": \"Artifacts/Release\"", json, StringComparison.Ordinal);
+
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            Assert.NotNull(jsonSpec);
+
+            service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
+            var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(jsonSpec!.Segments[0]);
+            var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(jsonSpec.Segments[1]);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[2]);
+            Assert.Equal(projectConfig, projectBuild.Configuration.ConfigPath);
+            Assert.Equal(packageRoot, packageBuild.Configuration.RootPath);
+            Assert.Equal(stagingRoot, packageBuild.Configuration.StagingPath);
+            Assert.Equal(releaseRoot, release.Configuration.StageRoot);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Plan_keeps_package_build_segments()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-plan-packages-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            const string moduleName = "SampleModule";
+            File.WriteAllText(Path.Combine(root.FullName, $"{moduleName}.psd1"), "@{ ModuleVersion = '1.2.3' }");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.2.X"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = "Build/project.build.json",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            RootPath = "Sources",
+                            Enabled = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            VersionSource = ReleaseVersionSource.PackageBuild,
+                            PrimaryProject = "HtmlTinkerX"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.Single(plan.ProjectBuilds);
+            Assert.Single(plan.PackageBuilds);
+            Assert.NotNull(plan.Release);
+            Assert.True(plan.ProjectBuilds[0].Configuration.BuildBeforeModule);
+            Assert.Equal("Sources", plan.PackageBuilds[0].Configuration.RootPath);
+            Assert.Equal(ReleaseVersionSource.PackageBuild, plan.Release!.Configuration.VersionSource);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+
+    [Fact]
     public void WritePipelineSpecJson_preserves_configured_manifest_version_in_build_spec()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-version-" + Guid.NewGuid().ToString("N")));

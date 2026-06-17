@@ -12,6 +12,8 @@ internal sealed class ModulePipelineExecutionSession
     private readonly Dictionary<ConfigurationPublishSegment, ModulePipelineStep> _publishSteps;
     private readonly Dictionary<ConfigurationAppleAppSegment, ModulePipelineStep> _appleAppSteps;
     private readonly Dictionary<ConfigurationXcodeProjectVersionSegment, ModulePipelineStep> _xcodeProjectVersionSteps;
+    private readonly Dictionary<ConfigurationProjectBuildSegment, ModulePipelineStep> _projectBuildSteps;
+    private readonly Dictionary<ConfigurationPackageBuildSegment, ModulePipelineStep> _packageBuildSteps;
     private readonly Dictionary<ConfigurationActionSegment, ModulePipelineStep> _actionSteps;
 
     private ModulePipelineExecutionSession(ModulePipelineStep[] steps, IModulePipelineProgressReporter reporter)
@@ -35,6 +37,12 @@ internal sealed class ModulePipelineExecutionSession
         _xcodeProjectVersionSteps = Steps
             .Where(static step => step.XcodeProjectVersionSegment is not null)
             .ToDictionary(static step => step.XcodeProjectVersionSegment!, static step => step);
+        _projectBuildSteps = Steps
+            .Where(static step => step.ProjectBuildSegment is not null)
+            .ToDictionary(static step => step.ProjectBuildSegment!, static step => step);
+        _packageBuildSteps = Steps
+            .Where(static step => step.PackageBuildSegment is not null)
+            .ToDictionary(static step => step.PackageBuildSegment!, static step => step);
         _actionSteps = Steps
             .Where(static step => step.ActionSegment is not null)
             .ToDictionary(static step => step.ActionSegment!, static step => step);
@@ -100,6 +108,18 @@ internal sealed class ModulePipelineExecutionSession
     {
         if (xcodeProjectVersion is null) return null;
         return _xcodeProjectVersionSteps.TryGetValue(xcodeProjectVersion, out var step) ? step : null;
+    }
+
+    internal ModulePipelineStep? GetProjectBuildStep(ConfigurationProjectBuildSegment projectBuild)
+    {
+        if (projectBuild is null) return null;
+        return _projectBuildSteps.TryGetValue(projectBuild, out var step) ? step : null;
+    }
+
+    internal ModulePipelineStep? GetPackageBuildStep(ConfigurationPackageBuildSegment packageBuild)
+    {
+        if (packageBuild is null) return null;
+        return _packageBuildSteps.TryGetValue(packageBuild, out var step) ? step : null;
     }
 
     internal ModulePipelineStep? GetActionStep(ConfigurationActionSegment action)

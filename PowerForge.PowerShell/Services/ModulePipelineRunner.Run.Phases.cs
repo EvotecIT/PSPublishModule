@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -17,6 +16,9 @@ public sealed partial class ModulePipelineRunner
         ExecuteActions(ModulePipelineActionStage.BeforeDependencies, plan, session, state);
         state.DependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
         ExecuteActions(ModulePipelineActionStage.AfterDependencies, plan, session, state);
+
+        ExecutePackageBuildsBeforeModule(plan, session, state);
+        ApplyPackageReleaseVersionIfRequested(plan, state);
 
         ExecuteActions(ModulePipelineActionStage.BeforeVersioning, plan, session, state);
         SyncSourceProjectVersionIfRequested(plan);
@@ -678,31 +680,13 @@ public sealed partial class ModulePipelineRunner
         }
         ExecuteActions(ModulePipelineActionStage.AfterArtefacts, plan, session, state);
 
+        ExecutePackageBuildsAfterModule(plan, session, state);
+
         ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
-        if (plan.Publishes is { Length: > 0 })
-        {
-            foreach (var publish in plan.Publishes)
-            {
-                var step = session.GetPublishStep(publish);
-                session.Start(step);
-                try
-                {
-                    state.PublishResults.Add(_hostedOperations.PublishModule(
-                        publish.Configuration,
-                        plan,
-                        buildResult,
-                        state.ArtefactResults,
-                        includeScriptFolders: !state.PackageWithoutScriptFolders));
-                    session.Done(step);
-                }
-                catch (Exception ex)
-                {
-                    session.Fail(step, ex);
-                    throw;
-                }
-            }
-        }
+        ExecutePublishOperations(plan, session, buildResult, state);
         ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
+
+        state.ReleaseCoordinationResult ??= PrepareUnifiedReleaseAssets(plan, state);
 
         ExecuteActions(ModulePipelineActionStage.BeforeInstall, plan, session, state);
         if (plan.InstallEnabled)

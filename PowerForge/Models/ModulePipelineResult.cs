@@ -116,6 +116,16 @@ public sealed class ModulePipelineResult
     public ModulePublishResult[] PublishResults { get; }
 
     /// <summary>
+    /// Package/project build results produced before the module lane.
+    /// </summary>
+    public ProjectBuildHostExecutionResult[] ProjectBuildResults { get; }
+
+    /// <summary>
+    /// Unified release coordination result when a Release segment was configured.
+    /// </summary>
+    public ModuleReleaseCoordinationResult? ReleaseCoordinationResult { get; }
+
+    /// <summary>
     /// Lifecycle action results produced during the run.
     /// </summary>
     public ModulePipelineActionResult[] ActionResults { get; }
@@ -164,6 +174,8 @@ public sealed class ModulePipelineResult
         XcodeProjectVersionUpdateResult[]? xcodeProjectVersionResults = null,
         AppleAppReleasePreparationResult[]? appleAppResults = null,
         ModulePipelineActionResult[]? actionResults = null,
+        ProjectBuildHostExecutionResult[]? projectBuildResults = null,
+        ModuleReleaseCoordinationResult? releaseCoordinationResult = null,
         ModuleOwnerNote[]? ownerNotes = null)
     {
         Plan = plan;
@@ -188,6 +200,8 @@ public sealed class ModulePipelineResult
         XcodeProjectVersionResults = xcodeProjectVersionResults ?? Array.Empty<XcodeProjectVersionUpdateResult>();
         AppleAppResults = appleAppResults ?? Array.Empty<AppleAppReleasePreparationResult>();
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
+        ProjectBuildResults = projectBuildResults ?? Array.Empty<ProjectBuildHostExecutionResult>();
+        ReleaseCoordinationResult = releaseCoordinationResult;
         ActionResults = actionResults ?? Array.Empty<ModulePipelineActionResult>();
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
         SigningResult = signingResult;

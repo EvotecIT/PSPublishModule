@@ -40,6 +40,8 @@ public sealed partial class ModulePipelineRunner
     private readonly IModuleManifestMutator _manifestMutator;
     private readonly IMissingFunctionAnalysisService _missingFunctionAnalysisService;
     private readonly IScriptFunctionExportDetector _scriptFunctionExportDetector;
+    private readonly ModulePipelineRunnerDefaults.ModulePackageBuildExecutor _packageBuildExecutor;
+    private readonly ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher _gitHubReleasePublisher;
 
     private sealed class RequiredModuleDraft
     {
@@ -87,8 +89,10 @@ public sealed partial class ModulePipelineRunner
         IModulePipelineHostedOperations? hostedOperations = null,
         IModuleManifestMutator? manifestMutator = null,
         IMissingFunctionAnalysisService? missingFunctionAnalysisService = null,
-        IScriptFunctionExportDetector? scriptFunctionExportDetector = null)
-        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator, missingFunctionAnalysisService, scriptFunctionExportDetector))
+        IScriptFunctionExportDetector? scriptFunctionExportDetector = null,
+        ModulePipelineRunnerDefaults.ModulePackageBuildExecutor? packageBuildExecutor = null,
+        ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher? gitHubReleasePublisher = null)
+        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator, missingFunctionAnalysisService, scriptFunctionExportDetector, packageBuildExecutor, gitHubReleasePublisher))
     {
     }
 
@@ -104,6 +108,8 @@ public sealed partial class ModulePipelineRunner
         _manifestMutator = services.ManifestMutator;
         _missingFunctionAnalysisService = services.MissingFunctionAnalysisService;
         _scriptFunctionExportDetector = services.ScriptFunctionExportDetector;
+        _packageBuildExecutor = services.PackageBuildExecutor;
+        _gitHubReleasePublisher = services.GitHubReleasePublisher;
     }
 
 }

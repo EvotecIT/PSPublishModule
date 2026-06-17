@@ -129,6 +129,7 @@ public sealed class ModuleBuildPipeline
             ModuleVersion = spec.Version,
             Configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration,
             Frameworks = tfms,
+            NuGetRestoreSources = spec.NuGetRestoreSources ?? Array.Empty<string>(),
             Author = spec.Author,
             CompanyName = spec.CompanyName,
             Description = spec.Description,

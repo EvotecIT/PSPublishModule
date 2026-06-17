@@ -75,11 +75,15 @@ public sealed partial class ModulePipelineRunner
             xcodeProjectVersionResults: state.XcodeProjectVersionResults.ToArray(),
             appleAppResults: state.AppleAppResults.ToArray(),
             actionResults: state.ActionResults.ToArray(),
+            projectBuildResults: state.ProjectBuildResults.ToArray(),
+            releaseCoordinationResult: state.ReleaseCoordinationResult,
             ownerNotes: BuildOwnerNotes(
                 plan,
                 buildResult,
                 state.DocumentationResult,
                 state.DependencyInstallResults,
+                state.ProjectBuildResults.ToArray(),
+                state.ReleaseCoordinationResult,
                 stagingResult,
                 state.MergeExecution,
                 state.ProjectManifestSyncMessage));
@@ -95,6 +99,8 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildResult buildResult,
         DocumentationBuildResult? documentationResult,
         ModuleDependencyInstallResult[]? dependencyInstallResults,
+        ProjectBuildHostExecutionResult[]? projectBuildResults,
+        ModuleReleaseCoordinationResult? releaseCoordinationResult,
         ModuleBuildPipeline.StagingResult? stagingResult,
         MergeExecutionResult? mergeExecution,
         string? projectManifestSyncMessage)
@@ -119,6 +125,45 @@ public sealed partial class ModulePipelineRunner
                 details: new[]
                 {
                     $"{installed} installed, {updated} updated, {satisfied} satisfied, {skipped} skipped."
+                }));
+        }
+
+        if (projectBuildResults is { Length: > 0 })
+        {
+            var successful = projectBuildResults.Count(static result => result.Success);
+            var failed = projectBuildResults.Length - successful;
+            var configured = projectBuildResults
+                .Select(static result => result.ConfigPath)
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            notes.Add(new ModuleOwnerNote(
+                "Package Builds",
+                failed > 0 ? ModuleOwnerNoteSeverity.Warning : ModuleOwnerNoteSeverity.Info,
+                summary: $"Ran {projectBuildResults.Length} package build lane(s) before the module build.",
+                nextStep: failed > 0
+                    ? "Review the package build result before publishing the module or release assets."
+                    : string.Empty,
+                details: new[]
+                {
+                    $"{successful} succeeded, {failed} failed.",
+                    configured.Length == 0 ? "No package build config paths were reported." : $"Configs: {string.Join(", ", configured)}"
+                }));
+        }
+
+        if (releaseCoordinationResult is not null)
+        {
+            notes.Add(new ModuleOwnerNote(
+                "Release",
+                releaseCoordinationResult.GitHub is { Succeeded: false } ? ModuleOwnerNoteSeverity.Warning : ModuleOwnerNoteSeverity.Info,
+                summary: $"Prepared {releaseCoordinationResult.AssetPaths.Length} unified release asset(s).",
+                details: new[]
+                {
+                    string.IsNullOrWhiteSpace(releaseCoordinationResult.StageRoot)
+                        ? "Assets were published from their original output paths."
+                        : $"StageRoot: {releaseCoordinationResult.StageRoot}",
+                    $"{releaseCoordinationResult.ModuleAssetPaths.Length} module asset(s), {releaseCoordinationResult.PackageAssetPaths.Length} package asset(s)."
                 }));
         }
 
