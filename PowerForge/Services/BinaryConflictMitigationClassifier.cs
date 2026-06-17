@@ -13,6 +13,7 @@ internal static class BinaryConflictMitigationClassifier
         BinaryConflictDetectionResult result,
         bool useAssemblyLoadContext,
         bool strictAnalysis,
+        IDictionary<string, bool>? moduleIsolationCache = null,
         ILogger? logger = null)
     {
         if (result is null)
@@ -20,7 +21,12 @@ internal static class BinaryConflictMitigationClassifier
         if (result.Issues.Length == 0)
             return result;
 
-        if (!IsCurrentModuleConflictMitigatedByAlc(useAssemblyLoadContext, result.PowerShellEdition, strictAnalysis))
+        if (!IsCurrentModuleConflictMitigatedByAlc(
+                useAssemblyLoadContext,
+                result.PowerShellEdition,
+                strictAnalysis,
+                result.ModuleRoot,
+                moduleIsolationCache))
             return result;
 
         var suppressed = result.Issues.Length;
@@ -39,11 +45,14 @@ internal static class BinaryConflictMitigationClassifier
     internal static bool IsCurrentModuleConflictMitigatedByAlc(
         bool useAssemblyLoadContext,
         string? powerShellEdition,
-        bool strictAnalysis)
+        bool strictAnalysis,
+        string? moduleRoot,
+        IDictionary<string, bool>? moduleIsolationCache = null)
     {
         return !strictAnalysis &&
                useAssemblyLoadContext &&
-               IsCoreEdition(powerShellEdition);
+               IsCoreEdition(powerShellEdition) &&
+               ModuleHasAssemblyLoadContextIsolation(moduleRoot, moduleIsolationCache);
     }
 
     internal static bool IsRequiredModuleConflictMitigatedByAlc(

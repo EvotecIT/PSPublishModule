@@ -102,7 +102,7 @@ try {
     $issues = Invoke-ScriptAnalyzer -Path $paths -ExcludeRule $exclude -ErrorAction Continue
     if ($null -eq $issues) { $issues = @() }
     $records = @($issues | ConvertTo-PssaIssueRecord)
-    $json = if ($records.Count -eq 0) { '[]' } else { $records | ConvertTo-Json -Depth 5 }
+    $json = if ($records.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject ([object[]]$records) -Depth 5 }
     Set-Content -Path $OutJson -Value $json -Encoding UTF8 -ErrorAction Stop
 } catch {
     $message = if ($_.Exception) { $_.Exception.Message } else { "$_" }

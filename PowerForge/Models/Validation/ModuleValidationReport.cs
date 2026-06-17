@@ -85,6 +85,22 @@ public sealed class ModuleValidationCheckResult
     /// <param name="status">Computed status.</param>
     /// <param name="summary">Short summary.</param>
     /// <param name="issues">Issues discovered by the check.</param>
+    public ModuleValidationCheckResult(
+        string name,
+        ValidationSeverity severity,
+        CheckStatus status,
+        string summary,
+        string[] issues)
+        : this(name, severity, status, summary, issues, System.Array.Empty<ModuleValidationIssue>())
+    {
+    }
+
+    /// <summary>Creates a single validation check result.</summary>
+    /// <param name="name">Check name.</param>
+    /// <param name="severity">Configured severity.</param>
+    /// <param name="status">Computed status.</param>
+    /// <param name="summary">Short summary.</param>
+    /// <param name="issues">Issues discovered by the check.</param>
     /// <param name="structuredIssues">Structured issues discovered by the check.</param>
     public ModuleValidationCheckResult(
         string name,
@@ -92,7 +108,7 @@ public sealed class ModuleValidationCheckResult
         CheckStatus status,
         string summary,
         string[] issues,
-        ModuleValidationIssue[]? structuredIssues = null)
+        ModuleValidationIssue[]? structuredIssues)
     {
         Name = name ?? string.Empty;
         Severity = severity;

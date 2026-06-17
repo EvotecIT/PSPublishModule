@@ -256,6 +256,7 @@ public sealed partial class ModulePipelineRunner
         var diagnostics = new List<BuildDiagnostic>();
         var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var suppressed = 0;
+        var isolationCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         var modulePaths = installedModules
             .Select(module => module.ModuleBasePath!)
             .ToArray();
@@ -273,7 +274,9 @@ public sealed partial class ModulePipelineRunner
                 if (BinaryConflictMitigationClassifier.IsCurrentModuleConflictMitigatedByAlc(
                         plan.BuildSpec.UseAssemblyLoadContext,
                         issue.PowerShellEdition,
-                        strictAnalysis))
+                        strictAnalysis,
+                        buildResult.StagingPath,
+                        isolationCache))
                 {
                     suppressed++;
                     continue;

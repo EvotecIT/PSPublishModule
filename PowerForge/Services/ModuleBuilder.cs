@@ -614,7 +614,7 @@ public sealed class ModuleBuilder
                 result,
                 opts.UseAssemblyLoadContext,
                 strictAnalysis: false,
-                _logger);
+                logger: _logger);
             if (!result.HasConflicts)
             {
                 editionStatuses.Add((result.PowerShellEdition, false));
