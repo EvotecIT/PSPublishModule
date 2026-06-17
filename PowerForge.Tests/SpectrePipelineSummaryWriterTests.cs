@@ -7,6 +7,34 @@ namespace PowerForge.Tests;
 public sealed class SpectrePipelineSummaryWriterTests
 {
     [Fact]
+    public void BuildRecommendationRows_PreservesDiagnosticLocation()
+    {
+        var diagnostics = new[]
+        {
+            new BuildDiagnostic(
+                ruleId: "VALIDATION-PSSA-PSAVOIDASSIGNMENTTOAUTOMATICVARIABLE",
+                area: BuildDiagnosticArea.Validation,
+                severity: BuildDiagnosticSeverity.Warning,
+                scope: BuildDiagnosticScope.Project,
+                owner: BuildDiagnosticOwner.ModuleAuthor,
+                remediationKind: BuildDiagnosticRemediationKind.ManualFix,
+                canAutoFix: false,
+                summary: "Fix PSAvoidAssignmentToAutomaticVariable",
+                details: "Tests\\Test.ps1:75:1 - The variable profile is automatic.",
+                recommendedAction: "Rename the variable so it does not overwrite a PowerShell automatic variable.",
+                sourcePath: "Tests\\Test.ps1:75:1",
+                generatedBy: "PSScriptAnalyzer")
+        };
+
+        var rows = SpectrePipelineSummaryWriter.BuildRecommendationRows(diagnostics, BuildDiagnosticArea.Validation);
+
+        var row = Assert.Single(rows);
+        Assert.Equal("Fix PSAvoidAssignmentToAutomaticVariable", row.When);
+        Assert.Equal("Tests\\Test.ps1:75:1", row.Where);
+        Assert.Contains("Rename the variable", row.Action);
+    }
+
+    [Fact]
     public void NormalizeFailureMessage_PreservesStructuredImportDiagnosticsWithoutTruncation()
     {
         var detail = new string('x', 400);

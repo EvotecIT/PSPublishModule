@@ -99,6 +99,12 @@ public sealed class ModuleBuilder
         public string? BinaryConflictReportRoot { get; set; }
 
         /// <summary>
+        /// When true, suppresses PowerShell Core binary conflict advisories that are mitigated by the generated
+        /// module-scoped AssemblyLoadContext loader.
+        /// </summary>
+        public bool UseAssemblyLoadContext { get; set; }
+
+        /// <summary>
         /// Optional filters used to exclude copied binary libraries by package id, target key, relative path, or file name.
         /// </summary>
         public IReadOnlyList<string> ExcludeLibraryFilter { get; set; } = Array.Empty<string>();
@@ -604,6 +610,11 @@ public sealed class ModuleBuilder
                 edition,
                 currentModuleName: opts.ModuleName,
                 searchRoots: opts.BinaryConflictSearchRoots);
+            result = BinaryConflictMitigationClassifier.SuppressCurrentModuleConflictsMitigatedByAlc(
+                result,
+                opts.UseAssemblyLoadContext,
+                strictAnalysis: false,
+                _logger);
             if (!result.HasConflicts)
             {
                 editionStatuses.Add((result.PowerShellEdition, false));

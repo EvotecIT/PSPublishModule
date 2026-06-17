@@ -69,15 +69,17 @@ public sealed partial class ModulePipelineRunner
 
         var diagnostics = new List<BuildDiagnostic>();
         var editions = GetBinaryConflictEditions(plan.CompatiblePSEditions);
+        var strictAnalysis = cfg.AnalyzeBinaryConflicts == true;
         diagnostics.AddRange(CreateRequiredModuleOrderDiagnostics(
             requiredModules,
             installedModules,
             editions,
-            preferConflictOrder: cfg.PreferBinaryConflictOrder == true));
-        diagnostics.AddRange(CreateRequiredModuleBinaryConflictDiagnostics(installedModules, editions));
+            preferConflictOrder: cfg.PreferBinaryConflictOrder == true,
+            strictAnalysis: strictAnalysis));
+        diagnostics.AddRange(CreateRequiredModuleBinaryConflictDiagnostics(installedModules, editions, strictAnalysis));
 
         if (cfg.Self == true)
-            diagnostics.AddRange(CreateBuiltModuleBinaryConflictDiagnostics(plan, buildResult, installedModules, editions));
+            diagnostics.AddRange(CreateBuiltModuleBinaryConflictDiagnostics(plan, buildResult, installedModules, editions, strictAnalysis));
 
         return diagnostics.ToArray();
     }
@@ -122,10 +124,21 @@ public sealed partial class ModulePipelineRunner
         RequiredModuleReference[] requiredModules,
         InstalledModuleMetadata[] installedModules,
         string[] editions,
-        bool preferConflictOrder)
+        bool preferConflictOrder,
+        bool strictAnalysis)
     {
         if (installedModules.Length < 2)
             return Array.Empty<BuildDiagnostic>();
+
+        if (!strictAnalysis &&
+            editions.Length > 0 &&
+            editions.All(static edition => string.Equals(edition, "Core", StringComparison.OrdinalIgnoreCase)) &&
+            installedModules.All(module => BinaryConflictMitigationClassifier.ModuleHasAssemblyLoadContextIsolation(module.ModuleBasePath)))
+        {
+            if (_logger.IsVerbose)
+                _logger.Verbose("Suppressed RequiredModules import-order advisory; every required module appears to use AssemblyLoadContext isolation on PowerShell Core.");
+            return Array.Empty<BuildDiagnostic>();
+        }
 
         var declaredOrder = requiredModules
             .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
@@ -158,7 +171,8 @@ public sealed partial class ModulePipelineRunner
 
     private BuildDiagnostic[] CreateRequiredModuleBinaryConflictDiagnostics(
         InstalledModuleMetadata[] installedModules,
-        string[] editions)
+        string[] editions,
+        bool strictAnalysis)
     {
         if (installedModules.Length < 2)
             return Array.Empty<BuildDiagnostic>();
@@ -166,12 +180,16 @@ public sealed partial class ModulePipelineRunner
         var detector = new BinaryConflictDetectionService(_logger);
         var diagnostics = new List<BuildDiagnostic>();
         var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var isolationCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        var suppressed = 0;
 
         foreach (var module in installedModules)
         {
-            var otherModulePaths = installedModules
+            var otherModules = installedModules
                 .Where(other => !string.Equals(other.Name, module.Name, StringComparison.OrdinalIgnoreCase))
-                .Select(other => other.ModuleBasePath!)
+                .ToArray();
+            var otherModulePaths = otherModules
+                .Select(static other => other.ModuleBasePath!)
                 .ToArray();
             if (otherModulePaths.Length == 0)
                 continue;
@@ -186,6 +204,18 @@ public sealed partial class ModulePipelineRunner
 
                 foreach (var issue in result.Issues)
                 {
+                    var otherModule = FindInstalledModule(otherModules, issue);
+                    if (BinaryConflictMitigationClassifier.IsRequiredModuleConflictMitigatedByAlc(
+                            module,
+                            otherModule,
+                            issue.PowerShellEdition,
+                            strictAnalysis,
+                            isolationCache))
+                    {
+                        suppressed++;
+                        continue;
+                    }
+
                     var preferredFirst = issue.VersionComparison >= 0 ? module.Name : issue.InstalledModuleName;
                     var preferredSecond = issue.VersionComparison >= 0 ? issue.InstalledModuleName : module.Name;
                     var preferredVersion = issue.VersionComparison >= 0 ? issue.PayloadAssemblyVersion : issue.InstalledAssemblyVersion;
@@ -209,6 +239,9 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        if (suppressed > 0 && _logger.IsVerbose)
+            _logger.Verbose($"Suppressed {suppressed} RequiredModules binary conflict advisory item(s); at least one side appears to use AssemblyLoadContext isolation on PowerShell Core.");
+
         return diagnostics.ToArray();
     }
 
@@ -216,11 +249,13 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         InstalledModuleMetadata[] installedModules,
-        string[] editions)
+        string[] editions,
+        bool strictAnalysis)
     {
         var detector = new BinaryConflictDetectionService(_logger);
         var diagnostics = new List<BuildDiagnostic>();
         var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var suppressed = 0;
         var modulePaths = installedModules
             .Select(module => module.ModuleBasePath!)
             .ToArray();
@@ -235,6 +270,15 @@ public sealed partial class ModulePipelineRunner
 
             foreach (var issue in result.Issues)
             {
+                if (BinaryConflictMitigationClassifier.IsCurrentModuleConflictMitigatedByAlc(
+                        plan.BuildSpec.UseAssemblyLoadContext,
+                        issue.PowerShellEdition,
+                        strictAnalysis))
+                {
+                    suppressed++;
+                    continue;
+                }
+
                 var moduleLabel = string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
                     ? issue.InstalledModuleName
                     : issue.InstalledModuleName + " " + issue.InstalledModuleVersion;
@@ -256,7 +300,29 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        if (suppressed > 0 && _logger.IsVerbose)
+            _logger.Verbose($"Suppressed {suppressed} built-module binary conflict advisory item(s); UseAssemblyLoadContext isolates the module payload on PowerShell Core.");
+
         return diagnostics.ToArray();
+    }
+
+    private static InstalledModuleMetadata? FindInstalledModule(
+        IEnumerable<InstalledModuleMetadata> modules,
+        BinaryConflictDetectionIssue issue)
+    {
+        foreach (var module in modules ?? Array.Empty<InstalledModuleMetadata>())
+        {
+            if (!string.Equals(module.Name, issue.InstalledModuleName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (string.IsNullOrWhiteSpace(issue.InstalledModuleVersion) ||
+                string.Equals(module.Version, issue.InstalledModuleVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                return module;
+            }
+        }
+
+        return null;
     }
 
     private string[] BuildPreferredRequiredModuleOrder(

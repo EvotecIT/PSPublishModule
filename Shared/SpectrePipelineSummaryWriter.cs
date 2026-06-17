@@ -674,19 +674,49 @@ internal static class SpectrePipelineSummaryWriter
         AnsiConsole.Write(table);
     }
 
-    private static List<(string When, string Action)> BuildRecommendations(
+    internal sealed class RecommendationRow
+    {
+        public string When { get; }
+        public string Where { get; }
+        public string Action { get; }
+
+        public RecommendationRow(string when, string where, string action)
+        {
+            When = when ?? string.Empty;
+            Where = where ?? string.Empty;
+            Action = action ?? string.Empty;
+        }
+    }
+
+    internal static IReadOnlyList<RecommendationRow> BuildRecommendations(
         ModulePipelineResult result,
         BuildDiagnosticArea area,
         BuildDiagnosticScope? scope = null)
     {
         if (result?.Diagnostics is null || result.Diagnostics.Length == 0)
-            return new List<(string When, string Action)>();
+            return new List<RecommendationRow>();
 
-        return result.Diagnostics
+        return BuildRecommendationRows(result.Diagnostics, area, scope);
+    }
+
+    internal static IReadOnlyList<RecommendationRow> BuildRecommendationRows(
+        IEnumerable<BuildDiagnostic> diagnostics,
+        BuildDiagnosticArea area,
+        BuildDiagnosticScope? scope = null)
+    {
+        if (diagnostics is null)
+            return new List<RecommendationRow>();
+
+        return diagnostics
+            .Where(static diagnostic => diagnostic is not null)
             .Where(diagnostic => diagnostic.Area == area && (!scope.HasValue || diagnostic.Scope == scope.Value))
-            .Select(static diagnostic => (When: diagnostic.Summary, Action: BuildRecommendationAction(diagnostic)))
+            .Select(static diagnostic => new RecommendationRow(
+                diagnostic.Summary,
+                BuildRecommendationLocation(diagnostic),
+                BuildRecommendationAction(diagnostic)))
             .Where(static item => !string.IsNullOrWhiteSpace(item.When) && !string.IsNullOrWhiteSpace(item.Action))
-            .Distinct()
+            .GroupBy(static item => string.Join("|", item.When, item.Where, item.Action), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
             .ToList();
     }
 
@@ -707,7 +737,7 @@ internal static class SpectrePipelineSummaryWriter
 
     private static void WriteRecommendationTable(
         string title,
-        IReadOnlyList<(string When, string Action)> recommendations,
+        IReadOnlyList<RecommendationRow> recommendations,
         TableBorder border)
     {
         if (recommendations is null || recommendations.Count == 0)
@@ -715,17 +745,29 @@ internal static class SpectrePipelineSummaryWriter
 
         static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
 
-        var table = new Table()
-            .Border(border)
-            .AddColumn(new TableColumn(title).NoWrap())
-            .AddColumn(new TableColumn("Do this"));
+        var hasLocation = recommendations.Any(static recommendation => !string.IsNullOrWhiteSpace(recommendation.Where));
+        var table = new Table().Border(border);
+        table.AddColumn(new TableColumn(title).NoWrap());
+        if (hasLocation)
+            table.AddColumn(new TableColumn("Where").NoWrap());
+        table.AddColumn(new TableColumn("Do this"));
 
         foreach (var recommendation in recommendations)
         {
             if (string.IsNullOrWhiteSpace(recommendation.When) || string.IsNullOrWhiteSpace(recommendation.Action))
                 continue;
 
-            table.AddRow(Esc(recommendation.When), Esc(recommendation.Action));
+            if (hasLocation)
+            {
+                table.AddRow(
+                    Esc(recommendation.When),
+                    Esc(recommendation.Where),
+                    Esc(recommendation.Action));
+            }
+            else
+            {
+                table.AddRow(Esc(recommendation.When), Esc(recommendation.Action));
+            }
         }
 
         if (table.Rows.Count > 0)
@@ -908,6 +950,14 @@ internal static class SpectrePipelineSummaryWriter
             return $"{diagnostic.RecommendedAction} Suggested command: {diagnostic.SuggestedCommand}";
 
         return diagnostic.RecommendedAction;
+    }
+
+    private static string BuildRecommendationLocation(BuildDiagnostic diagnostic)
+    {
+        if (diagnostic is null)
+            return string.Empty;
+
+        return diagnostic.SourcePath ?? string.Empty;
     }
 
     private static List<string> BuildFileConsistencyReasons(

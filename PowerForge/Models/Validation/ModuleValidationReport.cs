@@ -76,23 +76,29 @@ public sealed class ModuleValidationCheckResult
     /// <summary>Issues found by the check.</summary>
     public string[] Issues { get; }
 
+    /// <summary>Structured issues found by the check.</summary>
+    public ModuleValidationIssue[] StructuredIssues { get; }
+
     /// <summary>Creates a single validation check result.</summary>
     /// <param name="name">Check name.</param>
     /// <param name="severity">Configured severity.</param>
     /// <param name="status">Computed status.</param>
     /// <param name="summary">Short summary.</param>
     /// <param name="issues">Issues discovered by the check.</param>
+    /// <param name="structuredIssues">Structured issues discovered by the check.</param>
     public ModuleValidationCheckResult(
         string name,
         ValidationSeverity severity,
         CheckStatus status,
         string summary,
-        string[] issues)
+        string[] issues,
+        ModuleValidationIssue[]? structuredIssues = null)
     {
         Name = name ?? string.Empty;
         Severity = severity;
         Status = status;
         Summary = summary ?? string.Empty;
         Issues = issues ?? System.Array.Empty<string>();
+        StructuredIssues = structuredIssues ?? System.Array.Empty<ModuleValidationIssue>();
     }
 }

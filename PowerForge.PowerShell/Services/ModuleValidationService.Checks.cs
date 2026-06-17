@@ -273,19 +273,30 @@ public sealed partial class ModuleValidationService
             if (parsed.Length == 0)
                 return BuildResult("PSScriptAnalyzer", settings.Severity, issues, $"Checked {CountLabel(scripts.Length, "script", "scripts")}, found 0 issues");
 
+            var structuredIssues = parsed
+                .Select(i => CreateScriptAnalyzerValidationIssue(moduleRoot, i))
+                .ToArray();
+
             foreach (var i in parsed.Take(25))
             {
-                var location = string.IsNullOrWhiteSpace(i.ScriptPath)
+                var scriptPathForDisplay = i.ScriptPath ?? string.Empty;
+                var relativePath = string.IsNullOrWhiteSpace(scriptPathForDisplay)
                     ? string.Empty
-                    : $"{Path.GetFileName(i.ScriptPath)}:{i.Line}:{i.Column}";
+                    : ProjectTextDetector.ComputeRelativePath(moduleRoot, scriptPathForDisplay);
+                var location = string.IsNullOrWhiteSpace(relativePath)
+                    ? string.Empty
+                    : $"{relativePath}:{i.Line}:{i.Column}";
                 var line = $"{i.RuleName} {i.Severity} {location}".Trim();
                 if (!string.IsNullOrWhiteSpace(i.Message))
                     line += $" - {i.Message}";
+                var recommendation = BuildScriptAnalyzerRecommendation(i.RuleName, i.Message, i.SuggestedCorrection);
+                if (!string.IsNullOrWhiteSpace(recommendation))
+                    line += $" Recommendation: {recommendation}";
                 issues.Add(line.Trim());
             }
 
             var summary = $"Checked {CountLabel(scripts.Length, "script", "scripts")}, found {CountLabel(parsed.Length, "issue", "issues")}";
-            return BuildResult("PSScriptAnalyzer", settings.Severity, issues, summary);
+            return BuildResult("PSScriptAnalyzer", settings.Severity, issues, summary, structuredIssues);
         }
         finally
         {
@@ -427,5 +438,57 @@ public sealed partial class ModuleValidationService
         ModuleValidationSpec spec,
         CsprojValidationSettings settings)
         => ModuleValidationCoreChecks.ValidateCsproj(spec, settings);
+
+    private static ModuleValidationIssue CreateScriptAnalyzerValidationIssue(string moduleRoot, ScriptAnalyzerIssue issue)
+    {
+        var path = issue.ScriptPath ?? string.Empty;
+        var relativePath = string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : ProjectTextDetector.ComputeRelativePath(moduleRoot, path);
+        return new ModuleValidationIssue(
+            code: issue.RuleName ?? string.Empty,
+            severity: issue.Severity ?? string.Empty,
+            message: issue.Message ?? string.Empty,
+            filePath: path,
+            relativePath: relativePath,
+            line: issue.Line,
+            column: issue.Column,
+            endLine: issue.EndLine,
+            endColumn: issue.EndColumn,
+            recommendation: BuildScriptAnalyzerRecommendation(issue.RuleName, issue.Message, issue.SuggestedCorrection),
+            suggestedCorrection: issue.SuggestedCorrection ?? string.Empty,
+            source: "PSScriptAnalyzer");
+    }
+
+    private static string BuildScriptAnalyzerRecommendation(string? ruleName, string? message, string? suggestedCorrection)
+    {
+        if (!string.IsNullOrWhiteSpace(suggestedCorrection))
+            return $"Apply the suggested correction: {suggestedCorrection!.Trim()}";
+
+        var normalizedRule = (ruleName ?? string.Empty).Trim();
+        if (string.Equals(normalizedRule, "PSAvoidAssignmentToAutomaticVariable", StringComparison.OrdinalIgnoreCase))
+            return "Rename the variable so it does not overwrite a PowerShell automatic variable unless that assignment is intentional.";
+        if (string.Equals(normalizedRule, "PSAvoidUsingPlainTextForPassword", StringComparison.OrdinalIgnoreCase))
+            return "Use SecureString, PSCredential, SecretManagement, or another protected secret flow instead of plain text password values.";
+        if (string.Equals(normalizedRule, "PSUseApprovedVerbs", StringComparison.OrdinalIgnoreCase))
+            return "Rename the function to use an approved PowerShell verb returned by Get-Verb.";
+        if (string.Equals(normalizedRule, "PSAvoidUsingWriteHost", StringComparison.OrdinalIgnoreCase))
+            return "Use output, verbose, information, warning, or error streams instead of Write-Host unless host-only rendering is required.";
+        if (string.Equals(normalizedRule, "PSUseDeclaredVarsMoreThanAssignments", StringComparison.OrdinalIgnoreCase))
+            return "Remove the unused assignment or use the value where it is needed.";
+        if (string.Equals(normalizedRule, "PSAvoidUsingConvertToSecureStringWithPlainText", StringComparison.OrdinalIgnoreCase))
+            return "Avoid embedding plain text secrets; retrieve secrets from a secure provider or accept credentials from the caller.";
+        if (string.Equals(normalizedRule, "PSAvoidGlobalVars", StringComparison.OrdinalIgnoreCase))
+            return "Pass state through parameters, return values, or scoped script/module variables instead of global variables.";
+        if (string.Equals(normalizedRule, "PSAvoidUsingInvokeExpression", StringComparison.OrdinalIgnoreCase))
+            return "Replace Invoke-Expression with direct command invocation, splatting, or a validated parser-specific implementation.";
+        if (string.Equals(normalizedRule, "PSUseShouldProcessForStateChangingFunctions", StringComparison.OrdinalIgnoreCase))
+            return "Add SupportsShouldProcess and guard state-changing operations with ShouldProcess.";
+
+        if (!string.IsNullOrWhiteSpace(message))
+            return "Review the analyzer message and update the source so the rule no longer triggers.";
+
+        return "Review the PSScriptAnalyzer rule and update the source before rerunning validation.";
+    }
 
 }

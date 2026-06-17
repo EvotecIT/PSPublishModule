@@ -152,6 +152,46 @@ public sealed class BuildDiagnosticsFactoryTests
     }
 
     [Fact]
+    public void CreateValidationDiagnostics_ProducesPerFindingPssaRecommendations()
+    {
+        var report = new ModuleValidationReport(new[]
+        {
+            new ModuleValidationCheckResult(
+                name: "PSScriptAnalyzer",
+                severity: ValidationSeverity.Warning,
+                status: CheckStatus.Warning,
+                summary: "Checked 1 script, found 1 issue",
+                issues: new[] { "PSAvoidAssignmentToAutomaticVariable Warning TestScript.ps1:1:1 - automatic variable" },
+                structuredIssues: new[]
+                {
+                    new ModuleValidationIssue(
+                        code: "PSAvoidAssignmentToAutomaticVariable",
+                        severity: "Warning",
+                        message: "The Variable 'profile' is an automatic variable that is built into PowerShell.",
+                        filePath: @"C:\Repo\TestScript.ps1",
+                        relativePath: "TestScript.ps1",
+                        line: 1,
+                        column: 1,
+                        endLine: 1,
+                        endColumn: 9,
+                        recommendation: "Rename the variable so it does not overwrite a PowerShell automatic variable unless that assignment is intentional.",
+                        source: "PSScriptAnalyzer")
+                })
+        });
+
+        var diagnostics = BuildDiagnosticsFactory.CreateValidationDiagnostics(report);
+
+        var pssa = Assert.Single(diagnostics);
+        Assert.Equal("VALIDATION-PSSA-PSAVOIDASSIGNMENTTOAUTOMATICVARIABLE", pssa.RuleId);
+        Assert.Equal(BuildDiagnosticOwner.ModuleAuthor, pssa.Owner);
+        Assert.Equal(BuildDiagnosticScope.Project, pssa.Scope);
+        Assert.Equal("TestScript.ps1:1:1", pssa.SourcePath);
+        Assert.Contains("TestScript.ps1:1:1", pssa.Details);
+        Assert.Contains("automatic variable", pssa.RecommendedAction, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("PSScriptAnalyzer", pssa.GeneratedBy);
+    }
+
+    [Fact]
     public void CreatePipelineDiagnostics_AggregatesConfiguredAreas()
     {
         var settings = new FileConsistencySettings
