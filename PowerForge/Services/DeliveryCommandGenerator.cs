@@ -122,6 +122,8 @@ public sealed class DeliveryCommandGenerator
         var includeRootReadme = delivery.IncludeRootReadme ? "$true" : "$false";
         var includeRootChangelog = delivery.IncludeRootChangelog ? "$true" : "$false";
         var includeRootLicense = delivery.IncludeRootLicense ? "$true" : "$false";
+        var includePaths = BuildPowerShellStringArrayLiteral(delivery.IncludePaths);
+        var excludePaths = BuildPowerShellStringArrayLiteral(delivery.ExcludePaths);
         var preservePaths = BuildPowerShellStringArrayLiteral(delivery.PreservePaths);
         var overwritePaths = BuildPowerShellStringArrayLiteral(delivery.OverwritePaths);
 
@@ -137,6 +139,8 @@ public sealed class DeliveryCommandGenerator
             ["IncludeRootReadme"] = includeRootReadme,
             ["IncludeRootChangelog"] = includeRootChangelog,
             ["IncludeRootLicense"] = includeRootLicense,
+            ["IncludePathsArray"] = includePaths,
+            ["ExcludePathsArray"] = excludePaths,
             ["PreservePathsArray"] = preservePaths,
             ["OverwritePathsArray"] = overwritePaths
         };

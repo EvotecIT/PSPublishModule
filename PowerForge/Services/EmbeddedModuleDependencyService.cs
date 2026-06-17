@@ -156,6 +156,11 @@ internal sealed class EmbeddedModuleDependencyService
                         MergeDirectory(rootModuleBasePath!, destinationPath, overwriteFiles: force);
                         results.Add(CreateInstallResult(rootModule, rootModuleBasePath!, destinationPath, action, receiptPath, "RootModule"));
                     }
+                    else if (onExists == OnExistsOption.Refresh)
+                    {
+                        MergeDirectory(rootModuleBasePath!, destinationPath, overwriteFiles: true);
+                        results.Add(CreateInstallResult(rootModule, rootModuleBasePath!, destinationPath, action, receiptPath, "RootModule"));
+                    }
                     else
                     {
                         CopyDirectory(rootModuleBasePath!, destinationPath, overwrite: true);
@@ -195,6 +200,12 @@ internal sealed class EmbeddedModuleDependencyService
                     if (onExists == OnExistsOption.Merge)
                     {
                         MergeDirectory(sourcePath, destinationPath, overwriteFiles: force);
+                        results.Add(CreateInstallResult(entry, sourcePath, destinationPath, action, receiptPath, "Dependency"));
+                        continue;
+                    }
+                    if (onExists == OnExistsOption.Refresh)
+                    {
+                        MergeDirectory(sourcePath, destinationPath, overwriteFiles: true);
                         results.Add(CreateInstallResult(entry, sourcePath, destinationPath, action, receiptPath, "Dependency"));
                         continue;
                     }
@@ -610,6 +621,7 @@ internal sealed class EmbeddedModuleDependencyService
         if (!exists) return "Copy";
         return onExists switch
         {
+            OnExistsOption.Refresh => "Refresh",
             OnExistsOption.Overwrite => "Overwrite",
             OnExistsOption.Merge => force ? "MergeOverwrite" : "Merge",
             OnExistsOption.Skip => "Skip",

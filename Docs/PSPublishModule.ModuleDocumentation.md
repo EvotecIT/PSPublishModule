@@ -96,11 +96,36 @@ This means each module version lands in its own folder such as `C:\Docs\MyModule
 | OnExists | Behavior |
 | --- | --- |
 | `Merge` | Add missing files and folders. Existing files are preserved unless `-Force` is used. Local files that are not part of the package remain in place. |
+| `Refresh` | Add missing files and overwrite files that are part of the package. Local files that are not part of the package remain in place. |
 | `Overwrite` | Delete the destination folder first, then copy a fresh documentation set. Use `-Force` when read-only files may need their attributes cleared before delete. |
 | `Skip` | Leave the destination unchanged and return the resolved destination path. |
 | `Stop` | Throw when the destination already exists. |
 
-`-Force` does not change the selected layout. With `-OnExists Merge`, it allows colliding files from the package to replace existing destination files while still leaving unrelated local files in place. With `-OnExists Overwrite`, it helps clear read-only attributes before the destination folder is deleted.
+`-Force` does not change the selected layout. With `-OnExists Merge`, it allows colliding files from the package to replace existing destination files while still leaving unrelated local files in place. With `-OnExists Refresh`, package-owned file collisions are replaced without needing `-Force`, and local files not present in the package are kept. With `-OnExists Overwrite`, `-Force` helps clear read-only attributes before the destination folder is deleted.
+
+Generated delivery helpers from `New-ConfigurationDelivery -GenerateInstallCommand -GenerateUpdateCommand` use the same conflict vocabulary:
+
+- generated `Install-<ModuleName>` helpers default to `Merge`
+- generated `Update-<ModuleName>` helpers default to `Refresh`
+- `IncludePaths` scopes which package files are managed by generated helpers
+- `ExcludePaths` removes package files from the managed set, and exclusions win over includes
+- `PreservePaths` can keep selected package paths during `Refresh`
+- `OverwritePaths` can opt selected package paths into replacement during `Merge`
+- `Overwrite` remains the destructive full-folder replacement mode for disposable destinations
+
+Use include/exclude patterns when the package contains support files that should not be installed or refreshed by default. Patterns are relative to the delivery `InternalsPath`:
+
+```powershell
+New-ConfigurationDelivery `
+  -Enable `
+  -GenerateInstallCommand `
+  -GenerateUpdateCommand `
+  -IncludePaths 'Config/*.sample.json', 'Scripts/*.ps1' `
+  -ExcludePaths 'Config/local/**' `
+  -PreservePaths 'Config/config.json'
+```
+
+In this shape, generated update helpers refresh shipped sample configuration and scripts, skip `Config/local/**`, preserve the active `Config/config.json`, and leave destination-only files in place.
 
 For validation, PowerForge can now enforce the old package's most-used missing-doc checks through `New-ConfigurationValidation`:
 

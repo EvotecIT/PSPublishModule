@@ -19,6 +19,8 @@ internal sealed class DeliveryConfigurationRequest
     public string[]? RepositoryPaths { get; set; }
     public string? RepositoryBranch { get; set; }
     public string[]? DocumentationOrder { get; set; }
+    public string[]? IncludePaths { get; set; }
+    public string[]? ExcludePaths { get; set; }
     public string[]? PreservePaths { get; set; }
     public string[]? OverwritePaths { get; set; }
     public bool GenerateInstallCommand { get; set; }

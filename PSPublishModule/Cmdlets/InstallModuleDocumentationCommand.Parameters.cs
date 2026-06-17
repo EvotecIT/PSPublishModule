@@ -29,7 +29,7 @@ public sealed partial class InstallModuleDocumentationCommand
     [Parameter]
     public DocumentationLayout Layout { get; set; } = DocumentationLayout.ModuleAndVersion;
 
-    /// <summary>Behavior when the destination folder already exists. The default, <see cref="OnExistsOption.Merge"/>, adds missing files and preserves existing files unless <c>-Force</c> is used.</summary>
+    /// <summary>Behavior when the destination folder already exists. The default, <see cref="OnExistsOption.Merge"/>, adds missing files and preserves existing files unless <c>-Force</c> is used. <see cref="OnExistsOption.Refresh"/> overwrites package files without deleting unrelated local files.</summary>
     [Parameter]
     public OnExistsOption OnExists { get; set; } = OnExistsOption.Merge;
 

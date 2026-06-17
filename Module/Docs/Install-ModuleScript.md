@@ -152,7 +152,7 @@ Conflict handling when a destination file already exists. Defaults to Merge (kee
 Type: OnExistsOption
 Parameter Sets: ByName, ByModule
 Aliases: None
-Possible values: Merge, Overwrite, Skip, Stop
+Possible values: Merge, Refresh, Overwrite, Skip, Stop
 
 Required: False
 Position: named

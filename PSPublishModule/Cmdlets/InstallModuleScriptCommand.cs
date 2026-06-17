@@ -172,6 +172,7 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
                         }
                         WriteVerbose($"Refreshing existing (merge/force): {target}");
                         break;
+                    case OnExistsOption.Refresh:
                     case OnExistsOption.Overwrite:
                         break;
                 }
@@ -284,6 +285,7 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
 
         return onExists switch
         {
+            OnExistsOption.Refresh => "Overwrite",
             OnExistsOption.Overwrite => "Overwrite",
             OnExistsOption.Merge when force => "Overwrite",
             OnExistsOption.Skip => "Skip",

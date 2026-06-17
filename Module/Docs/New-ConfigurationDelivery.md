@@ -11,7 +11,7 @@ Configures delivery metadata for bundling and installing internal docs/examples.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-Sign] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-PreservePaths <string[]>] [-OverwritePaths <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
+New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-Sign] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-IncludePaths <string[]>] [-ExcludePaths <string[]>] [-PreservePaths <string[]>] [-OverwritePaths <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -20,8 +20,10 @@ generate public helper commands (Install-<ModuleName> / Update-<ModuleName>) tha
 
 This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.
 
-Merge behavior for generated delivery commands can be fine-tuned with PreservePaths and
-OverwritePaths so selected relative paths keep local changes or are refreshed during updates.
+Generated install helpers default to merge behavior. Generated update helpers default to refresh behavior, which
+overwrites package files while keeping local files that are not part of the package. Use IncludePaths
+and ExcludePaths to scope which package files are managed, then use PreservePaths
+and OverwritePaths to fine-tune collision behavior for managed relative paths.
 
 ## EXAMPLES
 
@@ -41,10 +43,10 @@ Helps modules expose docs from a repository path in a consistent order.
 
 ### EXAMPLE 3
 ```powershell
-PS> New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'
+PS> New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -IncludePaths 'Config/**','Scripts/*.ps1' -ExcludePaths 'Config/local/**' -PreservePaths 'Config/config.json' -OverwritePaths 'Bin/**','Templates/**'
 ```
 
-Generates custom delivery helpers and preserves selected local files while refreshing binaries and templates during merge installs.
+Generates custom delivery helpers, manages only selected package files, excludes local-only configuration paths, preserves the active configuration during refresh updates, and can refresh selected paths during merge installs.
 
 ## PARAMETERS
 
@@ -96,6 +98,23 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -ExcludePaths
+Optional wildcard patterns (relative to InternalsPath) that generated Install-/Update- helpers should not copy, refresh, or consider package-owned.
+Exclusions win over IncludePaths. Use this for local-only or user-owned package-adjacent paths such as Config/local/** or Config/config.json.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -GenerateInstallCommand
 When set, generates a public Install-<ModuleName> helper function during build that copies Internals to a destination folder.
 
@@ -113,7 +132,7 @@ Accept wildcard characters: True
 ```
 
 ### -GenerateUpdateCommand
-When set, generates a public Update-<ModuleName> helper function during build that delegates to the install command.
+When set, generates a public Update-<ModuleName> helper function during build that delegates to the install command in refresh mode by default.
 
 ```yaml
 Type: SwitchParameter
@@ -133,6 +152,24 @@ Important links (Title/Url). Accepts legacy hashtable array (@{ Title='..'; Url=
 
 ```yaml
 Type: DeliveryImportantLink[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludePaths
+Optional wildcard patterns (relative to InternalsPath) that define which package files generated Install-/Update- helpers manage.
+Use this when a module ships mixed content but only selected folders should be copied or refreshed, for example Config/*.sample.json and Scripts/*.ps1.
+When omitted, all files under InternalsPath are managed.
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -290,7 +327,7 @@ Accept wildcard characters: True
 ```
 
 ### -PreservePaths
-Optional wildcard patterns (relative to Internals) that should be preserved during merge installs by generated Install-/Update- helpers.
+Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs by generated Install-/Update- helpers.
 Example: Config/**.
 
 ```yaml

@@ -16,8 +16,10 @@ namespace PSPublishModule;
 /// This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.
 /// </para>
 /// <para>
-/// Merge behavior for generated delivery commands can be fine-tuned with <see cref="PreservePaths"/> and
-/// <see cref="OverwritePaths"/> so selected relative paths keep local changes or are refreshed during updates.
+/// Generated install helpers default to merge behavior. Generated update helpers default to refresh behavior, which
+/// overwrites package files while keeping local files that are not part of the package. Use <see cref="IncludePaths"/>
+/// and <see cref="ExcludePaths"/> to scope which package files are managed, then use <see cref="PreservePaths"/>
+/// and <see cref="OverwritePaths"/> to fine-tune collision behavior for managed relative paths.
 /// </para>
 /// </remarks>
 /// <example>
@@ -35,8 +37,8 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Configure merge policies and custom helper names</summary>
 /// <prefix>PS&gt; </prefix>
-/// <code>New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'</code>
-/// <para>Generates custom delivery helpers and preserves selected local files while refreshing binaries and templates during merge installs.</para>
+/// <code>New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -IncludePaths 'Config/**','Scripts/*.ps1' -ExcludePaths 'Config/local/**' -PreservePaths 'Config/config.json' -OverwritePaths 'Bin/**','Templates/**'</code>
+/// <para>Generates custom delivery helpers, manages only selected package files, excludes local-only configuration paths, preserves the active configuration during refresh updates, and can refresh selected paths during merge installs.</para>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationDelivery")]
 public sealed class NewConfigurationDeliveryCommand : PSCmdlet
@@ -97,7 +99,20 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     [Parameter] public string[]? DocumentationOrder { get; set; }
 
     /// <summary>
-    /// Optional wildcard patterns (relative to Internals) that should be preserved during merge installs by generated Install-/Update- helpers.
+    /// Optional wildcard patterns (relative to <see cref="InternalsPath"/>) that define which package files generated Install-/Update- helpers manage.
+    /// Use this when a module ships mixed content but only selected folders should be copied or refreshed, for example <c>Config/*.sample.json</c> and <c>Scripts/*.ps1</c>.
+    /// When omitted, all files under <see cref="InternalsPath"/> are managed.
+    /// </summary>
+    [Parameter] public string[]? IncludePaths { get; set; }
+
+    /// <summary>
+    /// Optional wildcard patterns (relative to <see cref="InternalsPath"/>) that generated Install-/Update- helpers should not copy, refresh, or consider package-owned.
+    /// Exclusions win over <see cref="IncludePaths"/>. Use this for local-only or user-owned package-adjacent paths such as <c>Config/local/**</c> or <c>Config/config.json</c>.
+    /// </summary>
+    [Parameter] public string[]? ExcludePaths { get; set; }
+
+    /// <summary>
+    /// Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs by generated Install-/Update- helpers.
     /// Example: <c>Config/**</c>.
     /// </summary>
     [Parameter] public string[]? PreservePaths { get; set; }
@@ -114,7 +129,7 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     [Parameter] public SwitchParameter GenerateInstallCommand { get; set; }
 
     /// <summary>
-    /// When set, generates a public Update-&lt;ModuleName&gt; helper function during build that delegates to the install command.
+    /// When set, generates a public Update-&lt;ModuleName&gt; helper function during build that delegates to the install command in refresh mode by default.
     /// </summary>
     [Parameter] public SwitchParameter GenerateUpdateCommand { get; set; }
 
@@ -150,6 +165,8 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
             RepositoryPaths = RepositoryPaths,
             RepositoryBranch = RepositoryBranch,
             DocumentationOrder = DocumentationOrder,
+            IncludePaths = IncludePaths,
+            ExcludePaths = ExcludePaths,
             PreservePaths = PreservePaths,
             OverwritePaths = OverwritePaths,
             GenerateInstallCommand = GenerateInstallCommand.IsPresent,

@@ -447,6 +447,26 @@ public sealed partial class ModulePipelineRunner
                         _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "RepositoryPaths", repoPaths);
                 }
 
+                if (delivery.IncludePaths is { Length: > 0 })
+                {
+                    var include = delivery.IncludePaths
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToArray();
+                    if (include.Length > 0)
+                        _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "IncludePaths", include);
+                }
+
+                if (delivery.ExcludePaths is { Length: > 0 })
+                {
+                    var exclude = delivery.ExcludePaths
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToArray();
+                    if (exclude.Length > 0)
+                        _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "ExcludePaths", exclude);
+                }
+
                 if (delivery.PreservePaths is { Length: > 0 })
                 {
                     var preserve = delivery.PreservePaths

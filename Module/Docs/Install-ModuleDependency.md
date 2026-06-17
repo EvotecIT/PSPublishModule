@@ -127,7 +127,7 @@ Conflict handling when a dependency version folder already exists.
 Type: OnExistsOption
 Parameter Sets: ByName, ByModule
 Aliases: None
-Possible values: Merge, Overwrite, Skip, Stop
+Possible values: Merge, Refresh, Overwrite, Skip, Stop
 
 Required: False
 Position: named

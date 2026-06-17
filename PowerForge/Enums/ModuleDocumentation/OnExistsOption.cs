@@ -11,6 +11,11 @@ public enum OnExistsOption
     /// </summary>
     Merge,
     /// <summary>
+    /// Refresh package-owned files without deleting local files that are not present in the package. Existing
+    /// package files are overwritten, while unmentioned local files remain in place.
+    /// </summary>
+    Refresh,
+    /// <summary>
     /// Delete the destination folder before copying a fresh documentation set. Use <c>-Force</c> when read-only
     /// files may need to be cleared before the delete.
     /// </summary>
