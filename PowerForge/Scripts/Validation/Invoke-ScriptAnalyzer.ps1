@@ -35,12 +35,12 @@ function ConvertTo-PssaIssueRecord {
         if ($null -eq $Issue) { return }
 
         $extent = $Issue.Extent
-        $path = if (-not [string]::IsNullOrWhiteSpace($Issue.ScriptPath)) {
+        $path = if ($null -ne $extent -and -not [string]::IsNullOrWhiteSpace($extent.File)) {
+            $extent.File
+        } elseif (-not [string]::IsNullOrWhiteSpace($Issue.ScriptPath)) {
             $Issue.ScriptPath
         } elseif (-not [string]::IsNullOrWhiteSpace($Issue.ScriptName)) {
             $Issue.ScriptName
-        } elseif ($null -ne $extent -and -not [string]::IsNullOrWhiteSpace($extent.File)) {
-            $extent.File
         } else {
             ''
         }

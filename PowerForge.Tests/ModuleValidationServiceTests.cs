@@ -380,6 +380,22 @@ public sealed class ModuleValidationServiceTests
     }
 
     [Fact]
+    public void ScriptAnalyzerRunner_PrefersExtentFileBeforeLeafScriptName()
+    {
+        var script = EmbeddedScripts.Load("Scripts/Validation/Invoke-ScriptAnalyzer.ps1");
+
+        var extentFileIndex = script.IndexOf("$extent.File", StringComparison.Ordinal);
+        var scriptPathIndex = script.IndexOf("$Issue.ScriptPath", StringComparison.Ordinal);
+        var scriptNameIndex = script.IndexOf("$Issue.ScriptName", StringComparison.Ordinal);
+
+        Assert.True(extentFileIndex >= 0, "Expected the runner to inspect Extent.File.");
+        Assert.True(scriptPathIndex >= 0, "Expected the runner to inspect ScriptPath.");
+        Assert.True(scriptNameIndex >= 0, "Expected the runner to inspect ScriptName.");
+        Assert.True(extentFileIndex < scriptPathIndex, "Extent.File should be preferred over ScriptPath when available.");
+        Assert.True(extentFileIndex < scriptNameIndex, "Extent.File should be preferred over ScriptName when available.");
+    }
+
+    [Fact]
     public void Run_ScriptAnalyzerInstallIfUnavailable_UsesRuntimeDependencyInstaller()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
