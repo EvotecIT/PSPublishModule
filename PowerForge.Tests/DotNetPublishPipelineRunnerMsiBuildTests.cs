@@ -569,6 +569,75 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void Plan_ClonesInstallerAuthoringLaunchConditionsAndServiceCredentials()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+
+            var spec = CreateBaseSpec(root, app);
+            var authoring = CreateSimpleAuthoring("ProductFiles");
+            authoring.Inputs.Add(new PowerForgeInstallerInput
+            {
+                Id = "ServiceAccount",
+                PropertyName = "SERVICE_ACCOUNT",
+                Label = "Service account",
+                DefaultValue = "LocalSystem"
+            });
+            authoring.Inputs.Add(new PowerForgeInstallerInput
+            {
+                Id = "ServicePassword",
+                PropertyName = "SERVICE_PASSWORD",
+                Label = "Service password",
+                Secure = true,
+                Hidden = true
+            });
+            authoring.LaunchConditions.Add(new PowerForgeInstallerLaunchCondition
+            {
+                Condition = "SERVICE_ACCOUNT = \"\" OR SERVICE_ACCOUNT = \"LocalSystem\" OR SERVICE_PASSWORD <> \"\"",
+                Message = "Password is required when specifying a service account."
+            });
+            authoring.Components.Add(new PowerForgeInstallerServiceComponent
+            {
+                Id = "ServiceComponent",
+                FileId = "AppServiceExe",
+                Source = "$(var.PayloadDir)\\App.Service.exe",
+                ServiceName = "Evotec.App.Service",
+                DisplayName = "Evotec App Service",
+                AccountPropertyName = "SERVICE_ACCOUNT",
+                PasswordPropertyName = "SERVICE_PASSWORD"
+            });
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app.msi",
+                    PrepareFromTarget = "app",
+                    Harvest = DotNetPublishMsiHarvestMode.Auto,
+                    Authoring = authoring
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var installerPlan = Assert.Single(plan.Installers);
+            Assert.NotNull(installerPlan.Authoring);
+            var plannedAuthoring = installerPlan.Authoring!;
+            var condition = Assert.Single(plannedAuthoring.LaunchConditions);
+            Assert.Equal("SERVICE_ACCOUNT = \"\" OR SERVICE_ACCOUNT = \"LocalSystem\" OR SERVICE_PASSWORD <> \"\"", condition.Condition);
+            Assert.Equal("Password is required when specifying a service account.", condition.Message);
+            var service = Assert.IsType<PowerForgeInstallerServiceComponent>(
+                Assert.Single(plannedAuthoring.Components));
+            Assert.Equal("SERVICE_ACCOUNT", service.AccountPropertyName);
+            Assert.Equal("SERVICE_PASSWORD", service.PasswordPropertyName);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_AddsMsiSignStep_WhenInstallerSignEnabled()
     {
         var root = CreateTempRoot();

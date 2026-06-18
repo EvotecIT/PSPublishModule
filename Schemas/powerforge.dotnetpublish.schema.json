@@ -211,6 +211,15 @@
       },
       "required": ["Id", "Root", "Key", "Name"]
     },
+    "PowerForgeInstallerLaunchCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Condition": { "type": "string", "minLength": 1 },
+        "Message": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Condition", "Message"]
+    },
     "PowerForgeInstallerInput": {
       "type": "object",
       "additionalProperties": false,
@@ -381,6 +390,8 @@
         "Description": { "type": ["string", "null"] },
         "Arguments": { "type": ["string", "null"] },
         "Account": { "type": "string" },
+        "AccountPropertyName": { "type": ["string", "null"] },
+        "PasswordPropertyName": { "type": ["string", "null"] },
         "Start": { "type": "string" },
         "DelayedAutoStart": { "type": "boolean" },
         "ControlStart": { "type": "string" },
@@ -509,6 +520,10 @@
         "Inputs": {
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerInput" }
+        },
+        "LaunchConditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerLaunchCondition" }
         },
         "Dialogs": {
           "type": "array",
@@ -702,10 +717,29 @@
         "Start": { "type": "boolean" },
         "Verify": { "type": "boolean" },
         "StopTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "HealthChecks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishServiceHealthCheck" }
+        },
         "WhatIf": { "type": "boolean" },
         "OnUnsupportedPlatform": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
         "OnExecutionFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
       }
+    },
+    "DotNetPublishServiceHealthCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": ["string", "null"] },
+        "Uri": { "type": "string", "minLength": 1 },
+        "ExpectedStatusCode": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "JsonPath": { "type": ["string", "null"] },
+        "ExpectedValue": { "type": ["string", "null"] },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "PollIntervalMilliseconds": { "type": "integer", "minimum": 100 },
+        "OnFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
+      },
+      "required": ["Uri"]
     },
     "DotNetPublishServiceRecoveryOptions": {
       "type": "object",
@@ -1125,7 +1159,8 @@
         "ManifestJsonPath": { "type": ["string", "null"] },
         "ManifestTextPath": { "type": ["string", "null"] },
         "ChecksumsPath": { "type": ["string", "null"] },
-        "RunReportPath": { "type": ["string", "null"] }
+        "RunReportPath": { "type": ["string", "null"] },
+        "RunReportMarkdownPath": { "type": ["string", "null"] }
       }
     }
   }

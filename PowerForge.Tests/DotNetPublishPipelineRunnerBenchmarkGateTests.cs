@@ -147,12 +147,17 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
         {
             var sourcePath = Path.Combine(root, "bench.log");
             var baselinePath = Path.Combine(root, "baseline.updated.json");
+            var runReportMarkdownPath = Path.Combine(root, "run-report.md");
 
             File.WriteAllText(sourcePath, "probes=1000: filter=avg=120.5ms");
 
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs
+                {
+                    RunReportMarkdownPath = runReportMarkdownPath
+                },
                 BenchmarkGates = new[]
                 {
                     new DotNetPublishBenchmarkGatePlan
@@ -190,6 +195,10 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
             Assert.True(File.Exists(baselinePath));
             var baselineJson = File.ReadAllText(baselinePath);
             Assert.Contains("FilterAvgMs", baselineJson, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(runReportMarkdownPath, result.RunReportMarkdownPath);
+            var markdown = File.ReadAllText(runReportMarkdownPath);
+            Assert.Contains("| storage | Passed | Update | 1 | 0 |", markdown, StringComparison.Ordinal);
+            Assert.Contains("| FilterAvgMs | 120.5 |", markdown, StringComparison.Ordinal);
         }
         finally
         {
@@ -266,12 +275,14 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
         try
         {
             var runReportPath = Path.Combine(root, "Artifacts", "DotNetPublish", "run-report.json");
+            var runReportMarkdownPath = Path.Combine(root, "Artifacts", "DotNetPublish", "run-report.md");
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs
                 {
-                    RunReportPath = runReportPath
+                    RunReportPath = runReportPath,
+                    RunReportMarkdownPath = runReportMarkdownPath
                 },
                 Steps = new[]
                 {
@@ -287,7 +298,9 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
             var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
             Assert.True(result.Succeeded, result.ErrorMessage);
             Assert.Equal(runReportPath, result.RunReportPath);
+            Assert.Equal(runReportMarkdownPath, result.RunReportMarkdownPath);
             Assert.True(File.Exists(runReportPath));
+            Assert.True(File.Exists(runReportMarkdownPath));
 
             using var reportJson = JsonDocument.Parse(File.ReadAllText(runReportPath));
             Assert.Equal(JsonValueKind.Object, reportJson.RootElement.ValueKind);
@@ -297,6 +310,12 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
                 .Value;
             Assert.Equal(JsonValueKind.Array, steps.ValueKind);
             Assert.True(steps.EnumerateArray().Any());
+
+            var markdown = File.ReadAllText(runReportMarkdownPath);
+            Assert.Contains("# DotNet Publish Run Report", markdown, StringComparison.Ordinal);
+            Assert.Contains("## Artifacts", markdown, StringComparison.Ordinal);
+            Assert.Contains("## Benchmark Gates", markdown, StringComparison.Ordinal);
+            Assert.Contains("## Steps", markdown, StringComparison.Ordinal);
         }
         finally
         {

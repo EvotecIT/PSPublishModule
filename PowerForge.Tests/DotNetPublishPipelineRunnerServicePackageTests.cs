@@ -44,6 +44,23 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
                                 GenerateInstallScript = true,
                                 GenerateUninstallScript = false,
                                 GenerateRunOnceScript = true,
+                                Lifecycle = new DotNetPublishServiceLifecycleOptions
+                                {
+                                    Enabled = true,
+                                    HealthChecks = new[]
+                                    {
+                                        new DotNetPublishServiceHealthCheck
+                                        {
+                                            Id = "runtime",
+                                            Uri = "http://127.0.0.1:58433/runtime",
+                                            JsonPath = "service.name",
+                                            ExpectedValue = "PowerForge.Svc",
+                                            TimeoutSeconds = 5,
+                                            PollIntervalMilliseconds = 250,
+                                            OnFailure = DotNetPublishPolicyMode.Warn
+                                        }
+                                    }
+                                },
                                 Recovery = new DotNetPublishServiceRecoveryOptions
                                 {
                                     Enabled = true,
@@ -64,6 +81,15 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
             Assert.True(service.GenerateInstallScript);
             Assert.False(service.GenerateUninstallScript);
             Assert.True(service.GenerateRunOnceScript);
+            Assert.NotNull(service.Lifecycle);
+            var healthCheck = Assert.Single(service.Lifecycle!.HealthChecks);
+            Assert.Equal("runtime", healthCheck.Id);
+            Assert.Equal("http://127.0.0.1:58433/runtime", healthCheck.Uri);
+            Assert.Equal("service.name", healthCheck.JsonPath);
+            Assert.Equal("PowerForge.Svc", healthCheck.ExpectedValue);
+            Assert.Equal(5, healthCheck.TimeoutSeconds);
+            Assert.Equal(250, healthCheck.PollIntervalMilliseconds);
+            Assert.Equal(DotNetPublishPolicyMode.Warn, healthCheck.OnFailure);
             Assert.NotNull(service.Recovery);
             Assert.True(service.Recovery!.Enabled);
             Assert.Equal(120, service.Recovery.ResetPeriodSeconds);
@@ -315,6 +341,48 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void ServiceHealthCheckContent_PassesWhenJsonPathMatchesExpectedValue()
+    {
+        var check = new DotNetPublishServiceHealthCheck
+        {
+            Id = "runtime",
+            Uri = "http://127.0.0.1:58433/runtime",
+            JsonPath = "service.status",
+            ExpectedValue = "Ready"
+        };
+
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod("TryEvaluateServiceHealthCheckContent", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        object?[] args = { check, """{ "service": { "status": "Ready" } }""", null };
+        var passed = (bool)method!.Invoke(null, args)!;
+
+        Assert.True(passed, args[2]?.ToString());
+        Assert.Null(args[2]);
+    }
+
+    [Fact]
+    public void ServiceHealthCheckContent_FailsWhenJsonPathDoesNotMatchExpectedValue()
+    {
+        var check = new DotNetPublishServiceHealthCheck
+        {
+            Id = "runtime",
+            Uri = "http://127.0.0.1:58433/runtime",
+            JsonPath = "service.status",
+            ExpectedValue = "Ready"
+        };
+
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod("TryEvaluateServiceHealthCheckContent", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        object?[] args = { check, """{ "service": { "status": "NeedsAuthentication" } }""", null };
+        var passed = (bool)method!.Invoke(null, args)!;
+
+        Assert.False(passed);
+        Assert.Contains("expected 'Ready'", args[2]?.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

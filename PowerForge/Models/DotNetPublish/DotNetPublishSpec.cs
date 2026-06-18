@@ -1104,4 +1104,9 @@ public sealed class DotNetPublishOutputs
     /// Optional path for run report JSON (step timings, artifact/signing summary, gate outcomes).
     /// </summary>
     public string? RunReportPath { get; set; }
+
+    /// <summary>
+    /// Optional path for run report Markdown (human-readable step, artifact, signing, and benchmark gate summary).
+    /// </summary>
+    public string? RunReportMarkdownPath { get; set; }
 }

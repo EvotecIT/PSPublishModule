@@ -28,6 +28,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? manifestText = null;
         string? checksumsPath = null;
         string? runReportPath = null;
+        string? runReportMarkdownPath = null;
 
         try
         {
@@ -132,7 +133,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 stepReports,
                 runStartedUtc,
                 runStopwatch.Elapsed);
+            runReportMarkdownPath = TryWriteRunReportMarkdown(
+                plan,
+                successResult,
+                stepReports,
+                runStartedUtc,
+                runStopwatch.Elapsed);
             successResult.RunReportPath = runReportPath;
+            successResult.RunReportMarkdownPath = runReportMarkdownPath;
             return successResult;
         }
         catch (Exception ex)
@@ -163,7 +171,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 stepReports,
                 runStartedUtc,
                 runStopwatch.Elapsed);
+            runReportMarkdownPath = TryWriteRunReportMarkdown(
+                plan,
+                failedResult,
+                stepReports,
+                runStartedUtc,
+                runStopwatch.Elapsed);
             failedResult.RunReportPath = runReportPath;
+            failedResult.RunReportMarkdownPath = runReportMarkdownPath;
             return failedResult;
         }
     }

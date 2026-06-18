@@ -1,3 +1,4 @@
+using System;
 using System.Management.Automation;
 using PowerForge;
 
@@ -64,6 +65,12 @@ public sealed class NewConfigurationDotNetServiceLifecycleCommand : PSCmdlet
     public int StopTimeoutSeconds { get; set; } = 30;
 
     /// <summary>
+    /// Optional HTTP readiness checks executed after service state verification.
+    /// </summary>
+    [Parameter]
+    public DotNetPublishServiceHealthCheck[]? HealthCheck { get; set; }
+
+    /// <summary>
     /// Simulates lifecycle actions.
     /// </summary>
     [Parameter]
@@ -96,10 +103,10 @@ public sealed class NewConfigurationDotNetServiceLifecycleCommand : PSCmdlet
             Start = Start,
             Verify = Verify,
             StopTimeoutSeconds = StopTimeoutSeconds,
+            HealthChecks = HealthCheck ?? Array.Empty<DotNetPublishServiceHealthCheck>(),
             WhatIf = WhatIfMode.IsPresent,
             OnUnsupportedPlatform = OnUnsupportedPlatform,
             OnExecutionFailure = OnExecutionFailure
         });
     }
 }
-

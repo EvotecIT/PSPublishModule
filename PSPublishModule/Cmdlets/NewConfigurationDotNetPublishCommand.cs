@@ -130,6 +130,12 @@ public sealed class NewConfigurationDotNetPublishCommand : PSCmdlet
     public string? RunReportPath { get; set; }
 
     /// <summary>
+    /// Optional run report Markdown output path.
+    /// </summary>
+    [Parameter]
+    public string? RunReportMarkdownPath { get; set; }
+
+    /// <summary>
     /// Additional targets to append.
     /// </summary>
     [Parameter]
@@ -185,6 +191,8 @@ public sealed class NewConfigurationDotNetPublishCommand : PSCmdlet
             spec.Outputs.ChecksumsPath = NormalizeNullable(ChecksumsPath);
         if (bound.ContainsKey(nameof(RunReportPath)))
             spec.Outputs.RunReportPath = NormalizeNullable(RunReportPath);
+        if (bound.ContainsKey(nameof(RunReportMarkdownPath)))
+            spec.Outputs.RunReportMarkdownPath = NormalizeNullable(RunReportMarkdownPath);
 
         if (Targets is { Length: > 0 })
             spec.Targets = (spec.Targets ?? Array.Empty<DotNetPublishTarget>())

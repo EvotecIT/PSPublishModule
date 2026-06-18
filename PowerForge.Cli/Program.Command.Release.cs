@@ -210,6 +210,8 @@ internal static partial class Program
                     cmdLogger.Info($"Checksums: {result.DotNetTools.ChecksumsPath}");
                 if (!string.IsNullOrWhiteSpace(result.DotNetTools.RunReportPath))
                     cmdLogger.Info($"Run report: {result.DotNetTools.RunReportPath}");
+                if (!string.IsNullOrWhiteSpace(result.DotNetTools.RunReportMarkdownPath))
+                    cmdLogger.Info($"Run report Markdown: {result.DotNetTools.RunReportMarkdownPath}");
             }
 
             if (result.AppleAppPlan is not null)

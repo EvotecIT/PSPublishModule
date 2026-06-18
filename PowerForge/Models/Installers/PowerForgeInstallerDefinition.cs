@@ -44,6 +44,11 @@ public sealed class PowerForgeInstallerDefinition
     public List<PowerForgeInstallerInput> Inputs { get; set; } = new();
 
     /// <summary>
+    /// Launch conditions checked before installation proceeds.
+    /// </summary>
+    public List<PowerForgeInstallerLaunchCondition> LaunchConditions { get; set; } = new();
+
+    /// <summary>
     /// Optional custom dialogs composed from installer inputs.
     /// </summary>
     public List<PowerForgeInstallerDialog> Dialogs { get; set; } = new();
@@ -289,6 +294,22 @@ public sealed class PowerForgeInstallerRegistrySearch
     /// WiX registry search type, for example raw.
     /// </summary>
     public string Type { get; set; } = "raw";
+}
+
+/// <summary>
+/// MSI launch condition with the message shown when the condition is not satisfied.
+/// </summary>
+public sealed class PowerForgeInstallerLaunchCondition
+{
+    /// <summary>
+    /// MSI condition expression that must evaluate to true.
+    /// </summary>
+    public string Condition { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Error message shown when <see cref="Condition"/> evaluates to false.
+    /// </summary>
+    public string Message { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -604,6 +625,16 @@ public sealed class PowerForgeInstallerServiceComponent : PowerForgeInstallerCom
     /// Service account.
     /// </summary>
     public string Account { get; set; } = "LocalSystem";
+
+    /// <summary>
+    /// Optional MSI property name that provides the service account value.
+    /// </summary>
+    public string? AccountPropertyName { get; set; }
+
+    /// <summary>
+    /// Optional MSI property name that provides the service password value.
+    /// </summary>
+    public string? PasswordPropertyName { get; set; }
 
     /// <summary>
     /// Service start mode.
