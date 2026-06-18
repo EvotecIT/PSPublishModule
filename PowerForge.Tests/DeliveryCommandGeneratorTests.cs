@@ -271,6 +271,60 @@ public sealed class DeliveryCommandGeneratorTests
     }
 
     [Fact]
+    public void GeneratedUpdate_CharacterClassIncludePath_MatchesPowerShellWildcardSemantics()
+    {
+        var powerShell = FindPowerShellExecutable();
+        if (powerShell is null)
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var delivery = new DeliveryOptionsConfiguration
+            {
+                Enable = true,
+                InternalsPath = "Internals",
+                IncludePaths = new[] { "Config/[Pp]rod*.json" },
+                GenerateInstallCommand = true,
+                GenerateUpdateCommand = true
+            };
+
+            var generator = new DeliveryCommandGenerator(new NullLogger());
+            generator.Generate(root.FullName, "TestDelivery", delivery);
+
+            var config = Directory.CreateDirectory(Path.Combine(root.FullName, "Internals", "Config"));
+            File.WriteAllText(Path.Combine(config.FullName, "ProdSettings.json"), "prod-new");
+            File.WriteAllText(Path.Combine(config.FullName, "devSettings.json"), "dev-new");
+            File.WriteAllText(Path.Combine(root.FullName, "TestDelivery.psm1"), """
+                . "$PSScriptRoot\Public\Install-TestDelivery.ps1"
+                . "$PSScriptRoot\Public\Update-TestDelivery.ps1"
+                """);
+
+            var destination = Directory.CreateDirectory(Path.Combine(root.FullName, "Destination"));
+            var destinationConfig = Directory.CreateDirectory(Path.Combine(destination.FullName, "Config"));
+            File.WriteAllText(Path.Combine(destinationConfig.FullName, "ProdSettings.json"), "prod-old");
+            File.WriteAllText(Path.Combine(destinationConfig.FullName, "devSettings.json"), "dev-old");
+
+            var scriptPath = Path.Combine(root.FullName, "run-update-character-class.ps1");
+            File.WriteAllText(scriptPath, $$"""
+                $ErrorActionPreference = 'Stop'
+                Import-Module -Name '{{EscapePowerShellString(Path.Combine(root.FullName, "TestDelivery.psm1"))}}' -Force
+                Update-TestDelivery -Path '{{EscapePowerShellString(destination.FullName)}}' | Out-Null
+                """);
+
+            var result = RunPowerShell(powerShell, scriptPath);
+
+            Assert.True(result.ExitCode == 0, $"PowerShell failed with exit code {result.ExitCode}.{Environment.NewLine}STDOUT:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}STDERR:{Environment.NewLine}{result.StandardError}");
+            Assert.Equal("prod-new", File.ReadAllText(Path.Combine(destinationConfig.FullName, "ProdSettings.json")));
+            Assert.Equal("dev-old", File.ReadAllText(Path.Combine(destinationConfig.FullName, "devSettings.json")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void GeneratedInstall_Overwrite_RemainsDestructive()
     {
         var powerShell = FindPowerShellExecutable();
@@ -353,22 +407,24 @@ public sealed class DeliveryCommandGeneratorTests
         {
             var publicFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
             File.WriteAllText(
-                Path.Combine(publicFolder.FullName, "Install-EFAdminManager.ps1"),
-                "function Install-EFAdminManager { param([ValidateSet('Merge', 'Overwrite', 'Skip', 'Stop')] [string] $OnExists = 'Merge') }");
+                Path.Combine(publicFolder.FullName, "Install-DataRefresh.ps1"),
+                "function Install-DataRefresh { param([ValidateSet('Merge', 'Overwrite', 'Skip', 'Stop')] [string] $OnExists = 'Merge') Write-Verbose 'Install-DataRefresh' }");
 
             var delivery = new DeliveryOptionsConfiguration
             {
                 Enable = true,
                 GenerateInstallCommand = true,
-                GenerateUpdateCommand = true
+                GenerateUpdateCommand = true,
+                InstallCommandName = "Install-DataRefresh",
+                UpdateCommandName = "Update-DataRefresh"
             };
 
             var generator = new DeliveryCommandGenerator(new NullLogger());
-            var generated = generator.Generate(root.FullName, "EFAdminManager", delivery);
+            var generated = generator.Generate(root.FullName, "DataRefresh", delivery);
 
-            Assert.DoesNotContain(generated, g => g.Name == "Install-EFAdminManager");
-            Assert.DoesNotContain(generated, g => g.Name == "Update-EFAdminManager");
-            Assert.False(File.Exists(Path.Combine(publicFolder.FullName, "Update-EFAdminManager.ps1")));
+            Assert.DoesNotContain(generated, g => g.Name == "Install-DataRefresh");
+            Assert.DoesNotContain(generated, g => g.Name == "Update-DataRefresh");
+            Assert.False(File.Exists(Path.Combine(publicFolder.FullName, "Update-DataRefresh.ps1")));
         }
         finally
         {

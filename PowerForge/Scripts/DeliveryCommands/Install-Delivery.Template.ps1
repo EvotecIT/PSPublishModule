@@ -201,6 +201,15 @@
                 continue
             }
 
+            if ($char -eq '[') {
+                $end = $Pattern.IndexOf(']', $i + 1)
+                if ($end -gt $i) {
+                    [void] $builder.Append($Pattern.Substring($i, $end - $i + 1))
+                    $i = $end
+                    continue
+                }
+            }
+
             [void] $builder.Append([System.Text.RegularExpressions.Regex]::Escape([string] $char))
         }
 

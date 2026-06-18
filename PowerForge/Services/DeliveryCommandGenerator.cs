@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -124,8 +125,25 @@ public sealed class DeliveryCommandGenerator
             return false;
 
         var content = File.ReadAllText(scriptPath);
-        return content.IndexOf("Refresh", StringComparison.OrdinalIgnoreCase) < 0;
+        var validateSets = Regex.Matches(content, @"\[ValidateSet\s*\((?<values>[^)]*)\)\]", RegexOptions.IgnoreCase);
+        foreach (Match validateSet in validateSets)
+        {
+            var values = validateSet.Groups["values"].Value;
+            var hasOnExistsValues =
+                ContainsQuotedToken(values, "Merge") &&
+                ContainsQuotedToken(values, "Overwrite") &&
+                ContainsQuotedToken(values, "Skip") &&
+                ContainsQuotedToken(values, "Stop");
+
+            if (hasOnExistsValues)
+                return !ContainsQuotedToken(values, "Refresh");
+        }
+
+        return false;
     }
+
+    private static bool ContainsQuotedToken(string value, string token)
+        => Regex.IsMatch(value, $@"(?<!\w)['""]{Regex.Escape(token)}['""](?!\w)", RegexOptions.IgnoreCase);
 
     private static string BuildInstallScript(
         string commandName,
