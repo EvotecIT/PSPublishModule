@@ -35,6 +35,7 @@ internal static class ProjectBuildPackageFeedResolver
         {
             VersionSources = versionSources,
             VersionSourceCredential = ResolveVersionSourceCredential(config, configDir, versionSources, githubPackagesOwner, githubToken),
+            VersionSourceCredentials = ResolveVersionSourceCredentials(config, versionSources, publishSource, githubPackagesOwner, githubToken),
             PublishSource = publishSource,
             PublishApiKey = publishApiKey,
             GitHubToken = githubToken,
@@ -69,8 +70,13 @@ internal static class ProjectBuildPackageFeedResolver
         if (!string.IsNullOrWhiteSpace(token))
             return token;
 
-        if (config.UseGitHubPackages || ContainsGitHubPackagesSource(config.NugetSource) || IsGitHubPackagesSource(config.PublishSource))
+        if (config.UseGitHubPackages ||
+            ContainsGitHubPackagesSource(config.NugetSource) ||
+            IsGitHubPackagesSource(config.PublishSource) ||
+            ContainsGitHubPackagesSource(GetVersionTrackSources(config)))
+        {
             return ResolveFirstEnvironmentSecret("GITHUB_TOKEN", "GH_TOKEN");
+        }
 
         return null;
     }
@@ -80,7 +86,8 @@ internal static class ProjectBuildPackageFeedResolver
         var owner = TrimOrNull(config.GitHubPackagesOwner) ??
                     (config.UseGitHubPackages ? TrimOrNull(config.GitHubUsername) : null) ??
                     ResolveGitHubPackagesOwnerFromSources(config.NugetSource) ??
-                    ResolveGitHubPackagesOwnerFromSource(config.PublishSource);
+                    ResolveGitHubPackagesOwnerFromSource(config.PublishSource) ??
+                    ResolveGitHubPackagesOwnerFromSources(GetVersionTrackSources(config));
         if (config.UseGitHubPackages && string.IsNullOrWhiteSpace(owner))
             throw new InvalidOperationException("UseGitHubPackages is true but GitHubPackagesOwner/GitHubUsername is not set.");
 
@@ -158,6 +165,37 @@ internal static class ProjectBuildPackageFeedResolver
         return null;
     }
 
+    private static Dictionary<string, RepositoryCredential>? ResolveVersionSourceCredentials(
+        ProjectBuildConfiguration config,
+        string[]? versionSources,
+        string? publishSource,
+        string? githubPackagesOwner,
+        string? githubToken)
+    {
+        if (string.IsNullOrWhiteSpace(githubToken))
+            return null;
+
+        var credentials = new Dictionary<string, RepositoryCredential>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in GetCredentialCandidateSources(config, versionSources, publishSource))
+        {
+            if (!IsGitHubPackagesSource(source))
+                continue;
+
+            var normalizedSource = source.Trim();
+            var owner = ResolveGitHubPackagesOwnerFromSource(normalizedSource) ?? githubPackagesOwner;
+            if (string.IsNullOrWhiteSpace(owner))
+                continue;
+
+            credentials[normalizedSource] = new RepositoryCredential
+            {
+                UserName = owner,
+                Secret = githubToken
+            };
+        }
+
+        return credentials.Count == 0 ? null : credentials;
+    }
+
     private static bool ContainsGitHubPackagesSource(string[]? sources)
         => sources is not null && sources.Any(IsGitHubPackagesSource);
 
@@ -191,6 +229,38 @@ internal static class ProjectBuildPackageFeedResolver
             .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault();
         return TrimOrNull(owner);
+    }
+
+    private static string[]? GetVersionTrackSources(ProjectBuildConfiguration config)
+    {
+        if (config.VersionTracks is null || config.VersionTracks.Count == 0)
+            return null;
+
+        return config.VersionTracks.Values
+            .Where(track => track?.NugetSource is { Length: > 0 })
+            .SelectMany(track => track!.NugetSource!)
+            .Where(source => !string.IsNullOrWhiteSpace(source))
+            .Select(source => source.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IEnumerable<string> GetCredentialCandidateSources(
+        ProjectBuildConfiguration config,
+        string[]? versionSources,
+        string? publishSource)
+    {
+        foreach (var source in versionSources ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(source))
+                yield return source;
+        }
+
+        if (!string.IsNullOrWhiteSpace(publishSource))
+            yield return publishSource!;
+
+        foreach (var source in GetVersionTrackSources(config) ?? Array.Empty<string>())
+            yield return source;
     }
 
     private static string? ResolveFirstEnvironmentSecret(params string[] names)

@@ -184,6 +184,10 @@ public sealed class ProjectBuildPreparationServiceTests
 
             Assert.Equal("explicit-source-token", context.PublishApiKey);
             Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", context.Spec.PublishSource);
+            var credential = Assert.Single(context.Spec.VersionSourceCredentials!);
+            Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", credential.Key);
+            Assert.Equal("EvotecIT", credential.Value.UserName);
+            Assert.Equal("explicit-source-token", credential.Value.Secret);
         }
         finally
         {
@@ -218,6 +222,10 @@ public sealed class ProjectBuildPreparationServiceTests
             Assert.NotNull(context.Spec.VersionSourceCredential);
             Assert.Equal("EvotecIT", context.Spec.VersionSourceCredential!.UserName);
             Assert.Equal("explicit-version-source-token", context.Spec.VersionSourceCredential.Secret);
+            var scopedCredential = Assert.Single(context.Spec.VersionSourceCredentials!);
+            Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", scopedCredential.Key);
+            Assert.Equal("EvotecIT", scopedCredential.Value.UserName);
+            Assert.Equal("explicit-version-source-token", scopedCredential.Value.Secret);
         }
         finally
         {
@@ -255,6 +263,53 @@ public sealed class ProjectBuildPreparationServiceTests
 
             Assert.Null(context.Spec.VersionSourceCredential);
             Assert.Equal(config.NugetSource, context.Spec.VersionSources);
+            var scopedCredential = Assert.Single(context.Spec.VersionSourceCredentials!);
+            Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", scopedCredential.Key);
+            Assert.Equal("EvotecIT", scopedCredential.Value.UserName);
+            Assert.Equal("mixed-version-source-token", scopedCredential.Value.Secret);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, null);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_resolves_github_packages_credentials_from_version_track_sources()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-githubpackages-track-source-" + Guid.NewGuid().ToString("N")));
+        var gitHubEnv = "PF_TEST_GITHUB_PACKAGES_TRACK_" + Guid.NewGuid().ToString("N");
+
+        try
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, "track-source-token");
+
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                GitHubAccessTokenEnvName = gitHubEnv,
+                VersionTracks = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PowerForge"] = new()
+                    {
+                        ExpectedVersion = "1.2.3",
+                        AnchorProject = "PowerForge",
+                        NugetSource = new[] { "https://nuget.pkg.github.com/EvotecIT/index.json" }
+                    }
+                }
+            };
+
+            var context = service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            var scopedCredential = Assert.Single(context.Spec.VersionSourceCredentials!);
+            Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", scopedCredential.Key);
+            Assert.Equal("EvotecIT", scopedCredential.Value.UserName);
+            Assert.Equal("track-source-token", scopedCredential.Value.Secret);
         }
         finally
         {

@@ -11,6 +11,9 @@ internal sealed class ProjectBuildPackageFeedSettings
     /// <summary>Credential used for authenticated version lookup sources.</summary>
     public RepositoryCredential? VersionSourceCredential { get; set; }
 
+    /// <summary>Credentials scoped to individual version lookup sources.</summary>
+    public Dictionary<string, RepositoryCredential>? VersionSourceCredentials { get; set; }
+
     /// <summary>NuGet source used by <c>dotnet nuget push</c>.</summary>
     public string? PublishSource { get; set; }
 
