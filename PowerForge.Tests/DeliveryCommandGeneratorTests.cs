@@ -284,7 +284,7 @@ public sealed class DeliveryCommandGeneratorTests
             {
                 Enable = true,
                 InternalsPath = "Internals",
-                IncludePaths = new[] { "Config/[Pp]rod*.json" },
+                IncludePaths = new[] { "Config/[Pp]rod*.json", "Config/[Pp]rod.json" },
                 GenerateInstallCommand = true,
                 GenerateUpdateCommand = true
             };
@@ -293,6 +293,7 @@ public sealed class DeliveryCommandGeneratorTests
             generator.Generate(root.FullName, "TestDelivery", delivery);
 
             var config = Directory.CreateDirectory(Path.Combine(root.FullName, "Internals", "Config"));
+            File.WriteAllText(Path.Combine(config.FullName, "prod.json"), "prod-exact-new");
             File.WriteAllText(Path.Combine(config.FullName, "ProdSettings.json"), "prod-new");
             File.WriteAllText(Path.Combine(config.FullName, "devSettings.json"), "dev-new");
             File.WriteAllText(Path.Combine(root.FullName, "TestDelivery.psm1"), """
@@ -302,6 +303,7 @@ public sealed class DeliveryCommandGeneratorTests
 
             var destination = Directory.CreateDirectory(Path.Combine(root.FullName, "Destination"));
             var destinationConfig = Directory.CreateDirectory(Path.Combine(destination.FullName, "Config"));
+            File.WriteAllText(Path.Combine(destinationConfig.FullName, "prod.json"), "prod-exact-old");
             File.WriteAllText(Path.Combine(destinationConfig.FullName, "ProdSettings.json"), "prod-old");
             File.WriteAllText(Path.Combine(destinationConfig.FullName, "devSettings.json"), "dev-old");
 
@@ -315,6 +317,7 @@ public sealed class DeliveryCommandGeneratorTests
             var result = RunPowerShell(powerShell, scriptPath);
 
             Assert.True(result.ExitCode == 0, $"PowerShell failed with exit code {result.ExitCode}.{Environment.NewLine}STDOUT:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}STDERR:{Environment.NewLine}{result.StandardError}");
+            Assert.Equal("prod-exact-new", File.ReadAllText(Path.Combine(destinationConfig.FullName, "prod.json")));
             Assert.Equal("prod-new", File.ReadAllText(Path.Combine(destinationConfig.FullName, "ProdSettings.json")));
             Assert.Equal("dev-old", File.ReadAllText(Path.Combine(destinationConfig.FullName, "devSettings.json")));
         }

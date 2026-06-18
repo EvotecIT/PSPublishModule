@@ -157,7 +157,7 @@
             if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
             if ($pattern.EndsWith('/')) { $pattern = "$pattern**" }
 
-            if ($pattern.IndexOf('*') -lt 0 -and $pattern.IndexOf('?') -lt 0) {
+            if ($pattern.IndexOf('*') -lt 0 -and $pattern.IndexOf('?') -lt 0 -and $pattern.IndexOf('[') -lt 0) {
                 if ($normalizedPath.StartsWith("$pattern/", [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
                 if ([string]::Equals($normalizedPath, $pattern, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
                 continue
