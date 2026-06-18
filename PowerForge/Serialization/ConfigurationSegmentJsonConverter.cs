@@ -84,6 +84,9 @@ public sealed class ConfigurationSegmentJsonConverter : JsonConverter<IConfigura
         if (discriminator.Equals("TestsAfterMerge", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationTestSegment);
         if (discriminator.Equals("XcodeProjectVersion", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationXcodeProjectVersionSegment);
         if (discriminator.Equals("AppleApp", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationAppleAppSegment);
+        if (discriminator.Equals("ProjectBuild", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationProjectBuildSegment);
+        if (discriminator.Equals("PackageBuild", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationPackageBuildSegment);
+        if (discriminator.Equals("Release", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationReleaseSegment);
 
         // Dynamic discriminator types (maps to a single concrete segment type)
         if (discriminator.Equals("GalleryNuget", StringComparison.OrdinalIgnoreCase) ||

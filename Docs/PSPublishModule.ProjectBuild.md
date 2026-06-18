@@ -3,6 +3,8 @@
 This document describes the JSON configuration consumed by `Invoke-ProjectBuild` and the behavior it drives.
 For the unified repo-level entrypoint that combines package and downloadable tool releases in one file,
 see `Build/release.json` and `powerforge release`.
+For module-plus-NuGet repository releases such as PSParseHTML, where one run should publish packages,
+the PowerShell module, and one GitHub asset set, see `Docs/PSPublishModule.UnifiedModuleProjectRelease.md`.
 For a PowerShell-first authoring layer proposal that keeps the same engine but avoids raw CLI argument shaping,
 see `Docs/PSPublishModule.ProjectBuild.DslProposal.md`.
 

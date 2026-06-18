@@ -46,6 +46,26 @@ public sealed class DotnetPublisher
         IEnumerable<string> frameworks,
         string version,
         string? artifactsRoot)
+        => Publish(projectPath, configuration, frameworks, version, artifactsRoot, restoreSources: null);
+
+    /// <summary>
+    /// Runs <c>dotnet publish</c> for each target framework and returns a map of TFM to publish directory.
+    /// When <paramref name="artifactsRoot"/> is provided, build outputs (bin/obj/publish) are redirected there to avoid file locking issues.
+    /// </summary>
+    /// <param name="projectPath">Path to the SDK-style project file to publish.</param>
+    /// <param name="configuration">Build configuration (e.g., Release).</param>
+    /// <param name="frameworks">Target frameworks to publish (e.g., net472, net8.0, net10.0).</param>
+    /// <param name="version">Version to stamp into the published assemblies.</param>
+    /// <param name="artifactsRoot">Optional root folder for build artifacts (bin/obj/publish).</param>
+    /// <param name="restoreSources">Additional NuGet restore sources appended to normal project restore sources.</param>
+    /// <returns>Dictionary mapping TFM to the publish output directory.</returns>
+    public IReadOnlyDictionary<string, string> Publish(
+        string projectPath,
+        string configuration,
+        IEnumerable<string> frameworks,
+        string version,
+        string? artifactsRoot,
+        IEnumerable<string>? restoreSources)
     {
         if (string.IsNullOrWhiteSpace(projectPath) || !File.Exists(projectPath))
             throw new FileNotFoundException($"Project file not found: {projectPath}");
@@ -91,6 +111,15 @@ public sealed class DotnetPublisher
             var publishDir = useIsolatedArtifacts
                 ? Path.Combine(artifacts!, "publish", tfm)
                 : Path.Combine(projDir, "bin", configuration, tfm, "publish");
+            var args = BuildPublishArguments(
+                configuration,
+                version,
+                tfm,
+                useIsolatedArtifacts,
+                artifacts,
+                maxCpuCountArgument,
+                publishDir,
+                restoreSources);
 
             var psi = new ProcessStartInfo
             {
@@ -104,53 +133,10 @@ public sealed class DotnetPublisher
             ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
-            var args = new List<string>
-            {
-                "publish",
-                "--configuration", configuration,
-                "-nologo",
-                "--verbosity", "minimal",
-                $"-p:Version={version}",
-                $"-p:AssemblyVersion={version}",
-                $"-p:FileVersion={version}",
-                "--framework", tfm
-            };
-
-            if (useIsolatedArtifacts)
-            {
-                args.Add("-p:UseArtifactsOutput=true");
-                args.Add($"-p:ArtifactsPath={artifacts}");
-                // Centralized artifacts output can make parallel project-reference builds race on generated files.
-                // Serializing MSBuild trades speed for deterministic module binary publishes.
-                args.Add(maxCpuCountArgument);
-                args.Add("--output");
-                args.Add(publishDir);
-            }
-
             psi.Arguments = BuildWindowsArgumentString(args);
 #else
-            psi.ArgumentList.Add("publish");
-            psi.ArgumentList.Add("--configuration");
-            psi.ArgumentList.Add(configuration);
-            psi.ArgumentList.Add("-nologo");
-            psi.ArgumentList.Add("--verbosity");
-            psi.ArgumentList.Add("minimal");
-            psi.ArgumentList.Add($"-p:Version={version}");
-            psi.ArgumentList.Add($"-p:AssemblyVersion={version}");
-            psi.ArgumentList.Add($"-p:FileVersion={version}");
-            psi.ArgumentList.Add("--framework");
-            psi.ArgumentList.Add(tfm);
-
-            if (useIsolatedArtifacts)
-            {
-                psi.ArgumentList.Add("-p:UseArtifactsOutput=true");
-                psi.ArgumentList.Add($"-p:ArtifactsPath={artifacts}");
-                // Centralized artifacts output can make parallel project-reference builds race on generated files.
-                // Serializing MSBuild trades speed for deterministic module binary publishes.
-                psi.ArgumentList.Add(maxCpuCountArgument);
-                psi.ArgumentList.Add("--output");
-                psi.ArgumentList.Add(publishDir);
-            }
+            foreach (var arg in args)
+                psi.ArgumentList.Add(arg);
 #endif
 
             using var p = Process.Start(psi)!;
@@ -172,6 +158,54 @@ public sealed class DotnetPublisher
 
         return result;
     }
+
+    internal static IReadOnlyList<string> BuildPublishArguments(
+        string configuration,
+        string version,
+        string tfm,
+        bool useIsolatedArtifacts,
+        string? artifacts,
+        string maxCpuCountArgument,
+        string publishDir,
+        IEnumerable<string>? restoreSources)
+    {
+        var args = new List<string>
+        {
+            "publish",
+            "--configuration", configuration,
+            "-nologo",
+            "--verbosity", "minimal",
+            $"-p:Version={version}",
+            $"-p:AssemblyVersion={version}",
+            $"-p:FileVersion={version}",
+            "--framework", tfm
+        };
+
+        var normalizedSources = NormalizeRestoreSources(restoreSources);
+        if (normalizedSources.Length > 0)
+            args.Add($"-p:RestoreAdditionalProjectSources={string.Join(";", normalizedSources)}");
+
+        if (useIsolatedArtifacts)
+        {
+            args.Add("-p:UseArtifactsOutput=true");
+            args.Add($"-p:ArtifactsPath={artifacts}");
+            // Centralized artifacts output can make parallel project-reference builds race on generated files.
+            // Serializing MSBuild trades speed for deterministic module binary publishes.
+            args.Add(maxCpuCountArgument);
+            args.Add("--output");
+            args.Add(publishDir);
+        }
+
+        return args;
+    }
+
+    private static string[] NormalizeRestoreSources(IEnumerable<string>? restoreSources)
+        => (restoreSources ?? Array.Empty<string>())
+            .Where(static source => !string.IsNullOrWhiteSpace(source))
+            .Select(static source => source.Trim().Trim('"'))
+            .Where(static source => !string.IsNullOrWhiteSpace(source))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static bool IsNetFrameworkTfm(string tfm)
     {

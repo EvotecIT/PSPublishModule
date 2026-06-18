@@ -205,6 +205,67 @@ public sealed class ModulePipelineStepTests
     }
 
     [Fact]
+    public void Create_IncludesPackageBuildStepsBeforeModuleBuildSteps()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = "Build/project.build.json",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Inline",
+                            BuildBeforeModule = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            var idxProject = Array.FindIndex(steps, s => s.Key == "package:project:01");
+            var idxInline = Array.FindIndex(steps, s => s.Key == "package:inline:01");
+            var idxStage = Array.FindIndex(steps, s => s.Key == "build:stage");
+
+            Assert.True(idxProject >= 0);
+            Assert.True(idxInline >= 0);
+            Assert.True(idxStage >= 0);
+            Assert.True(idxProject < idxStage);
+            Assert.True(idxInline < idxStage);
+            Assert.Equal(ModulePipelineStepKind.PackageBuild, steps[idxProject].Kind);
+            Assert.Equal(ModulePipelineStepKind.PackageBuild, steps[idxInline].Kind);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Create_SkipsDisabledAppleAndXcodeVersioningSteps()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

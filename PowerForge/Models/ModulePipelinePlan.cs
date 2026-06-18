@@ -25,12 +25,12 @@ public sealed class ModulePipelinePlan
     /// <summary>
     /// Resolved version after stepping.
     /// </summary>
-    public string ResolvedVersion { get; }
+    public string ResolvedVersion { get; internal set; }
 
     /// <summary>
     /// Optional prerelease tag (used for token replacements).
     /// </summary>
-    public string? PreRelease { get; }
+    public string? PreRelease { get; internal set; }
 
     /// <summary>
     /// Manifest configuration resolved from <c>Manifest</c> segments (last-wins).
@@ -156,6 +156,21 @@ public sealed class ModulePipelinePlan
     /// Xcode project version updates to apply before staging the build.
     /// </summary>
     public ConfigurationXcodeProjectVersionSegment[] XcodeProjectVersions { get; }
+
+    /// <summary>
+    /// Existing project-build JSON package lanes coordinated by the module pipeline.
+    /// </summary>
+    public ConfigurationProjectBuildSegment[] ProjectBuilds { get; }
+
+    /// <summary>
+    /// Inline package-build lanes coordinated by the module pipeline.
+    /// </summary>
+    public ConfigurationPackageBuildSegment[] PackageBuilds { get; }
+
+    /// <summary>
+    /// Optional repo-level release coordination settings.
+    /// </summary>
+    public ConfigurationReleaseSegment? Release { get; }
 
     /// <summary>
     /// When true, module sources should be merged into a single PSM1 (legacy: BuildModule.Merge).
@@ -350,6 +365,9 @@ public sealed class ModulePipelinePlan
             actions,
             Array.Empty<ConfigurationAppleAppSegment>(),
             Array.Empty<ConfigurationXcodeProjectVersionSegment>(),
+            Array.Empty<ConfigurationProjectBuildSegment>(),
+            Array.Empty<ConfigurationPackageBuildSegment>(),
+            null,
             mergeModule,
             mergeMissing,
             doNotAttemptToFixRelativePaths,
@@ -408,6 +426,9 @@ public sealed class ModulePipelinePlan
         ConfigurationActionSegment[] actions,
         ConfigurationAppleAppSegment[] appleApps,
         ConfigurationXcodeProjectVersionSegment[] xcodeProjectVersions,
+        ConfigurationProjectBuildSegment[] projectBuilds,
+        ConfigurationPackageBuildSegment[] packageBuilds,
+        ConfigurationReleaseSegment? release,
         bool mergeModule,
         bool mergeMissing,
         bool doNotAttemptToFixRelativePaths,
@@ -460,6 +481,9 @@ public sealed class ModulePipelinePlan
             actions,
             appleApps,
             xcodeProjectVersions,
+            projectBuilds,
+            packageBuilds,
+            release,
             mergeModule,
             mergeMissing,
             doNotAttemptToFixRelativePaths,
@@ -519,6 +543,9 @@ public sealed class ModulePipelinePlan
         ConfigurationActionSegment[] actions,
         ConfigurationAppleAppSegment[] appleApps,
         ConfigurationXcodeProjectVersionSegment[] xcodeProjectVersions,
+        ConfigurationProjectBuildSegment[] projectBuilds,
+        ConfigurationPackageBuildSegment[] packageBuilds,
+        ConfigurationReleaseSegment? release,
         bool mergeModule,
         bool mergeMissing,
         bool doNotAttemptToFixRelativePaths,
@@ -573,6 +600,9 @@ public sealed class ModulePipelinePlan
         Actions = actions ?? Array.Empty<ConfigurationActionSegment>();
         AppleApps = appleApps ?? Array.Empty<ConfigurationAppleAppSegment>();
         XcodeProjectVersions = xcodeProjectVersions ?? Array.Empty<ConfigurationXcodeProjectVersionSegment>();
+        ProjectBuilds = projectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>();
+        PackageBuilds = packageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>();
+        Release = release;
         MergeModule = mergeModule;
         MergeMissing = mergeMissing;
         DoNotAttemptToFixRelativePaths = doNotAttemptToFixRelativePaths;

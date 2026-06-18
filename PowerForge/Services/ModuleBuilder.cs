@@ -50,6 +50,8 @@ public sealed class ModuleBuilder
         public string Configuration { get; set; } = "Release";
         /// <summary>Target frameworks to publish (e.g., net472, net8.0, net10.0).</summary>
         public IReadOnlyList<string> Frameworks { get; set; } = Array.Empty<string>();
+        /// <summary>Additional NuGet restore sources appended to the binary project publish.</summary>
+        public IReadOnlyList<string> NuGetRestoreSources { get; set; } = Array.Empty<string>();
         /// <summary>Base module version to write to the manifest before install resolution.</summary>
         public string ModuleVersion { get; set; } = "1.0.0";
         /// <summary>Installation strategy controlling versioned install behavior.</summary>
@@ -163,7 +165,7 @@ public sealed class ModuleBuilder
             Directory.CreateDirectory(artifactsRoot);
             try
             {
-                var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, frameworks, opts.ModuleVersion, artifactsRoot);
+                var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, frameworks, opts.ModuleVersion, artifactsRoot, opts.NuGetRestoreSources);
 
                 var usedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var tfm in frameworks)

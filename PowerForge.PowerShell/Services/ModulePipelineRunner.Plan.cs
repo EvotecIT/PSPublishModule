@@ -98,6 +98,9 @@ public sealed partial class ModulePipelineRunner
         var publishes = new List<ConfigurationPublishSegment>();
         var appleApps = new List<ConfigurationAppleAppSegment>();
         var xcodeProjectVersions = new List<ConfigurationXcodeProjectVersionSegment>();
+        var projectBuilds = new List<ConfigurationProjectBuildSegment>();
+        var packageBuilds = new List<ConfigurationPackageBuildSegment>();
+        ConfigurationReleaseSegment? release = null;
         var approvedModules = new List<string>();
         var moduleSkipIgnoreModules = new List<string>();
         var moduleSkipIgnoreFunctions = new List<string>();
@@ -483,6 +486,22 @@ public sealed partial class ModulePipelineRunner
                         expectedVersion = spec.Build.Version;
                     break;
                 }
+                case ConfigurationProjectBuildSegment projectBuild:
+                {
+                    projectBuilds.Add(projectBuild);
+                    break;
+                }
+                case ConfigurationPackageBuildSegment packageBuild:
+                {
+                    packageBuilds.Add(packageBuild);
+                    break;
+                }
+                case ConfigurationReleaseSegment releaseSegment:
+                {
+                    if (releaseSegment.Configuration is not null)
+                        release = releaseSegment;
+                    break;
+                }
             }
         }
 
@@ -766,6 +785,9 @@ public sealed partial class ModulePipelineRunner
             testsAfterMerge.Clear();
             enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
             enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
+            projectBuilds.Clear();
+            packageBuilds.Clear();
+            release = null;
         }
 
         // Run delivery validation after refresh-only pruning so artefact overlap checks reflect
@@ -838,6 +860,13 @@ public sealed partial class ModulePipelineRunner
                 : xcodeProjectVersions
                 .Where(static project => project?.Configuration?.Enabled != false)
                 .ToArray(),
+            projectBuilds: projectBuilds
+                .Where(static projectBuild => projectBuild?.Configuration?.Enabled != false)
+                .ToArray(),
+            packageBuilds: packageBuilds
+                .Where(static packageBuild => packageBuild?.Configuration?.Enabled != false)
+                .ToArray(),
+            release: release,
             mergeModule: mergeModule,
             mergeMissing: mergeMissing,
             doNotAttemptToFixRelativePaths: doNotAttemptToFixRelativePaths,
@@ -892,88 +921,6 @@ public sealed partial class ModulePipelineRunner
             preferOnlineMetadata: true,
             allowOnlineLookup: true);
     }
-
-    private static string[] BuildMissingCsprojReasonList(
-        ModulePipelineSpec spec,
-        bool syncNETProjectVersion,
-        string[]? dotnetFrameworksFromSegments,
-        string[]? exportAssembliesFromSegments,
-        string[]? excludeLibraryFilterFromSegments,
-        bool? doNotCopyLibrariesRecursivelyFromSegments,
-        bool? handleRuntimesFromSegments,
-        bool useAssemblyLoadContextRequested,
-        bool typeAcceleratorsRequireAlc,
-        string? resolveBinaryConflictsProjectName,
-        bool binaryModuleDocumentationRequested)
-    {
-        var reasons = new List<string>();
-        var hasFrameworks = HasAnyConfiguredValues(dotnetFrameworksFromSegments)
-                            || HasAnyConfiguredValues(spec.Build.Frameworks);
-        var hasBinaryModules = HasAnyConfiguredValues(exportAssembliesFromSegments)
-                               || HasAnyConfiguredValues(spec.Build.ExportAssemblies);
-        var effectiveDoNotCopyLibrariesRecursively =
-            doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively;
-        var effectiveHandleRuntimes =
-            handleRuntimesFromSegments ?? spec.Build.HandleRuntimes;
-        var hasExplicitBinaryIntentBeyondFramework =
-            syncNETProjectVersion
-            || hasBinaryModules
-            || !string.IsNullOrWhiteSpace(resolveBinaryConflictsProjectName)
-            || HasAnyConfiguredValues(excludeLibraryFilterFromSegments)
-            || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
-            || effectiveDoNotCopyLibrariesRecursively
-            || effectiveHandleRuntimes
-            || useAssemblyLoadContextRequested
-            || typeAcceleratorsRequireAlc
-            || binaryModuleDocumentationRequested;
-
-        if (syncNETProjectVersion)
-            reasons.Add("SyncNETProjectVersion");
-
-        if (hasFrameworks && hasExplicitBinaryIntentBeyondFramework)
-            reasons.Add("NETFramework");
-
-        if (hasBinaryModules)
-            reasons.Add("NETBinaryModule");
-
-        if (!string.IsNullOrWhiteSpace(resolveBinaryConflictsProjectName))
-            reasons.Add("ResolveBinaryConflictsName");
-
-        if (HasAnyConfiguredValues(excludeLibraryFilterFromSegments) || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter))
-            reasons.Add("NETExcludeLibraryFilter");
-
-        if (effectiveDoNotCopyLibrariesRecursively)
-            reasons.Add("NETDoNotCopyLibrariesRecursively");
-
-        if (effectiveHandleRuntimes)
-            reasons.Add("NETHandleRuntimes");
-
-        if (useAssemblyLoadContextRequested)
-            reasons.Add("UseAssemblyLoadContext");
-
-        if (typeAcceleratorsRequireAlc)
-            reasons.Add("NETAssemblyTypeAccelerators");
-
-        if (binaryModuleDocumentationRequested)
-            reasons.Add("NETBinaryModuleDocumentation");
-
-        return reasons
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static bool HasAnyConfiguredValues(string[]? values)
-        => values is { Length: > 0 } &&
-           values.Any(static value => !string.IsNullOrWhiteSpace(value));
-
-    private static string[] NormalizeStringArray(string[]? values)
-        => values is { Length: > 0 }
-            ? values
-                .Where(static value => !string.IsNullOrWhiteSpace(value))
-                .Select(static value => value.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray()
-            : Array.Empty<string>();
 
     private bool TryAddExternalModuleDependency(
         string moduleName,

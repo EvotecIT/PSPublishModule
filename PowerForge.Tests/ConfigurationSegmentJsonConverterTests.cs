@@ -137,4 +137,76 @@ public sealed class ConfigurationSegmentJsonConverterTests
         Assert.True(segment.Configuration.UseResolvedVersion);
         Assert.Equal(AppleBuildNumberPolicy.IncrementExisting, segment.Configuration.BuildNumberPolicy);
     }
+
+    [Fact]
+    public void Deserialize_ReadsPackageBuildSegments()
+    {
+        const string json = """
+            {
+              "Build": {
+                "Name": "PSParseHTML",
+                "SourcePath": ".",
+                "Version": "1.0.0"
+              },
+              "Install": {
+                "Enabled": false
+              },
+              "Segments": [
+                {
+                  "Type": "ProjectBuild",
+                  "Configuration": {
+                    "Name": "Libraries",
+                    "ConfigPath": "Build/project.build.json",
+                    "BuildBeforeModule": true,
+                    "UseAsReleaseVersionSource": true,
+                    "ProvideLocalNuGetFeed": true
+                  }
+                },
+                {
+                  "Type": "PackageBuild",
+                  "Configuration": {
+                    "RootPath": "Sources",
+                    "ExpectedVersionMap": {
+                      "HtmlTinkerX": "2.0.X"
+                    },
+                    "BuildBeforeModule": true,
+                    "PublishNuget": true
+                  }
+                },
+                {
+                  "Type": "Release",
+                  "Configuration": {
+                    "StageRoot": "Artifacts/Release",
+                    "VersionSource": "PackageBuild",
+                    "PrimaryProject": "HtmlTinkerX"
+                  }
+                }
+              ]
+            }
+            """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+
+        Assert.NotNull(spec);
+        var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(spec!.Segments[0]);
+        Assert.Equal("Build/project.build.json", projectBuild.Configuration.ConfigPath);
+        Assert.True(projectBuild.Configuration.BuildBeforeModule);
+        Assert.True(projectBuild.Configuration.UseAsReleaseVersionSource);
+        Assert.True(projectBuild.Configuration.ProvideLocalNuGetFeed);
+
+        var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(spec.Segments[1]);
+        Assert.Equal("Sources", packageBuild.Configuration.RootPath);
+        Assert.Equal("2.0.X", packageBuild.Configuration.ExpectedVersionMap?["HtmlTinkerX"]);
+        Assert.True(packageBuild.Configuration.BuildBeforeModule);
+        Assert.True(packageBuild.Configuration.PublishNuget);
+
+        var release = Assert.IsType<ConfigurationReleaseSegment>(spec.Segments[2]);
+        Assert.Equal("Artifacts/Release", release.Configuration.StageRoot);
+        Assert.Equal(ReleaseVersionSource.PackageBuild, release.Configuration.VersionSource);
+        Assert.Equal("HtmlTinkerX", release.Configuration.PrimaryProject);
+    }
 }

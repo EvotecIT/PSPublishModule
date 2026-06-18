@@ -51,7 +51,7 @@ public sealed partial class ModulePipelineRunner
             SetOrRemoveTopLevelString(manifestPath, "Description", manifest.Description, removeWhenEmpty: true);
             SetOrRemoveTopLevelString(manifestPath, "PowerShellVersion", manifest.PowerShellVersion, removeWhenEmpty: true);
             SetOrRemoveTopLevelString(manifestPath, "DotNetFrameworkVersion", manifest.DotNetFrameworkVersion, removeWhenEmpty: true);
-            SetOrRemovePsDataString(manifestPath, "Prerelease", manifest.Prerelease, removeWhenEmpty: true);
+            SetOrRemovePsDataString(manifestPath, "Prerelease", plan.PreRelease, removeWhenEmpty: true);
 
             if (manifest.CompatiblePSEditions is not null)
                 _manifestMutator.TrySetTopLevelStringArray(manifestPath, "CompatiblePSEditions", NormalizeStringArray(manifest.CompatiblePSEditions));

@@ -193,6 +193,31 @@ internal sealed class ModuleBuildPreparationService
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.Path)) continue;
             cfg.Path = ResolveConfigPath(projectRoot, cfg.Path);
         }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationProjectBuildSegment>() ?? Enumerable.Empty<ConfigurationProjectBuildSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null || string.IsNullOrWhiteSpace(cfg.ConfigPath)) continue;
+            cfg.ConfigPath = ResolveConfigPath(projectRoot, cfg.ConfigPath);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationPackageBuildSegment>() ?? Enumerable.Empty<ConfigurationPackageBuildSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.RootPath = ResolveConfigPathNullable(projectRoot, cfg.RootPath);
+            cfg.OutputPath = ResolveConfigPathNullable(projectRoot, cfg.OutputPath);
+            cfg.ReleaseZipOutputPath = ResolveConfigPathNullable(projectRoot, cfg.ReleaseZipOutputPath);
+            cfg.StagingPath = ResolveConfigPathNullable(projectRoot, cfg.StagingPath);
+            cfg.PlanOutputPath = ResolveConfigPathNullable(projectRoot, cfg.PlanOutputPath);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationReleaseSegment>() ?? Enumerable.Empty<ConfigurationReleaseSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null || string.IsNullOrWhiteSpace(cfg.StageRoot)) continue;
+            cfg.StageRoot = ResolveConfigPath(projectRoot, cfg.StageRoot);
+        }
     }
 
     private static string ResolveBaseVersion(string projectRoot, string moduleName, IReadOnlyList<IConfigurationSegment>? segments)
@@ -327,6 +352,37 @@ internal sealed class ModuleBuildPreparationService
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.Path)) continue;
             cfg.Path = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.Path));
         }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationProjectBuildSegment>() ?? Enumerable.Empty<ConfigurationProjectBuildSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null || string.IsNullOrWhiteSpace(cfg.ConfigPath)) continue;
+            cfg.ConfigPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.ConfigPath));
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationPackageBuildSegment>() ?? Enumerable.Empty<ConfigurationPackageBuildSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.RootPath = MakeRelativeForProjectRoot(projectRoot, cfg.RootPath);
+            cfg.OutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.OutputPath);
+            cfg.ReleaseZipOutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.ReleaseZipOutputPath);
+            cfg.StagingPath = MakeRelativeForProjectRoot(projectRoot, cfg.StagingPath);
+            cfg.PlanOutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.PlanOutputPath);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationReleaseSegment>() ?? Enumerable.Empty<ConfigurationReleaseSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null || string.IsNullOrWhiteSpace(cfg.StageRoot)) continue;
+            cfg.StageRoot = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.StageRoot));
+        }
+    }
+
+    private static string? MakeRelativeForProjectRoot(string projectRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        return MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, path));
     }
 
     private static string MakeRelativeForConfig(string baseDir, string path)

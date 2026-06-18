@@ -30,6 +30,12 @@ public sealed class ModuleBuildSpec
     /// <summary>Target frameworks to publish (e.g., net472, net8.0, net10.0).</summary>
     public string[] Frameworks { get; set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Additional local or remote NuGet sources used when publishing the module binary project.
+    /// These sources are appended to the normal project restore sources.
+    /// </summary>
+    public string[] NuGetRestoreSources { get; set; } = Array.Empty<string>();
+
     /// <summary>Author value written to the manifest (when provided).</summary>
     public string? Author { get; set; }
 
