@@ -8,7 +8,7 @@ public sealed class PublishConfigurationFactoryTests
     public void Create_reads_publish_api_key_from_file()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
-        File.WriteAllText(path, " api-key ");
+        File.WriteAllText(path, " api-key " + Environment.NewLine);
         try
         {
             var factory = new PublishConfigurationFactory();
@@ -24,6 +24,86 @@ public sealed class PublishConfigurationFactoryTests
             Assert.Equal("api-key", segment.Configuration.ApiKey);
             Assert.Equal(PublishDestination.PowerShellGallery, segment.Configuration.Destination);
             Assert.True(segment.Configuration.Enabled);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Create_rejects_multiline_publish_api_key_file()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".ps1");
+        File.WriteAllText(path, "Write-Host 'not a key'" + Environment.NewLine + "Write-Host 'still not a key'");
+        try
+        {
+            var factory = new PublishConfigurationFactory();
+
+            var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+            {
+                ParameterSetName = "ApiFromFile",
+                Type = PublishDestination.PowerShellGallery,
+                FilePath = path,
+                Enabled = true
+            }));
+
+            Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("not a script", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("ApiKey")]
+    [InlineData("JFrog")]
+    public void Create_rejects_multiline_inline_publish_api_key(string parameterSetName)
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = parameterSetName,
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "line-one" + Environment.NewLine + "line-two",
+            Enabled = true
+        }));
+
+        Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Create_rejects_multiline_repository_credential_secret_file()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
+        File.WriteAllText(path, "line-one" + Environment.NewLine + "line-two");
+        try
+        {
+            var factory = new PublishConfigurationFactory();
+
+            var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+            {
+                ParameterSetName = "JFrog",
+                Type = PublishDestination.PowerShellGallery,
+                RepositoryName = "JFrogPS",
+                Tool = PublishTool.PSResourceGet,
+                JFrogBaseUri = "https://company.jfrog.io/artifactory",
+                JFrogRepository = "powershell-virtual",
+                RepositoryCredentialUserName = "name@company.com",
+                RepositoryCredentialSecretFilePath = path,
+                RepositoryCredentialSecretFilePathSpecified = true,
+                Enabled = true
+            }));
+
+            Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
