@@ -60,6 +60,25 @@ public sealed class PublishConfigurationFactoryTests
         }
     }
 
+    [Theory]
+    [InlineData("ApiKey")]
+    [InlineData("JFrog")]
+    public void Create_rejects_multiline_inline_publish_api_key(string parameterSetName)
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = parameterSetName,
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "line-one" + Environment.NewLine + "line-two",
+            Enabled = true
+        }));
+
+        Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Create_rejects_multiline_repository_credential_secret_file()
     {

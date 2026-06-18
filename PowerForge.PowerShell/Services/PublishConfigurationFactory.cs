@@ -26,7 +26,7 @@ internal sealed class PublishConfigurationFactory
             "ApiFromFile" => ReadSingleLineSecretFile(request.FilePath, nameof(request.FilePath)),
             "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
             "JFrog" when !string.IsNullOrWhiteSpace(request.FilePath) => ReadSingleLineSecretFile(request.FilePath, nameof(request.FilePath)),
-            _ => request.ApiKey
+            _ => ValidateSingleLineSecret(request.ApiKey, nameof(PublishConfigurationRequest.ApiKey))
         };
 
         if (destination == PublishDestination.GitHub && string.IsNullOrWhiteSpace(request.UserName))
