@@ -183,8 +183,13 @@
             $char = $Pattern[$i]
             if ($char -eq '*') {
                 if (($i + 1) -lt $Pattern.Length -and $Pattern[$i + 1] -eq '*') {
-                    [void] $builder.Append('.*')
-                    $i++
+                    if (($i + 2) -lt $Pattern.Length -and $Pattern[$i + 2] -eq '/') {
+                        [void] $builder.Append('(?:.*/)?')
+                        $i += 2
+                    } else {
+                        [void] $builder.Append('.*')
+                        $i++
+                    }
                 } else {
                     [void] $builder.Append('[^/]*')
                 }

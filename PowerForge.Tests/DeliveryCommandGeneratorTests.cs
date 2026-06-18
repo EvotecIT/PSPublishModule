@@ -157,6 +157,62 @@ public sealed class DeliveryCommandGeneratorTests
     }
 
     [Fact]
+    public void GeneratedUpdate_RecursiveIncludePath_MatchesDirectAndNestedFiles()
+    {
+        var powerShell = FindPowerShellExecutable();
+        if (powerShell is null)
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var delivery = new DeliveryOptionsConfiguration
+            {
+                Enable = true,
+                InternalsPath = "Internals",
+                IncludePaths = new[] { "Config/**/*.json" },
+                GenerateInstallCommand = true,
+                GenerateUpdateCommand = true
+            };
+
+            var generator = new DeliveryCommandGenerator(new NullLogger());
+            generator.Generate(root.FullName, "TestDelivery", delivery);
+
+            var config = Directory.CreateDirectory(Path.Combine(root.FullName, "Internals", "Config"));
+            var nested = Directory.CreateDirectory(Path.Combine(config.FullName, "nested"));
+            File.WriteAllText(Path.Combine(config.FullName, "app.json"), "direct-new");
+            File.WriteAllText(Path.Combine(nested.FullName, "app.json"), "nested-new");
+            File.WriteAllText(Path.Combine(root.FullName, "TestDelivery.psm1"), """
+                . "$PSScriptRoot\Public\Install-TestDelivery.ps1"
+                . "$PSScriptRoot\Public\Update-TestDelivery.ps1"
+                """);
+
+            var destination = Directory.CreateDirectory(Path.Combine(root.FullName, "Destination"));
+            var destinationConfig = Directory.CreateDirectory(Path.Combine(destination.FullName, "Config"));
+            var destinationNested = Directory.CreateDirectory(Path.Combine(destinationConfig.FullName, "nested"));
+            File.WriteAllText(Path.Combine(destinationConfig.FullName, "app.json"), "direct-old");
+            File.WriteAllText(Path.Combine(destinationNested.FullName, "app.json"), "nested-old");
+
+            var scriptPath = Path.Combine(root.FullName, "run-update-recursive.ps1");
+            File.WriteAllText(scriptPath, $$"""
+                $ErrorActionPreference = 'Stop'
+                Import-Module -Name '{{EscapePowerShellString(Path.Combine(root.FullName, "TestDelivery.psm1"))}}' -Force
+                Update-TestDelivery -Path '{{EscapePowerShellString(destination.FullName)}}' | Out-Null
+                """);
+
+            var result = RunPowerShell(powerShell, scriptPath);
+
+            Assert.True(result.ExitCode == 0, $"PowerShell failed with exit code {result.ExitCode}.{Environment.NewLine}STDOUT:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}STDERR:{Environment.NewLine}{result.StandardError}");
+            Assert.Equal("direct-new", File.ReadAllText(Path.Combine(destinationConfig.FullName, "app.json")));
+            Assert.Equal("nested-new", File.ReadAllText(Path.Combine(destinationNested.FullName, "app.json")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void GeneratedUpdate_DefaultRefresh_OverwritesPackageFiles_AndPreservesLocalExtras()
     {
         var powerShell = FindPowerShellExecutable();
