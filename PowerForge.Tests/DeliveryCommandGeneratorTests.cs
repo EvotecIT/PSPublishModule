@@ -95,7 +95,7 @@ public sealed class DeliveryCommandGeneratorTests
             {
                 Enable = true,
                 InternalsPath = "Internals",
-                IncludePaths = new[] { "Config/**", "Scripts/*.ps1" },
+                IncludePaths = new[] { "Config/*.json", "Scripts/*.ps1" },
                 ExcludePaths = new[] { "Config/ignored.json", "Config/local/**" },
                 PreservePaths = new[] { "Config/preserved.json" },
                 GenerateInstallCommand = true,
@@ -107,12 +107,14 @@ public sealed class DeliveryCommandGeneratorTests
 
             var config = Directory.CreateDirectory(Path.Combine(root.FullName, "Internals", "Config"));
             var local = Directory.CreateDirectory(Path.Combine(config.FullName, "local"));
+            var nested = Directory.CreateDirectory(Path.Combine(config.FullName, "nested"));
             var scripts = Directory.CreateDirectory(Path.Combine(root.FullName, "Internals", "Scripts"));
             var docs = Directory.CreateDirectory(Path.Combine(root.FullName, "Internals", "Docs"));
             File.WriteAllText(Path.Combine(config.FullName, "config.sample.json"), "package-new");
             File.WriteAllText(Path.Combine(config.FullName, "ignored.json"), "package-ignored-new");
             File.WriteAllText(Path.Combine(config.FullName, "preserved.json"), "package-preserved-new");
             File.WriteAllText(Path.Combine(local.FullName, "default.json"), "package-local-new");
+            File.WriteAllText(Path.Combine(nested.FullName, "settings.json"), "package-nested-new");
             File.WriteAllText(Path.Combine(scripts.FullName, "tool.ps1"), "package-script-new");
             File.WriteAllText(Path.Combine(docs.FullName, "readme.md"), "package-doc-new");
             File.WriteAllText(Path.Combine(root.FullName, "TestDelivery.psm1"), """
@@ -145,6 +147,7 @@ public sealed class DeliveryCommandGeneratorTests
             Assert.Equal("local-preserved", File.ReadAllText(Path.Combine(destinationConfig.FullName, "preserved.json")));
             Assert.Equal("local-default", File.ReadAllText(Path.Combine(destinationLocal.FullName, "default.json")));
             Assert.Equal("package-script-new", File.ReadAllText(Path.Combine(destinationScripts.FullName, "tool.ps1")));
+            Assert.False(File.Exists(Path.Combine(destination.FullName, "Config", "nested", "settings.json")));
             Assert.False(File.Exists(Path.Combine(destination.FullName, "Docs", "readme.md")));
         }
         finally

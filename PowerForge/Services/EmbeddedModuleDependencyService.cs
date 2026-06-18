@@ -678,7 +678,27 @@ internal sealed class EmbeddedModuleDependencyService
             if (!overwriteFiles && File.Exists(target))
                 continue;
 
+            if (overwriteFiles)
+                TryClearReadOnlyAttribute(target);
+
             File.Copy(file, target, overwrite: overwriteFiles);
+        }
+    }
+
+    private static void TryClearReadOnlyAttribute(string path)
+    {
+        if (!File.Exists(path))
+            return;
+
+        try
+        {
+            var attributes = File.GetAttributes(path);
+            if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
+        }
+        catch
+        {
+            // Best effort. File.Copy will surface any remaining access error with the original path.
         }
     }
 

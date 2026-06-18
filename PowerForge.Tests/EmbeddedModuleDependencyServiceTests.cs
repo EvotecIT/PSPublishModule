@@ -279,7 +279,9 @@ public sealed class EmbeddedModuleDependencyServiceTests
             var destinationRoot = Path.Combine(root.FullName, "PrivateDeps");
             var destinationModule = Path.Combine(destinationRoot, "Microsoft.Graph.Authentication", "2.25.0");
             Directory.CreateDirectory(destinationModule);
-            File.WriteAllText(Path.Combine(destinationModule, "settings.json"), "package-old");
+            var targetSettings = Path.Combine(destinationModule, "settings.json");
+            File.WriteAllText(targetSettings, "package-old");
+            File.SetAttributes(targetSettings, File.GetAttributes(targetSettings) | FileAttributes.ReadOnly);
             File.WriteAllText(Path.Combine(destinationModule, "local-only.txt"), "local-extra");
 
             var results = service.Install(
@@ -289,11 +291,12 @@ public sealed class EmbeddedModuleDependencyServiceTests
 
             var result = Assert.Single(results);
             Assert.Equal("Refresh", result.Action);
-            Assert.Equal("package-new", File.ReadAllText(Path.Combine(destinationModule, "settings.json")));
+            Assert.Equal("package-new", File.ReadAllText(targetSettings));
             Assert.Equal("local-extra", File.ReadAllText(Path.Combine(destinationModule, "local-only.txt")));
         }
         finally
         {
+            ClearReadOnlyAttributes(root.FullName);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -678,6 +681,26 @@ public sealed class EmbeddedModuleDependencyServiceTests
 
     private static string CreateModule(string root, string name, string version)
         => CreateModuleAt(Path.Combine(root, "Dependencies", name, version), name, version);
+
+    private static void ClearReadOnlyAttributes(string root)
+    {
+        if (!Directory.Exists(root))
+            return;
+
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var attributes = File.GetAttributes(file);
+                if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                    File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+            }
+            catch
+            {
+                /* best effort cleanup */
+            }
+        }
+    }
 
     private static string CreateModuleAt(string moduleRoot, string name, string version)
     {

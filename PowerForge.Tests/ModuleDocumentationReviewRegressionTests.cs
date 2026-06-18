@@ -61,6 +61,25 @@ public class ModuleDocumentationReviewRegressionTests
     }
 
     [Fact]
+    public void InstallModuleScript_Refresh_Clears_ReadOnly_Targets()
+    {
+        Assert.False(InstallModuleScriptCommand.ShouldClearReadOnlyTargetForTesting(true, OnExistsOption.Merge, force: false));
+        Assert.True(InstallModuleScriptCommand.ShouldClearReadOnlyTargetForTesting(true, OnExistsOption.Merge, force: true));
+        Assert.True(InstallModuleScriptCommand.ShouldClearReadOnlyTargetForTesting(true, OnExistsOption.Refresh, force: false));
+        Assert.True(InstallModuleScriptCommand.ShouldClearReadOnlyTargetForTesting(true, OnExistsOption.Overwrite, force: false));
+    }
+
+    [Fact]
+    public void OnExistsOption_NumericValues_RemainBackwardCompatible()
+    {
+        Assert.Equal(0, (int)OnExistsOption.Merge);
+        Assert.Equal(1, (int)OnExistsOption.Overwrite);
+        Assert.Equal(2, (int)OnExistsOption.Skip);
+        Assert.Equal(3, (int)OnExistsOption.Stop);
+        Assert.Equal(4, (int)OnExistsOption.Refresh);
+    }
+
+    [Fact]
     public void DocumentationInstaller_Refresh_OverwritesPackageFiles_AndPreservesLocalExtras()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PFDocsRefresh", System.Guid.NewGuid().ToString("N")));

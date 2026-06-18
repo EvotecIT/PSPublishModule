@@ -155,18 +155,52 @@
 
             $pattern = $raw.Trim().Replace('\', '/')
             if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
-            if ($pattern.EndsWith('/')) { $pattern = "$pattern*" }
-            $pattern = $pattern.Replace('**', '*')
-
-            if ($normalizedPath -like $pattern) { return $true }
+            if ($pattern.EndsWith('/')) { $pattern = "$pattern**" }
 
             if ($pattern.IndexOf('*') -lt 0 -and $pattern.IndexOf('?') -lt 0) {
                 if ($normalizedPath.StartsWith("$pattern/", [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
                 if ([string]::Equals($normalizedPath, $pattern, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+                continue
             }
+
+            $regex = Convert-DeliveryWildcardToRegex -Pattern $pattern
+            if ([System.Text.RegularExpressions.Regex]::IsMatch($normalizedPath, $regex, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { return $true }
         }
 
         return $false
+    }
+
+    function Convert-DeliveryWildcardToRegex {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string] $Pattern
+        )
+
+        $builder = [System.Text.StringBuilder]::new()
+        [void] $builder.Append('^')
+        for ($i = 0; $i -lt $Pattern.Length; $i++) {
+            $char = $Pattern[$i]
+            if ($char -eq '*') {
+                if (($i + 1) -lt $Pattern.Length -and $Pattern[$i + 1] -eq '*') {
+                    [void] $builder.Append('.*')
+                    $i++
+                } else {
+                    [void] $builder.Append('[^/]*')
+                }
+                continue
+            }
+
+            if ($char -eq '?') {
+                [void] $builder.Append('[^/]')
+                continue
+            }
+
+            [void] $builder.Append([System.Text.RegularExpressions.Regex]::Escape([string] $char))
+        }
+
+        [void] $builder.Append('$')
+        return $builder.ToString()
     }
 
     function Test-DeliveryPathIncluded {
