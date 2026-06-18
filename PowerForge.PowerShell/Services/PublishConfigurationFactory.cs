@@ -23,10 +23,10 @@ internal sealed class PublishConfigurationFactory
 
         var apiKeyToUse = request.ParameterSetName switch
         {
-            "ApiFromFile" => File.ReadAllText(request.FilePath).Trim(),
+            "ApiFromFile" => ReadSingleLineSecretFile(request.FilePath, nameof(request.FilePath)),
             "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
-            "JFrog" when !string.IsNullOrWhiteSpace(request.FilePath) => File.ReadAllText(request.FilePath).Trim(),
-            _ => request.ApiKey
+            "JFrog" when !string.IsNullOrWhiteSpace(request.FilePath) => ReadSingleLineSecretFile(request.FilePath, nameof(request.FilePath)),
+            _ => ValidateSingleLineSecret(request.ApiKey, nameof(PublishConfigurationRequest.ApiKey))
         };
 
         if (destination == PublishDestination.GitHub && string.IsNullOrWhiteSpace(request.UserName))
@@ -241,15 +241,39 @@ internal sealed class PublishConfigurationFactory
         string? secretEnvironmentVariable)
     {
         if (secretFileSpecified && !string.IsNullOrWhiteSpace(secretFilePath))
-            return File.ReadAllText(secretFilePath!.Trim()).Trim();
+            return ReadSingleLineSecretFile(secretFilePath!, nameof(PublishConfigurationRequest.RepositoryCredentialSecretFilePath));
 
         if (secretEnvironmentVariableSpecified && !string.IsNullOrWhiteSpace(secretEnvironmentVariable))
-            return Environment.GetEnvironmentVariable(secretEnvironmentVariable!.Trim())?.Trim() ?? string.Empty;
+            return ValidateSingleLineSecret(
+                Environment.GetEnvironmentVariable(secretEnvironmentVariable!.Trim())?.Trim() ?? string.Empty,
+                nameof(PublishConfigurationRequest.RepositoryCredentialSecretEnvironmentVariable));
 
         if (secretSpecified && !string.IsNullOrWhiteSpace(secret))
-            return secret!.Trim();
+            return ValidateSingleLineSecret(secret!.Trim(), nameof(PublishConfigurationRequest.RepositoryCredentialSecret));
 
         return string.Empty;
+    }
+
+    private static string ReadSingleLineSecretFile(string filePath, string parameterName)
+    {
+        var path = filePath.Trim();
+        var value = File.ReadAllText(path).Trim();
+        return ValidateSingleLineSecret(value, parameterName, path);
+    }
+
+    private static string ValidateSingleLineSecret(string value, string parameterName, string? path = null)
+    {
+        if (value.Contains('\r') || value.Contains('\n'))
+        {
+            var location = string.IsNullOrWhiteSpace(path)
+                ? parameterName
+                : $"{parameterName} '{path}'";
+            throw new ArgumentException(
+                $"{location} resolved to a multi-line secret. Publish API keys and repository credential secrets must be a single line; check that the path points to a secret file, not a script or configuration file.",
+                parameterName);
+        }
+
+        return value;
     }
 
     private static string? ResolveJfrogPlatformUri(string? explicitPlatformUri, string? jfrogBaseUri)
