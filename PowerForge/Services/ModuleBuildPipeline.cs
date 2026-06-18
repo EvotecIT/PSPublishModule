@@ -130,7 +130,7 @@ public sealed class ModuleBuildPipeline
             _logger,
             _manifestMutator,
             _scriptFunctionExportDetector);
-        var buildNotes = builder.BuildInPlace(new ModuleBuilder.Options
+        var buildOptions = new ModuleBuilder.Options
         {
             ProjectRoot = staging,
             ModuleName = spec.Name,
@@ -153,7 +153,9 @@ public sealed class ModuleBuildPipeline
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
             CsprojRequiredReasons = spec.RefreshManifestOnly ? Array.Empty<string>() : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
-        });
+            EmitBinaryConflictOwnerNotes = false,
+        };
+        _ = builder.BuildInPlace(buildOptions);
 
         var psd1 = Path.Combine(staging, $"{spec.Name}.psd1");
         if (!File.Exists(psd1))
@@ -184,6 +186,7 @@ public sealed class ModuleBuildPipeline
             _logger.Info("RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration.");
         }
 
+        var buildNotes = builder.AnalyzeInstalledBinaryConflicts(buildOptions);
         return new ModuleBuildResult(staging, psd1, exports, buildNotes);
     }
 

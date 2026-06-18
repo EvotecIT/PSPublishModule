@@ -119,6 +119,12 @@ public sealed class ModuleBuilder
         /// When populated and <see cref="CsprojPath"/> is empty, the builder fails instead of reusing an existing Lib payload.
         /// </summary>
         public IReadOnlyList<string> CsprojRequiredReasons { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// When true, returns binary conflict owner notes from <see cref="BuildInPlace"/>.
+        /// Pipelines that generate a bootstrapper after the in-place build can defer this check until the final staged module exists.
+        /// </summary>
+        public bool EmitBinaryConflictOwnerNotes { get; set; } = true;
     }
 
     /// <summary>
@@ -230,8 +236,6 @@ public sealed class ModuleBuilder
             }
         }
 
-        var buildNotes = WarnOnInstalledBinaryConflicts(opts);
-
         // 2) Manifest generation
         var psd1 = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1");
         // Prefer a script RootModule for compatibility; load binary via NestedModules
@@ -312,7 +316,21 @@ public sealed class ModuleBuilder
         }
 
         SetManifestExports(psd1, functions: functionsToSet, cmdlets: cmdletsToSet, aliases: aliasesToSet);
-        return buildNotes;
+        return opts.EmitBinaryConflictOwnerNotes
+            ? WarnOnInstalledBinaryConflicts(opts)
+            : Array.Empty<ModuleOwnerNote>();
+    }
+
+    internal ModuleOwnerNote[] AnalyzeInstalledBinaryConflicts(Options opts)
+    {
+        if (opts is null)
+            throw new ArgumentNullException(nameof(opts));
+        if (string.IsNullOrWhiteSpace(opts.ProjectRoot) || !Directory.Exists(opts.ProjectRoot))
+            throw new DirectoryNotFoundException($"Project root not found: {opts.ProjectRoot}");
+        if (string.IsNullOrWhiteSpace(opts.ModuleName))
+            throw new ArgumentException("ModuleName is required", nameof(opts.ModuleName));
+
+        return WarnOnInstalledBinaryConflicts(opts);
     }
 
     /// <summary>
