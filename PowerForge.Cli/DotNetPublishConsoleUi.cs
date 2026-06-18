@@ -194,6 +194,8 @@ internal static class DotNetPublishConsoleUi
             summary.AddRow("Manifest", Markup.Escape(result.ManifestJsonPath));
         if (!string.IsNullOrWhiteSpace(result.RunReportPath))
             summary.AddRow("Run report", Markup.Escape(result.RunReportPath));
+        if (!string.IsNullOrWhiteSpace(result.RunReportMarkdownPath))
+            summary.AddRow("Run report MD", Markup.Escape(result.RunReportMarkdownPath));
 
         if (!result.Succeeded && result.Failure is not null)
         {

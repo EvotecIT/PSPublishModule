@@ -431,6 +431,11 @@ public sealed class DotNetPublishServiceLifecycleOptions
     public int StopTimeoutSeconds { get; set; } = 30;
 
     /// <summary>
+    /// Optional HTTP readiness checks executed after service state verification.
+    /// </summary>
+    public DotNetPublishServiceHealthCheck[] HealthChecks { get; set; } = Array.Empty<DotNetPublishServiceHealthCheck>();
+
+    /// <summary>
     /// When true, logs intended actions without changing local services.
     /// </summary>
     public bool WhatIf { get; set; }
@@ -444,6 +449,55 @@ public sealed class DotNetPublishServiceLifecycleOptions
     /// Policy used for lifecycle command failures.
     /// </summary>
     public DotNetPublishPolicyMode OnExecutionFailure { get; set; } = DotNetPublishPolicyMode.Fail;
+}
+
+/// <summary>
+/// HTTP readiness check executed by a service lifecycle verification step.
+/// </summary>
+public sealed class DotNetPublishServiceHealthCheck
+{
+    /// <summary>
+    /// Optional check identifier used in logs and failure messages.
+    /// </summary>
+    public string? Id { get; set; }
+
+    /// <summary>
+    /// Absolute HTTP or HTTPS endpoint to poll.
+    /// Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {executablePath}.
+    /// </summary>
+    public string Uri { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Expected HTTP status code. Defaults to 200.
+    /// </summary>
+    public int ExpectedStatusCode { get; set; } = 200;
+
+    /// <summary>
+    /// Optional dot-separated JSON path to validate in the response body.
+    /// Array indexes can be expressed as property[0].
+    /// </summary>
+    public string? JsonPath { get; set; }
+
+    /// <summary>
+    /// Optional expected JSON scalar value at <see cref="JsonPath"/>.
+    /// When omitted, the check only verifies that the path exists.
+    /// </summary>
+    public string? ExpectedValue { get; set; }
+
+    /// <summary>
+    /// Maximum time in seconds to wait for the endpoint to pass.
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Delay in milliseconds between polling attempts.
+    /// </summary>
+    public int PollIntervalMilliseconds { get; set; } = 500;
+
+    /// <summary>
+    /// Policy used when the health check does not pass before timeout.
+    /// </summary>
+    public DotNetPublishPolicyMode OnFailure { get; set; } = DotNetPublishPolicyMode.Fail;
 }
 
 /// <summary>

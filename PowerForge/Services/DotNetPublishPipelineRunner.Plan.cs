@@ -220,7 +220,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 : ResolvePath(projectRoot, spec.Outputs.ChecksumsPath!),
             RunReportPath = string.IsNullOrWhiteSpace(spec.Outputs.RunReportPath)
                 ? null
-                : ResolvePath(projectRoot, spec.Outputs.RunReportPath!)
+                : ResolvePath(projectRoot, spec.Outputs.RunReportPath!),
+            RunReportMarkdownPath = string.IsNullOrWhiteSpace(spec.Outputs.RunReportMarkdownPath)
+                ? null
+                : ResolvePath(projectRoot, spec.Outputs.RunReportMarkdownPath!)
         };
 
         var benchmarkGates = BuildBenchmarkGatePlans(spec.BenchmarkGates, projectRoot);
@@ -236,6 +239,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 EnsurePathWithinRoot(projectRoot, outputs.ChecksumsPath!, "ChecksumsPath");
             if (!string.IsNullOrWhiteSpace(outputs.RunReportPath))
                 EnsurePathWithinRoot(projectRoot, outputs.RunReportPath!, "RunReportPath");
+            if (!string.IsNullOrWhiteSpace(outputs.RunReportMarkdownPath))
+                EnsurePathWithinRoot(projectRoot, outputs.RunReportMarkdownPath!, "RunReportMarkdownPath");
         }
 
         if (!spec.DotNet.AllowOutputOutsideProjectRoot)
@@ -825,7 +830,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ManifestJsonPath = outputs.ManifestJsonPath,
             ManifestTextPath = outputs.ManifestTextPath,
             ChecksumsPath = outputs.ChecksumsPath,
-            RunReportPath = outputs.RunReportPath
+            RunReportPath = outputs.RunReportPath,
+            RunReportMarkdownPath = outputs.RunReportMarkdownPath
         };
     }
 
@@ -958,6 +964,16 @@ public sealed partial class DotNetPublishPipelineRunner
             clone.Inputs.Add(inputClone);
         }
 
+        foreach (var condition in definition.LaunchConditions)
+        {
+            if (condition is null) continue;
+            clone.LaunchConditions.Add(new PowerForgeInstallerLaunchCondition
+            {
+                Condition = condition.Condition,
+                Message = condition.Message
+            });
+        }
+
         foreach (var dialog in definition.Dialogs)
         {
             if (dialog is null) continue;
@@ -1063,6 +1079,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 Description = service.Description,
                 Arguments = service.Arguments,
                 Account = service.Account,
+                AccountPropertyName = service.AccountPropertyName,
+                PasswordPropertyName = service.PasswordPropertyName,
                 Start = service.Start,
                 DelayedAutoStart = service.DelayedAutoStart,
                 ControlStart = service.ControlStart,
@@ -1521,10 +1539,29 @@ public sealed partial class DotNetPublishPipelineRunner
             Start = lifecycle.Start,
             Verify = lifecycle.Verify,
             StopTimeoutSeconds = lifecycle.StopTimeoutSeconds,
+            HealthChecks = CloneServiceHealthChecks(lifecycle.HealthChecks),
             WhatIf = lifecycle.WhatIf,
             OnUnsupportedPlatform = lifecycle.OnUnsupportedPlatform,
             OnExecutionFailure = lifecycle.OnExecutionFailure
         };
+    }
+
+    private static DotNetPublishServiceHealthCheck[] CloneServiceHealthChecks(DotNetPublishServiceHealthCheck[]? checks)
+    {
+        return (checks ?? Array.Empty<DotNetPublishServiceHealthCheck>())
+            .Where(check => check is not null)
+            .Select(check => new DotNetPublishServiceHealthCheck
+            {
+                Id = check.Id,
+                Uri = check.Uri,
+                ExpectedStatusCode = check.ExpectedStatusCode,
+                JsonPath = check.JsonPath,
+                ExpectedValue = check.ExpectedValue,
+                TimeoutSeconds = check.TimeoutSeconds,
+                PollIntervalMilliseconds = check.PollIntervalMilliseconds,
+                OnFailure = check.OnFailure
+            })
+            .ToArray();
     }
 
     private static DotNetPublishServiceRecoveryOptions? CloneServiceRecoveryOptions(DotNetPublishServiceRecoveryOptions? recovery)

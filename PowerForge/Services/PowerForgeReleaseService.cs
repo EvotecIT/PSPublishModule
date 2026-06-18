@@ -31,6 +31,9 @@ internal sealed class PowerForgeReleaseService
     private const string DefaultDotNetRunReportTemplate =
         "Artifacts/DotNetPublish/run-report.json";
 
+    private const string DefaultDotNetRunReportMarkdownTemplate =
+        "Artifacts/DotNetPublish/run-report.md";
+
     private const string DefaultMsiPrepareStagingPathTemplate =
         "Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/payload";
 
@@ -1572,7 +1575,8 @@ internal sealed class PowerForgeReleaseService
                 result.ManifestJsonPath,
                 result.ManifestTextPath,
                 result.ChecksumsPath,
-                result.RunReportPath
+                result.RunReportPath,
+                result.RunReportMarkdownPath
             }
             : Array.Empty<string?>();
 
@@ -2240,6 +2244,11 @@ internal sealed class PowerForgeReleaseService
             string.IsNullOrWhiteSpace(spec.Outputs.RunReportPath)
                 ? DefaultDotNetRunReportTemplate
                 : spec.Outputs.RunReportPath!);
+        spec.Outputs.RunReportMarkdownPath = CombineOutputRoot(
+            normalizedRoot,
+            string.IsNullOrWhiteSpace(spec.Outputs.RunReportMarkdownPath)
+                ? DefaultDotNetRunReportMarkdownTemplate
+                : spec.Outputs.RunReportMarkdownPath!);
     }
 
     private static string CombineOutputRoot(string outputRoot, string path)
@@ -2465,7 +2474,8 @@ internal sealed class PowerForgeReleaseService
                 result.DotNetTools?.ManifestJsonPath,
                 result.DotNetTools?.ManifestTextPath,
                 result.DotNetTools?.ChecksumsPath,
-                result.DotNetTools?.RunReportPath
+                result.DotNetTools?.RunReportPath,
+                result.DotNetTools?.RunReportMarkdownPath
             }
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             .Select(path => new PowerForgeReleaseAssetEntry
@@ -2971,6 +2981,7 @@ internal sealed class PowerForgeReleaseService
             tools.ManifestTextPath,
             tools.ChecksumsPath,
             tools.RunReportPath,
+            tools.RunReportMarkdownPath,
             tools.Artefacts,
             tools.MsiBuilds,
             tools.StorePackages

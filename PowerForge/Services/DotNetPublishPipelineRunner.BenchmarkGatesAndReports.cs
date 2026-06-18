@@ -245,29 +245,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 EnsurePathWithinRoot(plan.ProjectRoot, reportPath, "RunReportPath");
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(reportPath))!);
-
-            var report = new DotNetPublishRunReport
-            {
-                StartedUtc = runStartedUtc,
-                FinishedUtc = runStartedUtc + runDuration,
-                DurationMs = (long)Math.Max(0, runDuration.TotalMilliseconds),
-                Succeeded = result.Succeeded,
-                ErrorMessage = result.ErrorMessage,
-                Steps = (steps ?? Array.Empty<DotNetPublishRunReportStep>()).ToArray(),
-                Artefacts = new DotNetPublishRunReportArtefacts
-                {
-                    PublishCount = result.Artefacts?.Length ?? 0,
-                    MsiPrepareCount = result.MsiPrepares?.Length ?? 0,
-                    MsiBuildCount = result.MsiBuilds?.Length ?? 0,
-                    TotalPublishBytes = result.Artefacts?.Sum(a => a.TotalBytes) ?? 0
-                },
-                Signing = new DotNetPublishRunReportSigning
-                {
-                    PublishFilesSigned = result.Artefacts?.Sum(a => a.SignedFiles) ?? 0,
-                    MsiFilesSigned = result.MsiBuilds?.Sum(m => m.SignedFiles?.Length ?? 0) ?? 0
-                },
-                Gates = result.BenchmarkGates ?? Array.Empty<DotNetPublishBenchmarkGateResult>()
-            };
+            var report = BuildRunReport(result, steps, runStartedUtc, runDuration);
 
             var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(reportPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -278,6 +256,186 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Warn($"Failed to write run report: {reportPath}");
             return null;
         }
+    }
+
+    private string? TryWriteRunReportMarkdown(
+        DotNetPublishPlan plan,
+        DotNetPublishResult result,
+        IReadOnlyList<DotNetPublishRunReportStep> steps,
+        DateTimeOffset runStartedUtc,
+        TimeSpan runDuration)
+    {
+        if (plan is null) return null;
+        if (result is null) return null;
+        if (string.IsNullOrWhiteSpace(plan.Outputs.RunReportMarkdownPath)) return null;
+
+        var reportPath = plan.Outputs.RunReportMarkdownPath!;
+        try
+        {
+            if (!plan.AllowManifestOutsideProjectRoot)
+                EnsurePathWithinRoot(plan.ProjectRoot, reportPath, "RunReportMarkdownPath");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(reportPath))!);
+            var report = BuildRunReport(result, steps, runStartedUtc, runDuration);
+            var markdown = BuildRunReportMarkdown(report);
+            File.WriteAllText(reportPath, markdown, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            return reportPath;
+        }
+        catch
+        {
+            _logger.Warn($"Failed to write run report Markdown: {reportPath}");
+            return null;
+        }
+    }
+
+    private static DotNetPublishRunReport BuildRunReport(
+        DotNetPublishResult result,
+        IReadOnlyList<DotNetPublishRunReportStep> steps,
+        DateTimeOffset runStartedUtc,
+        TimeSpan runDuration)
+    {
+        return new DotNetPublishRunReport
+        {
+            StartedUtc = runStartedUtc,
+            FinishedUtc = runStartedUtc + runDuration,
+            DurationMs = (long)Math.Max(0, runDuration.TotalMilliseconds),
+            Succeeded = result.Succeeded,
+            ErrorMessage = result.ErrorMessage,
+            Steps = (steps ?? Array.Empty<DotNetPublishRunReportStep>()).ToArray(),
+            Artefacts = new DotNetPublishRunReportArtefacts
+            {
+                PublishCount = result.Artefacts?.Length ?? 0,
+                MsiPrepareCount = result.MsiPrepares?.Length ?? 0,
+                MsiBuildCount = result.MsiBuilds?.Length ?? 0,
+                TotalPublishBytes = result.Artefacts?.Sum(a => a.TotalBytes) ?? 0
+            },
+            Signing = new DotNetPublishRunReportSigning
+            {
+                PublishFilesSigned = result.Artefacts?.Sum(a => a.SignedFiles) ?? 0,
+                MsiFilesSigned = result.MsiBuilds?.Sum(m => m.SignedFiles?.Length ?? 0) ?? 0
+            },
+            Gates = result.BenchmarkGates ?? Array.Empty<DotNetPublishBenchmarkGateResult>()
+        };
+    }
+
+    private static string BuildRunReportMarkdown(DotNetPublishRunReport report)
+    {
+        var markdown = new StringBuilder();
+        markdown.AppendLine("# DotNet Publish Run Report");
+        markdown.AppendLine();
+        markdown.AppendLine($"- Status: {(report.Succeeded ? "Succeeded" : "Failed")}");
+        markdown.AppendLine($"- Started UTC: {report.StartedUtc:O}");
+        markdown.AppendLine($"- Finished UTC: {report.FinishedUtc:O}");
+        markdown.AppendLine($"- Duration: {FormatDuration(report.DurationMs)}");
+        if (!string.IsNullOrWhiteSpace(report.ErrorMessage))
+            markdown.AppendLine($"- Error: {EscapeMarkdownCell(report.ErrorMessage)}");
+        markdown.AppendLine();
+
+        markdown.AppendLine("## Artifacts");
+        markdown.AppendLine();
+        markdown.AppendLine("| Publish | MSI prepares | MSI builds | Signed publish files | Signed MSI files | Publish bytes |");
+        markdown.AppendLine("| ---: | ---: | ---: | ---: | ---: | ---: |");
+        markdown.AppendLine(
+            $"| {report.Artefacts.PublishCount} | {report.Artefacts.MsiPrepareCount} | {report.Artefacts.MsiBuildCount} | {report.Signing.PublishFilesSigned} | {report.Signing.MsiFilesSigned} | {report.Artefacts.TotalPublishBytes} |");
+        markdown.AppendLine();
+
+        markdown.AppendLine("## Benchmark Gates");
+        markdown.AppendLine();
+        var gates = report.Gates ?? Array.Empty<DotNetPublishBenchmarkGateResult>();
+        if (gates.Length == 0)
+        {
+            markdown.AppendLine("No benchmark gates were configured.");
+            markdown.AppendLine();
+        }
+        else
+        {
+            markdown.AppendLine("| Gate | Status | Mode | Metrics | Regressed | Baseline |");
+            markdown.AppendLine("| --- | --- | --- | ---: | ---: | --- |");
+            foreach (var gate in gates.OrderBy(g => g.GateId, StringComparer.OrdinalIgnoreCase))
+            {
+                var metrics = gate.Metrics ?? Array.Empty<DotNetPublishBenchmarkMetricResult>();
+                var regressed = metrics.Count(m => m.Regressed);
+                markdown.AppendLine(
+                    $"| {EscapeMarkdownCell(gate.GateId)} | {(gate.Passed ? "Passed" : "Failed")} | {gate.BaselineMode} | {metrics.Length} | {regressed} | {EscapeMarkdownCell(gate.BaselinePath)} |");
+            }
+
+            markdown.AppendLine();
+            foreach (var gate in gates.OrderBy(g => g.GateId, StringComparer.OrdinalIgnoreCase))
+            {
+                var metrics = gate.Metrics ?? Array.Empty<DotNetPublishBenchmarkMetricResult>();
+                if (metrics.Length == 0 && (gate.Messages?.Length ?? 0) == 0)
+                    continue;
+
+                markdown.AppendLine($"### {EscapeMarkdownHeading(gate.GateId)}");
+                markdown.AppendLine();
+                if (metrics.Length > 0)
+                {
+                    markdown.AppendLine("| Metric | Actual | Baseline | Allowed | Status |");
+                    markdown.AppendLine("| --- | ---: | ---: | ---: | --- |");
+                    foreach (var metric in metrics.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        var status = metric.Regressed
+                            ? "Regressed"
+                            : metric.MissingInSource
+                                ? "Missing in source"
+                                : metric.MissingInBaseline
+                                    ? "Missing in baseline"
+                                    : "OK";
+                        markdown.AppendLine(
+                            $"| {EscapeMarkdownCell(metric.Name)} | {FormatNullableDouble(metric.Actual)} | {FormatNullableDouble(metric.Baseline)} | {FormatNullableDouble(metric.Allowed)} | {status} |");
+                    }
+
+                    markdown.AppendLine();
+                }
+
+                foreach (var message in gate.Messages ?? Array.Empty<string>())
+                    markdown.AppendLine($"- {EscapeMarkdownCell(message)}");
+                if ((gate.Messages?.Length ?? 0) > 0)
+                    markdown.AppendLine();
+            }
+        }
+
+        markdown.AppendLine("## Steps");
+        markdown.AppendLine();
+        markdown.AppendLine("| Step | Kind | Status | Duration |");
+        markdown.AppendLine("| --- | --- | --- | ---: |");
+        foreach (var step in report.Steps ?? Array.Empty<DotNetPublishRunReportStep>())
+        {
+            markdown.AppendLine(
+                $"| {EscapeMarkdownCell(string.IsNullOrWhiteSpace(step.Title) ? step.Key : step.Title)} | {step.Kind} | {(step.Succeeded ? "Succeeded" : "Failed")} | {FormatDuration(step.DurationMs)} |");
+        }
+
+        return markdown.ToString();
+    }
+
+    private static string FormatNullableDouble(double? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+            : string.Empty;
+    }
+
+    private static string FormatDuration(long milliseconds)
+    {
+        if (milliseconds < 1000)
+            return $"{milliseconds} ms";
+
+        return TimeSpan.FromMilliseconds(milliseconds).TotalSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " s";
+    }
+
+    private static string EscapeMarkdownCell(string? value)
+    {
+        return (value ?? string.Empty)
+            .Replace("|", "\\|")
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Trim();
+    }
+
+    private static string EscapeMarkdownHeading(string? value)
+    {
+        var text = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+        return string.IsNullOrWhiteSpace(text) ? "Benchmark gate" : text.Replace("#", "\\#");
     }
 
     private static Dictionary<string, double> ReadBenchmarkBaseline(string path)

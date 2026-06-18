@@ -41,6 +41,7 @@ internal static partial class Program
                 var overrideFrameworks = ParseCsvOptionValues(subArgs, "--framework");
                 var overrideStyle = TryGetOptionValue(subArgs, "--style");
                 var overrideProfile = TryGetOptionValue(subArgs, "--profile");
+                var overrideProjectRoot = TryGetProjectRoot(subArgs);
                 var skipRestore = subArgs.Any(a => a.Equals("--skip-restore", StringComparison.OrdinalIgnoreCase));
                 var skipBuild = subArgs.Any(a => a.Equals("--skip-build", StringComparison.OrdinalIgnoreCase));
 
@@ -93,6 +94,8 @@ internal static partial class Program
                         : matrixOverrides.Styles;
 
                     var runner = new DotNetPublishPipelineRunner(cmdLogger);
+                    if (!string.IsNullOrWhiteSpace(overrideProjectRoot))
+                        spec.DotNet.ProjectRoot = Path.GetFullPath(overrideProjectRoot.Trim().Trim('"'));
                     if (!string.IsNullOrWhiteSpace(overrideProfile))
                         spec.Profile = overrideProfile.Trim();
                     if (effectiveStyles.Length > 1 && GetActiveDotNetPublishProfile(spec) is not null)
@@ -196,6 +199,8 @@ internal static partial class Program
                         cmdLogger.Info($"Checksums: {result.ChecksumsPath}");
                     if (!string.IsNullOrWhiteSpace(result.RunReportPath))
                         cmdLogger.Info($"Run report: {result.RunReportPath}");
+                    if (!string.IsNullOrWhiteSpace(result.RunReportMarkdownPath))
+                        cmdLogger.Info($"Run report Markdown: {result.RunReportMarkdownPath}");
                     foreach (var a in result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
                     {
                         if (!string.IsNullOrWhiteSpace(a.OutputDir))

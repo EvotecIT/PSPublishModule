@@ -134,7 +134,8 @@ public sealed class DotNetPublishConfigScaffolder
                 ManifestJsonPath = "Artifacts/DotNetPublish/manifest.json",
                 ManifestTextPath = "Artifacts/DotNetPublish/manifest.txt",
                 ChecksumsPath = "Artifacts/DotNetPublish/SHA256SUMS.txt",
-                RunReportPath = "Artifacts/DotNetPublish/run-report.json"
+                RunReportPath = "Artifacts/DotNetPublish/run-report.json",
+                RunReportMarkdownPath = "Artifacts/DotNetPublish/run-report.md"
             }
         };
     }

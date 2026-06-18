@@ -94,6 +94,13 @@ internal static class PowerForgeInstallerDefinitionValidator
             definition.ExecutableActions.Select(action => action.Id),
             "installer executable action ID");
         ValidateExecutableActionIds(definition);
+
+        foreach (var condition in definition.LaunchConditions)
+        {
+            Require(condition.Condition, "installer launch condition");
+            Require(condition.Message, "installer launch condition message");
+        }
+
         // Reserve the whole generated-dialog prefix case-insensitively so authored dialogs cannot
         // collide with future generated validation prompts such as PowerForgeRequiredInputDlg2.
         if (definition.Dialogs.Any(dialog =>
@@ -267,6 +274,7 @@ internal static class PowerForgeInstallerDefinitionValidator
                 Require(service.ControlStart, $"service component '{service.Id}' ControlStart");
                 Require(service.ControlStop, $"service component '{service.Id}' ControlStop");
                 Require(service.ControlRemove, $"service component '{service.Id}' ControlRemove");
+                ValidateServiceCredentialProperties(service);
                 ValidateServiceScriptInstall(service);
             }
             else if (component is PowerForgeInstallerRemoveFolderComponent removeFolder)
@@ -305,6 +313,31 @@ internal static class PowerForgeInstallerDefinitionValidator
         {
             throw new InvalidOperationException(
                 $"Service component '{service.Id}' ScriptInstall.StopDelaySeconds must be greater than or equal to 0.");
+        }
+    }
+
+    private static void ValidateServiceCredentialProperties(PowerForgeInstallerServiceComponent service)
+    {
+        if (!string.IsNullOrWhiteSpace(service.AccountPropertyName))
+        {
+            RequirePublicMsiProperty(
+                service.AccountPropertyName!.Trim(),
+                $"service component '{service.Id}' AccountPropertyName");
+        }
+
+        if (!string.IsNullOrWhiteSpace(service.PasswordPropertyName))
+        {
+            RequirePublicMsiProperty(
+                service.PasswordPropertyName!.Trim(),
+                $"service component '{service.Id}' PasswordPropertyName");
+        }
+
+        if (service.ScriptInstall is not null &&
+            (!string.IsNullOrWhiteSpace(service.AccountPropertyName) ||
+             !string.IsNullOrWhiteSpace(service.PasswordPropertyName)))
+        {
+            throw new InvalidOperationException(
+                $"Service component '{service.Id}' cannot set AccountPropertyName or PasswordPropertyName when ScriptInstall owns service registration.");
         }
     }
 

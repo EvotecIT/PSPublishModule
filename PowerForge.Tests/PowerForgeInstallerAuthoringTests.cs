@@ -52,6 +52,71 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_ModelsServiceAccountAndPasswordProperties()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "ServiceAccount",
+            PropertyName = "SERVICE_ACCOUNT",
+            Label = "Service account",
+            DefaultValue = "LocalSystem"
+        });
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "ServicePassword",
+            PropertyName = "SERVICE_PASSWORD",
+            Label = "Service password",
+            Kind = PowerForgeInstallerInputKind.Password,
+            Secure = true,
+            Hidden = true
+        });
+        definition.LaunchConditions.Add(new PowerForgeInstallerLaunchCondition
+        {
+            Condition = "SERVICE_ACCOUNT = \"\" OR SERVICE_ACCOUNT = \"LocalSystem\" OR SERVICE_PASSWORD <> \"\"",
+            Message = "Password is required when specifying a service account."
+        });
+
+        var service = definition.Components.OfType<PowerForgeInstallerServiceComponent>().Single();
+        service.AccountPropertyName = "SERVICE_ACCOUNT";
+        service.PasswordPropertyName = "SERVICE_PASSWORD";
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Descendants(Wix + "Property").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "SERVICE_ACCOUNT" &&
+            (string?)e.Attribute("Value") == "LocalSystem"));
+        Assert.NotNull(doc.Descendants(Wix + "Property").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "SERVICE_PASSWORD" &&
+            (string?)e.Attribute("Secure") == "yes" &&
+            (string?)e.Attribute("Hidden") == "yes"));
+        Assert.NotNull(doc.Descendants(Wix + "Launch").SingleOrDefault(e =>
+            (string?)e.Attribute("Condition") == "SERVICE_ACCOUNT = \"\" OR SERVICE_ACCOUNT = \"LocalSystem\" OR SERVICE_PASSWORD <> \"\"" &&
+            (string?)e.Attribute("Message") == "Password is required when specifying a service account."));
+        Assert.NotNull(doc.Descendants(Wix + "ServiceInstall").SingleOrDefault(e =>
+            (string?)e.Attribute("Name") == "TestimoX.Monitoring" &&
+            (string?)e.Attribute("Account") == "[SERVICE_ACCOUNT]" &&
+            (string?)e.Attribute("Password") == "[SERVICE_PASSWORD]"));
+    }
+
+    [Fact]
+    public void EmitSource_RejectsServiceCredentialPropertiesForScriptInstall()
+    {
+        var definition = CreateMonitoringInstaller();
+        var service = definition.Components.OfType<PowerForgeInstallerServiceComponent>().Single();
+        service.AccountPropertyName = "SERVICE_ACCOUNT";
+        service.ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+        {
+            Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\""
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("AccountPropertyName", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EmitSource_ModelsScriptServiceInstallWithImagePathPreservation()
     {
         var definition = CreateMonitoringInstaller();

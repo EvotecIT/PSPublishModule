@@ -42,6 +42,9 @@ public sealed class DotNetPublishResult
 
     /// <summary>Path to run report JSON written by the pipeline (when enabled).</summary>
     public string? RunReportPath { get; set; }
+
+    /// <summary>Path to run report Markdown written by the pipeline (when enabled).</summary>
+    public string? RunReportMarkdownPath { get; set; }
 }
 
 /// <summary>

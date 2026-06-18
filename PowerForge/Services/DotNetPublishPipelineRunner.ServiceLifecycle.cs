@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 
 namespace PowerForge;
@@ -107,7 +109,10 @@ public sealed partial class DotNetPublishPipelineRunner
             StartService(outputDir, serviceName, timeoutSeconds, lifecycle);
 
         if (lifecycle.Verify)
+        {
             VerifyService(outputDir, serviceName, lifecycle.Start, lifecycle);
+            VerifyServiceHealthChecks(serviceName, outputDir, executableFullPath, lifecycle);
+        }
     }
 
     private void ExecuteServiceLifecycleInlineBeforePublish(
@@ -194,7 +199,11 @@ public sealed partial class DotNetPublishPipelineRunner
             StartService(outputDir, serviceName, timeoutSeconds, lifecycle);
 
         if (lifecycle.Verify)
+        {
             VerifyService(outputDir, serviceName, lifecycle.Start, lifecycle);
+            var executableFullPath = ResolvePath(outputDir, package.ExecutablePath);
+            VerifyServiceHealthChecks(serviceName, outputDir, executableFullPath, lifecycle);
+        }
     }
 
     private static string ResolveServiceLifecycleName(string? targetName, string? configuredServiceName)
@@ -398,6 +407,138 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         _logger.Info($"Service lifecycle verification: '{serviceName}' state={resolvedState}");
+    }
+
+    private void VerifyServiceHealthChecks(
+        string serviceName,
+        string outputDir,
+        string executableFullPath,
+        DotNetPublishServiceLifecycleOptions lifecycle)
+    {
+        var checks = lifecycle.HealthChecks ?? Array.Empty<DotNetPublishServiceHealthCheck>();
+        if (checks.Length == 0)
+            return;
+
+        foreach (var check in checks)
+        {
+            if (check is null)
+                continue;
+
+            var label = string.IsNullOrWhiteSpace(check.Id) ? check.Uri : check.Id!;
+            var resolvedUri = ReplaceServiceLifecycleTokens(check.Uri, serviceName, outputDir, executableFullPath);
+            if (!Uri.TryCreate(resolvedUri, UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                HandlePolicy(check.OnFailure, $"Service health check '{label}' has an invalid HTTP endpoint: {resolvedUri}");
+                continue;
+            }
+
+            var timeout = TimeSpan.FromSeconds(check.TimeoutSeconds <= 0 ? 30 : check.TimeoutSeconds);
+            var pollInterval = TimeSpan.FromMilliseconds(Math.Max(100, check.PollIntervalMilliseconds));
+            var requestTimeout = TimeSpan.FromSeconds(Math.Min(Math.Max(1, timeout.TotalSeconds), 10));
+            var expectedStatusCode = check.ExpectedStatusCode <= 0 ? 200 : check.ExpectedStatusCode;
+            var sw = Stopwatch.StartNew();
+            var lastFailure = string.Empty;
+            var passed = false;
+
+            _logger.Info($"Service lifecycle health check: '{label}' -> {uri}");
+            using var client = new HttpClient();
+            client.Timeout = requestTimeout;
+            while (true)
+            {
+                try
+                {
+                    using var response = client.GetAsync(uri).GetAwaiter().GetResult();
+                    var content = response.Content is null
+                        ? string.Empty
+                        : response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+                    if ((int)response.StatusCode != expectedStatusCode)
+                    {
+                        lastFailure = $"returned HTTP {(int)response.StatusCode}, expected {expectedStatusCode}.";
+                    }
+                    else if (!TryEvaluateServiceHealthCheckContent(check, content, out lastFailure))
+                    {
+                        lastFailure ??= "response content did not satisfy the configured check.";
+                    }
+                    else
+                    {
+                        _logger.Info($"Service lifecycle health check passed: '{label}'");
+                        passed = true;
+                        break;
+                    }
+                }
+                catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException || ex is InvalidOperationException || ex is JsonException)
+                {
+                    lastFailure = ex.Message;
+                }
+
+                if (sw.Elapsed >= timeout)
+                    break;
+
+                Thread.Sleep(pollInterval);
+            }
+
+            if (!passed)
+            {
+                HandlePolicy(
+                    check.OnFailure,
+                    $"Service health check '{label}' did not pass within {timeout.TotalSeconds:0.#}s. Last failure: {lastFailure}");
+            }
+        }
+    }
+
+    private static bool TryEvaluateServiceHealthCheckContent(
+        DotNetPublishServiceHealthCheck check,
+        string content,
+        out string? failure)
+    {
+        failure = null;
+        if (string.IsNullOrWhiteSpace(check.JsonPath))
+            return true;
+
+        using var json = JsonDocument.Parse(string.IsNullOrWhiteSpace(content) ? "{}" : content);
+        if (!TryResolveJsonPath(json.RootElement, check.JsonPath!, out var value))
+        {
+            failure = $"JSON path '{check.JsonPath}' was not found.";
+            return false;
+        }
+
+        if (check.ExpectedValue is null)
+            return true;
+
+        var actual = ConvertJsonScalarToString(value);
+        if (string.Equals(actual, check.ExpectedValue, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        failure = $"JSON path '{check.JsonPath}' value was '{actual}', expected '{check.ExpectedValue}'.";
+        return false;
+    }
+
+    private static string ConvertJsonScalarToString(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? string.Empty,
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.Null => string.Empty,
+            _ => value.GetRawText()
+        };
+    }
+
+    private static string ReplaceServiceLifecycleTokens(
+        string? value,
+        string serviceName,
+        string outputDir,
+        string executableFullPath)
+    {
+        var resolved = value ?? string.Empty;
+        resolved = ReplaceOrdinalIgnoreCase(resolved, "{serviceName}", serviceName ?? string.Empty);
+        resolved = ReplaceOrdinalIgnoreCase(resolved, "{outputDir}", outputDir ?? string.Empty);
+        resolved = ReplaceOrdinalIgnoreCase(resolved, "{executablePath}", executableFullPath ?? string.Empty);
+        return resolved;
     }
 
     private static bool WaitForServiceState(string workingDir, string serviceName, string expectedState, TimeSpan timeout)

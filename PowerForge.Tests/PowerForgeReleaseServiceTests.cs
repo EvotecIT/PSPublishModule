@@ -3455,6 +3455,7 @@ public sealed class PowerForgeReleaseServiceTests
                 (installer.StagingPath ?? string.Empty).Replace('\\', '/'));
             Assert.Equal(Path.Combine(root, "CustomOutput", "Artifacts", "DotNetPublish", "manifest.json"), plan.Outputs.ManifestJsonPath);
             Assert.Equal(Path.Combine(root, "CustomOutput", "Artifacts", "DotNetPublish", "run-report.json"), plan.Outputs.RunReportPath);
+            Assert.Equal(Path.Combine(root, "CustomOutput", "Artifacts", "DotNetPublish", "run-report.md"), plan.Outputs.RunReportMarkdownPath);
         }
         finally
         {

@@ -46,6 +46,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("DowngradeErrorMessage", definition.Product.DowngradeErrorMessage)),
             new XElement(WixNamespace + "MediaTemplate", new XAttribute("EmbedCab", "yes")));
 
+        EmitLaunchConditions(package, definition);
         EmitProperties(package, definition);
         EmitLicenseAgreement(package, definition);
         EmitExitLaunchAction(package, definition);
@@ -178,6 +179,17 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             }
 
         package.Add(property);
+        }
+    }
+
+    private static void EmitLaunchConditions(XElement package, PowerForgeInstallerDefinition definition)
+    {
+        foreach (var condition in definition.LaunchConditions)
+        {
+            package.Add(new XElement(
+                WixNamespace + "Launch",
+                new XAttribute("Condition", condition.Condition),
+                new XAttribute("Message", condition.Message)));
         }
     }
 
@@ -919,13 +931,33 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XAttribute("Type", "ownProcess"),
             new XAttribute("ErrorControl", "normal"),
             new XAttribute("Vital", "yes"));
-        if (!IsLocalSystemAccount(service.Account))
+        var accountValue = ResolveServicePropertyValue(service.AccountPropertyName);
+        if (!string.IsNullOrWhiteSpace(accountValue))
+        {
+            serviceInstall.Add(new XAttribute("Account", accountValue!));
+        }
+        else if (!IsLocalSystemAccount(service.Account))
+        {
             serviceInstall.Add(new XAttribute("Account", service.Account));
+        }
+
+        var passwordValue = ResolveServicePropertyValue(service.PasswordPropertyName);
+        if (!string.IsNullOrWhiteSpace(passwordValue))
+            serviceInstall.Add(new XAttribute("Password", passwordValue!));
         if (!string.IsNullOrWhiteSpace(service.Description))
             serviceInstall.Add(new XAttribute("Description", service.Description!));
         if (!string.IsNullOrWhiteSpace(service.Arguments))
             serviceInstall.Add(new XAttribute("Arguments", service.Arguments!));
         return serviceInstall;
+    }
+
+    private static string? ResolveServicePropertyValue(string? propertyName)
+    {
+        var trimmed = propertyName?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+
+        return "[" + trimmed + "]";
     }
 
     private static bool IsLocalSystemAccount(string? account)
