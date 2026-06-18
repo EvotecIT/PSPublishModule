@@ -47,6 +47,9 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>Credential used for private version sources.</summary>
     public RepositoryCredential? VersionSourceCredential { get; set; }
 
+    /// <summary>Credentials scoped to individual private version sources.</summary>
+    public Dictionary<string, RepositoryCredential>? VersionSourceCredentials { get; set; }
+
     /// <summary>Whether to include prerelease versions during version resolution.</summary>
     public bool IncludePrerelease { get; set; }
 

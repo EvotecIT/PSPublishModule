@@ -35,6 +35,17 @@ public sealed class NuGetPackageVersionResolver
         IReadOnlyList<string>? sources,
         RepositoryCredential? credential,
         bool includePrerelease)
+        => ResolveLatest(packageId, sources, credential, credentialsBySource: null, includePrerelease);
+
+    /// <summary>
+    /// Resolves the latest version from the provided sources with optional source-scoped credentials.
+    /// </summary>
+    public Version? ResolveLatest(
+        string packageId,
+        IReadOnlyList<string>? sources,
+        RepositoryCredential? credential,
+        IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource,
+        bool includePrerelease)
     {
         if (string.IsNullOrWhiteSpace(packageId)) return null;
 
@@ -51,10 +62,11 @@ public sealed class NuGetPackageVersionResolver
         foreach (var source in normalizedSources)
         {
             Version? candidate = null;
+            var sourceCredential = ResolveCredentialForSource(source, credentialsBySource) ?? credential;
             if (IsLocalPath(source))
                 candidate = ResolveFromLocalPath(packageId, source, includePrerelease);
             else
-                candidate = ResolveFromV3Source(packageId, source, credential, includePrerelease);
+                candidate = ResolveFromV3Source(packageId, source, sourceCredential, includePrerelease);
 
             if (candidate is null) continue;
             if (latest is null || candidate > latest)
@@ -62,6 +74,31 @@ public sealed class NuGetPackageVersionResolver
         }
 
         return latest;
+    }
+
+    private static RepositoryCredential? ResolveCredentialForSource(
+        string source,
+        IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource)
+    {
+        if (credentialsBySource is null || credentialsBySource.Count == 0)
+            return null;
+
+        var normalized = source.Trim();
+        if (credentialsBySource.TryGetValue(normalized, out var credential))
+            return credential;
+
+        var trimmed = normalized.TrimEnd('/');
+        if (credentialsBySource.TryGetValue(trimmed, out credential))
+            return credential;
+
+        if (normalized.EndsWith("/index.json", StringComparison.OrdinalIgnoreCase))
+        {
+            var withoutIndex = normalized.Substring(0, normalized.Length - "/index.json".Length).TrimEnd('/');
+            if (credentialsBySource.TryGetValue(withoutIndex, out credential))
+                return credential;
+        }
+
+        return null;
     }
 
     private static bool IsLocalPath(string source)

@@ -50,6 +50,41 @@ public sealed class ProjectBuildPublishHostServiceTests
     }
 
     [Fact]
+    public void LoadConfiguration_ResolvesGitHubPackagesPublishSourceAndToken()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+        var configPath = Path.Combine(buildDirectory, "project.build.json");
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "PublishNuget": true,
+              "UseGitHubPackages": true,
+              "GitHubPackagesOwner": "EvotecIT",
+              "GitHubAccessTokenEnvName": "PFGH_PACKAGES_TOKEN"
+            }
+            """);
+
+        try
+        {
+            using var _ = new EnvironmentScope()
+                .Set("PFGH_PACKAGES_TOKEN", "github-packages-token");
+
+            var configuration = new ProjectBuildPublishHostService().LoadConfiguration(configPath);
+
+            Assert.True(configuration.PublishNuget);
+            Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", configuration.PublishSource);
+            Assert.Equal("github-packages-token", configuration.PublishApiKey);
+            Assert.Equal("github-packages-token", configuration.GitHubToken);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void PublishGitHub_MapsHostConfigurationIntoSharedRequest()
     {
         ProjectBuildGitHubPublishRequest? captured = null;

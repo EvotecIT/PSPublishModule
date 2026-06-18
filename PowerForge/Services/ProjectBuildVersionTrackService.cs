@@ -20,13 +20,26 @@ internal sealed class ProjectBuildVersionTrackService
     public Dictionary<string, string>? ResolveExpectedVersionMap(
         ProjectBuildConfiguration config,
         RepositoryCredential? credential)
+        => ResolveExpectedVersionMap(config, config.NugetSource, credential);
+
+    public Dictionary<string, string>? ResolveExpectedVersionMap(
+        ProjectBuildConfiguration config,
+        IReadOnlyList<string>? defaultSources,
+        RepositoryCredential? credential)
+        => ResolveExpectedVersionMap(config, defaultSources, credential, credentialsBySource: null);
+
+    public Dictionary<string, string>? ResolveExpectedVersionMap(
+        ProjectBuildConfiguration config,
+        IReadOnlyList<string>? defaultSources,
+        RepositoryCredential? credential,
+        IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource)
     {
         if (config is null)
             throw new ArgumentNullException(nameof(config));
 
         var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var entry in ExpandTracks(config.VersionTracks, config.ExpectedVersion, config.NugetSource, credential, config.IncludePrerelease))
+        foreach (var entry in ExpandTracks(config.VersionTracks, config.ExpectedVersion, defaultSources, credential, credentialsBySource, config.IncludePrerelease))
             resolved[entry.Key] = entry.Value;
 
         var explicitMap = config.ExpectedVersionMap;
@@ -49,6 +62,7 @@ internal sealed class ProjectBuildVersionTrackService
         string? defaultExpectedVersion,
         IReadOnlyList<string>? defaultSources,
         RepositoryCredential? credential,
+        IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource,
         bool defaultIncludePrerelease)
     {
         if (tracks is null || tracks.Count == 0)
@@ -62,7 +76,7 @@ internal sealed class ProjectBuildVersionTrackService
             if (string.IsNullOrWhiteSpace(expectedVersion))
                 throw new ArgumentException($"VersionTracks['{trackName}'] must define ExpectedVersion or rely on a non-empty top-level ExpectedVersion.", nameof(tracks));
 
-            var resolvedVersion = ResolveTrackVersion(trackName, track, expectedVersion!, defaultSources, credential, defaultIncludePrerelease);
+            var resolvedVersion = ResolveTrackVersion(trackName, track, expectedVersion!, defaultSources, credential, credentialsBySource, defaultIncludePrerelease);
             foreach (var project in ResolveProjects(trackName, track))
                 yield return new KeyValuePair<string, string>(project, resolvedVersion);
         }
@@ -74,6 +88,7 @@ internal sealed class ProjectBuildVersionTrackService
         string expectedVersion,
         IReadOnlyList<string>? defaultSources,
         RepositoryCredential? credential,
+        IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource,
         bool defaultIncludePrerelease)
     {
         if (Version.TryParse(expectedVersion, out var exact))
@@ -90,7 +105,7 @@ internal sealed class ProjectBuildVersionTrackService
             .ToArray();
 
         var includePrerelease = track.IncludePrerelease ?? defaultIncludePrerelease;
-        var current = _resolver.ResolveLatest(anchorPackageId, sources, credential, includePrerelease);
+        var current = _resolver.ResolveLatest(anchorPackageId, sources, credential, credentialsBySource, includePrerelease);
         if (current is null)
             _logger.Info($"Version track '{trackName}' could not resolve an existing version for anchor '{anchorPackageId}'. Using the X-pattern baseline.");
 

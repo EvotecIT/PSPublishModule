@@ -229,7 +229,7 @@ internal sealed class ProjectBuildSupportService
         string? gitHubRepositoryName)
     {
         if (publishNuget && string.IsNullOrWhiteSpace(publishApiKey))
-            return "PublishNuget is enabled but no PublishApiKey was resolved (use PublishApiKey, PublishApiKeyFilePath, or PublishApiKeyEnvName).";
+            return "PublishNuget is enabled but no PublishApiKey was resolved (use PublishApiKey, PublishApiKeyFilePath, PublishApiKeyEnvName, or GitHubAccessToken for GitHub Packages).";
 
         if (publishGitHub && !createReleaseZip)
             return "PublishGitHub is enabled but CreateReleaseZip is false.";

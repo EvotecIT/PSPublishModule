@@ -71,31 +71,16 @@ internal sealed class ProjectBuildPreparationService
         if (string.IsNullOrWhiteSpace(context.ReleaseZipOutputPath) && !string.IsNullOrWhiteSpace(context.StagingPath))
             context.ReleaseZipOutputPath = Path.Combine(context.StagingPath, "releases");
 
-        var nugetCredentialSecret = ProjectBuildSupportService.ResolveSecret(
-            config.NugetCredentialSecret,
-            config.NugetCredentialSecretFilePath,
-            config.NugetCredentialSecretEnvName,
-            configDir);
-        var nugetUser = string.IsNullOrWhiteSpace(config.NugetCredentialUserName) ? null : config.NugetCredentialUserName!.Trim();
-        var nugetCredential = (!string.IsNullOrWhiteSpace(nugetUser) || !string.IsNullOrWhiteSpace(nugetCredentialSecret))
-            ? new RepositoryCredential
-            {
-                UserName = nugetUser,
-                Secret = nugetCredentialSecret
-            }
-            : null;
-        var expectedVersionMap = new ProjectBuildVersionTrackService(_logger).ResolveExpectedVersionMap(config, nugetCredential);
+        var feed = ProjectBuildPackageFeedResolver.Resolve(config, configDir);
+        var nugetCredential = feed.VersionSourceCredential;
+        var expectedVersionMap = new ProjectBuildVersionTrackService(_logger).ResolveExpectedVersionMap(
+            config,
+            feed.VersionSources,
+            nugetCredential,
+            feed.VersionSourceCredentials);
 
-        context.PublishApiKey = ProjectBuildSupportService.ResolveSecret(
-            config.PublishApiKey,
-            config.PublishApiKeyFilePath,
-            config.PublishApiKeyEnvName,
-            configDir);
-        context.GitHubToken = ProjectBuildSupportService.ResolveSecret(
-            config.GitHubAccessToken,
-            config.GitHubAccessTokenFilePath,
-            config.GitHubAccessTokenEnvName,
-            configDir);
+        context.PublishApiKey = feed.PublishApiKey;
+        context.GitHubToken = feed.GitHubToken;
 
         var packStrategy = ProjectBuildSupportService.ParsePackStrategy(config.PackStrategy);
         if (!ProjectBuildSupportService.IsKnownPackStrategy(config.PackStrategy))
@@ -111,8 +96,9 @@ internal sealed class ProjectBuildPreparationService
             IncludeProjects = config.IncludeProjects,
             ExcludeProjects = config.ExcludeProjects,
             ExcludeDirectories = config.ExcludeDirectories,
-            VersionSources = config.NugetSource,
+            VersionSources = feed.VersionSources,
             VersionSourceCredential = nugetCredential,
+            VersionSourceCredentials = feed.VersionSourceCredentials,
             IncludePrerelease = config.IncludePrerelease,
             Configuration = string.IsNullOrWhiteSpace(config.Configuration) ? "Release" : config.Configuration!,
             OutputPath = context.OutputPath,
@@ -124,7 +110,7 @@ internal sealed class ProjectBuildPreparationService
             Pack = context.Build || context.PublishNuget || context.PublishGitHub,
             CreateReleaseZip = context.CreateReleaseZip,
             Publish = context.PublishNuget,
-            PublishSource = config.PublishSource,
+            PublishSource = feed.PublishSource,
             PublishApiKey = context.PublishApiKey,
             SkipDuplicate = config.SkipDuplicate ?? true,
             PublishFailFast = config.PublishFailFast ?? true,

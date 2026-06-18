@@ -73,6 +73,8 @@ public sealed partial class ModulePipelinePackageBuildTests
                             Build = true,
                             PublishNuget = false,
                             PublishGitHub = false,
+                            UseGitHubPackages = true,
+                            GitHubPackagesOwner = "EvotecIT",
                             GitHubIncludeProjectNameInTag = false
                         }
                     }
@@ -97,6 +99,8 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.True(calls[1].Request.Build);
             Assert.False(calls[1].Request.PublishNuget);
             Assert.False(calls[1].Request.PublishGitHub);
+            Assert.True(inlineConfiguration.UseGitHubPackages);
+            Assert.Equal("EvotecIT", inlineConfiguration.GitHubPackagesOwner);
             Assert.False(inlineConfiguration.GitHubIncludeProjectNameInTag);
 
             var projectPackageIndex = reporter.StartedKeys.IndexOf("package:project:01");

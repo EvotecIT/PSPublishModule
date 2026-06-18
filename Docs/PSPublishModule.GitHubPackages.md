@@ -45,6 +45,35 @@ Publish-NugetPackage -Path .\Artifacts\Packages -ProfileName LicensingGitHub -Sk
 `Publish-NugetPackage` uses the supplied `-ApiKey` when provided. For
 GitHub Packages profiles, it can also use `GITHUB_TOKEN` or `GH_TOKEN`.
 
+## Project Build Publish
+
+For repository project builds, prefer config over repo-local authentication
+helpers. `UseGitHubPackages` resolves both version lookup and package publish
+to the organization feed:
+
+```json
+{
+  "RootPath": "..",
+  "IncludeProjects": [ "ComputerX", "ADPlayground.Monitoring" ],
+  "UseGitHubPackages": true,
+  "GitHubPackagesOwner": "EvotecIT",
+  "GitHubAccessTokenEnvName": "GITHUB_TOKEN",
+  "Build": true,
+  "PublishNuget": true
+}
+```
+
+When `GitHubPackagesOwner` is omitted, PowerForge uses `GitHubUsername`. The
+resolved feed is `https://nuget.pkg.github.com/<owner>/index.json`. The GitHub
+token is reused as the `dotnet nuget push` API key unless a dedicated
+`PublishApiKey`, `PublishApiKeyFilePath`, or `PublishApiKeyEnvName` is supplied.
+
+This is the migration path for repositories such as TestimoX that currently
+carry repo-local GitHub Packages auth/test scripts. Keep the repo wrapper focused
+on invoking PowerForge, move feed ownership into `project.build.json`, and pass
+the token through the existing GitHub token or package-token environment
+variable.
+
 ## Consumer CI Restore
 
 Consumer repositories should add the GitHub Packages source before `dotnet

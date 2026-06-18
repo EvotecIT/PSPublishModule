@@ -142,6 +142,8 @@ public sealed class PowerForgeProjectCmdletTests
             })
             .AddParameter("BuildBeforeModule")
             .AddParameter("PublishNuget", false)
+            .AddParameter("UseGitHubPackages")
+            .AddParameter("GitHubPackagesOwner", "EvotecIT")
             .AddParameter("GitHubIncludeProjectNameInTag", false);
 
         var results = ps.Invoke();
@@ -152,6 +154,8 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Equal("2.0.X", segment.Configuration.ExpectedVersionMap?["HtmlTinkerX"]);
         Assert.True(segment.Configuration.BuildBeforeModule);
         Assert.False(segment.Configuration.PublishNuget);
+        Assert.True(segment.Configuration.UseGitHubPackages);
+        Assert.Equal("EvotecIT", segment.Configuration.GitHubPackagesOwner);
         Assert.False(segment.Configuration.GitHubIncludeProjectNameInTag);
         Assert.NotNull(segment.Configuration.VersionTracks);
         var track = segment.Configuration.VersionTracks!["Core"];

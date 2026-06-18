@@ -69,6 +69,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 packageId: string.IsNullOrWhiteSpace(project.PackageId) ? project.ProjectName : project.PackageId,
                 sources: versionSources,
                 credential: spec.VersionSourceCredential,
+                credentialsBySource: spec.VersionSourceCredentials,
                 includePrerelease: spec.IncludePrerelease);
 
             if (latest is not null && Version.TryParse(project.NewVersion, out var target))
