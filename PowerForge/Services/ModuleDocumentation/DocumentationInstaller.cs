@@ -68,6 +68,7 @@ internal sealed class DocumentationInstaller
                     PrepareDirectoryDeleteTarget(dest, force);
                     Directory.Delete(dest, true);
                     break;
+                case OnExistsOption.Refresh:
                 case OnExistsOption.Merge:
                     // keep existing, merge below
                     break;
@@ -77,7 +78,7 @@ internal sealed class DocumentationInstaller
         PathHelper.EnsureDirectory(dest);
         if (internals != null)
         {
-            CopyTree(internals, dest, overwrite: force);
+            CopyTree(internals, dest, overwrite: force || onExists == OnExistsOption.Refresh);
         }
         else
         {
@@ -85,16 +86,16 @@ internal sealed class DocumentationInstaller
         }
 
         // Copy selected root files
-        TryCopyIfMatch(root, "README*", dest, force);
-        TryCopyIfMatch(root, "CHANGELOG*", dest, force);
+        TryCopyIfMatch(root, "README*", dest, force, onExists == OnExistsOption.Refresh);
+        TryCopyIfMatch(root, "CHANGELOG*", dest, force, onExists == OnExistsOption.Refresh);
         // Normalize license name if present
         var lic = new DirectoryInfo(root).GetFiles("LICENSE*").FirstOrDefault();
         if (lic != null)
         {
             var licTarget = Path.Combine(dest, "license.txt");
-            if (!(File.Exists(licTarget) && !force))
+            if (!(File.Exists(licTarget) && !force && onExists != OnExistsOption.Refresh))
             {
-                PrepareOverwriteTarget(licTarget, force);
+                PrepareOverwriteTarget(licTarget, force || onExists == OnExistsOption.Refresh);
                 lic.CopyTo(licTarget, overwrite: true);
             }
         }
@@ -176,14 +177,14 @@ internal sealed class DocumentationInstaller
         }
     }
 
-    private static void TryCopyIfMatch(string root, string pattern, string dest, bool force)
+    private static void TryCopyIfMatch(string root, string pattern, string dest, bool force, bool refresh)
     {
         var di = new DirectoryInfo(root);
         foreach (var f in di.GetFiles(pattern))
         {
             var target = Path.Combine(dest, f.Name);
-            if (File.Exists(target) && !force) continue; // keep existing unless -Force
-            PrepareOverwriteTarget(target, force);
+            if (File.Exists(target) && !force && !refresh) continue; // keep existing unless -Force or refresh
+            PrepareOverwriteTarget(target, force || refresh);
             f.CopyTo(target, overwrite: true);
         }
     }

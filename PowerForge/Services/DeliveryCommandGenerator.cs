@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -55,6 +56,10 @@ public sealed class DeliveryCommandGenerator
             if (string.Equals(updateName, installName, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.Warn($"Delivery update command '{updateName}' matches install command; skipping update command generation.");
+            }
+            else if (ExistingInstallCommandRejectsRefresh(publicFolder, installName))
+            {
+                _logger.Warn($"Delivery update command '{updateName}' was not generated because existing install command '{installName}' does not support OnExists=Refresh.");
             }
             else
             {
@@ -113,6 +118,33 @@ public sealed class DeliveryCommandGenerator
     private static string EscapeSingleQuotes(string value)
         => (value ?? string.Empty).Replace("'", "''");
 
+    private static bool ExistingInstallCommandRejectsRefresh(string publicFolder, string installCommandName)
+    {
+        var scriptPath = Path.Combine(publicFolder, installCommandName + ".ps1");
+        if (!File.Exists(scriptPath))
+            return false;
+
+        var content = File.ReadAllText(scriptPath);
+        var validateSets = Regex.Matches(content, @"\[ValidateSet\s*\((?<values>[^)]*)\)\]", RegexOptions.IgnoreCase);
+        foreach (Match validateSet in validateSets)
+        {
+            var values = validateSet.Groups["values"].Value;
+            var hasOnExistsValues =
+                ContainsQuotedToken(values, "Merge") &&
+                ContainsQuotedToken(values, "Overwrite") &&
+                ContainsQuotedToken(values, "Skip") &&
+                ContainsQuotedToken(values, "Stop");
+
+            if (hasOnExistsValues)
+                return !ContainsQuotedToken(values, "Refresh");
+        }
+
+        return false;
+    }
+
+    private static bool ContainsQuotedToken(string value, string token)
+        => Regex.IsMatch(value, $@"(?<!\w)['""]{Regex.Escape(token)}['""](?!\w)", RegexOptions.IgnoreCase);
+
     private static string BuildInstallScript(
         string commandName,
         string moduleName,
@@ -122,6 +154,8 @@ public sealed class DeliveryCommandGenerator
         var includeRootReadme = delivery.IncludeRootReadme ? "$true" : "$false";
         var includeRootChangelog = delivery.IncludeRootChangelog ? "$true" : "$false";
         var includeRootLicense = delivery.IncludeRootLicense ? "$true" : "$false";
+        var includePaths = BuildPowerShellStringArrayLiteral(delivery.IncludePaths);
+        var excludePaths = BuildPowerShellStringArrayLiteral(delivery.ExcludePaths);
         var preservePaths = BuildPowerShellStringArrayLiteral(delivery.PreservePaths);
         var overwritePaths = BuildPowerShellStringArrayLiteral(delivery.OverwritePaths);
 
@@ -137,6 +171,8 @@ public sealed class DeliveryCommandGenerator
             ["IncludeRootReadme"] = includeRootReadme,
             ["IncludeRootChangelog"] = includeRootChangelog,
             ["IncludeRootLicense"] = includeRootLicense,
+            ["IncludePathsArray"] = includePaths,
+            ["ExcludePathsArray"] = excludePaths,
             ["PreservePathsArray"] = preservePaths,
             ["OverwritePathsArray"] = overwritePaths
         };

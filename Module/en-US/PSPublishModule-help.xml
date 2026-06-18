@@ -8448,6 +8448,7 @@ into PSModulePath unless the chosen path is already part of PSModulePath.</maml:
           <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -8541,6 +8542,7 @@ into PSModulePath unless the chosen path is already part of PSModulePath.</maml:
           <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -8646,6 +8648,7 @@ into PSModulePath unless the chosen path is already part of PSModulePath.</maml:
         <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -8726,12 +8729,12 @@ System.Management.Automation.PSObject</maml:name>
       <command:noun>ModuleDocumentation</command:noun>
       <maml:description>
         <maml:para>Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.</maml:para>
-        <maml:para>Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. When successful, returns the destination path.</maml:para>
+        <maml:para>Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, refresh, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. The Refresh mode overwrites package files while keeping local files that are not part of the package. When successful, returns the destination path.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
       <maml:para>Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.</maml:para>
-      <maml:para>Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. When successful, returns the destination path.</maml:para>
+      <maml:para>Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, refresh, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. The Refresh mode overwrites package files while keeping local files that are not part of the package. When successful, returns the destination path.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="ByName">
@@ -8816,11 +8819,12 @@ System.Management.Automation.PSObject</maml:name>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>OnExists</maml:name>
           <maml:description>
-            <maml:para>Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used.</maml:para>
+            <maml:para>Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used. Refresh overwrites package files without deleting unrelated local files.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -8950,11 +8954,12 @@ System.Management.Automation.PSObject</maml:name>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>OnExists</maml:name>
           <maml:description>
-            <maml:para>Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used.</maml:para>
+            <maml:para>Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used. Refresh overwrites package files without deleting unrelated local files.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -9096,11 +9101,12 @@ System.Management.Automation.PSObject</maml:name>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>OnExists</maml:name>
         <maml:description>
-          <maml:para>Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used.</maml:para>
+          <maml:para>Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used. Refresh overwrites package files without deleting unrelated local files.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -9327,6 +9333,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -9456,6 +9463,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -9597,6 +9605,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
         <command:parameterValue required="false" variableLength="false">OnExistsOption</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Merge</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Refresh</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Overwrite</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
@@ -23417,8 +23426,10 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
       <maml:para>Delivery configuration is used to bundle “internals” (docs, examples, tools, configuration files) into a module and optionally&#xD;
 generate public helper commands (Install-&lt;ModuleName&gt; / Update-&lt;ModuleName&gt;) that can copy these files to a target folder.</maml:para>
       <maml:para>This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.</maml:para>
-      <maml:para>Merge behavior for generated delivery commands can be fine-tuned with PreservePaths and&#xD;
-OverwritePaths so selected relative paths keep local changes or are refreshed during updates.</maml:para>
+      <maml:para>Generated install helpers default to merge behavior. Generated update helpers default to refresh behavior, which&#xD;
+overwrites package files while keeping local files that are not part of the package. Use IncludePaths&#xD;
+and ExcludePaths to scope which package files are managed, then use PreservePaths&#xD;
+and OverwritePaths to fine-tune collision behavior for managed relative paths.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -23465,6 +23476,19 @@ OverwritePaths so selected relative paths keep local changes or are refreshed du
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ExcludePaths</maml:name>
+          <maml:description>
+            <maml:para>Optional wildcard patterns (relative to InternalsPath) that generated Install-/Update- helpers should not copy, refresh, or consider package-owned.&#xD;
+Exclusions win over IncludePaths. Use this for local-only or user-owned package-adjacent paths such as Config/local/** or Config/config.json.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>GenerateInstallCommand</maml:name>
           <maml:description>
@@ -23480,7 +23504,7 @@ OverwritePaths so selected relative paths keep local changes or are refreshed du
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>GenerateUpdateCommand</maml:name>
           <maml:description>
-            <maml:para>When set, generates a public Update-&lt;ModuleName&gt; helper function during build that delegates to the install command.</maml:para>
+            <maml:para>When set, generates a public Update-&lt;ModuleName&gt; helper function during build that delegates to the install command in refresh mode by default.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -23497,6 +23521,20 @@ OverwritePaths so selected relative paths keep local changes or are refreshed du
           <command:parameterValue required="false" variableLength="false">DeliveryImportantLink[]</command:parameterValue>
           <dev:type>
             <maml:name>DeliveryImportantLink[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludePaths</maml:name>
+          <maml:description>
+            <maml:para>Optional wildcard patterns (relative to InternalsPath) that define which package files generated Install-/Update- helpers manage.&#xD;
+Use this when a module ships mixed content but only selected folders should be copied or refreshed, for example Config/*.sample.json and Scripts/*.ps1.&#xD;
+When omitted, all files under InternalsPath are managed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -23619,7 +23657,7 @@ Example: Artefacts/**.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PreservePaths</maml:name>
           <maml:description>
-            <maml:para>Optional wildcard patterns (relative to Internals) that should be preserved during merge installs by generated Install-/Update- helpers.&#xD;
+            <maml:para>Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs by generated Install-/Update- helpers.&#xD;
 Example: Config/**.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -23764,6 +23802,19 @@ Example: Config/**.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ExcludePaths</maml:name>
+        <maml:description>
+          <maml:para>Optional wildcard patterns (relative to InternalsPath) that generated Install-/Update- helpers should not copy, refresh, or consider package-owned.&#xD;
+Exclusions win over IncludePaths. Use this for local-only or user-owned package-adjacent paths such as Config/local/** or Config/config.json.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>GenerateInstallCommand</maml:name>
         <maml:description>
@@ -23779,7 +23830,7 @@ Example: Config/**.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>GenerateUpdateCommand</maml:name>
         <maml:description>
-          <maml:para>When set, generates a public Update-&lt;ModuleName&gt; helper function during build that delegates to the install command.</maml:para>
+          <maml:para>When set, generates a public Update-&lt;ModuleName&gt; helper function during build that delegates to the install command in refresh mode by default.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -23796,6 +23847,20 @@ Example: Config/**.</maml:para>
         <command:parameterValue required="false" variableLength="false">DeliveryImportantLink[]</command:parameterValue>
         <dev:type>
           <maml:name>DeliveryImportantLink[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludePaths</maml:name>
+        <maml:description>
+          <maml:para>Optional wildcard patterns (relative to InternalsPath) that define which package files generated Install-/Update- helpers manage.&#xD;
+Use this when a module ships mixed content but only selected folders should be copied or refreshed, for example Config/*.sample.json and Scripts/*.ps1.&#xD;
+When omitted, all files under InternalsPath are managed.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -23918,7 +23983,7 @@ Example: Artefacts/**.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>PreservePaths</maml:name>
         <maml:description>
-          <maml:para>Optional wildcard patterns (relative to Internals) that should be preserved during merge installs by generated Install-/Update- helpers.&#xD;
+          <maml:para>Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs by generated Install-/Update- helpers.&#xD;
 Example: Config/**.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -24064,9 +24129,9 @@ Example: Config/**.</maml:para>
         <maml:introduction>
           <maml:para>PS&gt; </maml:para>
         </maml:introduction>
-        <dev:code>New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'</dev:code>
+        <dev:code>New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -IncludePaths 'Config/**','Scripts/*.ps1' -ExcludePaths 'Config/local/**' -PreservePaths 'Config/config.json' -OverwritePaths 'Bin/**','Templates/**'</dev:code>
         <dev:remarks>
-          <maml:para>Generates custom delivery helpers and preserves selected local files while refreshing binaries and templates during merge installs.</maml:para>
+          <maml:para>Generates custom delivery helpers, manages only selected package files, excludes local-only configuration paths, preserves the active configuration during refresh updates, and can refresh selected paths during merge installs.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

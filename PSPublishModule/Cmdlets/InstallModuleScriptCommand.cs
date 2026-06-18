@@ -172,6 +172,7 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
                         }
                         WriteVerbose($"Refreshing existing (merge/force): {target}");
                         break;
+                    case OnExistsOption.Refresh:
                     case OnExistsOption.Overwrite:
                         break;
                 }
@@ -179,10 +180,9 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
 
             if (ShouldProcess(target, exists ? "Overwrite script" : "Copy script"))
             {
-                if (exists && Force)
-                {
-                    try { File.SetAttributes(target, FileAttributes.Normal); } catch { /* ignore */ }
-                }
+                if (ShouldClearReadOnlyTarget(exists, OnExists, Force.IsPresent))
+                    TryClearReadOnlyAttribute(target);
+
                 File.Copy(file, target, overwrite: true);
                 if (Force)
                 {
@@ -277,6 +277,26 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
     internal static string ResolveExistingScriptActionForTesting(bool exists, OnExistsOption onExists, bool force)
         => ResolveExistingScriptAction(exists, onExists, force);
 
+    internal static bool ShouldClearReadOnlyTargetForTesting(bool exists, OnExistsOption onExists, bool force)
+        => ShouldClearReadOnlyTarget(exists, onExists, force);
+
+    private static bool ShouldClearReadOnlyTarget(bool exists, OnExistsOption onExists, bool force)
+        => exists && (force || onExists is OnExistsOption.Refresh or OnExistsOption.Overwrite);
+
+    private static void TryClearReadOnlyAttribute(string path)
+    {
+        try
+        {
+            var attributes = File.GetAttributes(path);
+            if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
     private static string ResolveExistingScriptAction(bool exists, OnExistsOption onExists, bool force)
     {
         if (!exists)
@@ -284,6 +304,7 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
 
         return onExists switch
         {
+            OnExistsOption.Refresh => "Overwrite",
             OnExistsOption.Overwrite => "Overwrite",
             OnExistsOption.Merge when force => "Overwrite",
             OnExistsOption.Skip => "Skip",

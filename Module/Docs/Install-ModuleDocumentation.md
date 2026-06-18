@@ -8,7 +8,7 @@ schema: 2.0.0
 ## SYNOPSIS
 Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.
 
-Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. When successful, returns the destination path.
+Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, refresh, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. The Refresh mode overwrites package files while keeping local files that are not part of the package. When successful, returns the destination path.
 
 ## SYNTAX
 ### ByName (Default)
@@ -24,7 +24,7 @@ Install-ModuleDocumentation -Path <string> [-Module <psmoduleinfo>] [-RequiredVe
 ## DESCRIPTION
 Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.
 
-Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. When successful, returns the destination path.
+Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, refresh, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. The Refresh mode overwrites package files while keeping local files that are not part of the package. When successful, returns the destination path.
 
 ## EXAMPLES
 
@@ -192,13 +192,13 @@ Accept wildcard characters: True
 ```
 
 ### -OnExists
-Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used.
+Behavior when the destination folder already exists. The default, Merge, adds missing files and preserves existing files unless -Force is used. Refresh overwrites package files without deleting unrelated local files.
 
 ```yaml
 Type: OnExistsOption
 Parameter Sets: ByName, ByModule
 Aliases: None
-Possible values: Merge, Overwrite, Skip, Stop
+Possible values: Merge, Refresh, Overwrite, Skip, Stop
 
 Required: False
 Position: named

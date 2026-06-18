@@ -6,7 +6,8 @@
     .DESCRIPTION
     Copies files from the module's '{{InternalsPath}}' folder into a destination path.
     By default, existing files are preserved (OnExists=Merge) so local configuration is not overwritten.
-    You can define default merge behavior for relative paths using PreservePaths/OverwritePaths.
+    Use OnExists=Refresh to overwrite package files while keeping local files that are not part of the package.
+    Use IncludePaths/ExcludePaths to define which package files are managed, then define collision behavior using PreservePaths/OverwritePaths.
     Optional bootstrap parameters can install/import a selected module version before extraction.
 
     .PARAMETER Path
@@ -15,6 +16,7 @@
     .PARAMETER OnExists
     What to do when the destination folder already exists:
     - Merge (default): keep existing files; copy only missing files (use -Force to overwrite files)
+    - Refresh: overwrite package files, but keep destination files that are not part of the package
     - Overwrite: delete the destination folder and recreate it
     - Skip: do nothing
     - Stop: emit an error and stop processing
@@ -28,8 +30,15 @@
     .PARAMETER Unblock
     On Windows, removes Zone.Identifier (best effort) from copied files.
 
+    .PARAMETER IncludePaths
+    Optional wildcard patterns (relative to Internals) that define which package files are managed, for example: Config/*.sample.json, Scripts/*.ps1.
+    Defaults to all package files.
+
+    .PARAMETER ExcludePaths
+    Optional wildcard patterns (relative to Internals) to skip. Exclusions win over IncludePaths, for example: Config/local/**.
+
     .PARAMETER PreservePaths
-    Optional wildcard patterns (relative to Internals) to preserve during merge, for example: Config/**.
+    Optional wildcard patterns (relative to Internals) to preserve during merge or refresh, for example: Config/**.
 
     .PARAMETER OverwritePaths
     Optional wildcard patterns (relative to Internals) to overwrite during merge, for example: Artefacts/**.
@@ -64,13 +73,15 @@
         [ValidateNotNullOrEmpty()]
         [string] $Path,
 
-        [ValidateSet('Merge', 'Overwrite', 'Skip', 'Stop')]
+        [ValidateSet('Merge', 'Refresh', 'Overwrite', 'Skip', 'Stop')]
         [string] $OnExists = 'Merge',
 
         [switch] $Force,
         [switch] $ListOnly,
         [switch] $Unblock,
 
+        [string[]] $IncludePaths = {{IncludePathsArray}},
+        [string[]] $ExcludePaths = {{ExcludePathsArray}},
         [string[]] $PreservePaths = {{PreservePathsArray}},
         [string[]] $OverwritePaths = {{OverwritePathsArray}},
 
@@ -144,18 +155,86 @@
 
             $pattern = $raw.Trim().Replace('\', '/')
             if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
-            if ($pattern.EndsWith('/')) { $pattern = "$pattern*" }
-            $pattern = $pattern.Replace('**', '*')
+            if ($pattern.EndsWith('/')) { $pattern = "$pattern**" }
 
-            if ($normalizedPath -like $pattern) { return $true }
-
-            if ($pattern.IndexOf('*') -lt 0 -and $pattern.IndexOf('?') -lt 0) {
+            if ($pattern.IndexOf('*') -lt 0 -and $pattern.IndexOf('?') -lt 0 -and $pattern.IndexOf('[') -lt 0) {
                 if ($normalizedPath.StartsWith("$pattern/", [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
                 if ([string]::Equals($normalizedPath, $pattern, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+                continue
             }
+
+            $regex = Convert-DeliveryWildcardToRegex -Pattern $pattern
+            if ([System.Text.RegularExpressions.Regex]::IsMatch($normalizedPath, $regex, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { return $true }
         }
 
         return $false
+    }
+
+    function Convert-DeliveryWildcardToRegex {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string] $Pattern
+        )
+
+        $builder = [System.Text.StringBuilder]::new()
+        [void] $builder.Append('^')
+        for ($i = 0; $i -lt $Pattern.Length; $i++) {
+            $char = $Pattern[$i]
+            if ($char -eq '*') {
+                if (($i + 1) -lt $Pattern.Length -and $Pattern[$i + 1] -eq '*') {
+                    if (($i + 2) -lt $Pattern.Length -and $Pattern[$i + 2] -eq '/') {
+                        [void] $builder.Append('(?:.*/)?')
+                        $i += 2
+                    } else {
+                        [void] $builder.Append('.*')
+                        $i++
+                    }
+                } else {
+                    [void] $builder.Append('[^/]*')
+                }
+                continue
+            }
+
+            if ($char -eq '?') {
+                [void] $builder.Append('[^/]')
+                continue
+            }
+
+            if ($char -eq '[') {
+                $end = $Pattern.IndexOf(']', $i + 1)
+                if ($end -gt $i) {
+                    [void] $builder.Append($Pattern.Substring($i, $end - $i + 1))
+                    $i = $end
+                    continue
+                }
+            }
+
+            [void] $builder.Append([System.Text.RegularExpressions.Regex]::Escape([string] $char))
+        }
+
+        [void] $builder.Append('$')
+        return $builder.ToString()
+    }
+
+    function Test-DeliveryPathIncluded {
+        [CmdletBinding()]
+        param(
+            [string] $RelativePath
+        )
+
+        if ([string]::IsNullOrWhiteSpace($RelativePath)) { return $false }
+
+        $hasInclude = $IncludePaths -and $IncludePaths.Count -gt 0
+        if ($hasInclude -and -not (Test-DeliveryPathMatch -RelativePath $RelativePath -Patterns $IncludePaths)) {
+            return $false
+        }
+
+        if (Test-DeliveryPathMatch -RelativePath $RelativePath -Patterns $ExcludePaths) {
+            return $false
+        }
+
+        return $true
     }
 
     function Get-DeliveryAction {
@@ -166,6 +245,12 @@
         )
 
         if (-not $TargetExists) { return 'Copy' }
+
+        if ($OnExists -eq 'Refresh') {
+            if (Test-DeliveryPathMatch -RelativePath $RelativePath -Patterns $PreservePaths) { return 'Keep' }
+            return 'Overwrite'
+        }
+
         if ($Force) { return 'Overwrite' }
 
         if ($OnExists -eq 'Merge') {
@@ -345,7 +430,12 @@
 
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-    $files = [System.IO.Directory]::GetFiles($internalsRoot, '*', [System.IO.SearchOption]::AllDirectories)
+    $allFiles = [System.IO.Directory]::GetFiles($internalsRoot, '*', [System.IO.SearchOption]::AllDirectories)
+    $files = foreach ($file in $allFiles) {
+        $rel = $file.Substring($internalsRoot.Length).TrimStart('\','/')
+        if (Test-DeliveryPathIncluded -RelativePath $rel) { $file }
+    }
+
     if ($ListOnly) {
         foreach ($file in $files) {
             $rel = $file.Substring($internalsRoot.Length).TrimStart('\','/')
@@ -364,6 +454,12 @@
     Write-Host "  Destination : $dest" -ForegroundColor DarkGray
     Write-Host "  Mode        : $OnExists" -ForegroundColor DarkGray
     Write-Host "  File count  : $($files.Count)" -ForegroundColor DarkGray
+    if ($IncludePaths.Count -gt 0) {
+        Write-Host "  Include     : $($IncludePaths -join ', ')" -ForegroundColor DarkGray
+    }
+    if ($ExcludePaths.Count -gt 0) {
+        Write-Host "  Exclude     : $($ExcludePaths -join ', ')" -ForegroundColor DarkGray
+    }
     if ($PreservePaths.Count -gt 0) {
         Write-Host "  Preserve    : $($PreservePaths -join ', ')" -ForegroundColor DarkGray
     }
@@ -421,7 +517,7 @@
         try {
             Get-ChildItem -LiteralPath $moduleBase -Filter 'README*' -File -ErrorAction SilentlyContinue | ForEach-Object {
                 $target = [System.IO.Path]::Combine($dest, $_.Name)
-                if ((Test-Path -LiteralPath $target) -and (-not $Force)) {
+                if ((Test-Path -LiteralPath $target) -and (-not $Force) -and ($OnExists -ne 'Refresh')) {
                     $keptCount++
                     Write-Host "  [keep] $($_.Name) -> $target" -ForegroundColor DarkYellow
                     return
@@ -442,7 +538,7 @@
         try {
             Get-ChildItem -LiteralPath $moduleBase -Filter 'CHANGELOG*' -File -ErrorAction SilentlyContinue | ForEach-Object {
                 $target = [System.IO.Path]::Combine($dest, $_.Name)
-                if ((Test-Path -LiteralPath $target) -and (-not $Force)) {
+                if ((Test-Path -LiteralPath $target) -and (-not $Force) -and ($OnExists -ne 'Refresh')) {
                     $keptCount++
                     Write-Host "  [keep] $($_.Name) -> $target" -ForegroundColor DarkYellow
                     return
@@ -464,7 +560,7 @@
             $lic = Get-ChildItem -LiteralPath $moduleBase -Filter 'LICENSE*' -File -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($lic) {
                 $target = [System.IO.Path]::Combine($dest, 'license.txt')
-                if (-not ((Test-Path -LiteralPath $target) -and (-not $Force))) {
+                if (-not ((Test-Path -LiteralPath $target) -and (-not $Force) -and ($OnExists -ne 'Refresh'))) {
                     $exists = Test-Path -LiteralPath $target
                     Copy-Item -LiteralPath $lic.FullName -Destination $target -Force
                     $extraCopiedCount++

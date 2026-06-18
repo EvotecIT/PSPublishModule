@@ -57,6 +57,57 @@ public class ModuleDocumentationReviewRegressionTests
     {
         Assert.Equal("Keep", InstallModuleScriptCommand.ResolveExistingScriptActionForTesting(true, OnExistsOption.Merge, force: false));
         Assert.Equal("Overwrite", InstallModuleScriptCommand.ResolveExistingScriptActionForTesting(true, OnExistsOption.Merge, force: true));
+        Assert.Equal("Overwrite", InstallModuleScriptCommand.ResolveExistingScriptActionForTesting(true, OnExistsOption.Refresh, force: false));
+    }
+
+    [Fact]
+    public void InstallModuleScript_Refresh_Clears_ReadOnly_Targets()
+    {
+        Assert.False(InstallModuleScriptCommand.ShouldClearReadOnlyTargetForTesting(true, OnExistsOption.Merge, force: false));
+        Assert.True(InstallModuleScriptCommand.ShouldClearReadOnlyTargetForTesting(true, OnExistsOption.Merge, force: true));
+        Assert.True(InstallModuleScriptCommand.ShouldClearReadOnlyTargetForTesting(true, OnExistsOption.Refresh, force: false));
+        Assert.True(InstallModuleScriptCommand.ShouldClearReadOnlyTargetForTesting(true, OnExistsOption.Overwrite, force: false));
+    }
+
+    [Fact]
+    public void OnExistsOption_NumericValues_RemainBackwardCompatible()
+    {
+        Assert.Equal(0, (int)OnExistsOption.Merge);
+        Assert.Equal(1, (int)OnExistsOption.Overwrite);
+        Assert.Equal(2, (int)OnExistsOption.Skip);
+        Assert.Equal(3, (int)OnExistsOption.Stop);
+        Assert.Equal(4, (int)OnExistsOption.Refresh);
+    }
+
+    [Fact]
+    public void DocumentationInstaller_Refresh_OverwritesPackageFiles_AndPreservesLocalExtras()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PFDocsRefresh", System.Guid.NewGuid().ToString("N")));
+        try
+        {
+            var internals = Directory.CreateDirectory(Path.Combine(root.FullName, "Internals", "Config"));
+            File.WriteAllText(Path.Combine(internals.FullName, "config.sample.json"), "package-new");
+            File.WriteAllText(Path.Combine(root.FullName, "README.md"), "readme-new");
+
+            var destination = Directory.CreateDirectory(Path.Combine(root.FullName, "Destination"));
+            var destinationConfig = Directory.CreateDirectory(Path.Combine(destination.FullName, "Config"));
+            File.WriteAllText(Path.Combine(destinationConfig.FullName, "config.sample.json"), "package-old");
+            File.WriteAllText(Path.Combine(destinationConfig.FullName, "config.json"), "local-config");
+            File.WriteAllText(Path.Combine(destination.FullName, "README.md"), "readme-old");
+            File.WriteAllText(Path.Combine(destination.FullName, "local-only.txt"), "local-extra");
+
+            var installer = new DocumentationInstaller();
+            installer.Install(root.FullName, "Demo", "1.0.0", destination.FullName, OnExistsOption.Refresh, force: false, open: false, noIntro: true);
+
+            Assert.Equal("package-new", File.ReadAllText(Path.Combine(destinationConfig.FullName, "config.sample.json")));
+            Assert.Equal("local-config", File.ReadAllText(Path.Combine(destinationConfig.FullName, "config.json")));
+            Assert.Equal("readme-new", File.ReadAllText(Path.Combine(destination.FullName, "README.md")));
+            Assert.Equal("local-extra", File.ReadAllText(Path.Combine(destination.FullName, "local-only.txt")));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
     }
 
     [Fact]

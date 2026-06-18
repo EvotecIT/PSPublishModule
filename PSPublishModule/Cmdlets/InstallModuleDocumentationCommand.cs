@@ -11,7 +11,7 @@ namespace PSPublishModule;
 
 /// <summary>
 /// <para type="synopsis">Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.</para>
-/// <para type="description">Resolves the module and copies its documentation payload into a destination folder arranged by <see cref="DocumentationLayout"/>. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, overwrite, skip or stop based on <see cref="OnExistsOption"/>. The default <see cref="OnExistsOption.Merge"/> mode adds missing files and keeps existing files unless <c>-Force</c> is used. When successful, returns the destination path.</para>
+/// <para type="description">Resolves the module and copies its documentation payload into a destination folder arranged by <see cref="DocumentationLayout"/>. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, refresh, overwrite, skip or stop based on <see cref="OnExistsOption"/>. The default <see cref="OnExistsOption.Merge"/> mode adds missing files and keeps existing files unless <c>-Force</c> is used. The <see cref="OnExistsOption.Refresh"/> mode overwrites package files while keeping local files that are not part of the package. When successful, returns the destination path.</para>
 /// </summary>
 /// <example>
 ///   <summary>Install into Module\Version folder</summary>

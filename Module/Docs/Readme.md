@@ -99,7 +99,7 @@ Installs a module and its embedded dependencies to an explicit private runtime f
 ### [Install-ModuleDocumentation](Install-ModuleDocumentation.md)
 Copies a module's bundled documentation (Internals, README/CHANGELOG/LICENSE) to a chosen location.
 
-Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. When successful, returns the destination path.
+Resolves the module and copies its documentation payload into a destination folder arranged by DocumentationLayout. The payload is the module's delivery Internals folder (or the default Internals folder) plus selected root documentation files such as README, CHANGELOG and LICENSE. Repeat runs can merge, refresh, overwrite, skip or stop based on OnExistsOption. The default Merge mode adds missing files and keeps existing files unless -Force is used. The Refresh mode overwrites package files while keeping local files that are not part of the package. When successful, returns the destination path.
 
 ### [Install-ModuleScript](Install-ModuleScript.md)
 Copies only PowerShell scripts from a module's Internals\Scripts folder to a destination path.

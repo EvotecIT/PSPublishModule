@@ -357,6 +357,8 @@
         "RepositoryPaths": { "type": ["array", "null"], "items": { "type": "string" } },
         "RepositoryBranch": { "type": ["string", "null"] },
         "DocumentationOrder": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IncludePaths": { "type": ["array", "null"], "items": { "type": "string" } },
+        "ExcludePaths": { "type": ["array", "null"], "items": { "type": "string" } },
         "PreservePaths": { "type": ["array", "null"], "items": { "type": "string" } },
         "OverwritePaths": { "type": ["array", "null"], "items": { "type": "string" } },
         "GenerateInstallCommand": { "type": "boolean" },

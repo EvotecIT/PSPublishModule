@@ -256,6 +256,52 @@ public sealed class EmbeddedModuleDependencyServiceTests
     }
 
     [Fact]
+    public void Install_RefreshOverwritesPayloadFilesAndPreservesLocalExtras()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var dependencyRoot = CreateModule(root.FullName, "Microsoft.Graph.Authentication", "2.25.0");
+            File.WriteAllText(Path.Combine(dependencyRoot, "settings.json"), "package-new");
+            var provider = new Provider(new InstalledModuleMetadata(
+                "Microsoft.Graph.Authentication",
+                "2.25.0",
+                guid: null,
+                moduleBasePath: dependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            service.Embed(
+                moduleRoot.FullName,
+                new[] { new RequiredModuleReference("Microsoft.Graph.Authentication", requiredVersion: "2.25.0") },
+                provider);
+
+            var destinationRoot = Path.Combine(root.FullName, "PrivateDeps");
+            var destinationModule = Path.Combine(destinationRoot, "Microsoft.Graph.Authentication", "2.25.0");
+            Directory.CreateDirectory(destinationModule);
+            var targetSettings = Path.Combine(destinationModule, "settings.json");
+            File.WriteAllText(targetSettings, "package-old");
+            File.SetAttributes(targetSettings, File.GetAttributes(targetSettings) | FileAttributes.ReadOnly);
+            File.WriteAllText(Path.Combine(destinationModule, "local-only.txt"), "local-extra");
+
+            var results = service.Install(
+                Path.Combine(moduleRoot.FullName, "Internals", "Modules", "module-dependencies.json"),
+                destinationRoot,
+                onExists: OnExistsOption.Refresh);
+
+            var result = Assert.Single(results);
+            Assert.Equal("Refresh", result.Action);
+            Assert.Equal("package-new", File.ReadAllText(targetSettings));
+            Assert.Equal("local-extra", File.ReadAllText(Path.Combine(destinationModule, "local-only.txt")));
+        }
+        finally
+        {
+            ClearReadOnlyAttributes(root.FullName);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Install_WithDependencyFilter_PreservesUnselectedExistingReceiptEntries()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -635,6 +681,26 @@ public sealed class EmbeddedModuleDependencyServiceTests
 
     private static string CreateModule(string root, string name, string version)
         => CreateModuleAt(Path.Combine(root, "Dependencies", name, version), name, version);
+
+    private static void ClearReadOnlyAttributes(string root)
+    {
+        if (!Directory.Exists(root))
+            return;
+
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var attributes = File.GetAttributes(file);
+                if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                    File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+            }
+            catch
+            {
+                /* best effort cleanup */
+            }
+        }
+    }
 
     private static string CreateModuleAt(string moduleRoot, string name, string version)
     {

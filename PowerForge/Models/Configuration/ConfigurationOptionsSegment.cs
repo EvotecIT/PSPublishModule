@@ -125,7 +125,19 @@ public sealed class DeliveryOptionsConfiguration
     public string[]? DocumentationOrder { get; set; }
 
     /// <summary>
-    /// Optional wildcard patterns (relative to Internals) that should be preserved during merge installs.
+    /// Optional wildcard patterns (relative to <see cref="InternalsPath"/>) that define which package files generated delivery helpers manage.
+    /// Defaults to all package files when omitted.
+    /// </summary>
+    public string[]? IncludePaths { get; set; }
+
+    /// <summary>
+    /// Optional wildcard patterns (relative to <see cref="InternalsPath"/>) that generated delivery helpers should not copy or refresh.
+    /// Exclusions win over <see cref="IncludePaths"/>.
+    /// </summary>
+    public string[]? ExcludePaths { get; set; }
+
+    /// <summary>
+    /// Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs.
     /// Example: <c>Config/**</c>.
     /// </summary>
     public string[]? PreservePaths { get; set; }
@@ -143,7 +155,7 @@ public sealed class DeliveryOptionsConfiguration
     public bool GenerateInstallCommand { get; set; }
 
     /// <summary>
-    /// When true, generates a public <c>Update-&lt;ModuleName&gt;</c> helper function during build that delegates to the install command.
+    /// When true, generates a public <c>Update-&lt;ModuleName&gt;</c> helper function during build that delegates to the install command in refresh mode by default.
     /// </summary>
     public bool GenerateUpdateCommand { get; set; }
 

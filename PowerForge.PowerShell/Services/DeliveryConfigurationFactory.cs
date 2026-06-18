@@ -36,6 +36,8 @@ internal sealed class DeliveryConfigurationFactory
                     RepositoryPaths = request.RepositoryPaths,
                     RepositoryBranch = request.RepositoryBranch,
                     DocumentationOrder = request.DocumentationOrder,
+                    IncludePaths = NormalizeStringArray(request.IncludePaths),
+                    ExcludePaths = NormalizeStringArray(request.ExcludePaths),
                     PreservePaths = NormalizeStringArray(request.PreservePaths),
                     OverwritePaths = NormalizeStringArray(request.OverwritePaths),
                     GenerateInstallCommand = request.GenerateInstallCommand || !string.IsNullOrWhiteSpace(request.InstallCommandName),

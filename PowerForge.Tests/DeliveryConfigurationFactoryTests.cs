@@ -1,4 +1,6 @@
 using PowerForge;
+using System;
+using System.IO;
 
 namespace PowerForge.Tests;
 
@@ -33,6 +35,8 @@ public sealed class DeliveryConfigurationFactoryTests
                 new DeliveryImportantLink { Title = " Docs ", Url = " https://example.test/docs " },
                 new DeliveryImportantLink { Title = " ", Url = "https://ignored.test" }
             ],
+            IncludePaths = [" Config/*.sample.json ", "config/*.sample.json", "Scripts/*.ps1"],
+            ExcludePaths = [" Config/local/** ", "config/local/**", "  "],
             PreservePaths = [" Config/** ", "config/**", "  "],
             OverwritePaths = [" Bin/** ", "Templates/**", "bin/**"],
             InstallCommandName = " Install-ContosoToolkit ",
@@ -48,8 +52,12 @@ public sealed class DeliveryConfigurationFactoryTests
         Assert.True(delivery.GenerateUpdateCommand);
         Assert.Equal("Install-ContosoToolkit", delivery.InstallCommandName);
         Assert.Equal("Update-ContosoToolkit", delivery.UpdateCommandName);
+        var includePaths = Assert.IsType<string[]>(delivery.IncludePaths);
+        var excludePaths = Assert.IsType<string[]>(delivery.ExcludePaths);
         var preservePaths = Assert.IsType<string[]>(delivery.PreservePaths);
         var overwritePaths = Assert.IsType<string[]>(delivery.OverwritePaths);
+        Assert.Equal(["Config/*.sample.json", "Scripts/*.ps1"], includePaths);
+        Assert.Equal(["Config/local/**"], excludePaths);
         Assert.Equal(["Config/**"], preservePaths);
         Assert.Equal(["Bin/**", "Templates/**"], overwritePaths);
 
@@ -57,5 +65,15 @@ public sealed class DeliveryConfigurationFactoryTests
         var link = Assert.Single(links);
         Assert.Equal("Docs", link.Title);
         Assert.Equal("https://example.test/docs", link.Url);
+    }
+
+    [Fact]
+    public void Segments_schema_allows_delivery_include_and_exclude_paths()
+    {
+        var schemaPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Schemas", "powerforge.segments.schema.json"));
+        var schema = File.ReadAllText(schemaPath);
+
+        Assert.Contains("\"IncludePaths\"", schema, StringComparison.Ordinal);
+        Assert.Contains("\"ExcludePaths\"", schema, StringComparison.Ordinal);
     }
 }
