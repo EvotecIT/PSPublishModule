@@ -77,7 +77,13 @@ internal static class ProjectBuildPackageFeedResolver
 
     private static string? ResolveGitHubPackagesOwner(ProjectBuildConfiguration config)
     {
-        var owner = TrimOrNull(config.GitHubPackagesOwner) ?? (config.UseGitHubPackages ? TrimOrNull(config.GitHubUsername) : null);
+        var owner = TrimOrNull(config.GitHubPackagesOwner) ??
+                    (config.UseGitHubPackages ? TrimOrNull(config.GitHubUsername) : null) ??
+                    ResolveGitHubPackagesOwnerFromSources(config.NugetSource) ??
+                    ResolveGitHubPackagesOwnerFromSource(config.PublishSource);
+        if (config.UseGitHubPackages && string.IsNullOrWhiteSpace(owner))
+            throw new InvalidOperationException("UseGitHubPackages is true but GitHubPackagesOwner/GitHubUsername is not set.");
+
         if (string.IsNullOrWhiteSpace(owner))
             return null;
 
@@ -139,6 +145,9 @@ internal static class ProjectBuildPackageFeedResolver
 
         if (ContainsGitHubPackagesSource(versionSources) && !string.IsNullOrWhiteSpace(githubToken))
         {
+            if (!ContainsOnlyGitHubPackagesSources(versionSources))
+                return null;
+
             return new RepositoryCredential
             {
                 UserName = githubPackagesOwner,
@@ -151,6 +160,38 @@ internal static class ProjectBuildPackageFeedResolver
 
     private static bool ContainsGitHubPackagesSource(string[]? sources)
         => sources is not null && sources.Any(IsGitHubPackagesSource);
+
+    private static bool ContainsOnlyGitHubPackagesSources(string[]? sources)
+    {
+        var normalized = (sources ?? Array.Empty<string>())
+            .Where(source => !string.IsNullOrWhiteSpace(source))
+            .ToArray();
+        return normalized.Length > 0 && normalized.All(IsGitHubPackagesSource);
+    }
+
+    private static string? ResolveGitHubPackagesOwnerFromSources(string[]? sources)
+    {
+        foreach (var source in sources ?? Array.Empty<string>())
+        {
+            var owner = ResolveGitHubPackagesOwnerFromSource(source);
+            if (!string.IsNullOrWhiteSpace(owner))
+                return owner;
+        }
+
+        return null;
+    }
+
+    private static string? ResolveGitHubPackagesOwnerFromSource(string? source)
+    {
+        if (!IsGitHubPackagesSource(source))
+            return null;
+
+        var uri = new Uri(source!.Trim(), UriKind.Absolute);
+        var owner = uri.AbsolutePath
+            .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+        return TrimOrNull(owner);
+    }
 
     private static string? ResolveFirstEnvironmentSecret(params string[] names)
     {

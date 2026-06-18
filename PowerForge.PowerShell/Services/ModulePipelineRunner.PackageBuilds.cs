@@ -445,6 +445,8 @@ public sealed partial class ModulePipelineRunner
             PublishNuget = source.PublishNuget,
             PublishGitHub = source.PublishGitHub,
             CreateReleaseZip = source.CreateReleaseZip,
+            UseGitHubPackages = source.UseGitHubPackages,
+            GitHubPackagesOwner = source.GitHubPackagesOwner,
             PublishSource = source.PublishSource,
             PublishApiKey = source.PublishApiKey,
             PublishApiKeyFilePath = source.PublishApiKeyFilePath,

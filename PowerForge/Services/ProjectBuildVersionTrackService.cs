@@ -20,13 +20,19 @@ internal sealed class ProjectBuildVersionTrackService
     public Dictionary<string, string>? ResolveExpectedVersionMap(
         ProjectBuildConfiguration config,
         RepositoryCredential? credential)
+        => ResolveExpectedVersionMap(config, config.NugetSource, credential);
+
+    public Dictionary<string, string>? ResolveExpectedVersionMap(
+        ProjectBuildConfiguration config,
+        IReadOnlyList<string>? defaultSources,
+        RepositoryCredential? credential)
     {
         if (config is null)
             throw new ArgumentNullException(nameof(config));
 
         var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var entry in ExpandTracks(config.VersionTracks, config.ExpectedVersion, config.NugetSource, credential, config.IncludePrerelease))
+        foreach (var entry in ExpandTracks(config.VersionTracks, config.ExpectedVersion, defaultSources, credential, config.IncludePrerelease))
             resolved[entry.Key] = entry.Value;
 
         var explicitMap = config.ExpectedVersionMap;

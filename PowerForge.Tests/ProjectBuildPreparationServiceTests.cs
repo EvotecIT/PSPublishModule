@@ -192,6 +192,94 @@ public sealed class ProjectBuildPreparationServiceTests
         }
     }
 
+    [Fact]
+    public void Prepare_derives_github_packages_owner_from_explicit_version_source()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-githubpackages-explicit-source-" + Guid.NewGuid().ToString("N")));
+        var gitHubEnv = "PF_TEST_GITHUB_PACKAGES_EXPLICIT_" + Guid.NewGuid().ToString("N");
+
+        try
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, "explicit-version-source-token");
+
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                NugetSource = new[] { "https://nuget.pkg.github.com/EvotecIT/index.json" },
+                GitHubAccessTokenEnvName = gitHubEnv
+            };
+
+            var context = service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            Assert.NotNull(context.Spec.VersionSourceCredential);
+            Assert.Equal("EvotecIT", context.Spec.VersionSourceCredential!.UserName);
+            Assert.Equal("explicit-version-source-token", context.Spec.VersionSourceCredential.Secret);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, null);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_does_not_apply_github_packages_token_to_mixed_version_sources()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-githubpackages-mixed-source-" + Guid.NewGuid().ToString("N")));
+        var gitHubEnv = "PF_TEST_GITHUB_PACKAGES_MIXED_" + Guid.NewGuid().ToString("N");
+
+        try
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, "mixed-version-source-token");
+
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                NugetSource = new[]
+                {
+                    "https://nuget.pkg.github.com/EvotecIT/index.json",
+                    "https://api.nuget.org/v3/index.json"
+                },
+                GitHubAccessTokenEnvName = gitHubEnv
+            };
+
+            var context = service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            Assert.Null(context.Spec.VersionSourceCredential);
+            Assert.Equal(config.NugetSource, context.Spec.VersionSources);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, null);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_rejects_github_packages_mode_without_owner()
+    {
+        var service = new ProjectBuildPreparationService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Prepare(
+            new ProjectBuildConfiguration
+            {
+                UseGitHubPackages = true
+            },
+            Directory.GetCurrentDirectory(),
+            null,
+            new ProjectBuildRequestedActions()));
+
+        Assert.Contains("GitHubPackagesOwner", exception.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(null, DotNetRepositoryPackStrategy.PerProject)]
     [InlineData("", DotNetRepositoryPackStrategy.PerProject)]
@@ -286,6 +374,43 @@ public sealed class ProjectBuildPreparationServiceTests
             Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject!["PowerForge"]);
             Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject["PowerForge.Cli"]);
             Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject["PowerForge.Web.Cli"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Version_tracks_use_resolved_default_sources()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-track-resolved-source-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var feed = root.CreateSubdirectory("feed");
+            File.WriteAllText(Path.Combine(feed.FullName, "PowerForge.1.0.4.nupkg"), string.Empty);
+
+            var config = new ProjectBuildConfiguration
+            {
+                ExpectedVersionMapAsInclude = true,
+                VersionTracks = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PowerForge"] = new()
+                    {
+                        ExpectedVersion = "1.0.X",
+                        AnchorProject = "PowerForge",
+                        Projects = new[] { "PowerForge.Cli" }
+                    }
+                }
+            };
+
+            var map = new ProjectBuildVersionTrackService(new NullLogger())
+                .ResolveExpectedVersionMap(config, new[] { feed.FullName }, credential: null);
+
+            Assert.NotNull(map);
+            Assert.Equal("1.0.5", map!["PowerForge"]);
+            Assert.Equal("1.0.5", map["PowerForge.Cli"]);
         }
         finally
         {

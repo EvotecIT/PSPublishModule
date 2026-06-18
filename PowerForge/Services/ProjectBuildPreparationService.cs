@@ -73,7 +73,7 @@ internal sealed class ProjectBuildPreparationService
 
         var feed = ProjectBuildPackageFeedResolver.Resolve(config, configDir);
         var nugetCredential = feed.VersionSourceCredential;
-        var expectedVersionMap = new ProjectBuildVersionTrackService(_logger).ResolveExpectedVersionMap(config, nugetCredential);
+        var expectedVersionMap = new ProjectBuildVersionTrackService(_logger).ResolveExpectedVersionMap(config, feed.VersionSources, nugetCredential);
 
         context.PublishApiKey = feed.PublishApiKey;
         context.GitHubToken = feed.GitHubToken;
