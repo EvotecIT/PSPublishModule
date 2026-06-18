@@ -264,7 +264,8 @@ public sealed partial class ModulePipelineRunner
     private static bool? ResolveUpdateVersions(ProjectBuildEffectiveActions actions, PackageBuildExecutionMode mode)
         => mode switch
         {
-            PackageBuildExecutionMode.DependencyBuild or PackageBuildExecutionMode.BuildOnly => actions.UpdateVersions,
+            PackageBuildExecutionMode.DependencyBuild => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
+            PackageBuildExecutionMode.BuildOnly => actions.UpdateVersions,
             _ => false
         };
 

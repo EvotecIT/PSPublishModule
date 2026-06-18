@@ -10,12 +10,13 @@ public sealed partial class ModulePipelineRunner
 {
     private ModuleReleaseCoordinationResult? PrepareUnifiedReleaseAssets(
         ModulePipelinePlan plan,
-        ModulePipelineRunState state)
+        ModulePipelineRunState state,
+        string? publishId)
     {
         if (plan.Release?.Configuration is null)
             return null;
 
-        var moduleAssets = CollectModuleReleaseAssets(state.ArtefactResults);
+        var moduleAssets = CollectModuleReleaseAssets(state.ArtefactResults, publishId);
         var packageAssets = CollectPackageReleaseAssets(state.ProjectBuildResults);
         var allAssets = moduleAssets.Concat(packageAssets).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
@@ -55,7 +56,7 @@ public sealed partial class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(publish.ApiKey))
             throw new InvalidOperationException("API key (token) is required for unified GitHub publishing.");
 
-        state.ReleaseCoordinationResult ??= PrepareUnifiedReleaseAssets(plan, state);
+        state.ReleaseCoordinationResult = PrepareUnifiedReleaseAssets(plan, state, publish.ID);
         var release = state.ReleaseCoordinationResult
             ?? throw new InvalidOperationException("Release coordination is not configured.");
 
@@ -108,13 +109,43 @@ public sealed partial class ModulePipelineRunner
         => plan.Release?.Configuration is not null &&
            publish.Destination == PublishDestination.GitHub;
 
-    private static string[] CollectModuleReleaseAssets(IEnumerable<ArtefactBuildResult> artefacts)
-        => (artefacts ?? Array.Empty<ArtefactBuildResult>())
+    private static string[] CollectModuleReleaseAssets(IEnumerable<ArtefactBuildResult> artefacts, string? publishId)
+    {
+        var packed = (artefacts ?? Array.Empty<ArtefactBuildResult>())
+            .Where(static artefact => artefact is not null && (artefact.Type == ArtefactType.Packed || artefact.Type == ArtefactType.ScriptPacked))
+            .ToArray();
+
+        if (packed.Length == 0)
+            return Array.Empty<string>();
+
+        ArtefactBuildResult[] selected;
+        if (string.IsNullOrWhiteSpace(publishId))
+        {
+            selected = new[] { packed[0] };
+        }
+        else
+        {
+            var idValue = publishId!.Trim();
+            selected = packed.Where(artefact => string.Equals(artefact.Id, idValue, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (selected.Length == 0)
+            {
+                var available = packed
+                    .Select(static artefact => artefact.Id)
+                    .Where(static id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var availableText = available.Length == 0 ? "(none)" : string.Join(", ", available);
+                throw new InvalidOperationException($"No packed artefacts matched ID '{publishId}'. Available IDs: {availableText}");
+            }
+        }
+
+        return selected
             .Select(static artefact => artefact.OutputPath)
             .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             .Select(static path => Path.GetFullPath(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
 
     private static string[] CollectPackageReleaseAssets(IEnumerable<ProjectBuildHostExecutionResult> projectBuildResults)
     {
@@ -123,13 +154,6 @@ public sealed partial class ModulePipelineRunner
         {
             foreach (var package in result.Result?.Release?.Projects.SelectMany(static project => project.Packages) ?? Array.Empty<string>())
                 TryAddReleasePackageAsset(assets, package);
-
-            if (!string.IsNullOrWhiteSpace(result.OutputPath) && Directory.Exists(result.OutputPath))
-            {
-                foreach (var package in Directory.EnumerateFiles(result.OutputPath, "*.nupkg", SearchOption.AllDirectories)
-                             .Concat(Directory.EnumerateFiles(result.OutputPath, "*.snupkg", SearchOption.AllDirectories)))
-                    TryAddReleasePackageAsset(assets, package);
-            }
         }
 
         return assets.ToArray();

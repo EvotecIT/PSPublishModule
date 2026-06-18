@@ -199,6 +199,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             var result = runner.Run(spec, plan, new RecordingProgressReporter());
 
             Assert.Equal(2, calls.Count);
+            Assert.True(calls[0].Request.UpdateVersions);
             Assert.True(calls[0].Request.Build);
             Assert.False(calls[0].Request.PublishNuget);
             Assert.False(calls[0].Request.PublishGitHub);

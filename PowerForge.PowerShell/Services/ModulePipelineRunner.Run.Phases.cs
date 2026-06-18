@@ -686,7 +686,7 @@ public sealed partial class ModulePipelineRunner
         ExecutePublishOperations(plan, session, buildResult, state);
         ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
 
-        state.ReleaseCoordinationResult ??= PrepareUnifiedReleaseAssets(plan, state);
+        state.ReleaseCoordinationResult ??= PrepareUnifiedReleaseAssets(plan, state, publishId: null);
 
         ExecuteActions(ModulePipelineActionStage.BeforeInstall, plan, session, state);
         if (plan.InstallEnabled)
