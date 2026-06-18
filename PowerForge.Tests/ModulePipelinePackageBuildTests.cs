@@ -92,7 +92,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.False(calls[0].Request.PublishGitHub);
             Assert.NotNull(calls[1].Configuration);
             var inlineConfiguration = calls[1].Configuration!;
-            Assert.Equal("Sources", inlineConfiguration.RootPath);
+            Assert.Equal(Path.Combine(root.FullName, "Sources"), inlineConfiguration.RootPath);
             Assert.Equal("2.0.X", inlineConfiguration.ExpectedVersionMap?["HtmlTinkerX"]);
             Assert.True(calls[1].Request.Build);
             Assert.False(calls[1].Request.PublishNuget);
@@ -107,6 +107,182 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.True(stageIndex >= 0);
             Assert.True(projectPackageIndex < stageIndex);
             Assert.True(inlinePackageIndex < stageIndex);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_PacksPublishOnlyDependencyPackageLaneForLocalFeed()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
+            var packagePath = Path.Combine(packageOutput, "HtmlTinkerX.2.0.1.nupkg");
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPath));
+
+                    if (request.Build == true)
+                    {
+                        Directory.CreateDirectory(packageOutput);
+                        File.WriteAllText(packagePath, "package");
+                    }
+
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    var project = new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "HtmlTinkerX",
+                        PackageId = "HtmlTinkerX",
+                        IsPackable = true,
+                        NewVersion = "2.0.1"
+                    };
+                    if (File.Exists(packagePath))
+                        project.Packages.Add(packagePath);
+                    release.Projects.Add(project);
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = packageOutput,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "InlinePackages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            ProvideLocalNuGetFeed = true,
+                            PublishNuget = true
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan, new RecordingProgressReporter());
+
+            Assert.Equal(2, calls.Count);
+            Assert.True(calls[0].Request.Build);
+            Assert.False(calls[0].Request.PublishNuget);
+            Assert.False(calls[0].Request.PublishGitHub);
+            Assert.False(calls[1].Request.Build);
+            Assert.True(calls[1].Request.PublishNuget);
+            Assert.Equal(new[] { Path.GetFullPath(packageOutput) }, plan.BuildSpec.NuGetRestoreSources);
+            Assert.Equal(plan.BuildSpec.NuGetRestoreSources, result.Plan.BuildSpec.NuGetRestoreSources);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_ResolvesInlinePackageBuildPathsFromModuleRoot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPath));
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "InlinePackages",
+                            RootPath = "Sources",
+                            StagingPath = Path.Combine("Artifacts", "ProjectBuild"),
+                            OutputPath = Path.Combine("Artifacts", "NuGet"),
+                            ReleaseZipOutputPath = Path.Combine("Artifacts", "Releases"),
+                            PlanOutputPath = Path.Combine("Artifacts", "plan.json"),
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = false,
+                            PublishGitHub = false
+                        }
+                    }
+                }
+            };
+
+            runner.Run(spec);
+
+            var call = Assert.Single(calls);
+            Assert.NotNull(call.Configuration);
+            var configuration = call.Configuration!;
+            Assert.Equal(Path.Combine(root.FullName, "Sources"), configuration.RootPath);
+            Assert.Equal(Path.Combine(root.FullName, "Artifacts", "ProjectBuild"), configuration.StagingPath);
+            Assert.Equal(Path.Combine(root.FullName, "Artifacts", "NuGet"), configuration.OutputPath);
+            Assert.Equal(Path.Combine(root.FullName, "Artifacts", "Releases"), configuration.ReleaseZipOutputPath);
+            Assert.Equal(Path.Combine(root.FullName, "Artifacts", "plan.json"), configuration.PlanOutputPath);
         }
         finally
         {

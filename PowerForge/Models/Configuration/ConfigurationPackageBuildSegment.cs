@@ -417,8 +417,6 @@ public sealed class ReleaseConfiguration
     /// <summary>Preferred publish order for destinations such as NuGet, PowerShellGallery, and GitHub.</summary>
     public string[]? PublishOrder { get; set; }
 
-    /// <summary>Whether release execution should stop at the first failing lane.</summary>
-    public bool? FailFast { get; set; }
 }
 
 /// <summary>

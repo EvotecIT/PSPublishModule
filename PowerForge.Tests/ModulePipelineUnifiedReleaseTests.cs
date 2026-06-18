@@ -238,6 +238,85 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void Run_UsesExplicitPackageLaneAsReleaseVersionSourceWithReleaseSegment()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) => new ProjectBuildHostExecutionResult
+                {
+                    Success = true,
+                    ConfigPath = configPath ?? request.ConfigPath,
+                    RootPath = root.FullName,
+                    Result = new ProjectBuildResult
+                    {
+                        Success = true,
+                        Release = new DotNetRepositoryReleaseResult
+                        {
+                            Success = true,
+                            ResolvedVersion = "3.4.5"
+                        }
+                    }
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            UseAsReleaseVersionSource = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified", "<ModuleName>", "<ModuleVersion>")
+                        }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            Assert.Equal("3.4.5", result.Plan.ResolvedVersion);
+            Assert.Equal("3.4.5", result.Plan.BuildSpec.Version);
+            Assert.Contains("ModuleVersion = '3.4.5'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_FailsUnifiedGitHubReleaseWhenNoPayloadAssetsExist()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

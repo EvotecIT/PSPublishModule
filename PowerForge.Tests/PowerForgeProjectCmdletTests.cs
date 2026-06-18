@@ -199,8 +199,7 @@ public sealed class PowerForgeProjectCmdletTests
             .AddParameter("VersionSource", ReleaseVersionSource.PackageBuild)
             .AddParameter("PrimaryProject", "HtmlTinkerX")
             .AddParameter("BuildOrder", new[] { "PackageBuild", "Module" })
-            .AddParameter("PublishOrder", new[] { "NuGet", "PowerShellGallery", "GitHub" })
-            .AddParameter("FailFast");
+            .AddParameter("PublishOrder", new[] { "NuGet", "PowerShellGallery", "GitHub" });
 
         var results = ps.Invoke();
 
@@ -211,7 +210,6 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Equal("HtmlTinkerX", segment.Configuration.PrimaryProject);
         Assert.Equal(new[] { "PackageBuild", "Module" }, segment.Configuration.BuildOrder);
         Assert.Equal(new[] { "NuGet", "PowerShellGallery", "GitHub" }, segment.Configuration.PublishOrder);
-        Assert.True(segment.Configuration.FailFast);
     }
 
     private static PowerShell CreatePowerShellWithModuleImported()

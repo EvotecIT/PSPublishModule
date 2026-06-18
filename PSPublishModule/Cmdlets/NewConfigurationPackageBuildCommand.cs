@@ -353,9 +353,6 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
     /// <summary>Preferred publish order for destinations such as NuGet, PowerShellGallery, and GitHub.</summary>
     [Parameter] public string[]? PublishOrder { get; set; }
 
-    /// <summary>Whether release execution should stop at the first failing lane.</summary>
-    [Parameter] public SwitchParameter FailFast { get; set; }
-
     /// <summary>Emits a release coordination configuration segment.</summary>
     protected override void ProcessRecord()
     {
@@ -368,14 +365,10 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
                 Version = Normalize(Version),
                 PrimaryProject = Normalize(PrimaryProject),
                 BuildOrder = BuildOrder,
-                PublishOrder = PublishOrder,
-                FailFast = BoundSwitch(nameof(FailFast), FailFast)
+                PublishOrder = PublishOrder
             }
         });
     }
-
-    private bool? BoundSwitch(string name, SwitchParameter value)
-        => MyInvocation.BoundParameters.ContainsKey(name) ? value.IsPresent : null;
 
     private static string? Normalize(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

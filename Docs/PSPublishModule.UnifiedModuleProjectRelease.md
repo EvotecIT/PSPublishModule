@@ -250,8 +250,7 @@ Proposed additive shape:
     "VersionSource": "Packages",
     "PrimaryProject": "HtmlTinkerX",
     "BuildOrder": [ "Packages", "Module" ],
-    "PublishOrder": [ "NuGet", "PowerShellGallery", "GitHub" ],
-    "FailFast": true
+    "PublishOrder": [ "NuGet", "PowerShellGallery", "GitHub" ]
   },
   "Module": {
     "RepositoryRoot": ".",

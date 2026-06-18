@@ -49,7 +49,12 @@ public sealed partial class ModulePipelineRunner
         {
             return release.VersionSource switch
             {
-                ReleaseVersionSource.Module => null,
+                ReleaseVersionSource.Module => ResolveCandidateVersion(
+                    state.ReleaseVersionCandidates,
+                    source: null,
+                    primaryProject: release.PrimaryProject,
+                    explicitOnly: true,
+                    required: false),
                 ReleaseVersionSource.Manual => ResolveManualReleaseVersion(release),
                 ReleaseVersionSource.ProjectBuild => ResolveCandidateVersion(
                     state.ReleaseVersionCandidates,

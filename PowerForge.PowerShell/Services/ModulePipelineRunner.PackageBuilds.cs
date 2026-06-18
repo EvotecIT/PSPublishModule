@@ -76,7 +76,7 @@ public sealed partial class ModulePipelineRunner
 
         foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
         {
-            if (segment?.Configuration is null || !ShouldExecutePackageBuildPublish(segment, destination))
+            if (segment?.Configuration is null || !ShouldExecutePackageBuildPublish(plan, segment, destination))
                 continue;
 
             ExecutePackageBuildSegment(plan, session, state, segment, mode);
@@ -213,7 +213,7 @@ public sealed partial class ModulePipelineRunner
         PackageBuildExecutionMode mode)
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
-        var projectBuildConfig = MapPackageBuildConfiguration(cfg);
+        var projectBuildConfig = MapPackageBuildConfiguration(cfg, plan.ProjectRoot);
         var actions = ResolveEffectiveActions(projectBuildConfig);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         var request = new ProjectBuildHostRequest
@@ -250,11 +250,12 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static bool ShouldExecutePackageBuildPublish(
+        ModulePipelinePlan plan,
         ConfigurationPackageBuildSegment segment,
         PackageBuildPublishDestination destination)
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
-        var actions = ResolveEffectiveActions(MapPackageBuildConfiguration(cfg));
+        var actions = ResolveEffectiveActions(MapPackageBuildConfiguration(cfg, plan.ProjectRoot));
         return destination == PackageBuildPublishDestination.NuGet
             ? actions.PublishNuGet
             : actions.PublishGitHub;
@@ -270,7 +271,8 @@ public sealed partial class ModulePipelineRunner
     private static bool? ResolveBuild(ProjectBuildEffectiveActions actions, PackageBuildExecutionMode mode)
         => mode switch
         {
-            PackageBuildExecutionMode.DependencyBuild or PackageBuildExecutionMode.BuildOnly => actions.Build,
+            PackageBuildExecutionMode.DependencyBuild => actions.Build || actions.PublishNuGet || actions.PublishGitHub,
+            PackageBuildExecutionMode.BuildOnly => actions.Build,
             _ => false
         };
 
@@ -414,7 +416,7 @@ public sealed partial class ModulePipelineRunner
             _ => mode.ToString()
         };
 
-    private static ProjectBuildConfiguration MapPackageBuildConfiguration(PackageBuildConfiguration source)
+    private static ProjectBuildConfiguration MapPackageBuildConfiguration(PackageBuildConfiguration source, string? projectRoot = null)
     {
         var target = new ProjectBuildConfiguration
         {
@@ -472,7 +474,31 @@ public sealed partial class ModulePipelineRunner
         };
 
         ApplyPackageBuildOptions(target, source.Options);
+        ResolveInlinePackageBuildPaths(target, projectRoot);
         return target;
+    }
+
+    private static void ResolveInlinePackageBuildPaths(ProjectBuildConfiguration target, string? projectRoot)
+    {
+        if (string.IsNullOrWhiteSpace(projectRoot))
+            return;
+
+        target.RootPath = ResolveInlinePackageBuildPath(projectRoot!, target.RootPath);
+        target.OutputPath = ResolveInlinePackageBuildPath(projectRoot!, target.OutputPath);
+        target.ReleaseZipOutputPath = ResolveInlinePackageBuildPath(projectRoot!, target.ReleaseZipOutputPath);
+        target.StagingPath = ResolveInlinePackageBuildPath(projectRoot!, target.StagingPath);
+        target.PlanOutputPath = ResolveInlinePackageBuildPath(projectRoot!, target.PlanOutputPath);
+    }
+
+    private static string? ResolveInlinePackageBuildPath(string projectRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var trimmed = path!.Trim().Trim('"');
+        return Path.GetFullPath(Path.IsPathRooted(trimmed)
+            ? trimmed
+            : Path.Combine(projectRoot, trimmed));
     }
 
     private static Dictionary<string, ProjectBuildVersionTrack>? MapVersionTracks(
