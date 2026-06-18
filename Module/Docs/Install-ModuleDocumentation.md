@@ -198,7 +198,7 @@ Behavior when the destination folder already exists. The default, Merge, adds mi
 Type: OnExistsOption
 Parameter Sets: ByName, ByModule
 Aliases: None
-Possible values: Merge, Refresh, Overwrite, Skip, Stop
+Possible values: Merge, Overwrite, Skip, Stop, Refresh
 
 Required: False
 Position: named

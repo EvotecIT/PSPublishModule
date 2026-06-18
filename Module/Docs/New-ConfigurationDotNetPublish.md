@@ -11,7 +11,7 @@ Creates DotNet publish configuration using DSL objects from a settings script bl
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetPublish [-Settings <scriptblock>] [-IncludeSchema] [-SchemaVersion <int>] [-Profile <string>] [-ProjectRoot <string>] [-SolutionPath <string>] [-Configuration <string>] [-Runtimes <string[]>] [-Restore <bool>] [-Clean <bool>] [-Build <bool>] [-NoRestoreInPublish <bool>] [-NoBuildInPublish <bool>] [-ManifestJsonPath <string>] [-ManifestTextPath <string>] [-ChecksumsPath <string>] [-RunReportPath <string>] [-Targets <DotNetPublishTarget[]>] [-Installers <DotNetPublishInstaller[]>] [<CommonParameters>]
+New-ConfigurationDotNetPublish [-Settings <scriptblock>] [-IncludeSchema] [-SchemaVersion <int>] [-Profile <string>] [-ProjectRoot <string>] [-SolutionPath <string>] [-Configuration <string>] [-Runtimes <string[]>] [-Restore <bool>] [-Clean <bool>] [-Build <bool>] [-NoRestoreInPublish <bool>] [-NoBuildInPublish <bool>] [-ManifestJsonPath <string>] [-ManifestTextPath <string>] [-ChecksumsPath <string>] [-RunReportPath <string>] [-RunReportMarkdownPath <string>] [-Targets <DotNetPublishTarget[]>] [-Installers <DotNetPublishInstaller[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -228,6 +228,22 @@ Enables restore step.
 
 ```yaml
 Type: Boolean
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RunReportMarkdownPath
+Optional run report Markdown output path.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

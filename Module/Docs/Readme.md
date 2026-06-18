@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.30
+Help Version: 3.0.31
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -201,6 +201,9 @@ Creates DotNet publish configuration using DSL objects from a settings script bl
 ### [New-ConfigurationDotNetService](New-ConfigurationDotNetService.md)
 Creates service packaging options for DotNet publish targets.
 
+### [New-ConfigurationDotNetServiceHealthCheck](New-ConfigurationDotNetServiceHealthCheck.md)
+Creates an HTTP readiness check for DotNet publish service lifecycle verification.
+
 ### [New-ConfigurationDotNetServiceLifecycle](New-ConfigurationDotNetServiceLifecycle.md)
 Creates service lifecycle execution options for DotNet publish service targets.
 
@@ -243,11 +246,17 @@ Provides a way to configure required, external, embedded, or approved modules us
 ### [New-ConfigurationModuleSkip](New-ConfigurationModuleSkip.md)
 Provides a way to ignore certain commands or modules during build-time dependency validation.
 
+### [New-ConfigurationPackageBuild](New-ConfigurationPackageBuild.md)
+Creates inline .NET/NuGet package build configuration from the module-build DSL.
+
 ### [New-ConfigurationPlaceHolder](New-ConfigurationPlaceHolder.md)
 Helps define custom placeholders replacing content within a script or module during the build process.
 
 ### [New-ConfigurationProject](New-ConfigurationProject.md)
 Creates a PowerShell-first project/release object for the unified PowerForge release engine.
+
+### [New-ConfigurationProjectBuild](New-ConfigurationProjectBuild.md)
+References an existing project.build.json package build from the module-build DSL.
 
 ### [New-ConfigurationProjectInstaller](New-ConfigurationProjectInstaller.md)
 Creates an installer entry for a PowerShell-authored project build.
@@ -269,6 +278,9 @@ Creates workspace-validation defaults for a PowerShell-authored project build.
 
 ### [New-ConfigurationPublish](New-ConfigurationPublish.md)
 Provides a way to configure publishing to PowerShell Gallery, GitHub, JFrog Artifactory, or other private PowerShell module repositories.
+
+### [New-ConfigurationRelease](New-ConfigurationRelease.md)
+Creates repo-level release coordination settings for a module and package build.
 
 ### [New-ConfigurationTest](New-ConfigurationTest.md)
 Configures running Pester tests as part of the build.

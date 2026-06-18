@@ -11,7 +11,7 @@ Creates service lifecycle execution options for DotNet publish service targets.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetServiceLifecycle [-Enabled] [-Mode <DotNetPublishServiceLifecycleMode>] [-StopIfExists <bool>] [-DeleteIfExists <bool>] [-Install <bool>] [-Start <bool>] [-Verify <bool>] [-StopTimeoutSeconds <int>] [-WhatIfMode] [-OnUnsupportedPlatform <DotNetPublishPolicyMode>] [-OnExecutionFailure <DotNetPublishPolicyMode>] [<CommonParameters>]
+New-ConfigurationDotNetServiceLifecycle [-Enabled] [-Mode <DotNetPublishServiceLifecycleMode>] [-StopIfExists <bool>] [-DeleteIfExists <bool>] [-Install <bool>] [-Start <bool>] [-Verify <bool>] [-StopTimeoutSeconds <int>] [-HealthCheck <DotNetPublishServiceHealthCheck[]>] [-WhatIfMode] [-OnUnsupportedPlatform <DotNetPublishPolicyMode>] [-OnExecutionFailure <DotNetPublishPolicyMode>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -48,6 +48,22 @@ Enables lifecycle execution.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -HealthCheck
+Optional HTTP readiness checks executed after service state verification.
+
+```yaml
+Type: DotNetPublishServiceHealthCheck[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
