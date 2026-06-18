@@ -1,4 +1,6 @@
 using PowerForge;
+using System;
+using System.IO;
 
 namespace PowerForge.Tests;
 
@@ -63,5 +65,15 @@ public sealed class DeliveryConfigurationFactoryTests
         var link = Assert.Single(links);
         Assert.Equal("Docs", link.Title);
         Assert.Equal("https://example.test/docs", link.Url);
+    }
+
+    [Fact]
+    public void Segments_schema_allows_delivery_include_and_exclude_paths()
+    {
+        var schemaPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Schemas", "powerforge.segments.schema.json"));
+        var schema = File.ReadAllText(schemaPath);
+
+        Assert.Contains("\"IncludePaths\"", schema, StringComparison.Ordinal);
+        Assert.Contains("\"ExcludePaths\"", schema, StringComparison.Ordinal);
     }
 }
