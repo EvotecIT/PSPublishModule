@@ -25,6 +25,50 @@ function Test-PssaAssemblyConflict([string]$message) {
         $message.IndexOf('already loaded', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
 }
 
+function ConvertTo-PssaIssueRecord {
+    param(
+        [Parameter(ValueFromPipeline)]
+        $Issue
+    )
+
+    process {
+        if ($null -eq $Issue) { return }
+
+        $extent = $Issue.Extent
+        $path = if ($null -ne $extent -and -not [string]::IsNullOrWhiteSpace($extent.File)) {
+            $extent.File
+        } elseif (-not [string]::IsNullOrWhiteSpace($Issue.ScriptPath)) {
+            $Issue.ScriptPath
+        } elseif (-not [string]::IsNullOrWhiteSpace($Issue.ScriptName)) {
+            $Issue.ScriptName
+        } else {
+            ''
+        }
+
+        $correction = ''
+        $suggestedCorrections = @($Issue.SuggestedCorrections)
+        if ($suggestedCorrections.Count -gt 0 -and $null -ne $suggestedCorrections[0]) {
+            if (-not [string]::IsNullOrWhiteSpace($suggestedCorrections[0].Description)) {
+                $correction = $suggestedCorrections[0].Description
+            } elseif (-not [string]::IsNullOrWhiteSpace($suggestedCorrections[0].Text)) {
+                $correction = $suggestedCorrections[0].Text
+            }
+        }
+
+        [pscustomobject]@{
+            RuleName = [string]$Issue.RuleName
+            Severity = [string]$Issue.Severity
+            Message = [string]$Issue.Message
+            ScriptPath = [string]$path
+            Line = if ($null -ne $extent) { [int]$extent.StartLineNumber } else { 0 }
+            Column = if ($null -ne $extent) { [int]$extent.StartColumnNumber } else { 0 }
+            EndLine = if ($null -ne $extent) { [int]$extent.EndLineNumber } else { 0 }
+            EndColumn = if ($null -ne $extent) { [int]$extent.EndColumnNumber } else { 0 }
+            SuggestedCorrection = [string]$correction
+        }
+    }
+}
+
 try {
     $paths = DecodeLines $PathsB64
     $exclude = DecodeLines $ExcludeB64
@@ -57,7 +101,8 @@ try {
 
     $issues = Invoke-ScriptAnalyzer -Path $paths -ExcludeRule $exclude -ErrorAction Continue
     if ($null -eq $issues) { $issues = @() }
-    $json = if (@($issues).Count -eq 0) { '[]' } else { @($issues) | ConvertTo-Json -Depth 6 }
+    $records = @($issues | ConvertTo-PssaIssueRecord)
+    $json = if ($records.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject ([object[]]$records) -Depth 5 }
     Set-Content -Path $OutJson -Value $json -Encoding UTF8 -ErrorAction Stop
 } catch {
     $message = if ($_.Exception) { $_.Exception.Message } else { "$_" }

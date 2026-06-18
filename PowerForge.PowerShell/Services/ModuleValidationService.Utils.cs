@@ -14,11 +14,15 @@ public sealed partial class ModuleValidationService
         string name,
         ValidationSeverity severity,
         List<string> issues,
-        string summary)
+        string summary,
+        IEnumerable<ModuleValidationIssue>? structuredIssues = null)
     {
         var issueArray = issues?.Where(i => !string.IsNullOrWhiteSpace(i)).ToArray() ?? Array.Empty<string>();
         var status = ResolveStatus(severity, issueArray.Length);
-        return new ModuleValidationCheckResult(name, severity, status, summary, issueArray);
+        var structuredIssueArray = structuredIssues?
+            .Where(static i => i is not null)
+            .ToArray() ?? Array.Empty<ModuleValidationIssue>();
+        return new ModuleValidationCheckResult(name, severity, status, summary, issueArray, structuredIssueArray);
     }
 
     private static CheckStatus ResolveStatus(ValidationSeverity severity, int issueCount)
@@ -204,5 +208,8 @@ public sealed partial class ModuleValidationService
         public string? ScriptPath { get; set; }
         public int Line { get; set; }
         public int Column { get; set; }
+        public int EndLine { get; set; }
+        public int EndColumn { get; set; }
+        public string? SuggestedCorrection { get; set; }
     }
 }

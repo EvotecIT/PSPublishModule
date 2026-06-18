@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Json;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -300,6 +301,101 @@ public sealed class ModuleValidationServiceTests
     }
 
     [Fact]
+    public void Run_ScriptAnalyzerFindings_CapturesStructuredRecommendations()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var scriptPath = Path.Combine(root.FullName, "TestScript.ps1");
+            File.WriteAllText(scriptPath, "$profile = 'custom'");
+
+            var settings = new ModuleValidationSettings
+            {
+                Enable = true,
+                Structure = new ModuleStructureValidationSettings { Severity = ValidationSeverity.Off },
+                Documentation = new DocumentationValidationSettings { Severity = ValidationSeverity.Off },
+                ScriptAnalyzer = new ScriptAnalyzerValidationSettings
+                {
+                    Enable = true,
+                    Severity = ValidationSeverity.Warning,
+                    ExcludeDirectories = Array.Empty<string>(),
+                    ExcludeRules = Array.Empty<string>(),
+                    SkipIfUnavailable = false,
+                    TimeoutSeconds = 5
+                },
+                FileIntegrity = new FileIntegrityValidationSettings { Severity = ValidationSeverity.Off },
+                Tests = new TestSuiteValidationSettings { Severity = ValidationSeverity.Off },
+                Binary = new BinaryModuleValidationSettings { Severity = ValidationSeverity.Off },
+                Csproj = new CsprojValidationSettings { Severity = ValidationSeverity.Off }
+            };
+
+            var analyzerJson = JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    RuleName = "PSAvoidAssignmentToAutomaticVariable",
+                    Severity = "Warning",
+                    Message = "The Variable 'profile' is an automatic variable that is built into PowerShell.",
+                    ScriptPath = scriptPath,
+                    Line = 1,
+                    Column = 1,
+                    EndLine = 1,
+                    EndColumn = 9,
+                    SuggestedCorrection = ""
+                }
+            });
+
+            var service = new ModuleValidationService(
+                new NullLogger(),
+                new JsonWritingPowerShellRunner(analyzerJson));
+
+            var report = service.Run(new ModuleValidationSpec
+            {
+                ProjectRoot = root.FullName,
+                StagingPath = root.FullName,
+                ModuleName = "TestModule",
+                ManifestPath = string.Empty,
+                Settings = settings
+            });
+
+            var check = Assert.Single(report.Checks);
+            Assert.Equal("PSScriptAnalyzer", check.Name);
+            Assert.Equal(CheckStatus.Warning, check.Status);
+            Assert.Contains(check.Issues, issue => issue.Contains("PSAvoidAssignmentToAutomaticVariable", StringComparison.Ordinal));
+            Assert.Contains(check.Issues, issue => issue.Contains("Recommendation:", StringComparison.Ordinal));
+
+            var structuredIssue = Assert.Single(check.StructuredIssues);
+            Assert.Equal("PSAvoidAssignmentToAutomaticVariable", structuredIssue.Code);
+            Assert.Equal("Warning", structuredIssue.Severity);
+            Assert.Equal("TestScript.ps1", structuredIssue.RelativePath);
+            Assert.Equal(1, structuredIssue.Line);
+            Assert.Equal(1, structuredIssue.Column);
+            Assert.Contains("automatic variable", structuredIssue.Recommendation, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("PSScriptAnalyzer", structuredIssue.Source);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ScriptAnalyzerRunner_PrefersExtentFileBeforeLeafScriptName()
+    {
+        var script = EmbeddedScripts.Load("Scripts/Validation/Invoke-ScriptAnalyzer.ps1");
+
+        var extentFileIndex = script.IndexOf("$extent.File", StringComparison.Ordinal);
+        var scriptPathIndex = script.IndexOf("$Issue.ScriptPath", StringComparison.Ordinal);
+        var scriptNameIndex = script.IndexOf("$Issue.ScriptName", StringComparison.Ordinal);
+
+        Assert.True(extentFileIndex >= 0, "Expected the runner to inspect Extent.File.");
+        Assert.True(scriptPathIndex >= 0, "Expected the runner to inspect ScriptPath.");
+        Assert.True(scriptNameIndex >= 0, "Expected the runner to inspect ScriptName.");
+        Assert.True(extentFileIndex < scriptPathIndex, "Extent.File should be preferred over ScriptPath when available.");
+        Assert.True(extentFileIndex < scriptNameIndex, "Extent.File should be preferred over ScriptName when available.");
+    }
+
+    [Fact]
     public void Run_ScriptAnalyzerInstallIfUnavailable_UsesRuntimeDependencyInstaller()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -571,6 +667,28 @@ public sealed class ModuleValidationServiceTests
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
             return _result;
+        }
+    }
+
+    private sealed class JsonWritingPowerShellRunner : IPowerShellRunner
+    {
+        private readonly string _json;
+
+        public JsonWritingPowerShellRunner(string json)
+        {
+            _json = json;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+        {
+            var outputPath = request.Arguments[2];
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllText(outputPath, _json);
+            return new PowerShellRunResult(
+                0,
+                string.Empty,
+                string.Empty,
+                TestPowerShellExecutable);
         }
     }
 

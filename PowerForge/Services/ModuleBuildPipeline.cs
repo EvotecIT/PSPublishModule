@@ -116,12 +116,21 @@ public sealed class ModuleBuildPipeline
         var staging = Path.GetFullPath(stagingPath);
         if (!Directory.Exists(staging)) throw new DirectoryNotFoundException($"Staging directory not found: {staging}");
 
+        var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };
+        var assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorOptions.ResolveMode(
+            spec.AssemblyTypeAcceleratorMode,
+            spec.AssemblyTypeAccelerators,
+            spec.AssemblyTypeAcceleratorAssemblies);
+        var useAssemblyLoadContext = spec.UseAssemblyLoadContext
+            || assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None;
+        if (useAssemblyLoadContext && !spec.UseAssemblyLoadContext)
+            _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
+
         var builder = new ModuleBuilder(
             _logger,
             _manifestMutator,
             _scriptFunctionExportDetector);
-        var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };
-        var buildNotes = builder.BuildInPlace(new ModuleBuilder.Options
+        var buildOptions = new ModuleBuilder.Options
         {
             ProjectRoot = staging,
             ModuleName = spec.Name,
@@ -140,10 +149,13 @@ public sealed class ModuleBuildPipeline
             BinaryConflictSearchRoots = spec.BinaryConflictSearchRoots ?? Array.Empty<string>(),
             BinaryConflictPriorityModuleNames = spec.BinaryConflictPriorityModuleNames ?? Array.Empty<string>(),
             BinaryConflictReportRoot = spec.BinaryConflictReportRoot,
+            UseAssemblyLoadContext = useAssemblyLoadContext,
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
             CsprojRequiredReasons = spec.RefreshManifestOnly ? Array.Empty<string>() : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
-        });
+            EmitBinaryConflictOwnerNotes = false,
+        };
+        _ = builder.BuildInPlace(buildOptions);
 
         var psd1 = Path.Combine(staging, $"{spec.Name}.psd1");
         if (!File.Exists(psd1))
@@ -155,15 +167,6 @@ public sealed class ModuleBuildPipeline
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
         if (!spec.RefreshManifestOnly)
         {
-            var assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorOptions.ResolveMode(
-                spec.AssemblyTypeAcceleratorMode,
-                spec.AssemblyTypeAccelerators,
-                spec.AssemblyTypeAcceleratorAssemblies);
-            var useAssemblyLoadContext = spec.UseAssemblyLoadContext
-                || assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None;
-            if (useAssemblyLoadContext && !spec.UseAssemblyLoadContext)
-                _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
-
             ModuleBootstrapperGenerator.Generate(
                 staging,
                 spec.Name,
@@ -183,6 +186,7 @@ public sealed class ModuleBuildPipeline
             _logger.Info("RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration.");
         }
 
+        var buildNotes = builder.AnalyzeInstalledBinaryConflicts(buildOptions);
         return new ModuleBuildResult(staging, psd1, exports, buildNotes);
     }
 

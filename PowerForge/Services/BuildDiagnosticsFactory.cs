@@ -480,6 +480,7 @@ public static class BuildDiagnosticsFactory
         var diagnostics = new List<BuildDiagnostic>();
         var detail = BuildCheckDetail(check);
         var issues = check.Issues ?? System.Array.Empty<string>();
+        var structuredIssues = check.StructuredIssues ?? System.Array.Empty<ModuleValidationIssue>();
         var missingTool = issues.Any(static issue =>
             issue.Contains("PSScriptAnalyzer not found", System.StringComparison.OrdinalIgnoreCase));
         var skippedTool = check.Summary?.IndexOf("skipped", System.StringComparison.OrdinalIgnoreCase) >= 0;
@@ -487,7 +488,57 @@ public static class BuildDiagnosticsFactory
             issue.Contains("runner completed without writing the results file", System.StringComparison.OrdinalIgnoreCase) ||
             issue.Contains("PSScriptAnalyzer failed", System.StringComparison.OrdinalIgnoreCase));
 
-        if (missingTool || skippedTool)
+        if (structuredIssues.Length > 0)
+        {
+            foreach (var issue in structuredIssues.Take(25))
+            {
+                var ruleName = string.IsNullOrWhiteSpace(issue.Code) ? "PSScriptAnalyzer" : issue.Code;
+                var sourcePath = !string.IsNullOrWhiteSpace(issue.RelativePath) ? issue.RelativePath : issue.FilePath;
+                var location = FormatValidationLocation(sourcePath, issue.Line, issue.Column);
+                var details = string.IsNullOrWhiteSpace(location)
+                    ? issue.Message
+                    : $"{location} - {issue.Message}";
+                var diagnosticSourcePath = string.IsNullOrWhiteSpace(location) ? sourcePath : location;
+                var recommendedAction = !string.IsNullOrWhiteSpace(issue.Recommendation)
+                    ? issue.Recommendation
+                    : "Review the analyzer message and update the PowerShell source so the rule no longer triggers.";
+                if (!string.IsNullOrWhiteSpace(issue.SuggestedCorrection) &&
+                    recommendedAction.IndexOf(issue.SuggestedCorrection, System.StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    recommendedAction += $" Suggested correction: {issue.SuggestedCorrection}";
+                }
+
+                diagnostics.Add(new BuildDiagnostic(
+                    ruleId: "VALIDATION-PSSA-" + NormalizeRuleId(ruleName),
+                    area: BuildDiagnosticArea.Validation,
+                    severity: severity,
+                    scope: BuildDiagnosticScope.Project,
+                    owner: BuildDiagnosticOwner.ModuleAuthor,
+                    remediationKind: BuildDiagnosticRemediationKind.ManualFix,
+                    canAutoFix: false,
+                    summary: $"Fix {ruleName}",
+                    details: details,
+                    recommendedAction: recommendedAction,
+                    sourcePath: diagnosticSourcePath,
+                    generatedBy: issue.Source));
+            }
+
+            if (structuredIssues.Length > 25)
+            {
+                diagnostics.Add(new BuildDiagnostic(
+                    ruleId: "VALIDATION-PSSA-MORE-FINDINGS",
+                    area: BuildDiagnosticArea.Validation,
+                    severity: severity,
+                    scope: BuildDiagnosticScope.Project,
+                    owner: BuildDiagnosticOwner.ModuleAuthor,
+                    remediationKind: BuildDiagnosticRemediationKind.ManualFix,
+                    canAutoFix: false,
+                    summary: "Review additional PSScriptAnalyzer findings",
+                    details: $"{structuredIssues.Length - 25} additional finding(s) were omitted from structured diagnostics.",
+                    recommendedAction: "Review the full module validation output or rerun PSScriptAnalyzer locally for the complete finding list."));
+            }
+        }
+        else if (missingTool || skippedTool)
         {
             diagnostics.Add(new BuildDiagnostic(
                 ruleId: "VALIDATION-PSSA-TOOLING",
@@ -532,6 +583,35 @@ public static class BuildDiagnosticsFactory
         }
 
         return diagnostics;
+    }
+
+    private static string FormatValidationLocation(string path, int line, int column)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        if (line <= 0)
+            return path;
+
+        if (column <= 0)
+            return $"{path}:{line}";
+
+        return $"{path}:{line}:{column}";
+    }
+
+    private static string NormalizeRuleId(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "FINDING";
+
+        var chars = value
+            .Trim()
+            .Select(static c => char.IsLetterOrDigit(c) ? char.ToUpperInvariant(c) : '-')
+            .ToArray();
+        var normalized = new string(chars).Trim('-');
+        while (normalized.Contains("--"))
+            normalized = normalized.Replace("--", "-");
+        return string.IsNullOrWhiteSpace(normalized) ? "FINDING" : normalized;
     }
 
     private static BuildDiagnosticSeverity ToBuildSeverity(CheckStatus status)
