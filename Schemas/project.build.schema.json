@@ -128,6 +128,17 @@
     "CreateReleaseZip": {
       "type": "boolean"
     },
+    "UseGitHubPackages": {
+      "type": "boolean",
+      "description": "When true, resolves the NuGet version lookup and publish feed to GitHub Packages for GitHubPackagesOwner, or GitHubUsername when the owner is omitted."
+    },
+    "GitHubPackagesOwner": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "GitHub user or organization that owns the GitHub Packages NuGet feed. Defaults to GitHubUsername when UseGitHubPackages is true."
+    },
     "CertificateThumbprint": {
       "type": [
         "string",

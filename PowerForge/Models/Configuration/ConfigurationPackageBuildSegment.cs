@@ -143,6 +143,12 @@ public sealed class PackageBuildConfiguration
     /// <summary>Whether release ZIPs should be created for package projects.</summary>
     public bool? CreateReleaseZip { get; set; }
 
+    /// <summary>Whether GitHub Packages should be used as the NuGet version lookup and publish feed.</summary>
+    public bool UseGitHubPackages { get; set; }
+
+    /// <summary>GitHub user or organization that owns the GitHub Packages NuGet feed.</summary>
+    public string? GitHubPackagesOwner { get; set; }
+
     /// <summary>NuGet publish source.</summary>
     public string? PublishSource { get; set; }
 

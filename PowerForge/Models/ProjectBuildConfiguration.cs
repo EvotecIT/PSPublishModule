@@ -31,6 +31,8 @@ internal sealed class ProjectBuildConfiguration
     public bool? PublishNuget { get; set; }
     public bool? PublishGitHub { get; set; }
     public bool? CreateReleaseZip { get; set; }
+    public bool UseGitHubPackages { get; set; }
+    public string? GitHubPackagesOwner { get; set; }
     public string? PublishSource { get; set; }
     public string? PublishApiKey { get; set; }
     public string? PublishApiKeyFilePath { get; set; }

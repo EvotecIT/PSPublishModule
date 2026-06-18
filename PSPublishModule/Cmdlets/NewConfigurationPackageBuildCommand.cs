@@ -166,6 +166,12 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
     /// <summary>Whether release ZIPs should be created for package projects.</summary>
     [Parameter] public SwitchParameter CreateReleaseZip { get; set; }
 
+    /// <summary>Whether GitHub Packages should be used as the NuGet version lookup and publish feed.</summary>
+    [Parameter] public SwitchParameter UseGitHubPackages { get; set; }
+
+    /// <summary>GitHub user or organization that owns the GitHub Packages NuGet feed.</summary>
+    [Parameter] public string? GitHubPackagesOwner { get; set; }
+
     /// <summary>NuGet publish source.</summary>
     [Parameter] public string? PublishSource { get; set; }
 
@@ -286,6 +292,8 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
                 PublishNuget = BoundSwitch(nameof(PublishNuget), PublishNuget),
                 PublishGitHub = BoundSwitch(nameof(PublishGitHub), PublishGitHub),
                 CreateReleaseZip = BoundSwitch(nameof(CreateReleaseZip), CreateReleaseZip),
+                UseGitHubPackages = UseGitHubPackages.IsPresent,
+                GitHubPackagesOwner = Normalize(GitHubPackagesOwner),
                 PublishSource = Normalize(PublishSource),
                 PublishApiKey = PublishApiKey,
                 PublishApiKeyFilePath = Normalize(PublishApiKeyFilePath),

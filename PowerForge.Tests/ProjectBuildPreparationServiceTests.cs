@@ -118,6 +118,80 @@ public sealed class ProjectBuildPreparationServiceTests
         }
     }
 
+    [Fact]
+    public void Prepare_resolves_github_packages_feed_from_shared_settings()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-githubpackages-" + Guid.NewGuid().ToString("N")));
+        var gitHubEnv = "PF_TEST_GITHUB_PACKAGES_" + Guid.NewGuid().ToString("N");
+
+        try
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, "github-packages-token");
+
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                UseGitHubPackages = true,
+                GitHubPackagesOwner = "EvotecIT",
+                GitHubAccessTokenEnvName = gitHubEnv,
+                PublishNuget = true
+            };
+
+            var context = service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            Assert.Equal("github-packages-token", context.PublishApiKey);
+            Assert.Equal("github-packages-token", context.GitHubToken);
+            Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", context.Spec.PublishSource);
+            Assert.Equal(new[] { "https://nuget.pkg.github.com/EvotecIT/index.json" }, context.Spec.VersionSources);
+            Assert.NotNull(context.Spec.VersionSourceCredential);
+            Assert.Equal("EvotecIT", context.Spec.VersionSourceCredential!.UserName);
+            Assert.Equal("github-packages-token", context.Spec.VersionSourceCredential.Secret);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, null);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_uses_github_token_for_explicit_github_packages_publish_source()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-githubpackages-source-" + Guid.NewGuid().ToString("N")));
+        var gitHubEnv = "PF_TEST_GITHUB_PACKAGES_SOURCE_" + Guid.NewGuid().ToString("N");
+
+        try
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, "explicit-source-token");
+
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                PublishSource = " https://nuget.pkg.github.com/EvotecIT/index.json ",
+                GitHubAccessTokenEnvName = gitHubEnv,
+                PublishNuget = true
+            };
+
+            var context = service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            Assert.Equal("explicit-source-token", context.PublishApiKey);
+            Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", context.Spec.PublishSource);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(gitHubEnv, null);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(null, DotNetRepositoryPackStrategy.PerProject)]
     [InlineData("", DotNetRepositoryPackStrategy.PerProject)]
