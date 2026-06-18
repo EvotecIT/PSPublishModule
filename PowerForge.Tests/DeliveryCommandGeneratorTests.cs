@@ -289,6 +289,37 @@ public sealed class DeliveryCommandGeneratorTests
         }
     }
 
+    [Fact]
+    public void Generate_SkipsUpdate_WhenExistingInstallCommandDoesNotSupportRefresh()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var publicFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(
+                Path.Combine(publicFolder.FullName, "Install-EFAdminManager.ps1"),
+                "function Install-EFAdminManager { param([ValidateSet('Merge', 'Overwrite', 'Skip', 'Stop')] [string] $OnExists = 'Merge') }");
+
+            var delivery = new DeliveryOptionsConfiguration
+            {
+                Enable = true,
+                GenerateInstallCommand = true,
+                GenerateUpdateCommand = true
+            };
+
+            var generator = new DeliveryCommandGenerator(new NullLogger());
+            var generated = generator.Generate(root.FullName, "EFAdminManager", delivery);
+
+            Assert.DoesNotContain(generated, g => g.Name == "Install-EFAdminManager");
+            Assert.DoesNotContain(generated, g => g.Name == "Update-EFAdminManager");
+            Assert.False(File.Exists(Path.Combine(publicFolder.FullName, "Update-EFAdminManager.ps1")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static string? FindPowerShellExecutable()
     {
         var candidates = OperatingSystem.IsWindows()

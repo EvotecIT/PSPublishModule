@@ -56,6 +56,10 @@ public sealed class DeliveryCommandGenerator
             {
                 _logger.Warn($"Delivery update command '{updateName}' matches install command; skipping update command generation.");
             }
+            else if (ExistingInstallCommandRejectsRefresh(publicFolder, installName))
+            {
+                _logger.Warn($"Delivery update command '{updateName}' was not generated because existing install command '{installName}' does not support OnExists=Refresh.");
+            }
             else
             {
                 output.AddRange(TryWriteUpdate(publicFolder, updateName, installName, moduleName));
@@ -112,6 +116,16 @@ public sealed class DeliveryCommandGenerator
 
     private static string EscapeSingleQuotes(string value)
         => (value ?? string.Empty).Replace("'", "''");
+
+    private static bool ExistingInstallCommandRejectsRefresh(string publicFolder, string installCommandName)
+    {
+        var scriptPath = Path.Combine(publicFolder, installCommandName + ".ps1");
+        if (!File.Exists(scriptPath))
+            return false;
+
+        var content = File.ReadAllText(scriptPath);
+        return content.IndexOf("Refresh", StringComparison.OrdinalIgnoreCase) < 0;
+    }
 
     private static string BuildInstallScript(
         string commandName,
