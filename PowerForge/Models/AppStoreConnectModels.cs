@@ -73,6 +73,48 @@ public sealed class AppStoreConnectBuildInfo
 }
 
 /// <summary>
+/// App Store Connect subscription group summary.
+/// </summary>
+public sealed class AppStoreConnectSubscriptionGroupInfo
+{
+    /// <summary>Subscription group id.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Reference name configured in App Store Connect.</summary>
+    public string? ReferenceName { get; set; }
+}
+
+/// <summary>
+/// App Store Connect auto-renewable subscription summary.
+/// </summary>
+public sealed class AppStoreConnectSubscriptionInfo
+{
+    /// <summary>Subscription id.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Product id used by StoreKit.</summary>
+    public string? ProductId { get; set; }
+
+    /// <summary>Reference name configured in App Store Connect.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Subscription state returned by App Store Connect.</summary>
+    public string? State { get; set; }
+
+    /// <summary>Subscription period returned by App Store Connect.</summary>
+    public string? SubscriptionPeriod { get; set; }
+
+    /// <summary>Family sharing flag when available.</summary>
+    public bool? FamilySharable { get; set; }
+
+    /// <summary>Subscription group id that owns the product.</summary>
+    public string? SubscriptionGroupId { get; set; }
+
+    /// <summary>Subscription group reference name when available.</summary>
+    public string? SubscriptionGroupReferenceName { get; set; }
+}
+
+/// <summary>
 /// Local-vs-App Store Connect release drift report.
 /// </summary>
 public sealed class AppleAppReleaseDriftReport
