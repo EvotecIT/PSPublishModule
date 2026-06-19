@@ -67,6 +67,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
   # Required for maintenance tasks such as GitHub artifact pruning.
   actions: write
 

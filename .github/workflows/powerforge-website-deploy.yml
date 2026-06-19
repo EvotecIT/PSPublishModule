@@ -94,6 +94,7 @@ on:
 permissions:
   actions: write
   contents: read
+  packages: read
   pages: write
   id-token: write
 

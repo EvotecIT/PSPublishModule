@@ -79,6 +79,7 @@ public class WebSiteScaffolderTests
 
             var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-ci.yml"));
             Assert.Contains("POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json", workflow, StringComparison.Ordinal);
+            Assert.Contains("packages: read", workflow, StringComparison.Ordinal);
             Assert.Contains("uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@main", workflow, StringComparison.Ordinal);
             Assert.Contains("website_root: .", workflow, StringComparison.Ordinal);
             Assert.Contains("pipeline_config: pipeline.json", workflow, StringComparison.Ordinal);
@@ -91,6 +92,7 @@ public class WebSiteScaffolderTests
             var maintenanceWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-maintenance.yml"));
             Assert.Contains("name: Website Maintenance", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("schedule:", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("packages: read", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("actions: write", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml@main", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("pipeline_config: pipeline.maintenance.json", maintenanceWorkflow, StringComparison.Ordinal);
