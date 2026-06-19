@@ -2,6 +2,35 @@ namespace PowerForge.Tests;
 
 public sealed class GitHubWebsiteRunWorkflowTests
 {
+    [Theory]
+    [InlineData("powerforge-website-ci.yml")]
+    [InlineData("powerforge-website-deploy.yml")]
+    [InlineData("powerforge-website-maintenance.yml")]
+    public void WebsiteWorkflows_ShouldAllowGitHubPackagesRestore(string workflowFileName)
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", workflowFileName);
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("packages: read", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WebsiteRunWorkflow_ShouldInheritCallerPermissions()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.DoesNotContain("permissions:", workflowYaml, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void WebsiteRunWorkflow_ShouldKeepTransientToolCachesInsideWorkspace()
     {

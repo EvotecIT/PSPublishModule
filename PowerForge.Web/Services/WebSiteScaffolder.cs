@@ -1068,6 +1068,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: website-ci-${{ github.ref }}
@@ -1099,6 +1100,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
   actions: write
 
 concurrency:
