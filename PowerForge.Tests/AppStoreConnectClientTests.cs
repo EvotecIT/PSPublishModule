@@ -961,6 +961,156 @@ public sealed class AppStoreConnectClientTests
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/betaTesters", handler.RequestUris[5].ToString());
     }
 
+    [Fact]
+    public async Task ReviewSubmissionClient_CreatesItemAndSubmits()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "submission-1",
+                    "type": "reviewSubmissions",
+                    "attributes": { "platform": "IOS", "isSubmitted": false, "state": "IN_PROGRESS" }
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "item-1",
+                    "type": "reviewSubmissionItems",
+                    "relationships": {
+                      "reviewSubmission": { "data": { "type": "reviewSubmissions", "id": "submission-1" } },
+                      "appStoreVersion": { "data": { "type": "appStoreVersions", "id": "version-1" } }
+                    }
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "submission-1",
+                    "type": "reviewSubmissions",
+                    "attributes": { "platform": "IOS", "isSubmitted": true, "state": "WAITING_FOR_REVIEW" }
+                  }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var submission = await client.CreateReviewSubmissionAsync("app-1", ApplePlatform.iOS);
+        var item = await client.CreateReviewSubmissionItemAsync(submission.Id, "version-1");
+        var submitted = await client.SubmitReviewSubmissionAsync(submission.Id);
+
+        Assert.Equal("submission-1", submission.Id);
+        Assert.False(submission.IsSubmitted);
+        Assert.Equal("item-1", item.Id);
+        Assert.Equal("version-1", item.AppStoreVersionId);
+        Assert.True(submitted.IsSubmitted);
+        Assert.Equal(HttpMethod.Post, handler.Methods[0]);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions", handler.RequestUris[0].ToString());
+        Assert.Contains("\"type\":\"reviewSubmissions\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"platform\":\"IOS\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems", handler.RequestUris[1].ToString());
+        Assert.Contains("\"type\":\"appStoreVersions\"", handler.RequestBodies[1], StringComparison.Ordinal);
+        Assert.Equal(new HttpMethod("PATCH"), handler.Methods[2]);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1", handler.RequestUris[2].ToString());
+        Assert.Contains("\"isSubmitted\":true", handler.RequestBodies[2], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReviewSubmissionService_SubmitsSelectedValidBuild()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "version-1",
+                      "type": "appStoreVersions",
+                      "attributes": { "versionString": "1.0.1", "platform": "IOS", "appStoreState": "PREPARE_FOR_SUBMISSION" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-5",
+                      "type": "builds",
+                      "attributes": { "version": "5", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.1", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": { "type": "builds", "id": "build-5" } }"""),
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "submission-1",
+                    "type": "reviewSubmissions",
+                    "attributes": { "platform": "IOS", "isSubmitted": false }
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "item-1",
+                    "type": "reviewSubmissionItems",
+                    "relationships": {
+                      "reviewSubmission": { "data": { "type": "reviewSubmissions", "id": "submission-1" } },
+                      "appStoreVersion": { "data": { "type": "appStoreVersions", "id": "version-1" } }
+                    }
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "submission-1",
+                    "type": "reviewSubmissions",
+                    "attributes": { "platform": "IOS", "isSubmitted": true, "state": "WAITING_FOR_REVIEW" }
+                  }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReviewSubmissionService(client);
+
+        var result = await service.SubmitAsync(new AppStoreConnectReviewSubmissionRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.1",
+            BuildNumber = "5",
+            Platform = ApplePlatform.iOS,
+            CheckReadiness = false
+        });
+
+        Assert.Equal("version-1", result.Version.Id);
+        Assert.Equal("build-5", result.Build?.Id);
+        Assert.Equal("submission-1", result.ReviewSubmission.Id);
+        Assert.True(result.ReviewSubmission.IsSubmitted);
+        Assert.Equal("item-1", result.ReviewSubmissionItem?.Id);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/appStoreVersions/version-1/relationships/build", handler.RequestUris[2].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions", handler.RequestUris[3].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1", handler.RequestUris[5].ToString());
+    }
+
     private static AppStoreConnectApiCredential CreateCredential()
     {
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);

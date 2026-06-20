@@ -59,6 +59,7 @@ internal sealed class PowerForgeReleaseService
     private readonly Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult> _uploadAppleApp;
     private readonly Func<AppStoreConnectReleasePreparationRequest, AppStoreConnectReleasePreparationResult> _prepareAppleDistribution;
     private readonly Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult> _distributeTestFlight;
+    private readonly Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult> _submitAppleReview;
 
     /// <summary>
     /// Creates a new unified release service.
@@ -115,7 +116,8 @@ internal sealed class PowerForgeReleaseService
         Func<AppleAppArchiveRequest, AppleAppArchiveResult>? archiveAppleApp = null,
         Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult>? uploadAppleApp = null,
         Func<AppStoreConnectReleasePreparationRequest, AppStoreConnectReleasePreparationResult>? prepareAppleDistribution = null,
-        Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult>? distributeTestFlight = null)
+        Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult>? distributeTestFlight = null,
+        Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult>? submitAppleReview = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -130,6 +132,7 @@ internal sealed class PowerForgeReleaseService
         _uploadAppleApp = uploadAppleApp ?? (request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult());
         _prepareAppleDistribution = prepareAppleDistribution ?? PrepareAppleDistribution;
         _distributeTestFlight = distributeTestFlight ?? DistributeTestFlight;
+        _submitAppleReview = submitAppleReview ?? SubmitAppleReview;
     }
 
     /// <summary>
@@ -734,9 +737,9 @@ internal sealed class PowerForgeReleaseService
 
         if (apps.Length == 0)
             throw new InvalidOperationException("AppleApps.Apps must contain at least one enabled app entry.");
-        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight) &&
+        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitForReview) &&
             apps.Any(app => string.IsNullOrWhiteSpace(app.AppStoreConnectAppId)))
-            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, or DistributeTestFlight requires AppStoreConnectAppId for every selected app.");
+            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, or SubmitForReview requires AppStoreConnectAppId for every selected app.");
         if (options.DistributeTestFlight &&
             NormalizeStrings(options.TestFlightBetaGroupIds).Length == 0 &&
             NormalizeStrings(options.TestFlightBetaGroupNames).Length == 0)
@@ -775,8 +778,8 @@ internal sealed class PowerForgeReleaseService
                 Environment.GetEnvironmentVariable("ASC_ISSUER_ID"))
             : options.AppStoreConnectApiIssuerId?.Trim();
         var appStoreConnectApiConfiguredCount = (appStoreConnectApiKeyPath is null ? 0 : 1) + (appStoreConnectApiKeyId is null ? 0 : 1) + (appStoreConnectApiIssuerId is null ? 0 : 1);
-        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight) && appStoreConnectApiConfiguredCount != 3)
-            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, or DistributeTestFlight requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
+        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitForReview) && appStoreConnectApiConfiguredCount != 3)
+            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, or SubmitForReview requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
         if (appStoreConnectApiConfiguredCount != 0)
         {
             if (appStoreConnectApiConfiguredCount != 3)
@@ -810,6 +813,11 @@ internal sealed class PowerForgeReleaseService
             TestFlightTesterEmails = NormalizeStrings(options.TestFlightTesterEmails),
             CreateMissingTestFlightTesters = options.CreateMissingTestFlightTesters,
             AllowUnprocessedTestFlightBuild = options.AllowUnprocessedTestFlightBuild,
+            SubmitForReview = options.SubmitForReview,
+            AllowUnselectedReviewBuild = options.AllowUnselectedReviewBuild,
+            AllowUnprocessedReviewBuild = options.AllowUnprocessedReviewBuild,
+            SkipReviewReadinessCheck = options.SkipReviewReadinessCheck,
+            AllowReviewSubmissionWhenNotReady = options.AllowReviewSubmissionWhenNotReady,
             XcodeBuildExecutable = string.IsNullOrWhiteSpace(options.XcodeBuildExecutable) ? "xcodebuild" : options.XcodeBuildExecutable.Trim(),
             AllowProvisioningUpdates = options.AllowProvisioningUpdates,
             ManageAppVersionAndBuildNumber = options.ManageAppVersionAndBuildNumber,
@@ -1018,6 +1026,23 @@ internal sealed class PowerForgeReleaseService
                 });
             }
 
+            if (plan.SubmitForReview && result.Success)
+            {
+                var reviewValues = ResolveAppleDistributionValues(app, result.VersionUpdate);
+                result.ReviewSubmission = _submitAppleReview(new AppStoreConnectReviewSubmissionRequest
+                {
+                    Credential = CreateAppStoreConnectCredential(plan),
+                    AppId = app.AppStoreConnectAppId!,
+                    VersionString = reviewValues.MarketingVersion,
+                    BuildNumber = reviewValues.BuildNumber,
+                    Platform = app.Platform,
+                    RequireSelectedBuild = !plan.AllowUnselectedReviewBuild,
+                    RequireValidBuild = !plan.AllowUnprocessedReviewBuild,
+                    CheckReadiness = !plan.SkipReviewReadinessCheck,
+                    RequireReady = !plan.AllowReviewSubmissionWhenNotReady
+                });
+            }
+
             results.Add(result);
         }
 
@@ -1042,6 +1067,17 @@ internal sealed class PowerForgeReleaseService
 
         using var client = new AppStoreConnectClient(request.Credential);
         return new AppStoreConnectTestFlightDistributionService(client).DistributeAsync(request).GetAwaiter().GetResult();
+    }
+
+    private static AppStoreConnectReviewSubmissionResult SubmitAppleReview(AppStoreConnectReviewSubmissionRequest request)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (request.Credential is null)
+            throw new ArgumentException("Credential is required.", nameof(request));
+
+        using var client = new AppStoreConnectClient(request.Credential);
+        return new AppStoreConnectReviewSubmissionService(client).SubmitAsync(request).GetAwaiter().GetResult();
     }
 
     private static AppStoreConnectApiCredential CreateAppStoreConnectCredential(PowerForgeAppleReleasePlan plan)
@@ -3166,6 +3202,11 @@ internal sealed class PowerForgeReleaseService
                 TestFlightTesterCount = plan.TestFlightTesterEmails.Length,
                 plan.CreateMissingTestFlightTesters,
                 plan.AllowUnprocessedTestFlightBuild,
+                plan.SubmitForReview,
+                plan.AllowUnselectedReviewBuild,
+                plan.AllowUnprocessedReviewBuild,
+                plan.SkipReviewReadinessCheck,
+                plan.AllowReviewSubmissionWhenNotReady,
                 plan.XcodeBuildExecutable,
                 plan.AllowProvisioningUpdates,
                 plan.ManageAppVersionAndBuildNumber,
@@ -3264,6 +3305,21 @@ internal sealed class PowerForgeReleaseService
                     }).ToArray(),
                     TesterCount = result.TestFlight.Testers.Length,
                     result.TestFlight.Messages
+                },
+                reviewSubmission = result.ReviewSubmission is null ? null : new
+                {
+                    result.ReviewSubmission.AppId,
+                    result.ReviewSubmission.VersionString,
+                    result.ReviewSubmission.BuildNumber,
+                    Platform = result.ReviewSubmission.Platform.ToString(),
+                    VersionId = result.ReviewSubmission.Version.Id,
+                    BuildId = result.ReviewSubmission.Build?.Id,
+                    ReviewSubmissionId = result.ReviewSubmission.ReviewSubmission.Id,
+                    result.ReviewSubmission.ReviewSubmission.IsSubmitted,
+                    result.ReviewSubmission.ReviewSubmission.State,
+                    ReviewSubmissionItemId = result.ReviewSubmission.ReviewSubmissionItem?.Id,
+                    ReadinessReady = result.ReviewSubmission.Readiness?.IsReady,
+                    result.ReviewSubmission.Messages
                 }
             }).ToArray()
         };

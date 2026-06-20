@@ -288,6 +288,11 @@
         },
         "CreateMissingTestFlightTesters": { "type": "boolean" },
         "AllowUnprocessedTestFlightBuild": { "type": "boolean" },
+        "SubmitForReview": { "type": "boolean" },
+        "AllowUnselectedReviewBuild": { "type": "boolean" },
+        "AllowUnprocessedReviewBuild": { "type": "boolean" },
+        "SkipReviewReadinessCheck": { "type": "boolean" },
+        "AllowReviewSubmissionWhenNotReady": { "type": "boolean" },
         "Apps": {
           "type": "array",
           "items": { "$ref": "powerforge.segments.schema.json#/$defs/AppleAppConfiguration" }
