@@ -868,6 +868,99 @@ public sealed class AppStoreConnectClientTests
         }
     }
 
+    [Fact]
+    public async Task AddBuildsToBetaGroupAsync_PostsBuildRelationship()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.NoContent, string.Empty));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        await client.AddBuildsToBetaGroupAsync("group-1", new[] { "build-5" });
+
+        Assert.Equal(HttpMethod.Post, handler.Methods[0]);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/builds", handler.RequestUris[0].ToString());
+        Assert.Contains("\"type\":\"builds\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"id\":\"build-5\"", handler.RequestBodies[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TestFlightDistributionService_AddsValidBuildAndTesterToGroups()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-5",
+                      "type": "builds",
+                      "attributes": { "version": "5", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.1", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-1",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Internal", "publicLinkEnabled": false }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "tester-1",
+                    "type": "betaTesters",
+                    "attributes": { "email": "tester@example.test", "firstName": "Test", "lastName": "User" }
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectTestFlightDistributionService(client);
+
+        var result = await service.DistributeAsync(new AppStoreConnectTestFlightDistributionRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.1",
+            BuildNumber = "5",
+            Platform = ApplePlatform.iOS,
+            BetaGroupNames = new[] { "Internal" },
+            Testers = new[]
+            {
+                new AppStoreConnectBetaTesterSpec
+                {
+                    Email = "tester@example.test",
+                    FirstName = "Test",
+                    LastName = "User"
+                }
+            }
+        });
+
+        Assert.Equal("build-5", result.Build.Id);
+        Assert.Equal("Internal", Assert.Single(result.BetaGroups).Name);
+        Assert.Equal("tester@example.test", Assert.Single(result.Testers).Email);
+        Assert.Contains("filter%5Bapp%5D=app-1", handler.RequestUris[1].Query, StringComparison.Ordinal);
+        Assert.Contains("filter%5Bname%5D=Internal", handler.RequestUris[1].Query, StringComparison.Ordinal);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/builds", handler.RequestUris[2].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters?limit=10&filter%5Bemail%5D=tester%40example.test", handler.RequestUris[3].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/betaTesters", handler.RequestUris[5].ToString());
+    }
+
     private static AppStoreConnectApiCredential CreateCredential()
     {
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);

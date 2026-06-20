@@ -273,6 +273,21 @@
         "SyncScreenshots": { "type": "boolean" },
         "ReplaceScreenshots": { "type": "boolean" },
         "CheckReleaseReadiness": { "type": "boolean" },
+        "DistributeTestFlight": { "type": "boolean" },
+        "TestFlightBetaGroupIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "TestFlightBetaGroupNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "TestFlightTesterEmails": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "CreateMissingTestFlightTesters": { "type": "boolean" },
+        "AllowUnprocessedTestFlightBuild": { "type": "boolean" },
         "Apps": {
           "type": "array",
           "items": { "$ref": "powerforge.segments.schema.json#/$defs/AppleAppConfiguration" }

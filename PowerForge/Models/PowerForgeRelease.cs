@@ -330,6 +330,18 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public bool CheckReleaseReadiness { get; set; }
 
+    public bool DistributeTestFlight { get; set; }
+
+    public string[] TestFlightBetaGroupIds { get; set; } = Array.Empty<string>();
+
+    public string[] TestFlightBetaGroupNames { get; set; } = Array.Empty<string>();
+
+    public string[] TestFlightTesterEmails { get; set; } = Array.Empty<string>();
+
+    public bool CreateMissingTestFlightTesters { get; set; } = true;
+
+    public bool AllowUnprocessedTestFlightBuild { get; set; }
+
     public AppleAppConfiguration[] Apps { get; set; } = Array.Empty<AppleAppConfiguration>();
 }
 
@@ -364,6 +376,18 @@ internal sealed class PowerForgeAppleReleasePlan
     public bool ReplaceScreenshots { get; set; }
 
     public bool CheckReleaseReadiness { get; set; }
+
+    public bool DistributeTestFlight { get; set; }
+
+    public string[] TestFlightBetaGroupIds { get; set; } = Array.Empty<string>();
+
+    public string[] TestFlightBetaGroupNames { get; set; } = Array.Empty<string>();
+
+    public string[] TestFlightTesterEmails { get; set; } = Array.Empty<string>();
+
+    public bool CreateMissingTestFlightTesters { get; set; } = true;
+
+    public bool AllowUnprocessedTestFlightBuild { get; set; }
 
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 
@@ -434,6 +458,8 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public XcodeProjectVersionUpdateResult? VersionUpdate { get; set; }
 
     public AppStoreConnectReleasePreparationResult? Distribution { get; set; }
+
+    public AppStoreConnectTestFlightDistributionResult? TestFlight { get; set; }
 
     public bool Success { get; set; }
 
