@@ -164,6 +164,121 @@ public sealed class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task CreateVersionAsync_PostsVersionPlatformAndAppRelationship()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "version-1",
+                    "type": "appStoreVersions",
+                    "attributes": {
+                      "versionString": "1.0.1",
+                      "platform": "IOS",
+                      "appStoreState": "PREPARE_FOR_SUBMISSION"
+                    }
+                  }
+                }
+                """));
+
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var version = await client.CreateVersionAsync("app-1", "1.0.1", ApplePlatform.iOS);
+
+        Assert.Equal("version-1", version.Id);
+        Assert.Equal("1.0.1", version.VersionString);
+        Assert.Equal(HttpMethod.Post, handler.Methods[0]);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/appStoreVersions", handler.RequestUris[0].ToString());
+        Assert.Contains("\"type\":\"appStoreVersions\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"platform\":\"IOS\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"versionString\":\"1.0.1\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"apps\",\"id\":\"app-1\"", handler.RequestBodies[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SetVersionBuildAsync_PatchesBuildRelationship()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.NoContent, string.Empty));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        await client.SetVersionBuildAsync("version-1", "build-5");
+
+        Assert.Equal(new HttpMethod("PATCH"), handler.Methods[0]);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/appStoreVersions/version-1/relationships/build", handler.RequestUris[0].ToString());
+        Assert.Contains("\"type\":\"builds\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"id\":\"build-5\"", handler.RequestBodies[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReleasePreparationService_CreatesMissingVersionAndSelectsValidBuild()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "version-1",
+                    "type": "appStoreVersions",
+                    "attributes": { "versionString": "1.0.1", "platform": "IOS" }
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-5",
+                      "type": "builds",
+                      "attributes": { "version": "5", "processingState": "VALID", "expired": false },
+                      "relationships": {
+                        "preReleaseVersion": {
+                          "data": { "id": "pre-1", "type": "preReleaseVersions" }
+                        }
+                      }
+                    }
+                  ],
+                  "included": [
+                    {
+                      "id": "pre-1",
+                      "type": "preReleaseVersions",
+                      "attributes": { "version": "1.0.1", "platform": "IOS" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": null }"""),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty));
+
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReleasePreparationService(client);
+
+        var result = await service.PrepareAsync(new AppStoreConnectReleasePreparationRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.1",
+            BuildNumber = "5",
+            Platform = ApplePlatform.iOS
+        });
+
+        Assert.True(result.CreatedVersion);
+        Assert.True(result.SelectedBuild);
+        Assert.Equal("version-1", result.Version.Id);
+        Assert.Equal("build-5", result.Build?.Id);
+        Assert.Equal(
+            new[] { HttpMethod.Get, HttpMethod.Post, HttpMethod.Get, HttpMethod.Get, new HttpMethod("PATCH") },
+            handler.Methods);
+        Assert.Contains("filter%5BversionString%5D=1.0.1", handler.RequestUris[0].Query, StringComparison.Ordinal);
+        Assert.Contains("filter%5Bversion%5D=5", handler.RequestUris[2].Query, StringComparison.Ordinal);
+        Assert.Contains("appStoreVersions/version-1/relationships/build", handler.RequestUris[4].ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetSubscriptionsForAppAsync_ListsGroupsAndSubscriptions()
     {
         var handler = new SequenceHandler(

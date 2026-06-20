@@ -93,6 +93,90 @@ public sealed class AppStoreConnectClient : IDisposable
     }
 
     /// <summary>
+    /// Creates an App Store version for an app and platform.
+    /// </summary>
+    public Task<AppStoreConnectVersionInfo> CreateVersionAsync(
+        string appId,
+        string versionString,
+        ApplePlatform platform,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(appId))
+            throw new ArgumentException("App id is required.", nameof(appId));
+        if (string.IsNullOrWhiteSpace(versionString))
+            throw new ArgumentException("Version string is required.", nameof(versionString));
+
+        var body = new
+        {
+            data = new
+            {
+                type = "appStoreVersions",
+                attributes = new
+                {
+                    platform = ToAppStoreConnectPlatform(platform),
+                    versionString = versionString.Trim()
+                },
+                relationships = new
+                {
+                    app = new
+                    {
+                        data = new { type = "apps", id = appId.Trim() }
+                    }
+                }
+            }
+        };
+
+        return PostSingleAsync("appStoreVersions", body, ParseVersion, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads the build relationship id currently selected for an App Store version.
+    /// </summary>
+    public async Task<string?> GetVersionBuildIdAsync(string versionId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(versionId))
+            throw new ArgumentException("Version id is required.", nameof(versionId));
+
+        using var doc = await GetJsonAsync(
+            $"appStoreVersions/{Uri.EscapeDataString(versionId.Trim())}/relationships/build",
+            cancellationToken,
+            returnNullOnNotFound: true).ConfigureAwait(false);
+        if (doc is null ||
+            !doc.RootElement.TryGetProperty("data", out var data) ||
+            data.ValueKind == JsonValueKind.Null)
+            return null;
+        if (data.ValueKind != JsonValueKind.Object)
+            return null;
+
+        return GetString(data, "id");
+    }
+
+    /// <summary>
+    /// Selects a build for an App Store version.
+    /// </summary>
+    public async Task SetVersionBuildAsync(
+        string versionId,
+        string buildId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(versionId))
+            throw new ArgumentException("Version id is required.", nameof(versionId));
+        if (string.IsNullOrWhiteSpace(buildId))
+            throw new ArgumentException("Build id is required.", nameof(buildId));
+
+        var body = new
+        {
+            data = new { type = "builds", id = buildId.Trim() }
+        };
+
+        using var _ = await SendJsonAsync(
+            new HttpMethod("PATCH"),
+            $"appStoreVersions/{Uri.EscapeDataString(versionId.Trim())}/relationships/build",
+            body,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Lists builds for an app.
     /// </summary>
     public Task<AppStoreConnectBuildInfo[]> GetBuildsAsync(

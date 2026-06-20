@@ -312,6 +312,12 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
 
+    public bool PrepareDistribution { get; set; }
+
+    public bool SelectBuildForDistribution { get; set; } = true;
+
+    public bool AllowUnprocessedDistributionBuild { get; set; }
+
     public bool SyncScreenshots { get; set; }
 
     public bool ReplaceScreenshots { get; set; }
@@ -334,6 +340,12 @@ internal sealed class PowerForgeAppleReleasePlan
     public string? ScreenshotConfigPath { get; set; }
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
+
+    public bool PrepareDistribution { get; set; }
+
+    public bool SelectBuildForDistribution { get; set; } = true;
+
+    public bool AllowUnprocessedDistributionBuild { get; set; }
 
     public bool ReplaceScreenshots { get; set; }
 
@@ -365,6 +377,8 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
     public string? BundleId { get; set; }
 
     public ApplePlatform Platform { get; set; }
+
+    public string? AppStoreConnectAppId { get; set; }
 
     public string ProjectPath { get; set; } = string.Empty;
 
@@ -402,6 +416,8 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public AppleAppArchiveUploadResult? Upload { get; set; }
 
     public XcodeProjectVersionUpdateResult? VersionUpdate { get; set; }
+
+    public AppStoreConnectReleasePreparationResult? Distribution { get; set; }
 
     public bool Success { get; set; }
 
