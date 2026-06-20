@@ -1,0 +1,158 @@
+namespace PowerForge;
+
+/// <summary>
+/// Prepares App Store Connect Distribution metadata for an uploaded Apple app build.
+/// </summary>
+public sealed class AppStoreConnectReleasePreparationService
+{
+    private readonly AppStoreConnectClient _client;
+
+    /// <summary>
+    /// Creates a release preparation service.
+    /// </summary>
+    /// <param name="client">App Store Connect client.</param>
+    public AppStoreConnectReleasePreparationService(AppStoreConnectClient client)
+    {
+        _client = client ?? throw new ArgumentNullException(nameof(client));
+    }
+
+    /// <summary>
+    /// Ensures the App Store version exists, optionally selects a processed build, and optionally syncs screenshots.
+    /// </summary>
+    public async Task<AppStoreConnectReleasePreparationResult> PrepareAsync(
+        AppStoreConnectReleasePreparationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(request.AppId))
+            throw new ArgumentException("AppId is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.VersionString))
+            throw new ArgumentException("VersionString is required.", nameof(request));
+        if (request.SelectBuild && string.IsNullOrWhiteSpace(request.BuildNumber))
+            throw new ArgumentException("BuildNumber is required when SelectBuild is enabled.", nameof(request));
+
+        var appId = request.AppId.Trim();
+        var versionString = request.VersionString.Trim();
+        var buildNumber = request.BuildNumber.Trim();
+        var messages = new List<string>();
+        var createdVersion = false;
+        var versions = await _client.GetVersionsAsync(
+            appId,
+            versionString,
+            request.Platform,
+            limit: 10,
+            cancellationToken).ConfigureAwait(false);
+        var version = versions.FirstOrDefault();
+        if (version is null)
+        {
+            if (!request.CreateVersion)
+                throw new InvalidOperationException($"App Store version '{versionString}' was not found for app '{appId}' and platform '{request.Platform}'.");
+
+            version = await _client.CreateVersionAsync(appId, versionString, request.Platform, cancellationToken).ConfigureAwait(false);
+            createdVersion = true;
+            messages.Add($"Created App Store version '{versionString}' for platform '{request.Platform}'.");
+        }
+        else
+        {
+            messages.Add($"Found App Store version '{versionString}' for platform '{request.Platform}'.");
+        }
+
+        AppStoreConnectBuildInfo? build = null;
+        string? previousBuildId = null;
+        var selectedBuild = false;
+        if (request.SelectBuild)
+        {
+            build = (await _client.GetBuildsAsync(
+                appId,
+                buildNumber,
+                limit: 20,
+                marketingVersion: versionString,
+                platform: request.Platform,
+                cancellationToken: cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+            if (build is null)
+                throw new InvalidOperationException($"Build '{buildNumber}' was not found for app '{appId}', version '{versionString}', and platform '{request.Platform}'.");
+
+            if (request.RequireValidBuild)
+                ValidateBuildIsSelectable(build, buildNumber);
+
+            previousBuildId = await _client.GetVersionBuildIdAsync(version.Id, cancellationToken).ConfigureAwait(false);
+            if (string.Equals(previousBuildId, build.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                messages.Add($"Build '{buildNumber}' is already selected for App Store version '{versionString}'.");
+            }
+            else
+            {
+                await _client.SetVersionBuildAsync(version.Id, build.Id, cancellationToken).ConfigureAwait(false);
+                selectedBuild = true;
+                messages.Add($"Selected build '{buildNumber}' for App Store version '{versionString}'.");
+            }
+        }
+
+        AppStoreConnectScreenshotSyncResult? screenshots = null;
+        if (request.ScreenshotSpec is not null)
+        {
+            var screenshotSpec = CreateScreenshotSpecForVersion(request.ScreenshotSpec, appId, versionString, request.Platform, version.Id);
+            screenshots = await new AppStoreConnectScreenshotSyncService(_client).SyncAsync(
+                new AppStoreConnectScreenshotSyncRequest
+                {
+                    Spec = screenshotSpec,
+                    ReplaceExisting = request.ReplaceScreenshots,
+                    BaseDirectory = request.BaseDirectory
+                },
+                cancellationToken).ConfigureAwait(false);
+            messages.Add("Synchronized App Store screenshots.");
+        }
+
+        return new AppStoreConnectReleasePreparationResult
+        {
+            AppId = appId,
+            VersionString = versionString,
+            BuildNumber = buildNumber,
+            Platform = request.Platform,
+            Version = version,
+            Build = build,
+            CreatedVersion = createdVersion,
+            SelectedBuild = selectedBuild,
+            PreviousBuildId = previousBuildId,
+            Screenshots = screenshots,
+            Messages = messages.ToArray()
+        };
+    }
+
+    private static void ValidateBuildIsSelectable(AppStoreConnectBuildInfo build, string buildNumber)
+    {
+        if (!string.Equals(build.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Build '{buildNumber}' cannot be selected because processing state is '{build.ProcessingState ?? "unknown"}'.");
+        if (build.Expired == true)
+            throw new InvalidOperationException($"Build '{buildNumber}' cannot be selected because it is expired.");
+    }
+
+    private static AppStoreConnectScreenshotSyncSpec CreateScreenshotSpecForVersion(
+        AppStoreConnectScreenshotSyncSpec source,
+        string appId,
+        string versionString,
+        ApplePlatform platform,
+        string versionId)
+    {
+        if (!string.IsNullOrWhiteSpace(source.AppId) &&
+            !string.Equals(source.AppId.Trim(), appId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Screenshot config AppId '{source.AppId}' does not match release app id '{appId}'.");
+        var sourceVersionString = string.IsNullOrWhiteSpace(source.VersionString) ? null : source.VersionString!.Trim();
+        if (sourceVersionString is not null &&
+            !string.Equals(sourceVersionString, versionString, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Screenshot config VersionString '{source.VersionString}' does not match release version '{versionString}'.");
+        if (source.Platform != platform)
+            throw new InvalidOperationException($"Screenshot config Platform '{source.Platform}' does not match release platform '{platform}'.");
+
+        return new AppStoreConnectScreenshotSyncSpec
+        {
+            AppId = appId,
+            VersionString = versionString,
+            VersionId = versionId,
+            Platform = platform,
+            Locale = source.Locale,
+            ScreenshotSets = source.ScreenshotSets
+        };
+    }
+}

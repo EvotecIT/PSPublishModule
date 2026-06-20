@@ -99,6 +99,7 @@ Get-AppStoreConnectApp -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPat
 Get-AppStoreConnectVersion -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath -AppId $appId
 Get-AppStoreConnectBuild -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath -AppId $appId
 Test-AppleAppReleaseDrift -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath -Path '.\Tactra.xcodeproj' -AppId $appId -Platform iOS
+Set-AppStoreConnectVersionBuild -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath -AppId $appId -VersionString '1.0.1' -BuildNumber '5' -Platform iOS
 ```
 
 ## Unified Release Flow
@@ -119,10 +120,21 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
     "ExportRoot": "Artifacts/Apple/Exports",
     "TeamId": "8ZPGZ79T7J",
     "Upload": false,
+    "PrepareDistribution": true,
+    "SelectBuildForDistribution": true,
+    "SyncScreenshots": true,
+    "ScreenshotConfigPaths": [
+      "build/appstore-screenshots/ios.json",
+      "build/appstore-screenshots/macos.json"
+    ],
+    "AppStoreConnectApiKeyPath": ".appstoreconnect/private_keys/AuthKey_ABC123DEFG.p8",
+    "AppStoreConnectApiKeyId": "ABC123DEFG",
+    "AppStoreConnectApiIssuerId": "00000000-0000-0000-0000-000000000000",
     "Apps": [
       {
         "Name": "Tactra iPhone",
         "BundleId": "com.evotecit.tactra",
+        "AppStoreConnectAppId": "1234567890",
         "Platform": "iOS",
         "ProjectPath": "Tactra.xcodeproj",
         "Scheme": "Tactra"
@@ -130,6 +142,7 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
       {
         "Name": "Tactra iPad",
         "BundleId": "com.evotecit.tactra",
+        "AppStoreConnectAppId": "1234567890",
         "Platform": "iPadOS",
         "ProjectPath": "Tactra.xcodeproj",
         "Scheme": "Tactra"
@@ -137,6 +150,7 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
       {
         "Name": "Tactra Mac",
         "BundleId": "com.evotecit.tactra.mac",
+        "AppStoreConnectAppId": "1234567890",
         "Platform": "macOS",
         "ProjectPath": "Tactra.xcodeproj",
         "Scheme": "TactraMac"
@@ -166,11 +180,16 @@ and `xcodebuild -exportArchive` helpers as `New-AppleAppArchive` and
 
 ## Current Boundary
 
-These helpers automate signed binary archive/upload and provide low-level screenshot
-upload primitives. App Store localized text metadata, build selection for review, and
-release submission still need dedicated App Store Connect write support before they
-should be automated here. Unified `AppleApps` screenshot sync is not wired yet; keep
-using `Sync-AppStoreConnectScreenshots` or project-specific screenshot scripts for now.
+These helpers automate signed binary archive/upload, App Store version preparation,
+processed build selection, and screenshot sync. `AppleApps.PrepareDistribution`
+creates the App Store version when needed, finds the matching uploaded build by
+marketing version/build number/platform, and attaches it once App Store Connect reports
+the build as `VALID`. `AppleApps.SyncScreenshots` runs the same screenshot sync engine
+from the unified release flow for matching screenshot config files.
+
+Localized text metadata, pricing, review submission, phased release controls, and final
+manual release/submission decisions still need dedicated App Store Connect automation
+before they should be driven by this lane.
 
 ## Screenshot Upload Flow
 

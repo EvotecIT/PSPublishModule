@@ -522,6 +522,93 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_PreparesDistributionVersionWithResolvedProjectVersion()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj", "1.0.1", "5");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var requests = new List<AppStoreConnectReleasePreparationRequest>();
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Archive should not run."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."),
+                prepareAppleDistribution: request =>
+                {
+                    requests.Add(request);
+                    return new AppStoreConnectReleasePreparationResult
+                    {
+                        AppId = request.AppId,
+                        VersionString = request.VersionString,
+                        BuildNumber = request.BuildNumber,
+                        Platform = request.Platform,
+                        Version = new AppStoreConnectVersionInfo { Id = "version-1", VersionString = request.VersionString },
+                        Build = new AppStoreConnectBuildInfo { Id = "build-5", Version = request.BuildNumber },
+                        SelectedBuild = true
+                    };
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        PrepareDistribution = true,
+                        SelectBuildForDistribution = true,
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                AppStoreConnectAppId = "app-1"
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                });
+
+            Assert.True(result.Success);
+            var request = Assert.Single(requests);
+            Assert.NotNull(request.Credential);
+            Assert.Equal("app-1", request.AppId);
+            Assert.Equal("1.0.1", request.VersionString);
+            Assert.Equal("5", request.BuildNumber);
+            Assert.True(request.CreateVersion);
+            Assert.True(request.SelectBuild);
+            Assert.True(request.RequireValidBuild);
+
+            var appResult = Assert.Single(result.AppleApps);
+            Assert.Equal("version-1", appResult.Distribution?.Version.Id);
+            Assert.Equal("build-5", appResult.Distribution?.Build?.Id);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ToolsOnly_DoesNotRunAppleApps()
     {
         var root = CreateSandbox();
@@ -589,21 +676,30 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_AppleApps_RejectsScreenshotSyncUntilUnifiedSupportExists()
+    public void Execute_AppleApps_AcceptsScreenshotSyncInUnifiedPlan()
     {
         var root = CreateSandbox();
         try
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var screenshotConfigPath = Path.Combine(root, "screenshots.json");
+            File.WriteAllText(screenshotConfigPath, """{ "appId": "app-1", "versionString": "1.0.0", "platform": "iOS", "screenshotSets": [] }""");
 
             var service = new PowerForgeReleaseService(new NullLogger());
-            var ex = Assert.Throws<NotSupportedException>(() => service.Execute(
+            var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
                     AppleApps = new PowerForgeAppleReleaseOptions
                     {
                         ProjectRoot = ".",
+                        Archive = false,
                         SyncScreenshots = true,
+                        ScreenshotConfigPath = "screenshots.json",
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
                         Apps = new[]
                         {
                             new AppleAppConfiguration
@@ -611,7 +707,8 @@ public sealed class PowerForgeReleaseServiceTests
                                 Name = "Tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
-                                Platform = ApplePlatform.iOS
+                                Platform = ApplePlatform.iOS,
+                                AppStoreConnectAppId = "app-1"
                             }
                         }
                     }
@@ -620,9 +717,12 @@ public sealed class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     PlanOnly = true
-                }));
+                });
 
-            Assert.Contains("SyncScreenshots is not supported", ex.Message, StringComparison.Ordinal);
+            Assert.True(result.Success);
+            Assert.NotNull(result.AppleAppPlan);
+            Assert.True(result.AppleAppPlan!.SyncScreenshots);
+            Assert.EndsWith("screenshots.json", result.AppleAppPlan.ScreenshotConfigPath, StringComparison.Ordinal);
         }
         finally
         {

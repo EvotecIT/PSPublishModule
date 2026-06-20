@@ -261,6 +261,9 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "PrepareDistribution": { "type": "boolean" },
+        "SelectBuildForDistribution": { "type": "boolean" },
+        "AllowUnprocessedDistributionBuild": { "type": "boolean" },
         "SyncScreenshots": { "type": "boolean" },
         "ReplaceScreenshots": { "type": "boolean" },
         "Apps": {
