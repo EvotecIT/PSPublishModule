@@ -118,6 +118,74 @@ public sealed class AppStoreConnectClient : IDisposable
     }
 
     /// <summary>
+    /// Lists subscription groups for an app.
+    /// </summary>
+    public Task<AppStoreConnectSubscriptionGroupInfo[]> GetSubscriptionGroupsAsync(
+        string appId,
+        int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(appId))
+            throw new ArgumentException("App id is required.", nameof(appId));
+
+        var query = new Dictionary<string, string?>
+        {
+            ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
+        };
+
+        return GetArrayAsync(
+            $"apps/{Uri.EscapeDataString(appId.Trim())}/subscriptionGroups" + BuildQuery(query),
+            ParseSubscriptionGroup,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Lists auto-renewable subscriptions for a subscription group.
+    /// </summary>
+    public Task<AppStoreConnectSubscriptionInfo[]> GetSubscriptionsAsync(
+        string subscriptionGroupId,
+        int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(subscriptionGroupId))
+            throw new ArgumentException("Subscription group id is required.", nameof(subscriptionGroupId));
+
+        var query = new Dictionary<string, string?>
+        {
+            ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
+        };
+
+        return GetArrayAsync(
+            $"subscriptionGroups/{Uri.EscapeDataString(subscriptionGroupId.Trim())}/subscriptions" + BuildQuery(query),
+            ParseSubscription,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Lists all auto-renewable subscriptions for an app across subscription groups.
+    /// </summary>
+    public async Task<AppStoreConnectSubscriptionInfo[]> GetSubscriptionsForAppAsync(
+        string appId,
+        int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        var groups = await GetSubscriptionGroupsAsync(appId, limit, cancellationToken).ConfigureAwait(false);
+        var subscriptions = new List<AppStoreConnectSubscriptionInfo>();
+        foreach (var group in groups)
+        {
+            var groupSubscriptions = await GetSubscriptionsAsync(group.Id, limit, cancellationToken).ConfigureAwait(false);
+            foreach (var subscription in groupSubscriptions)
+            {
+                subscription.SubscriptionGroupId = group.Id;
+                subscription.SubscriptionGroupReferenceName = group.ReferenceName;
+                subscriptions.Add(subscription);
+            }
+        }
+
+        return subscriptions.ToArray();
+    }
+
+    /// <summary>
     /// Lists App Store version localizations for an App Store version.
     /// </summary>
     public Task<AppStoreConnectVersionLocalizationInfo[]> GetVersionLocalizationsAsync(
@@ -608,6 +676,30 @@ public sealed class AppStoreConnectClient : IDisposable
             Id = GetString(item, "id") ?? string.Empty,
             Locale = GetString(attrs, "locale"),
             Name = GetString(attrs, "name")
+        };
+    }
+
+    private static AppStoreConnectSubscriptionGroupInfo ParseSubscriptionGroup(JsonElement item)
+    {
+        var attrs = GetAttributes(item);
+        return new AppStoreConnectSubscriptionGroupInfo
+        {
+            Id = GetString(item, "id") ?? string.Empty,
+            ReferenceName = GetString(attrs, "referenceName")
+        };
+    }
+
+    private static AppStoreConnectSubscriptionInfo ParseSubscription(JsonElement item)
+    {
+        var attrs = GetAttributes(item);
+        return new AppStoreConnectSubscriptionInfo
+        {
+            Id = GetString(item, "id") ?? string.Empty,
+            ProductId = GetString(attrs, "productId"),
+            Name = GetString(attrs, "name"),
+            State = GetString(attrs, "state"),
+            SubscriptionPeriod = GetString(attrs, "subscriptionPeriod"),
+            FamilySharable = GetBool(attrs, "familySharable")
         };
     }
 

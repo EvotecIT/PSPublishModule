@@ -164,6 +164,71 @@ public sealed class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GetSubscriptionsForAppAsync_ListsGroupsAndSubscriptions()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-1",
+                      "type": "subscriptionGroups",
+                      "attributes": { "referenceName": "CasaRay Plus" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "sub-monthly",
+                      "type": "subscriptions",
+                      "attributes": {
+                        "productId": "com.evotecit.casaray.plus.monthly",
+                        "name": "CasaRay Plus Monthly",
+                        "state": "READY_TO_SUBMIT",
+                        "subscriptionPeriod": "ONE_MONTH",
+                        "familySharable": false
+                      }
+                    },
+                    {
+                      "id": "sub-yearly",
+                      "type": "subscriptions",
+                      "attributes": {
+                        "productId": "com.evotecit.casaray.plus.yearly",
+                        "name": "CasaRay Plus Yearly",
+                        "state": "READY_TO_SUBMIT",
+                        "subscriptionPeriod": "ONE_YEAR",
+                        "familySharable": false
+                      }
+                    }
+                  ]
+                }
+                """));
+
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var subscriptions = await client.GetSubscriptionsForAppAsync("app-1");
+
+        Assert.Equal(2, subscriptions.Length);
+        Assert.All(subscriptions, subscription =>
+        {
+            Assert.Equal("group-1", subscription.SubscriptionGroupId);
+            Assert.Equal("CasaRay Plus", subscription.SubscriptionGroupReferenceName);
+            Assert.Equal("READY_TO_SUBMIT", subscription.State);
+        });
+        Assert.Equal("com.evotecit.casaray.plus.monthly", subscriptions[0].ProductId);
+        Assert.Equal("ONE_MONTH", subscriptions[0].SubscriptionPeriod);
+        Assert.False(subscriptions[0].FamilySharable);
+        Assert.Contains("apps/app-1/subscriptionGroups?", handler.RequestUris[0].ToString(), StringComparison.Ordinal);
+        Assert.Contains("subscriptionGroups/group-1/subscriptions?", handler.RequestUris[1].ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UploadScreenshotAsync_CreatesReservationUploadsAssetAndCommitsChecksum()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
