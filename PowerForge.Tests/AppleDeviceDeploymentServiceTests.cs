@@ -304,6 +304,63 @@ App installed:
         }
     }
 
+    [Fact]
+    public async Task DeployAsync_treats_locked_device_launch_as_successful_deployment()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.app"));
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.Arguments.Contains("install"))
+                    return Success("App installed:\n• bundleID: com.evotecit.tactra\n");
+
+                if (request.Arguments.Contains("launch"))
+                    return new ProcessRunResult(
+                        1,
+                        string.Empty,
+                        """
+                        ERROR: The application failed to launch. (com.apple.dt.CoreDeviceError error 10002 (0x2712))
+                               BundleIdentifier = com.evotecit.tactra
+                                   The request was denied by service delegate (SBMainWorkspace) for reason: Locked ("Unable to launch com.evotecit.tactra because the device was not, or could not be, unlocked").
+                                   BSErrorCodeDescription = Locked
+                        """,
+                        "xcrun-test",
+                        TimeSpan.FromMilliseconds(1),
+                        timedOut: false);
+
+                return Success("ok");
+            });
+            var service = new AppleDeviceDeploymentService(runner);
+
+            var result = await service.DeployAsync(new AppleAppDeviceDeploymentRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "Tactra",
+                AppPath = app.FullName,
+                DeviceIdentifier = "device-1",
+                BundleIdentifier = "com.evotecit.tactra",
+                Launch = true,
+                XcodeBuildExecutable = "xcodebuild-test",
+                XcrunExecutable = "xcrun-test"
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(result.Install);
+            Assert.True(result.Install.Succeeded);
+            Assert.NotNull(result.Launch);
+            Assert.False(result.Launch.Succeeded);
+            Assert.True(result.Launch.DeviceLocked);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ProcessRunResult Success(string stdOut)
         => new(0, stdOut, string.Empty, "tool", TimeSpan.FromMilliseconds(1), false);
 

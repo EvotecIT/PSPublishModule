@@ -216,6 +216,9 @@ public sealed class AppleAppLaunchResult
 
     /// <summary>True when devicectl completed successfully.</summary>
     public bool Succeeded => ProcessResult.Succeeded;
+
+    /// <summary>True when devicectl reported that launch was rejected because the device was locked.</summary>
+    public bool DeviceLocked => AppleDeviceLaunchFailureClassifier.IsDeviceLocked(ProcessResult);
 }
 
 /// <summary>
@@ -244,6 +247,6 @@ public sealed class AppleAppDeviceDeploymentResult
     /// <summary>Launch result, when Launch was requested and install succeeded.</summary>
     public AppleAppLaunchResult? Launch { get; set; }
 
-    /// <summary>True when all requested deployment stages completed successfully.</summary>
-    public bool Succeeded => Build.Succeeded && (Install?.Succeeded ?? false) && (Launch?.Succeeded ?? true);
+    /// <summary>True when build and install succeeded, and launch either succeeded or was blocked only because the device was locked.</summary>
+    public bool Succeeded => Build.Succeeded && (Install?.Succeeded ?? false) && (Launch is null || Launch.Succeeded || Launch.DeviceLocked);
 }
