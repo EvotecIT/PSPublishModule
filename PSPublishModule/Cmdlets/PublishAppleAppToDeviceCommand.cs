@@ -119,8 +119,10 @@ public sealed class PublishAppleAppToDeviceCommand : PSCmdlet
             ThrowTerminatingError(AppleDeviceCommandSupport.CreateProcessError(result.Build.ProcessResult, "AppleAppBuildFailed", "xcodebuild build failed."));
         if (result.Install is not null && !result.Install.Succeeded)
             ThrowTerminatingError(AppleDeviceCommandSupport.CreateProcessError(result.Install.ProcessResult, "AppleAppInstallFailed", "devicectl install failed."));
-        if (result.Launch is not null && !result.Launch.Succeeded)
+        if (result.Launch is not null && !result.Launch.Succeeded && !result.Launch.DeviceLocked)
             ThrowTerminatingError(AppleDeviceCommandSupport.CreateProcessError(result.Launch.ProcessResult, "AppleAppLaunchFailed", "devicectl launch failed."));
+        if (result.Launch is not null && result.Launch.DeviceLocked)
+            WriteWarning("The app was installed, but devicectl could not launch it because the device is locked. Unlock the device and launch the app manually or rerun Start-AppleApp.");
 
         WriteObject(result);
     }
