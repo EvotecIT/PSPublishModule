@@ -731,6 +731,76 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_AcceptsMetadataAndReadinessInUnifiedPlan()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var metadataConfigPath = Path.Combine(root, "metadata.json");
+            File.WriteAllText(metadataConfigPath,
+                """
+                {
+                  "appId": "app-1",
+                  "versionString": "1.0.0",
+                  "platform": "iOS",
+                  "locale": "en-US",
+                  "metadata": {
+                    "description": "Premium remote.",
+                    "keywords": "media,remote",
+                    "supportUrl": "https://example.test/support"
+                  }
+                }
+                """);
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        SyncMetadata = true,
+                        CheckReleaseReadiness = true,
+                        MetadataConfigPath = "metadata.json",
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                AppStoreConnectAppId = "app-1"
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.AppleAppPlan);
+            Assert.True(result.AppleAppPlan!.SyncMetadata);
+            Assert.True(result.AppleAppPlan.CheckReleaseReadiness);
+            Assert.EndsWith("metadata.json", result.AppleAppPlan.MetadataConfigPath, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleApps_ValidatesProjectPathBeforeReportingSuccess()
     {
         var root = CreateSandbox();

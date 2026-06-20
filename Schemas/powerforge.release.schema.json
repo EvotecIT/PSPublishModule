@@ -261,11 +261,18 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "MetadataConfigPath": { "type": [ "string", "null" ] },
+        "MetadataConfigPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "PrepareDistribution": { "type": "boolean" },
         "SelectBuildForDistribution": { "type": "boolean" },
         "AllowUnprocessedDistributionBuild": { "type": "boolean" },
+        "SyncMetadata": { "type": "boolean" },
         "SyncScreenshots": { "type": "boolean" },
         "ReplaceScreenshots": { "type": "boolean" },
+        "CheckReleaseReadiness": { "type": "boolean" },
         "Apps": {
           "type": "array",
           "items": { "$ref": "powerforge.segments.schema.json#/$defs/AppleAppConfiguration" }

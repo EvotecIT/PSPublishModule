@@ -89,6 +89,16 @@ public sealed class AppStoreConnectReleasePreparationService
             }
         }
 
+        AppStoreConnectVersionMetadataSyncResult? metadata = null;
+        if (request.MetadataSpec is not null)
+        {
+            var metadataSpec = CreateMetadataSpecForVersion(request.MetadataSpec, appId, versionString, request.Platform, version.Id);
+            metadata = await new AppStoreConnectVersionMetadataSyncService(_client).SyncAsync(
+                new AppStoreConnectVersionMetadataSyncRequest { Spec = metadataSpec },
+                cancellationToken).ConfigureAwait(false);
+            messages.Add("Synchronized App Store version metadata.");
+        }
+
         AppStoreConnectScreenshotSyncResult? screenshots = null;
         if (request.ScreenshotSpec is not null)
         {
@@ -104,6 +114,24 @@ public sealed class AppStoreConnectReleasePreparationService
             messages.Add("Synchronized App Store screenshots.");
         }
 
+        AppStoreConnectReleaseReadinessResult? readiness = null;
+        if (request.CheckReadiness)
+        {
+            var readinessRequest = CreateReadinessRequestForVersion(
+                request.ReadinessRequest,
+                appId,
+                versionString,
+                buildNumber,
+                request.Platform,
+                request.ScreenshotSpec);
+            readiness = await new AppStoreConnectReleaseReadinessService(_client)
+                .CheckAsync(readinessRequest, cancellationToken)
+                .ConfigureAwait(false);
+            messages.Add(readiness.IsReady
+                ? "App Store version readiness check passed."
+                : "App Store version readiness check failed.");
+        }
+
         return new AppStoreConnectReleasePreparationResult
         {
             AppId = appId,
@@ -116,6 +144,8 @@ public sealed class AppStoreConnectReleasePreparationService
             SelectedBuild = selectedBuild,
             PreviousBuildId = previousBuildId,
             Screenshots = screenshots,
+            Metadata = metadata,
+            Readiness = readiness,
             Messages = messages.ToArray()
         };
     }
@@ -153,6 +183,66 @@ public sealed class AppStoreConnectReleasePreparationService
             Platform = platform,
             Locale = source.Locale,
             ScreenshotSets = source.ScreenshotSets
+        };
+    }
+
+    private static AppStoreConnectVersionMetadataSpec CreateMetadataSpecForVersion(
+        AppStoreConnectVersionMetadataSpec source,
+        string appId,
+        string versionString,
+        ApplePlatform platform,
+        string versionId)
+    {
+        if (!string.IsNullOrWhiteSpace(source.AppId) &&
+            !string.Equals(source.AppId.Trim(), appId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Metadata config AppId '{source.AppId}' does not match release app id '{appId}'.");
+        var sourceVersionString = string.IsNullOrWhiteSpace(source.VersionString) ? null : source.VersionString!.Trim();
+        if (sourceVersionString is not null &&
+            !string.Equals(sourceVersionString, versionString, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Metadata config VersionString '{source.VersionString}' does not match release version '{versionString}'.");
+        if (source.Platform != platform)
+            throw new InvalidOperationException($"Metadata config Platform '{source.Platform}' does not match release platform '{platform}'.");
+
+        return new AppStoreConnectVersionMetadataSpec
+        {
+            AppId = appId,
+            VersionString = versionString,
+            VersionId = versionId,
+            Platform = platform,
+            Locale = source.Locale,
+            Metadata = source.Metadata
+        };
+    }
+
+    private static AppStoreConnectReleaseReadinessRequest CreateReadinessRequestForVersion(
+        AppStoreConnectReleaseReadinessRequest? source,
+        string appId,
+        string versionString,
+        string buildNumber,
+        ApplePlatform platform,
+        AppStoreConnectScreenshotSyncSpec? screenshotSpec)
+    {
+        source ??= new AppStoreConnectReleaseReadinessRequest();
+        return new AppStoreConnectReleaseReadinessRequest
+        {
+            AppId = appId,
+            VersionString = versionString,
+            BuildNumber = buildNumber,
+            Platform = platform,
+            Locale = string.IsNullOrWhiteSpace(source.Locale) ? "en-US" : source.Locale.Trim(),
+            RequireSelectedBuild = source.RequireSelectedBuild,
+            RequireValidBuild = source.RequireValidBuild,
+            RequireDescription = source.RequireDescription,
+            RequireKeywords = source.RequireKeywords,
+            RequireSupportUrl = source.RequireSupportUrl,
+            RequireMarketingUrl = source.RequireMarketingUrl,
+            RequirePromotionalText = source.RequirePromotionalText,
+            RequireWhatsNew = source.RequireWhatsNew,
+            RequireScreenshots = source.RequireScreenshots,
+            RequireCompleteScreenshots = source.RequireCompleteScreenshots,
+            MinimumScreenshotsPerSet = source.MinimumScreenshotsPerSet,
+            RequiredScreenshotDisplayTypes = source.RequiredScreenshotDisplayTypes,
+            ScreenshotSpec = screenshotSpec
         };
     }
 }

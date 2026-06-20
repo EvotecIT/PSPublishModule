@@ -13,6 +13,24 @@ public sealed class AppStoreConnectVersionLocalizationInfo
 
     /// <summary>Localized app name.</summary>
     public string? Name { get; set; }
+
+    /// <summary>Localized App Store description.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Localized App Store keywords.</summary>
+    public string? Keywords { get; set; }
+
+    /// <summary>Localized marketing URL.</summary>
+    public string? MarketingUrl { get; set; }
+
+    /// <summary>Localized promotional text.</summary>
+    public string? PromotionalText { get; set; }
+
+    /// <summary>Localized support URL.</summary>
+    public string? SupportUrl { get; set; }
+
+    /// <summary>Localized release notes / what's new text.</summary>
+    public string? WhatsNew { get; set; }
 }
 
 /// <summary>

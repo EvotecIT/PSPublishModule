@@ -302,15 +302,19 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string? SigningStyle { get; set; }
 
-    public string? AppStoreConnectApiKeyPath { get; set; }
+    internal string? AppStoreConnectApiKeyPath { get; set; }
 
-    public string? AppStoreConnectApiKeyId { get; set; }
+    internal string? AppStoreConnectApiKeyId { get; set; }
 
-    public string? AppStoreConnectApiIssuerId { get; set; }
+    internal string? AppStoreConnectApiIssuerId { get; set; }
 
     public string? ScreenshotConfigPath { get; set; }
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
+
+    public string? MetadataConfigPath { get; set; }
+
+    public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
 
     public bool PrepareDistribution { get; set; }
 
@@ -318,9 +322,13 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public bool AllowUnprocessedDistributionBuild { get; set; }
 
+    public bool SyncMetadata { get; set; }
+
     public bool SyncScreenshots { get; set; }
 
     public bool ReplaceScreenshots { get; set; }
+
+    public bool CheckReleaseReadiness { get; set; }
 
     public AppleAppConfiguration[] Apps { get; set; } = Array.Empty<AppleAppConfiguration>();
 }
@@ -341,13 +349,21 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
 
+    public string? MetadataConfigPath { get; set; }
+
+    public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
+
     public bool PrepareDistribution { get; set; }
 
     public bool SelectBuildForDistribution { get; set; } = true;
 
     public bool AllowUnprocessedDistributionBuild { get; set; }
 
+    public bool SyncMetadata { get; set; }
+
     public bool ReplaceScreenshots { get; set; }
+
+    public bool CheckReleaseReadiness { get; set; }
 
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 

@@ -213,6 +213,179 @@ public sealed class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GetVersionLocalizationsAsync_ParsesSubmissionMetadataFields()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "loc-1",
+                      "type": "appStoreVersionLocalizations",
+                      "attributes": {
+                        "locale": "en-US",
+                        "description": "Premium remote.",
+                        "keywords": "media,remote",
+                        "marketingUrl": "https://example.test",
+                        "promotionalText": "Fresh release.",
+                        "supportUrl": "https://example.test/support",
+                        "whatsNew": "Improved releases."
+                      }
+                    }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var localizations = await client.GetVersionLocalizationsAsync("version-1", "en-US");
+
+        var localization = Assert.Single(localizations);
+        Assert.Equal("Premium remote.", localization.Description);
+        Assert.Equal("media,remote", localization.Keywords);
+        Assert.Equal("https://example.test", localization.MarketingUrl);
+        Assert.Equal("Fresh release.", localization.PromotionalText);
+        Assert.Equal("https://example.test/support", localization.SupportUrl);
+        Assert.Equal("Improved releases.", localization.WhatsNew);
+    }
+
+    [Fact]
+    public async Task UpdateVersionLocalizationAsync_PatchesOnlyProvidedMetadataFields()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "loc-1",
+                    "type": "appStoreVersionLocalizations",
+                    "attributes": {
+                      "locale": "en-US",
+                      "description": "Updated.",
+                      "supportUrl": "https://example.test/support"
+                    }
+                  }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var result = await client.UpdateVersionLocalizationAsync("loc-1", new AppStoreConnectVersionLocalizationUpdate
+        {
+            Description = "Updated.",
+            SupportUrl = "https://example.test/support"
+        });
+
+        Assert.Equal("Updated.", result.Description);
+        Assert.Equal(new HttpMethod("PATCH"), handler.Methods[0]);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/appStoreVersionLocalizations/loc-1", handler.RequestUris[0].ToString());
+        Assert.Contains("\"description\":\"Updated.\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"supportUrl\":\"https://example.test/support\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("promotionalText", handler.RequestBodies[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReleaseReadinessService_RequiresSelectedBuildMetadataAndCompleteScreenshots()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "version-1",
+                      "type": "appStoreVersions",
+                      "attributes": { "versionString": "1.0.1", "platform": "IOS" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-5",
+                      "type": "builds",
+                      "attributes": { "version": "5", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.1", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                { "data": { "id": "build-5", "type": "builds" } }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "loc-1",
+                      "type": "appStoreVersionLocalizations",
+                      "attributes": {
+                        "locale": "en-US",
+                        "description": "Premium remote.",
+                        "keywords": "media,remote",
+                        "supportUrl": "https://example.test/support"
+                      }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "set-1",
+                      "type": "appScreenshotSets",
+                      "attributes": { "screenshotDisplayType": "APP_IPHONE_65" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "shot-1",
+                      "type": "appScreenshots",
+                      "attributes": {
+                        "fileName": "01.png",
+                        "assetDeliveryState": { "state": "COMPLETE" }
+                      }
+                    }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReleaseReadinessService(client);
+
+        var result = await service.CheckAsync(new AppStoreConnectReleaseReadinessRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.1",
+            BuildNumber = "5",
+            Platform = ApplePlatform.iOS,
+            RequiredScreenshotDisplayTypes = new[] { "APP_IPHONE_65" }
+        });
+
+        Assert.True(result.IsReady);
+        Assert.All(result.Checks, check => Assert.True(check.Passed, check.Message));
+        Assert.Equal("build-5", result.SelectedBuildId);
+        Assert.Equal("Premium remote.", result.Localization?.Description);
+        Assert.Equal("COMPLETE", Assert.Single(Assert.Single(result.ScreenshotSets).AssetDeliveryStates));
+    }
+
+    [Fact]
     public async Task ReleasePreparationService_CreatesMissingVersionAndSelectsValidBuild()
     {
         var handler = new SequenceHandler(
