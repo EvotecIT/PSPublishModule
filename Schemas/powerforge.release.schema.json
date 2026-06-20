@@ -293,6 +293,8 @@
         "AllowUnprocessedReviewBuild": { "type": "boolean" },
         "SkipReviewReadinessCheck": { "type": "boolean" },
         "AllowReviewSubmissionWhenNotReady": { "type": "boolean" },
+        "ReleaseApprovedVersion": { "type": "boolean" },
+        "AllowNonPendingDeveloperRelease": { "type": "boolean" },
         "Apps": {
           "type": "array",
           "items": { "$ref": "powerforge.segments.schema.json#/$defs/AppleAppConfiguration" }

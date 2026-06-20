@@ -352,6 +352,10 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public bool AllowReviewSubmissionWhenNotReady { get; set; }
 
+    public bool ReleaseApprovedVersion { get; set; }
+
+    public bool AllowNonPendingDeveloperRelease { get; set; }
+
     public AppleAppConfiguration[] Apps { get; set; } = Array.Empty<AppleAppConfiguration>();
 }
 
@@ -408,6 +412,10 @@ internal sealed class PowerForgeAppleReleasePlan
     public bool SkipReviewReadinessCheck { get; set; }
 
     public bool AllowReviewSubmissionWhenNotReady { get; set; }
+
+    public bool ReleaseApprovedVersion { get; set; }
+
+    public bool AllowNonPendingDeveloperRelease { get; set; }
 
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 
@@ -482,6 +490,8 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public AppStoreConnectTestFlightDistributionResult? TestFlight { get; set; }
 
     public AppStoreConnectReviewSubmissionResult? ReviewSubmission { get; set; }
+
+    public AppStoreConnectVersionReleaseResult? VersionRelease { get; set; }
 
     public bool Success { get; set; }
 

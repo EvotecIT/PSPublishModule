@@ -1111,6 +1111,92 @@ public sealed class AppStoreConnectClientTests
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1", handler.RequestUris[5].ToString());
     }
 
+    [Fact]
+    public async Task VersionReleaseService_ReleasesPendingDeveloperVersion()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "version-1",
+                      "type": "appStoreVersions",
+                      "attributes": {
+                        "versionString": "1.0.1",
+                        "platform": "IOS",
+                        "appStoreState": "PENDING_DEVELOPER_RELEASE"
+                      }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "release-1",
+                    "type": "appStoreVersionReleaseRequests",
+                    "relationships": {
+                      "appStoreVersion": { "data": { "type": "appStoreVersions", "id": "version-1" } }
+                    }
+                  }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectVersionReleaseService(client);
+
+        var result = await service.ReleaseAsync(new AppStoreConnectVersionReleaseRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.1",
+            Platform = ApplePlatform.iOS
+        });
+
+        Assert.Equal("version-1", result.Version.Id);
+        Assert.Equal("release-1", result.ReleaseRequest.Id);
+        Assert.Equal("version-1", result.ReleaseRequest.AppStoreVersionId);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/appStoreVersionReleaseRequests", handler.RequestUris[1].ToString());
+        Assert.Contains("\"type\":\"appStoreVersionReleaseRequests\"", handler.RequestBodies[1], StringComparison.Ordinal);
+        Assert.Contains("\"id\":\"version-1\"", handler.RequestBodies[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VersionReleaseService_BlocksNonPendingDeveloperVersionByDefault()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "version-1",
+                      "type": "appStoreVersions",
+                      "attributes": {
+                        "versionString": "1.0.1",
+                        "platform": "IOS",
+                        "appStoreState": "READY_FOR_REVIEW"
+                      }
+                    }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectVersionReleaseService(client);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReleaseAsync(new AppStoreConnectVersionReleaseRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.1",
+            Platform = ApplePlatform.iOS
+        }));
+
+        Assert.Contains("PENDING_DEVELOPER_RELEASE", ex.Message, StringComparison.Ordinal);
+        Assert.Single(handler.RequestUris);
+    }
+
     private static AppStoreConnectApiCredential CreateCredential()
     {
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);

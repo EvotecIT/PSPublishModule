@@ -911,6 +911,58 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_AcceptsApprovedVersionReleaseInUnifiedPlan()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        ReleaseApprovedVersion = true,
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                AppStoreConnectAppId = "app-1"
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.AppleAppPlan);
+            Assert.True(result.AppleAppPlan!.ReleaseApprovedVersion);
+            Assert.False(result.AppleAppPlan.AllowNonPendingDeveloperRelease);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleApps_ValidatesProjectPathBeforeReportingSuccess()
     {
         var root = CreateSandbox();
