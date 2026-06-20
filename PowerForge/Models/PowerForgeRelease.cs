@@ -302,15 +302,19 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string? SigningStyle { get; set; }
 
-    public string? AppStoreConnectApiKeyPath { get; set; }
+    internal string? AppStoreConnectApiKeyPath { get; set; }
 
-    public string? AppStoreConnectApiKeyId { get; set; }
+    internal string? AppStoreConnectApiKeyId { get; set; }
 
-    public string? AppStoreConnectApiIssuerId { get; set; }
+    internal string? AppStoreConnectApiIssuerId { get; set; }
 
     public string? ScreenshotConfigPath { get; set; }
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
+
+    public string? MetadataConfigPath { get; set; }
+
+    public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
 
     public bool PrepareDistribution { get; set; }
 
@@ -318,9 +322,39 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public bool AllowUnprocessedDistributionBuild { get; set; }
 
+    public bool SyncMetadata { get; set; }
+
     public bool SyncScreenshots { get; set; }
 
     public bool ReplaceScreenshots { get; set; }
+
+    public bool CheckReleaseReadiness { get; set; }
+
+    public bool DistributeTestFlight { get; set; }
+
+    public string[] TestFlightBetaGroupIds { get; set; } = Array.Empty<string>();
+
+    public string[] TestFlightBetaGroupNames { get; set; } = Array.Empty<string>();
+
+    public string[] TestFlightTesterEmails { get; set; } = Array.Empty<string>();
+
+    public bool CreateMissingTestFlightTesters { get; set; } = true;
+
+    public bool AllowUnprocessedTestFlightBuild { get; set; }
+
+    public bool SubmitForReview { get; set; }
+
+    public bool AllowUnselectedReviewBuild { get; set; }
+
+    public bool AllowUnprocessedReviewBuild { get; set; }
+
+    public bool SkipReviewReadinessCheck { get; set; }
+
+    public bool AllowReviewSubmissionWhenNotReady { get; set; }
+
+    public bool ReleaseApprovedVersion { get; set; }
+
+    public bool AllowNonPendingDeveloperRelease { get; set; }
 
     public AppleAppConfiguration[] Apps { get; set; } = Array.Empty<AppleAppConfiguration>();
 }
@@ -341,13 +375,47 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
 
+    public string? MetadataConfigPath { get; set; }
+
+    public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
+
     public bool PrepareDistribution { get; set; }
 
     public bool SelectBuildForDistribution { get; set; } = true;
 
     public bool AllowUnprocessedDistributionBuild { get; set; }
 
+    public bool SyncMetadata { get; set; }
+
     public bool ReplaceScreenshots { get; set; }
+
+    public bool CheckReleaseReadiness { get; set; }
+
+    public bool DistributeTestFlight { get; set; }
+
+    public string[] TestFlightBetaGroupIds { get; set; } = Array.Empty<string>();
+
+    public string[] TestFlightBetaGroupNames { get; set; } = Array.Empty<string>();
+
+    public string[] TestFlightTesterEmails { get; set; } = Array.Empty<string>();
+
+    public bool CreateMissingTestFlightTesters { get; set; } = true;
+
+    public bool AllowUnprocessedTestFlightBuild { get; set; }
+
+    public bool SubmitForReview { get; set; }
+
+    public bool AllowUnselectedReviewBuild { get; set; }
+
+    public bool AllowUnprocessedReviewBuild { get; set; }
+
+    public bool SkipReviewReadinessCheck { get; set; }
+
+    public bool AllowReviewSubmissionWhenNotReady { get; set; }
+
+    public bool ReleaseApprovedVersion { get; set; }
+
+    public bool AllowNonPendingDeveloperRelease { get; set; }
 
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 
@@ -418,6 +486,12 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public XcodeProjectVersionUpdateResult? VersionUpdate { get; set; }
 
     public AppStoreConnectReleasePreparationResult? Distribution { get; set; }
+
+    public AppStoreConnectTestFlightDistributionResult? TestFlight { get; set; }
+
+    public AppStoreConnectReviewSubmissionResult? ReviewSubmission { get; set; }
+
+    public AppStoreConnectVersionReleaseResult? VersionRelease { get; set; }
 
     public bool Success { get; set; }
 

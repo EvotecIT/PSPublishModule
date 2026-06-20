@@ -32,8 +32,17 @@ public sealed class AppStoreConnectReleasePreparationRequest
     /// <summary>Optional screenshot sync configuration to run after the version exists.</summary>
     public AppStoreConnectScreenshotSyncSpec? ScreenshotSpec { get; set; }
 
+    /// <summary>Optional localized metadata sync configuration to run after the version exists.</summary>
+    public AppStoreConnectVersionMetadataSpec? MetadataSpec { get; set; }
+
     /// <summary>Deletes existing screenshots before uploading screenshots from the local spec.</summary>
     public bool ReplaceScreenshots { get; set; }
+
+    /// <summary>Run a release readiness check after distribution preparation.</summary>
+    public bool CheckReadiness { get; set; }
+
+    /// <summary>Readiness check options. App/version/build/platform are filled from this request.</summary>
+    public AppStoreConnectReleaseReadinessRequest? ReadinessRequest { get; set; }
 
     /// <summary>Base directory for resolving relative screenshot paths.</summary>
     public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
@@ -73,6 +82,12 @@ public sealed class AppStoreConnectReleasePreparationResult
 
     /// <summary>Screenshot sync result when screenshots were configured.</summary>
     public AppStoreConnectScreenshotSyncResult? Screenshots { get; set; }
+
+    /// <summary>Metadata sync result when metadata was configured.</summary>
+    public AppStoreConnectVersionMetadataSyncResult? Metadata { get; set; }
+
+    /// <summary>Release readiness result when requested.</summary>
+    public AppStoreConnectReleaseReadinessResult? Readiness { get; set; }
 
     /// <summary>Preparation messages useful for release logs.</summary>
     public string[] Messages { get; set; } = Array.Empty<string>();

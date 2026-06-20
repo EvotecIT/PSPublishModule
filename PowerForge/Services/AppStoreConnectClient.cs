@@ -11,7 +11,7 @@ namespace PowerForge;
 /// <summary>
 /// App Store Connect API client.
 /// </summary>
-public sealed class AppStoreConnectClient : IDisposable
+public sealed partial class AppStoreConnectClient : IDisposable
 {
     private static readonly Uri DefaultBaseUri = new("https://api.appstoreconnect.apple.com/v1/");
 
@@ -759,7 +759,13 @@ public sealed class AppStoreConnectClient : IDisposable
         {
             Id = GetString(item, "id") ?? string.Empty,
             Locale = GetString(attrs, "locale"),
-            Name = GetString(attrs, "name")
+            Name = GetString(attrs, "name"),
+            Description = GetString(attrs, "description"),
+            Keywords = GetString(attrs, "keywords"),
+            MarketingUrl = GetString(attrs, "marketingUrl"),
+            PromotionalText = GetString(attrs, "promotionalText"),
+            SupportUrl = GetString(attrs, "supportUrl"),
+            WhatsNew = GetString(attrs, "whatsNew")
         };
     }
 

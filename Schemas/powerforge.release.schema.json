@@ -261,11 +261,40 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "MetadataConfigPath": { "type": [ "string", "null" ] },
+        "MetadataConfigPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "PrepareDistribution": { "type": "boolean" },
         "SelectBuildForDistribution": { "type": "boolean" },
         "AllowUnprocessedDistributionBuild": { "type": "boolean" },
+        "SyncMetadata": { "type": "boolean" },
         "SyncScreenshots": { "type": "boolean" },
         "ReplaceScreenshots": { "type": "boolean" },
+        "CheckReleaseReadiness": { "type": "boolean" },
+        "DistributeTestFlight": { "type": "boolean" },
+        "TestFlightBetaGroupIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "TestFlightBetaGroupNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "TestFlightTesterEmails": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "CreateMissingTestFlightTesters": { "type": "boolean" },
+        "AllowUnprocessedTestFlightBuild": { "type": "boolean" },
+        "SubmitForReview": { "type": "boolean" },
+        "AllowUnselectedReviewBuild": { "type": "boolean" },
+        "AllowUnprocessedReviewBuild": { "type": "boolean" },
+        "SkipReviewReadinessCheck": { "type": "boolean" },
+        "AllowReviewSubmissionWhenNotReady": { "type": "boolean" },
+        "ReleaseApprovedVersion": { "type": "boolean" },
+        "AllowNonPendingDeveloperRelease": { "type": "boolean" },
         "Apps": {
           "type": "array",
           "items": { "$ref": "powerforge.segments.schema.json#/$defs/AppleAppConfiguration" }
