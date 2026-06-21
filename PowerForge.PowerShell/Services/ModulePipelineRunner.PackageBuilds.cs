@@ -197,8 +197,8 @@ public sealed partial class ModulePipelineRunner
             ConfigPath = configPath,
             ExecuteBuild = true,
             PlanOnly = configuration.PlanOnly,
-            UpdateVersions = ResolveUpdateVersions(actions, mode),
-            Build = ResolveBuild(actions, mode),
+            UpdateVersions = ResolveUpdateVersions(actions, mode, plan.GateMode),
+            Build = ResolveBuild(actions, mode, plan.GateMode),
             PublishNuget = ResolvePublishNuGet(actions, mode),
             PublishGitHub = ResolvePublishGitHub(actions, mode)
         };
@@ -221,8 +221,8 @@ public sealed partial class ModulePipelineRunner
             ConfigPath = configPath,
             ExecuteBuild = true,
             PlanOnly = cfg.PlanOnly,
-            UpdateVersions = ResolveUpdateVersions(actions, mode),
-            Build = ResolveBuild(actions, mode),
+            UpdateVersions = ResolveUpdateVersions(actions, mode, plan.GateMode),
+            Build = ResolveBuild(actions, mode, plan.GateMode),
             PublishNuget = ResolvePublishNuGet(actions, mode),
             PublishGitHub = ResolvePublishGitHub(actions, mode)
         };
@@ -311,18 +311,26 @@ public sealed partial class ModulePipelineRunner
             : actions.PublishGitHub;
     }
 
-    private static bool? ResolveUpdateVersions(ProjectBuildEffectiveActions actions, PackageBuildExecutionMode mode)
+    private static bool? ResolveUpdateVersions(
+        ProjectBuildEffectiveActions actions,
+        PackageBuildExecutionMode mode,
+        ConfigurationGateMode? gateMode)
         => mode switch
         {
             PackageBuildExecutionMode.DependencyBuild => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
+            PackageBuildExecutionMode.BuildOnly when gateMode == ConfigurationGateMode.Build => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
             PackageBuildExecutionMode.BuildOnly => actions.UpdateVersions,
             _ => false
         };
 
-    private static bool? ResolveBuild(ProjectBuildEffectiveActions actions, PackageBuildExecutionMode mode)
+    private static bool? ResolveBuild(
+        ProjectBuildEffectiveActions actions,
+        PackageBuildExecutionMode mode,
+        ConfigurationGateMode? gateMode)
         => mode switch
         {
             PackageBuildExecutionMode.DependencyBuild => actions.Build || actions.PublishNuGet || actions.PublishGitHub,
+            PackageBuildExecutionMode.BuildOnly when gateMode == ConfigurationGateMode.Build => actions.Build || actions.PublishNuGet || actions.PublishGitHub,
             PackageBuildExecutionMode.BuildOnly => actions.Build,
             _ => false
         };

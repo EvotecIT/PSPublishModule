@@ -784,7 +784,7 @@ public sealed partial class ModulePipelineRunner
             resolveMissingModulesOnline = true;
 
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(
-            ResolveGateFilteredPublishes(gateMode, publishes));
+            ResolveDependencyVersionSourcePublishes(gateMode, publishes));
 
         return new RequiredModulePreflightInput(
             resolveMissingModulesOnline,

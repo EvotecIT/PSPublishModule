@@ -677,7 +677,8 @@ public sealed partial class ModulePipelineRunner
         }
 
         var enabledPublishes = ResolveGateFilteredPublishes(gateMode, publishes);
-        var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(enabledPublishes);
+        var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(
+            ResolveDependencyVersionSourcePublishes(gateMode, publishes));
 
         var approved = NormalizeApprovedModules(approvedModules);
         ApplyMergeDefaultsForPlan(
@@ -938,6 +939,20 @@ public sealed partial class ModulePipelineRunner
                 .ToArray()
         };
 
+    private static ConfigurationPublishSegment[] ResolveDependencyVersionSourcePublishes(
+        ConfigurationGateMode? gateMode,
+        IEnumerable<ConfigurationPublishSegment> publishes)
+        => gateMode switch
+        {
+            ConfigurationGateMode.Manifest => Array.Empty<ConfigurationPublishSegment>(),
+            ConfigurationGateMode.Build or ConfigurationGateMode.Publish => publishes
+                .Where(static publish => publish?.Configuration is not null)
+                .ToArray(),
+            _ => publishes
+                .Where(static publish => publish?.Configuration?.Enabled == true)
+                .ToArray()
+        };
+
     private static bool IsGateEnabledProjectBuild(
         ConfigurationGateMode? gateMode,
         ConfigurationProjectBuildSegment? segment)
@@ -953,7 +968,6 @@ public sealed partial class ModulePipelineRunner
     private DependencyVersionSourceRepository? ResolvePublishDependencyVersionSource(ConfigurationPublishSegment[] enabledPublishes)
     {
         var candidates = (enabledPublishes ?? Array.Empty<ConfigurationPublishSegment>())
-            .Where(static publish => publish?.Configuration?.Enabled == true)
             .Select(static publish => publish.Configuration)
             .Where(static publish => publish.UseAsDependencyVersionSource)
             .ToArray();

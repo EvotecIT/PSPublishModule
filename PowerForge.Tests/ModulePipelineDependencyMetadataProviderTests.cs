@@ -138,6 +138,84 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void Plan_GateBuild_UsesPublishRepositoryAsDependencyVersionSourceWithoutPublishing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSWriteHTML";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateGateDependencyVersionSourceSpec(
+                root.FullName,
+                moduleName,
+                dependencyName,
+                ConfigurationGateMode.Build,
+                publishEnabled: false);
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("1.41.0", null)
+                });
+
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+            var plan = runner.Plan(spec);
+
+            var required = Assert.Single(plan.RequiredModules);
+            Assert.Equal("1.41.0", required.ModuleVersion);
+            Assert.Equal("InternalModules", provider.LastOnlineRepository);
+            Assert.Empty(plan.Publishes);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_GatePublish_UsesDisabledPublishRepositoryAsDependencyVersionSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSWriteHTML";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateGateDependencyVersionSourceSpec(
+                root.FullName,
+                moduleName,
+                dependencyName,
+                ConfigurationGateMode.Publish,
+                publishEnabled: false);
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("1.41.0", null)
+                });
+
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+            var plan = runner.Plan(spec);
+
+            var required = Assert.Single(plan.RequiredModules);
+            Assert.Equal("1.41.0", required.ModuleVersion);
+            Assert.Equal("InternalModules", provider.LastOnlineRepository);
+            Assert.Single(plan.Publishes);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_HonorsInstalledVersionSource_WhenPublishOptInIsEnabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -840,6 +918,53 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
 
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
     }
+
+    private static ModulePipelineSpec CreateGateDependencyVersionSourceSpec(
+        string sourcePath,
+        string moduleName,
+        string dependencyName,
+        ConfigurationGateMode gateMode,
+        bool publishEnabled)
+        => new()
+        {
+            Build = new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = sourcePath,
+                Version = "1.0.0"
+            },
+            Install = new ModulePipelineInstallOptions { Enabled = false },
+            Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationGateSegment
+                {
+                    Configuration = new GateConfiguration
+                    {
+                        Mode = gateMode
+                    }
+                },
+                new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.RequiredModule,
+                    Configuration = new ModuleDependencyConfiguration
+                    {
+                        ModuleName = dependencyName,
+                        ModuleVersion = "Latest",
+                        VersionSource = ModuleDependencyVersionSource.PublishRepository
+                    }
+                },
+                new ConfigurationPublishSegment
+                {
+                    Configuration = new PublishConfiguration
+                    {
+                        Destination = PublishDestination.PowerShellGallery,
+                        Enabled = publishEnabled,
+                        RepositoryName = "InternalModules",
+                        UseAsDependencyVersionSource = true
+                    }
+                }
+            }
+        };
 
     private static ModulePipelineSpec CreateApprovedParentSpec(string sourcePath, string moduleName)
     {
