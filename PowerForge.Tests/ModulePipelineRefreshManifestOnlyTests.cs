@@ -37,6 +37,28 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
                             InstallMissingModules = true
                         }
                     },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
                     new ConfigurationAppleAppSegment
                     {
                         Configuration = new AppleAppConfiguration
@@ -67,6 +89,8 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.False(plan.InstallMissingModules);
             Assert.Empty(plan.AppleApps);
             Assert.Empty(plan.XcodeProjectVersions);
+            Assert.Empty(plan.ProjectBuilds);
+            Assert.Empty(plan.PackageBuilds);
         }
         finally
         {

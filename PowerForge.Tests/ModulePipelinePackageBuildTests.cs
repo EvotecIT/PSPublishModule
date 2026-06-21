@@ -119,6 +119,266 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
+    public void Run_AppliesDslOverridesToReferencedProjectBuildConfig()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var configPath = Path.Combine(root.FullName, "Build", "project.build.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            File.WriteAllText(
+                configPath,
+                string.Join(Environment.NewLine, new[]
+                {
+                    "{",
+                    "  \"RootPath\": \"Sources\",",
+                    "  \"Build\": false,",
+                    "  \"PublishNuget\": true,",
+                    "  \"PublishGitHub\": true,",
+                    "  \"CreateReleaseZip\": true",
+                    "}"
+                }));
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPath));
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = "JsonPackages",
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = false,
+                            PublishGitHub = false,
+                            CreateReleaseZip = false,
+                            Options = new Dictionary<string, object?>
+                            {
+                                ["StagingPath"] = Path.Combine("Artifacts", "MergedProjectBuild")
+                            }
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+            _ = runner.Run(spec, plan, new RecordingProgressReporter());
+
+            var call = Assert.Single(calls);
+            Assert.True(call.Request.Build);
+            Assert.False(call.Request.PublishNuget);
+            Assert.False(call.Request.PublishGitHub);
+            Assert.NotNull(call.Configuration);
+            Assert.False(call.Configuration!.CreateReleaseZip);
+            Assert.Equal(Path.Combine("Artifacts", "MergedProjectBuild"), call.Configuration.StagingPath);
+            Assert.EndsWith(Path.Combine("Build", "project.build.json"), call.ConfigPath, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_PreservesDefaultProjectBuildActionsWhenOneDslActionIsOverridden()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var configPath = Path.Combine(root.FullName, "Build", "project.build.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            File.WriteAllText(
+                configPath,
+                string.Join(Environment.NewLine, new[]
+                {
+                    "{",
+                    "  \"RootPath\": \"Sources\"",
+                    "}"
+                }));
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPath));
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = "JsonPackages",
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true,
+                            PublishNuget = false
+                        }
+                    }
+                }
+            };
+
+            runner.Run(spec);
+
+            var call = Assert.Single(calls);
+            Assert.True(call.Request.UpdateVersions);
+            Assert.True(call.Request.Build);
+            Assert.False(call.Request.PublishNuget);
+            Assert.False(call.Request.PublishGitHub);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_ConvertsProjectBuildOptionsHashtableMaps()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            WriteProjectBuildConfig(root.FullName, Path.Combine("Build", "project.build.json"));
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPath));
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = "JsonPackages",
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true,
+                            Options = new Dictionary<string, object?>
+                            {
+                                ["ExpectedVersionMap"] = new System.Collections.Hashtable
+                                {
+                                    ["HtmlTinkerX"] = "2.0.X"
+                                },
+                                ["VersionTracks"] = new System.Collections.Hashtable
+                                {
+                                    ["Core"] = new System.Collections.Hashtable
+                                    {
+                                        ["ExpectedVersion"] = "2.0.X",
+                                        ["Projects"] = new[] { "HtmlTinkerX" },
+                                        ["IncludePrerelease"] = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            runner.Run(spec);
+
+            var call = Assert.Single(calls);
+            Assert.NotNull(call.Configuration);
+            Assert.Equal("2.0.X", call.Configuration!.ExpectedVersionMap?["HtmlTinkerX"]);
+            Assert.NotNull(call.Configuration.VersionTracks);
+            var track = call.Configuration.VersionTracks!["Core"];
+            Assert.Equal("2.0.X", track.ExpectedVersion);
+            Assert.Equal(new[] { "HtmlTinkerX" }, track.Projects);
+            Assert.True(track.IncludePrerelease);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_PacksPublishOnlyDependencyPackageLaneForLocalFeed()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -57,10 +57,11 @@ internal static class ModulePipelinePlanningHelpers
 
     internal static string? TryResolveCsprojPath(string projectRoot, string moduleName, string? netProjectPath, string? netProjectName)
     {
-        if (string.IsNullOrWhiteSpace(netProjectPath))
-            return null;
-
         var projectName = string.IsNullOrWhiteSpace(netProjectName) ? moduleName : netProjectName!.Trim();
+
+        if (string.IsNullOrWhiteSpace(netProjectPath))
+            return TryResolveConventionalCsprojPath(projectRoot, projectName);
+
         var rawPath = netProjectPath!.Trim().Trim('"');
         var normalizedPath = rawPath
             .Replace('\\', Path.DirectorySeparatorChar)
@@ -74,6 +75,22 @@ internal static class ModulePipelinePlanningHelpers
             return basePath;
 
         return Path.Combine(basePath, projectName + ".csproj");
+    }
+
+    private static string? TryResolveConventionalCsprojPath(string projectRoot, string projectName)
+    {
+        if (string.IsNullOrWhiteSpace(projectRoot) || string.IsNullOrWhiteSpace(projectName))
+            return null;
+
+        var candidates = new[]
+        {
+            Path.Combine(projectRoot, "Sources", projectName, projectName + ".csproj"),
+            Path.Combine(projectRoot, "Sources", projectName + ".csproj"),
+            Path.Combine(projectRoot, "src", projectName, projectName + ".csproj"),
+            Path.Combine(projectRoot, "src", projectName + ".csproj")
+        };
+
+        return candidates.FirstOrDefault(File.Exists);
     }
 
     internal static string[] ResolveInstallRootsFromCompatiblePSEditions(string[] compatiblePSEditions)

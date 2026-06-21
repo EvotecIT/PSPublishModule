@@ -190,7 +190,7 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException("ProjectBuild ConfigPath is required.");
 
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
-        var configuration = LoadProjectBuildConfiguration(configPath);
+        var configuration = LoadProjectBuildConfiguration(configPath, cfg);
         var actions = ResolveEffectiveActions(configuration);
         var request = new ProjectBuildHostRequest
         {
@@ -204,7 +204,7 @@ public sealed partial class ModulePipelineRunner
         };
 
         _logger.Info($"Running package project build ({DescribePackageBuildMode(mode)}): {configPath}");
-        return _packageBuildExecutor(request, configuration: null, configPath: null);
+        return _packageBuildExecutor(request, configuration, configPath);
     }
 
     private ProjectBuildHostExecutionResult ExecutePackageBuildSegment(
@@ -234,6 +234,56 @@ public sealed partial class ModulePipelineRunner
     private ProjectBuildConfiguration LoadProjectBuildConfiguration(string configPath)
         => new ProjectBuildSupportService(_logger).LoadConfig(configPath);
 
+    private ProjectBuildConfiguration LoadProjectBuildConfiguration(
+        string configPath,
+        ProjectBuildConfigurationReference reference)
+    {
+        var configuration = LoadProjectBuildConfiguration(configPath);
+        ApplyProjectBuildReferenceOverrides(configuration, reference);
+        return configuration;
+    }
+
+    private static void ApplyProjectBuildReferenceOverrides(
+        ProjectBuildConfiguration target,
+        ProjectBuildConfigurationReference reference)
+    {
+        ApplyPackageBuildOptions(target, reference.Options);
+
+        if (UsesDefaultProjectBuildActions(target) && HasProjectBuildActionOverride(reference))
+            ApplyDefaultProjectBuildActions(target);
+
+        if (reference.UpdateVersions is not null)
+            target.UpdateVersions = reference.UpdateVersions;
+        if (reference.Build is not null)
+            target.Build = reference.Build;
+        if (reference.PublishNuget is not null)
+            target.PublishNuget = reference.PublishNuget;
+        if (reference.PublishGitHub is not null)
+            target.PublishGitHub = reference.PublishGitHub;
+        if (reference.CreateReleaseZip is not null)
+            target.CreateReleaseZip = reference.CreateReleaseZip;
+    }
+
+    private static bool HasProjectBuildActionOverride(ProjectBuildConfigurationReference reference)
+        => reference.UpdateVersions is not null ||
+           reference.Build is not null ||
+           reference.PublishNuget is not null ||
+           reference.PublishGitHub is not null;
+
+    private static bool UsesDefaultProjectBuildActions(ProjectBuildConfiguration target)
+        => target.UpdateVersions is null &&
+           target.Build is null &&
+           target.PublishNuget is null &&
+           target.PublishGitHub is null;
+
+    private static void ApplyDefaultProjectBuildActions(ProjectBuildConfiguration target)
+    {
+        target.UpdateVersions = true;
+        target.Build = true;
+        target.PublishNuget = false;
+        target.PublishGitHub = false;
+    }
+
     private bool ShouldExecuteProjectBuildPublish(
         ModulePipelinePlan plan,
         ConfigurationProjectBuildSegment segment,
@@ -243,7 +293,7 @@ public sealed partial class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(cfg.ConfigPath))
             return false;
 
-        var actions = ResolveEffectiveActions(LoadProjectBuildConfiguration(ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath)));
+        var actions = ResolveEffectiveActions(LoadProjectBuildConfiguration(ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath), cfg));
         return destination == PackageBuildPublishDestination.NuGet
             ? actions.PublishNuGet
             : actions.PublishGitHub;
@@ -562,6 +612,10 @@ public sealed partial class ModulePipelineRunner
         if (value is JsonElement json)
             return ConvertJsonPackageBuildOption(json, underlyingType);
 
+        if (underlyingType == typeof(Dictionary<string, string>))
+            return ConvertPackageBuildStringDictionaryOption(value);
+        if (underlyingType == typeof(Dictionary<string, ProjectBuildVersionTrack>))
+            return ConvertPackageBuildVersionTracksOption(value);
         if (underlyingType == typeof(string))
             return value.ToString();
         if (underlyingType == typeof(bool))
@@ -570,6 +624,97 @@ public sealed partial class ModulePipelineRunner
             return ConvertPackageBuildStringArrayOption(value);
 
         return Convert.ChangeType(value, underlyingType);
+    }
+
+    private static Dictionary<string, string>? ConvertPackageBuildStringDictionaryOption(object value)
+    {
+        if (value is not System.Collections.IDictionary dictionary)
+            return null;
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry entry in dictionary)
+        {
+            var key = entry.Key?.ToString();
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            result[key!.Trim()] = entry.Value?.ToString() ?? string.Empty;
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    private static Dictionary<string, ProjectBuildVersionTrack>? ConvertPackageBuildVersionTracksOption(object value)
+    {
+        if (value is not System.Collections.IDictionary dictionary)
+            return null;
+
+        var result = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry entry in dictionary)
+        {
+            var key = entry.Key?.ToString();
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            result[key!.Trim()] = ConvertPackageBuildVersionTrackOption(entry.Value);
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    private static ProjectBuildVersionTrack ConvertPackageBuildVersionTrackOption(object? value)
+    {
+        if (value is ProjectBuildVersionTrack track)
+            return track;
+
+        if (value is not System.Collections.IDictionary dictionary)
+            return new ProjectBuildVersionTrack { ExpectedVersion = value?.ToString() };
+
+        return new ProjectBuildVersionTrack
+        {
+            ExpectedVersion = GetPackageBuildDictionaryString(dictionary, nameof(ProjectBuildVersionTrack.ExpectedVersion)),
+            AnchorProject = GetPackageBuildDictionaryString(dictionary, nameof(ProjectBuildVersionTrack.AnchorProject)),
+            AnchorPackageId = GetPackageBuildDictionaryString(dictionary, nameof(ProjectBuildVersionTrack.AnchorPackageId)),
+            Projects = GetPackageBuildDictionaryStringArray(dictionary, nameof(ProjectBuildVersionTrack.Projects)),
+            NugetSource = GetPackageBuildDictionaryStringArray(dictionary, nameof(ProjectBuildVersionTrack.NugetSource)),
+            IncludePrerelease = GetPackageBuildDictionaryBool(dictionary, nameof(ProjectBuildVersionTrack.IncludePrerelease))
+        };
+    }
+
+    private static object? GetPackageBuildDictionaryValue(System.Collections.IDictionary dictionary, string key)
+    {
+        foreach (System.Collections.DictionaryEntry entry in dictionary)
+        {
+            if (string.Equals(entry.Key?.ToString(), key, StringComparison.OrdinalIgnoreCase))
+                return entry.Value;
+        }
+
+        return null;
+    }
+
+    private static string? GetPackageBuildDictionaryString(System.Collections.IDictionary dictionary, string key)
+        => GetPackageBuildDictionaryValue(dictionary, key)?.ToString();
+
+    private static string[]? GetPackageBuildDictionaryStringArray(System.Collections.IDictionary dictionary, string key)
+    {
+        var value = GetPackageBuildDictionaryValue(dictionary, key);
+        if (value is null)
+            return null;
+
+        var values = ConvertPackageBuildStringArrayOption(value);
+        return values.Length == 0 ? null : values;
+    }
+
+    private static bool? GetPackageBuildDictionaryBool(System.Collections.IDictionary dictionary, string key)
+    {
+        var value = GetPackageBuildDictionaryValue(dictionary, key);
+        if (value is null)
+            return null;
+
+        if (value is bool boolean)
+            return boolean;
+
+        return bool.TryParse(value.ToString(), out var parsed) ? parsed : null;
     }
 
     private static object? ConvertJsonPackageBuildOption(JsonElement value, Type targetType)

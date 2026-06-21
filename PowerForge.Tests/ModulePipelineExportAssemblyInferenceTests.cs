@@ -96,6 +96,51 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
     }
 
     [Fact]
+    public void Plan_ResolvesConventionalSourcesCsproj_FromProjectName()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "repo"));
+            var projectName = "PSParseHTML.PowerShell";
+            var csprojDir = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Sources", projectName));
+            var csprojPath = Path.Combine(csprojDir.FullName, projectName + ".csproj");
+            File.WriteAllText(csprojPath, "<Project />");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    ExportAssemblies = Array.Empty<string>()
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            ProjectName = projectName
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.Equal(csprojPath, plan.BuildSpec.CsprojPath);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_CarriesLegacyLibraryCopySettings_IntoBuildSpec()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

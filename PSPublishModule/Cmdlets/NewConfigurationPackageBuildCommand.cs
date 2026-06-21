@@ -1,4 +1,5 @@
 using System.Collections;
+using System.IO;
 using System.Management.Automation;
 using PowerForge;
 
@@ -22,9 +23,9 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
     public string? Name { get; set; }
 
     /// <summary>Path to an existing <c>project.build.json</c> file.</summary>
-    [Parameter(Mandatory = true)]
+    [Parameter]
     [ValidateNotNullOrEmpty]
-    public string ConfigPath { get; set; } = string.Empty;
+    public string ConfigPath { get; set; } = Path.Combine("Build", "project.build.json");
 
     /// <summary>Whether this project build lane is enabled. Defaults to true.</summary>
     [Parameter]
@@ -42,6 +43,30 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
     [Parameter]
     public SwitchParameter ProvideLocalNuGetFeed { get; set; }
 
+    /// <summary>Whether project/package versions should be updated, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter UpdateVersions { get; set; }
+
+    /// <summary>Whether package projects should be built/packed, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter Build { get; set; }
+
+    /// <summary>Whether NuGet packages should be published, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter PublishNuget { get; set; }
+
+    /// <summary>Whether package GitHub release publishing should be enabled, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter PublishGitHub { get; set; }
+
+    /// <summary>Whether release ZIPs should be created, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter CreateReleaseZip { get; set; }
+
+    /// <summary>Additional project-build JSON overrides for less common fields.</summary>
+    [Parameter]
+    public IDictionary? Options { get; set; }
+
     /// <summary>Emits a project-build configuration segment.</summary>
     protected override void ProcessRecord()
     {
@@ -54,10 +79,19 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
                 Enabled = BoundSwitchOrDefault(nameof(Enabled), Enabled, defaultValue: true),
                 BuildBeforeModule = BuildBeforeModule.IsPresent,
                 UseAsReleaseVersionSource = UseAsReleaseVersionSource.IsPresent,
-                ProvideLocalNuGetFeed = ProvideLocalNuGetFeed.IsPresent
+                ProvideLocalNuGetFeed = ProvideLocalNuGetFeed.IsPresent,
+                UpdateVersions = BoundSwitch(nameof(UpdateVersions), UpdateVersions),
+                Build = BoundSwitch(nameof(Build), Build),
+                PublishNuget = BoundSwitch(nameof(PublishNuget), PublishNuget),
+                PublishGitHub = BoundSwitch(nameof(PublishGitHub), PublishGitHub),
+                CreateReleaseZip = BoundSwitch(nameof(CreateReleaseZip), CreateReleaseZip),
+                Options = PackageBuildConfiguration.ToObjectDictionary(Options)
             }
         });
     }
+
+    private bool? BoundSwitch(string name, SwitchParameter value)
+        => MyInvocation.BoundParameters.ContainsKey(name) ? value.IsPresent : null;
 
     private bool BoundSwitchOrDefault(string name, SwitchParameter value, bool defaultValue)
         => MyInvocation.BoundParameters.ContainsKey(name) ? value.IsPresent : defaultValue;
@@ -344,7 +378,7 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
 public sealed class NewConfigurationReleaseCommand : PSCmdlet
 {
     /// <summary>Staged release root where upload-ready assets should be copied.</summary>
-    [Parameter] public string? StageRoot { get; set; }
+    [Parameter] public string? StageRoot { get; set; } = Path.Combine("Artefacts", "UploadReady");
 
     /// <summary>Source used to resolve the coordinated release version.</summary>
     [Parameter] public ReleaseVersionSource VersionSource { get; set; } = ReleaseVersionSource.Module;
