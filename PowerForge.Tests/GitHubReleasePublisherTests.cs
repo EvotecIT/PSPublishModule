@@ -39,4 +39,16 @@ public sealed class GitHubReleasePublisherTests
 
         Assert.Throws<FileNotFoundException>(() => publisher.PublishRelease(request));
     }
+
+    [Fact]
+    public void TryReserveExistingAssetNameForReplacement_AllowsOnlyAssetsFromOriginalSnapshot()
+    {
+        var replaceableAssetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "PowerForge-win-x64.zip"
+        };
+
+        Assert.True(GitHubReleasePublisher.TryReserveExistingAssetNameForReplacement(replaceableAssetNames, "powerforge-win-x64.zip"));
+        Assert.False(GitHubReleasePublisher.TryReserveExistingAssetNameForReplacement(replaceableAssetNames, "PowerForge-win-x64.zip"));
+    }
 }

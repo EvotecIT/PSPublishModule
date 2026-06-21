@@ -230,13 +230,20 @@ public sealed class GitHubReleasePublisher
         List<string> replacedExistingAssets)
     {
         var skippedAssets = new List<string>();
+        var replaceableAssetNames = replaceExistingAssets
+            ? CreateReplaceableAssetNameSet(ListReleaseAssets(owner, repo, token, releaseId))
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var assetPath in assets)
         {
             var fileName = Path.GetFileName(assetPath) ?? assetPath;
 
-            if (replaceExistingAssets && DeleteExistingAssetByName(owner, repo, token, releaseId, fileName))
+            if (replaceExistingAssets &&
+                TryReserveExistingAssetNameForReplacement(replaceableAssetNames, fileName) &&
+                DeleteExistingAssetByName(owner, repo, token, releaseId, fileName))
+            {
                 replacedExistingAssets.Add(fileName);
+            }
 
             _logger.Info($"Uploading GitHub release asset: {fileName}");
 
@@ -245,6 +252,7 @@ public sealed class GitHubReleasePublisher
             if (!resp.IsSuccessStatusCode && replaceExistingAssets &&
                 (int)resp.StatusCode == 422 &&
                 IsAlreadyExistsValidationError(respText, fieldName: "name") &&
+                TryReserveExistingAssetNameForReplacement(replaceableAssetNames, fileName) &&
                 DeleteExistingAssetByName(owner, repo, token, releaseId, fileName))
             {
                 replacedExistingAssets.Add(fileName);
@@ -271,6 +279,26 @@ public sealed class GitHubReleasePublisher
         }
 
         return skippedAssets;
+    }
+
+    internal static bool TryReserveExistingAssetNameForReplacement(ISet<string> replaceableAssetNames, string fileName)
+    {
+        if (replaceableAssetNames is null) throw new ArgumentNullException(nameof(replaceableAssetNames));
+        if (string.IsNullOrWhiteSpace(fileName)) return false;
+
+        return replaceableAssetNames.Remove(fileName);
+    }
+
+    private static HashSet<string> CreateReplaceableAssetNameSet(IEnumerable<GitHubReleaseAssetResponse> existingAssets)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var asset in existingAssets)
+        {
+            if (!string.IsNullOrWhiteSpace(asset.Name))
+                names.Add(asset.Name!);
+        }
+
+        return names;
     }
 
     private static HttpResponseMessage UploadAsset(string uploadUrl, string assetPath, string fileName, string token)
