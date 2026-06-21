@@ -9,7 +9,7 @@ using System.Reflection;
 /// </summary>
 public partial class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemblyCleanup {
     private static readonly object FrameworkResolverLock = new();
-    private static bool _frameworkResolverRegistered;
+    private static int _frameworkResolverRegistrationCount;
 
     /// <summary>
     /// Handles module import event.
@@ -40,23 +40,23 @@ public partial class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModu
 
     private static void RegisterFrameworkResolver() {
         lock (FrameworkResolverLock) {
-            if (_frameworkResolverRegistered) {
-                return;
+            _frameworkResolverRegistrationCount++;
+            if (_frameworkResolverRegistrationCount == 1) {
+                AppDomain.CurrentDomain.AssemblyResolve += MyResolveEventHandler;
             }
-
-            AppDomain.CurrentDomain.AssemblyResolve += MyResolveEventHandler;
-            _frameworkResolverRegistered = true;
         }
     }
 
     private static void UnregisterFrameworkResolver() {
         lock (FrameworkResolverLock) {
-            if (!_frameworkResolverRegistered) {
+            if (_frameworkResolverRegistrationCount <= 0) {
                 return;
             }
 
-            AppDomain.CurrentDomain.AssemblyResolve -= MyResolveEventHandler;
-            _frameworkResolverRegistered = false;
+            _frameworkResolverRegistrationCount--;
+            if (_frameworkResolverRegistrationCount == 0) {
+                AppDomain.CurrentDomain.AssemblyResolve -= MyResolveEventHandler;
+            }
         }
     }
 
