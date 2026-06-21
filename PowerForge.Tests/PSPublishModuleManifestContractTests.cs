@@ -21,7 +21,10 @@ public sealed class PSPublishModuleManifestContractTests
     private static readonly string[] DslHelperCmdlets =
     {
         "Get-ConfigurationBoolean",
-        "New-ConfigurationGate"
+        "New-ConfigurationGate",
+        "New-ConfigurationPackageBuild",
+        "New-ConfigurationProjectBuild",
+        "New-ConfigurationRelease"
     };
 
     [Fact]
