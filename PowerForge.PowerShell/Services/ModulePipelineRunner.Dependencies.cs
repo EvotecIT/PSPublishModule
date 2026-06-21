@@ -202,7 +202,7 @@ public sealed partial class ModulePipelineRunner
         foreach (var publish in plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
         {
             var cfg = publish.Configuration;
-            if (cfg is null || !cfg.Enabled || cfg.Destination != PublishDestination.PowerShellGallery)
+            if (cfg is null || cfg.Destination != PublishDestination.PowerShellGallery)
                 continue;
 
             switch (cfg.Tool)

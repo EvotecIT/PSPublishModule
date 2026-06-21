@@ -1876,6 +1876,38 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_GatePublishInstallsToolForDisabledPublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreatePublishToolSpec(root.FullName, moduleName, PublishTool.PSResourceGet, ConfigurationGateMode.Publish, publishEnabled: false);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Equal(ConfigurationGateMode.Publish, plan.GateMode);
+            Assert.Single(plan.Publishes);
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ValidateModuleImports_UsesInjectedPowerShellRunner()
     {
         var requests = new List<PowerShellRunRequest>();
@@ -2219,7 +2251,12 @@ public sealed class ModulePipelineHostedOperationsTests
         method!.Invoke(runner, new object?[] { plan, buildResult, configuration });
     }
 
-    private static ModulePipelineSpec CreatePublishToolSpec(string root, string moduleName, PublishTool tool)
+    private static ModulePipelineSpec CreatePublishToolSpec(
+        string root,
+        string moduleName,
+        PublishTool tool,
+        ConfigurationGateMode? gateMode = null,
+        bool publishEnabled = true)
     {
         return new ModulePipelineSpec
         {
@@ -2230,19 +2267,28 @@ public sealed class ModulePipelineHostedOperationsTests
                 Version = "1.0.0"
             },
             Install = new ModulePipelineInstallOptions { Enabled = false },
-            Segments = new IConfigurationSegment[]
+            Segments = new IConfigurationSegment?[]
             {
+                gateMode is null
+                    ? null
+                    : new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = gateMode.Value
+                        }
+                    },
                 new ConfigurationPublishSegment
                 {
                     Configuration = new PublishConfiguration
                     {
-                        Enabled = true,
+                        Enabled = publishEnabled,
                         Destination = PublishDestination.PowerShellGallery,
                         Tool = tool,
                         ApiKey = "test-api-key"
                     }
                 }
-            }
+            }.Where(static segment => segment is not null).Cast<IConfigurationSegment>().ToArray()
         };
     }
 
