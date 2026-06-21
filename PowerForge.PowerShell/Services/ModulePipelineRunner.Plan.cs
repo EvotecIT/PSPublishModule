@@ -933,6 +933,7 @@ public sealed partial class ModulePipelineRunner
             ConfigurationGateMode.Manifest or ConfigurationGateMode.Build => Array.Empty<ConfigurationPublishSegment>(),
             ConfigurationGateMode.Publish => publishes
                 .Where(static publish => publish?.Configuration is not null)
+                .Select(static publish => NormalizePublishGateSegment(publish))
                 .ToArray(),
             _ => publishes
                 .Where(static publish => publish?.Configuration?.Enabled == true)
@@ -944,7 +945,9 @@ public sealed partial class ModulePipelineRunner
         IEnumerable<ConfigurationPublishSegment> publishes)
         => gateMode switch
         {
-            ConfigurationGateMode.Manifest => Array.Empty<ConfigurationPublishSegment>(),
+            ConfigurationGateMode.Manifest => publishes
+                .Where(static publish => publish?.Configuration?.Enabled == true)
+                .ToArray(),
             ConfigurationGateMode.Build or ConfigurationGateMode.Publish => publishes
                 .Where(static publish => publish?.Configuration is not null)
                 .ToArray(),
@@ -952,6 +955,12 @@ public sealed partial class ModulePipelineRunner
                 .Where(static publish => publish?.Configuration?.Enabled == true)
                 .ToArray()
         };
+
+    private static ConfigurationPublishSegment NormalizePublishGateSegment(ConfigurationPublishSegment publish)
+    {
+        publish.Configuration.Enabled = true;
+        return publish;
+    }
 
     private static bool IsGateEnabledProjectBuild(
         ConfigurationGateMode? gateMode,
@@ -976,7 +985,7 @@ public sealed partial class ModulePipelineRunner
             return null;
 
         if (candidates.Length > 1)
-            throw new InvalidOperationException("Only one enabled New-ConfigurationPublish segment can use -UseAsDependencyVersionSource.");
+            throw new InvalidOperationException("Only one effective New-ConfigurationPublish segment can use -UseAsDependencyVersionSource.");
 
         var publish = candidates[0];
         if (publish.Destination != PublishDestination.PowerShellGallery)

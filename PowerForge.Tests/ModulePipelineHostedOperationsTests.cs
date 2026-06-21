@@ -1896,7 +1896,8 @@ public sealed class ModulePipelineHostedOperationsTests
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
             Assert.Equal(ConfigurationGateMode.Publish, plan.GateMode);
-            Assert.Single(plan.Publishes);
+            var publish = Assert.Single(plan.Publishes);
+            Assert.True(publish.Configuration.Enabled);
             Assert.Single(result);
             Assert.Equal(1, hostedOperations.DependencyInstallCalls);
             Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);

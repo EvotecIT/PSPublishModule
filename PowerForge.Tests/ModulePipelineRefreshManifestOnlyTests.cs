@@ -254,7 +254,8 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.False(plan.BuildSpec.RefreshManifestOnly);
             Assert.Single(plan.ProjectBuilds);
             Assert.Single(plan.PackageBuilds);
-            Assert.Single(plan.Publishes);
+            var publish = Assert.Single(plan.Publishes);
+            Assert.True(publish.Configuration.Enabled);
         }
         finally
         {
