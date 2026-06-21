@@ -87,7 +87,9 @@ public sealed partial class ModulePipelinePackageBuildTests
 
             Assert.Equal(2, calls.Count);
             Assert.Equal(2, result.ProjectBuildResults.Length);
-            Assert.Null(calls[0].Configuration);
+            Assert.NotNull(calls[0].Configuration);
+            var referencedConfiguration = calls[0].Configuration!;
+            Assert.Equal("Sources", referencedConfiguration.RootPath);
             Assert.EndsWith(Path.Combine("Build", "project.build.json"), calls[0].Request.ConfigPath, StringComparison.OrdinalIgnoreCase);
             Assert.True(calls[0].Request.Build);
             Assert.False(calls[0].Request.PublishNuget);

@@ -60,7 +60,12 @@ internal static class ModulePipelinePlanningHelpers
         var projectName = string.IsNullOrWhiteSpace(netProjectName) ? moduleName : netProjectName!.Trim();
 
         if (string.IsNullOrWhiteSpace(netProjectPath))
+        {
+            if (string.IsNullOrWhiteSpace(netProjectName))
+                return null;
+
             return TryResolveConventionalCsprojPath(projectRoot, projectName);
+        }
 
         var rawPath = netProjectPath!.Trim().Trim('"');
         var normalizedPath = rawPath
