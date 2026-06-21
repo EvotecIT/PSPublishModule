@@ -6,6 +6,41 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    public void Deserialize_ReadsGateSegment()
+    {
+        const string json = """
+            {
+              "Build": {
+                "Name": "PSPublishModule",
+                "SourcePath": ".",
+                "Version": "1.0.0"
+              },
+              "Install": {
+                "Enabled": false
+              },
+              "Segments": [
+                {
+                  "Type": "Gate",
+                  "Configuration": {
+                    "Mode": "Build"
+                  }
+                }
+              ]
+            }
+            """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+
+        Assert.NotNull(spec);
+        var segment = Assert.IsType<ConfigurationGateSegment>(Assert.Single(spec!.Segments));
+        Assert.Equal(ConfigurationGateMode.Build, segment.Configuration.Mode);
+    }
+
+    [Fact]
     public void Deserialize_ReadsExecuteSegment()
     {
         const string json = """

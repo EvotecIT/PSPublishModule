@@ -213,6 +213,11 @@ public sealed class ModulePipelinePlan
     public ConfigurationPublishSegment[] Publishes { get; }
 
     /// <summary>
+    /// Optional high-level run gate that constrained this plan.
+    /// </summary>
+    public ConfigurationGateMode? GateMode { get; }
+
+    /// <summary>
     /// Artefact configuration segments enabled for this pipeline run.
     /// </summary>
     public ConfigurationArtefactSegment[] Artefacts { get; }
@@ -389,7 +394,8 @@ public sealed class ModulePipelinePlan
             installMissingModulesRepository,
             installMissingModulesCredential,
             stagingWasGenerated,
-            deleteGeneratedStagingAfterRun)
+            deleteGeneratedStagingAfterRun,
+            gateMode: null)
     {
     }
 
@@ -506,7 +512,8 @@ public sealed class ModulePipelinePlan
             installMissingModulesCredential,
             stagingWasGenerated,
             deleteGeneratedStagingAfterRun,
-            embeddedModules: null)
+            embeddedModules: null,
+            gateMode: null)
     {
     }
 
@@ -568,7 +575,8 @@ public sealed class ModulePipelinePlan
         RepositoryCredential? installMissingModulesCredential,
         bool stagingWasGenerated,
         bool deleteGeneratedStagingAfterRun,
-        RequiredModuleReference[]? embeddedModules = null)
+        RequiredModuleReference[]? embeddedModules = null,
+        ConfigurationGateMode? gateMode = null)
     {
         ModuleName = moduleName;
         ProjectRoot = projectRoot;
@@ -611,6 +619,7 @@ public sealed class ModulePipelinePlan
         SignModule = signModule;
         Signing = signing;
         Publishes = publishes ?? Array.Empty<ConfigurationPublishSegment>();
+        GateMode = gateMode;
         Artefacts = artefacts;
         InstallEnabled = installEnabled;
         InstallStrategy = installStrategy;

@@ -107,21 +107,30 @@ public sealed class PowerForgeProjectCmdletTests
         using var ps = CreatePowerShellWithModuleImported();
         ps.AddCommand("New-ConfigurationProjectBuild")
             .AddParameter("Name", "Libraries")
-            .AddParameter("ConfigPath", ".\\Build\\project.build.json")
             .AddParameter("BuildBeforeModule")
             .AddParameter("UseAsReleaseVersionSource")
-            .AddParameter("ProvideLocalNuGetFeed");
+            .AddParameter("ProvideLocalNuGetFeed")
+            .AddParameter("Build")
+            .AddParameter("PublishNuget", false)
+            .AddParameter("PublishGitHub", false)
+            .AddParameter("CreateReleaseZip", false)
+            .AddParameter("Options", new Hashtable { ["StagingPath"] = ".\\Artifacts\\ProjectBuild" });
 
         var results = ps.Invoke();
 
         Assert.False(ps.HadErrors);
         var segment = Assert.IsType<ConfigurationProjectBuildSegment>(Assert.Single(results).BaseObject);
         Assert.Equal("Libraries", segment.Configuration.Name);
-        Assert.Equal(".\\Build\\project.build.json", segment.Configuration.ConfigPath);
+        Assert.Equal(Path.Combine("Build", "project.build.json"), segment.Configuration.ConfigPath);
         Assert.True(segment.Configuration.BuildBeforeModule);
         Assert.True(segment.Configuration.UseAsReleaseVersionSource);
         Assert.True(segment.Configuration.ProvideLocalNuGetFeed);
         Assert.True(segment.Configuration.Enabled);
+        Assert.True(segment.Configuration.Build);
+        Assert.False(segment.Configuration.PublishNuget);
+        Assert.False(segment.Configuration.PublishGitHub);
+        Assert.False(segment.Configuration.CreateReleaseZip);
+        Assert.Equal(".\\Artifacts\\ProjectBuild", segment.Configuration.Options?["StagingPath"]);
     }
 
     [Fact]
@@ -199,7 +208,6 @@ public sealed class PowerForgeProjectCmdletTests
     {
         using var ps = CreatePowerShellWithModuleImported();
         ps.AddCommand("New-ConfigurationRelease")
-            .AddParameter("StageRoot", ".\\Artifacts\\Release")
             .AddParameter("VersionSource", ReleaseVersionSource.PackageBuild)
             .AddParameter("PrimaryProject", "HtmlTinkerX")
             .AddParameter("BuildOrder", new[] { "PackageBuild", "Module" })
@@ -209,11 +217,63 @@ public sealed class PowerForgeProjectCmdletTests
 
         Assert.False(ps.HadErrors);
         var segment = Assert.IsType<ConfigurationReleaseSegment>(Assert.Single(results).BaseObject);
-        Assert.Equal(".\\Artifacts\\Release", segment.Configuration.StageRoot);
+        Assert.Equal(Path.Combine("Artefacts", "UploadReady"), segment.Configuration.StageRoot);
         Assert.Equal(ReleaseVersionSource.PackageBuild, segment.Configuration.VersionSource);
         Assert.Equal("HtmlTinkerX", segment.Configuration.PrimaryProject);
         Assert.Equal(new[] { "PackageBuild", "Module" }, segment.Configuration.BuildOrder);
         Assert.Equal(new[] { "NuGet", "PowerShellGallery", "GitHub" }, segment.Configuration.PublishOrder);
+    }
+
+    [Fact]
+    public void NewConfigurationGate_EmitsSegment()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationGate")
+            .AddParameter("Type", ConfigurationGateMode.Build);
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationGateSegment>(Assert.Single(results).BaseObject);
+        Assert.Equal(ConfigurationGateMode.Build, segment.Configuration.Mode);
+    }
+
+    [Fact]
+    public void GetConfigurationBoolean_UsesEnvironmentValueOrDefault()
+    {
+        var name = "POWERFORGE_TEST_BOOL_" + Guid.NewGuid().ToString("N");
+        try
+        {
+            using (var ps = CreatePowerShellWithModuleImported())
+            {
+                ps.AddCommand("Get-ConfigurationBoolean")
+                    .AddArgument(name)
+                    .AddParameter("Default", true);
+
+                var results = ps.Invoke();
+
+                Assert.False(ps.HadErrors);
+                Assert.True(Assert.IsType<bool>(Assert.Single(results).BaseObject));
+            }
+
+            Environment.SetEnvironmentVariable(name, "false");
+
+            using (var ps = CreatePowerShellWithModuleImported())
+            {
+                ps.AddCommand("Get-ConfigurationBoolean")
+                    .AddArgument(name)
+                    .AddParameter("Default", true);
+
+                var results = ps.Invoke();
+
+                Assert.False(ps.HadErrors);
+                Assert.False(Assert.IsType<bool>(Assert.Single(results).BaseObject));
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(name, null);
+        }
     }
 
     private static PowerShell CreatePowerShellWithModuleImported()

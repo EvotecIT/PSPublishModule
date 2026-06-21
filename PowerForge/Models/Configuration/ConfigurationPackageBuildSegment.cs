@@ -37,6 +37,24 @@ public sealed class ProjectBuildConfigurationReference
 
     /// <summary>Whether package outputs should be exposed as a temporary local NuGet feed for the module lane.</summary>
     public bool ProvideLocalNuGetFeed { get; set; }
+
+    /// <summary>Whether project/package versions should be updated, overriding the referenced JSON when set.</summary>
+    public bool? UpdateVersions { get; set; }
+
+    /// <summary>Whether package projects should be built/packed, overriding the referenced JSON when set.</summary>
+    public bool? Build { get; set; }
+
+    /// <summary>Whether NuGet packages should be published, overriding the referenced JSON when set.</summary>
+    public bool? PublishNuget { get; set; }
+
+    /// <summary>Whether package GitHub release publishing should be enabled, overriding the referenced JSON when set.</summary>
+    public bool? PublishGitHub { get; set; }
+
+    /// <summary>Whether release ZIPs should be created, overriding the referenced JSON when set.</summary>
+    public bool? CreateReleaseZip { get; set; }
+
+    /// <summary>Additional project-build JSON overrides for less common fields.</summary>
+    public Dictionary<string, object?>? Options { get; set; }
 }
 
 /// <summary>

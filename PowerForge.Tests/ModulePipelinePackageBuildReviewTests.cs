@@ -78,6 +78,107 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
+    public void Run_GateBuild_BuildsPostModulePublishOnlyPackageLanesWithoutPublishing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var configPath = Path.Combine(root.FullName, "Build", "project.build.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            File.WriteAllText(
+                configPath,
+                string.Join(Environment.NewLine, new[]
+                {
+                    "{",
+                    "  \"RootPath\": \"Sources\",",
+                    "  \"PublishNuget\": true",
+                    "}"
+                }));
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, path) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, path));
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = path ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Build
+                        }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = "JsonPackages",
+                            ConfigPath = Path.Combine("Build", "project.build.json")
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "InlinePackages",
+                            RootPath = "Sources",
+                            PublishGitHub = true
+                        }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            Assert.Equal(2, calls.Count);
+            Assert.Equal(2, result.ProjectBuildResults.Length);
+            foreach (var call in calls)
+            {
+                Assert.True(call.Request.UpdateVersions);
+                Assert.True(call.Request.Build);
+                Assert.False(call.Request.PublishNuget);
+                Assert.False(call.Request.PublishGitHub);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_HonorsReleaseBuildOrderForPackageBuildPlacement()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

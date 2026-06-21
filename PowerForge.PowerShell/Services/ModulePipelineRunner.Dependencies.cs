@@ -202,7 +202,7 @@ public sealed partial class ModulePipelineRunner
         foreach (var publish in plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
         {
             var cfg = publish.Configuration;
-            if (cfg is null || !cfg.Enabled || cfg.Destination != PublishDestination.PowerShellGallery)
+            if (cfg is null || cfg.Destination != PublishDestination.PowerShellGallery)
                 continue;
 
             switch (cfg.Tool)
@@ -699,6 +699,7 @@ public sealed partial class ModulePipelineRunner
         var refreshPsd1Only = false;
         var installMissingModulesForce = false;
         var installMissingModulesPrerelease = false;
+        ConfigurationGateMode? gateMode = null;
         string? installMissingModulesRepository = null;
         RepositoryCredential? installMissingModulesCredential = null;
 
@@ -706,6 +707,9 @@ public sealed partial class ModulePipelineRunner
         {
             switch (segment)
             {
+                case ConfigurationGateSegment gate:
+                    gateMode = gate.Configuration.Mode;
+                    break;
                 case ConfigurationBuildSegment build:
                 {
                     var cfg = build.BuildModule;
@@ -765,13 +769,22 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        switch (gateMode)
+        {
+            case ConfigurationGateMode.Manifest:
+                refreshPsd1Only = true;
+                break;
+            case ConfigurationGateMode.Build:
+            case ConfigurationGateMode.Publish:
+                refreshPsd1Only = false;
+                break;
+        }
+
         if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft.Concat(embeddedModulesDraft)))
             resolveMissingModulesOnline = true;
 
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(
-            publishes
-                .Where(static publish => publish is not null && publish.Configuration?.Enabled == true)
-                .ToArray());
+            ResolveDependencyVersionSourcePublishes(gateMode, publishes));
 
         return new RequiredModulePreflightInput(
             resolveMissingModulesOnline,

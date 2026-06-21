@@ -18,6 +18,15 @@ public sealed class PSPublishModuleManifestContractTests
         "Import-ModuleDependency"
     };
 
+    private static readonly string[] DslHelperCmdlets =
+    {
+        "Get-ConfigurationBoolean",
+        "New-ConfigurationGate",
+        "New-ConfigurationPackageBuild",
+        "New-ConfigurationProjectBuild",
+        "New-ConfigurationRelease"
+    };
+
     [Fact]
     public void Manifest_does_not_require_feature_specific_tool_modules_at_import_time()
     {
@@ -59,6 +68,20 @@ public sealed class PSPublishModuleManifestContractTests
         var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
 
         foreach (var cmdlet in EmbeddedDependencyCmdlets)
+        {
+            Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
+            Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Module_exports_dsl_helper_cmdlets()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var manifestText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psd1"));
+        var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
+
+        foreach (var cmdlet in DslHelperCmdlets)
         {
             Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
             Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
