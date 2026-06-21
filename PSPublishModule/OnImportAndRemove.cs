@@ -8,12 +8,15 @@ using System.Reflection;
 /// Namespace for module import and removal handling.
 /// </summary>
 public partial class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemblyCleanup {
+    private static readonly object FrameworkResolverLock = new();
+    private static int _frameworkResolverRegistrationCount;
+
     /// <summary>
     /// Handles module import event.
     /// </summary>
     public void OnImport() {
         if (IsNetFramework()) {
-            AppDomain.CurrentDomain.AssemblyResolve += MyResolveEventHandler;
+            RegisterFrameworkResolver();
         } else {
             RegisterCoreResolver();
         }
@@ -25,7 +28,7 @@ public partial class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModu
     /// <param name="module"></param>
     public void OnRemove(PSModuleInfo module) {
         if (IsNetFramework()) {
-            AppDomain.CurrentDomain.AssemblyResolve -= MyResolveEventHandler;
+            UnregisterFrameworkResolver();
         } else {
             UnregisterCoreResolver();
         }
@@ -34,6 +37,28 @@ public partial class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModu
     partial void RegisterCoreResolver();
 
     partial void UnregisterCoreResolver();
+
+    private static void RegisterFrameworkResolver() {
+        lock (FrameworkResolverLock) {
+            _frameworkResolverRegistrationCount++;
+            if (_frameworkResolverRegistrationCount == 1) {
+                AppDomain.CurrentDomain.AssemblyResolve += MyResolveEventHandler;
+            }
+        }
+    }
+
+    private static void UnregisterFrameworkResolver() {
+        lock (FrameworkResolverLock) {
+            if (_frameworkResolverRegistrationCount <= 0) {
+                return;
+            }
+
+            _frameworkResolverRegistrationCount--;
+            if (_frameworkResolverRegistrationCount == 0) {
+                AppDomain.CurrentDomain.AssemblyResolve -= MyResolveEventHandler;
+            }
+        }
+    }
 
     /// <summary>
     /// Custom assembly resolver to load assemblies from the module directory.
@@ -51,7 +76,7 @@ public partial class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModu
                 var candidate = Path.Combine(directoryPath, requestedName + ".dll");
                 if (File.Exists(candidate)) {
                     //Console.WriteLine($"Loading {args.Name} assembly {Path.GetFileName(candidate)}");
-                    return Assembly.LoadFile(candidate);
+                    return Assembly.LoadFrom(candidate);
                 }
             }
         }
