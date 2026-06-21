@@ -138,7 +138,8 @@ public sealed class PowerForgeReleaseServiceTests
                     {
                         Succeeded = true,
                         HtmlUrl = "https://example.test/release",
-                        ReusedExistingRelease = true
+                        ReusedExistingRelease = true,
+                        ReplacedExistingAssets = { "PowerForge-linux-x64.zip" }
                     };
                 });
 
@@ -154,7 +155,8 @@ public sealed class PowerForgeReleaseServiceTests
                             Repository = "PSPublishModule",
                             Token = "token",
                             TagTemplate = "{Target}-v{Version}",
-                            ReleaseNameTemplate = "{Target} {Version}"
+                            ReleaseNameTemplate = "{Target} {Version}",
+                            ReplaceExistingAssets = true
                         }
                     }
                 },
@@ -168,12 +170,14 @@ public sealed class PowerForgeReleaseServiceTests
             var publish = Assert.Single(publishCalls);
             Assert.Equal("PowerForge-v1.2.3", publish.TagName);
             Assert.Equal("PowerForge 1.2.3", publish.ReleaseName);
+            Assert.True(publish.ReplaceExistingAssets);
             Assert.Equal(2, publish.AssetFilePaths.Count);
 
             var release = Assert.Single(result.ToolGitHubReleases);
             Assert.True(release.Success);
             Assert.Equal(2, release.AssetPaths.Length);
             Assert.True(release.ReusedExistingRelease);
+            Assert.Equal(new[] { "PowerForge-linux-x64.zip" }, release.ReplacedExistingAssets);
         }
         finally
         {

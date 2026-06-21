@@ -99,6 +99,8 @@ internal sealed class PowerForgeToolReleaseGitHubOptions
 
     public bool IsPreRelease { get; set; }
 
+    public bool ReplaceExistingAssets { get; set; }
+
     public string? TagTemplate { get; set; }
 
     public string? ReleaseNameTemplate { get; set; }

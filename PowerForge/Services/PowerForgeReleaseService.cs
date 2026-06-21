@@ -1808,6 +1808,7 @@ internal sealed class PowerForgeReleaseService
                 GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
                 IsPreRelease = gitHub.IsPreRelease,
                 ReuseExistingReleaseOnConflict = true,
+                ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
                 AssetFilePaths = assets
             });
 
@@ -1823,7 +1824,8 @@ internal sealed class PowerForgeReleaseService
                 ReleaseUrl = publishResult.HtmlUrl,
                 ReusedExistingRelease = publishResult.ReusedExistingRelease,
                 ErrorMessage = publishResult.Succeeded ? null : "Unified GitHub release publish failed.",
-                SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>()
+                SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
+                ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>()
             };
         }
         catch (Exception ex)
@@ -2029,6 +2031,7 @@ internal sealed class PowerForgeReleaseService
                 GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
                 IsPreRelease = gitHub.IsPreRelease,
                 ReuseExistingReleaseOnConflict = true,
+                ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
                 AssetFilePaths = assets
             });
 
@@ -2045,7 +2048,8 @@ internal sealed class PowerForgeReleaseService
                 ReleaseUrl = publishResult.HtmlUrl,
                 ReusedExistingRelease = publishResult.ReusedExistingRelease,
                 ErrorMessage = publishResult.Succeeded ? null : "GitHub release publish failed.",
-                SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>()
+                SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
+                ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>()
             };
         }
         catch (Exception ex)

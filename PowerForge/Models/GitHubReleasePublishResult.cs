@@ -27,4 +27,7 @@ public sealed class GitHubReleasePublishResult
 
     /// <summary>Assets skipped because they already existed on the release.</summary>
     public List<string> SkippedExistingAssets { get; } = new();
+
+    /// <summary>Assets deleted from an existing release before uploading replacements.</summary>
+    public List<string> ReplacedExistingAssets { get; } = new();
 }
