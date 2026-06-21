@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.31
+Help Version: 3.0.32
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -10,6 +10,12 @@ Locale: en-US
 Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery
 
 ## PSPublishModule Cmdlets
+### [Add-AppStoreConnectBetaTesterToGroup](Add-AppStoreConnectBetaTesterToGroup.md)
+Adds App Store Connect beta testers to a TestFlight beta group.
+
+### [Add-AppStoreConnectBuildToBetaGroup](Add-AppStoreConnectBuildToBetaGroup.md)
+Adds App Store Connect builds to a TestFlight beta group.
+
 ### [Connect-ModuleRepository](Connect-ModuleRepository.md)
 Registers an Azure Artifacts repository if needed and validates authenticated access for the selected bootstrap mode.
 
@@ -31,17 +37,32 @@ Lists Apple devices available through xcrun devicectl.
 ### [Get-AppStoreConnectApp](Get-AppStoreConnectApp.md)
 Reads app information from App Store Connect.
 
+### [Get-AppStoreConnectBetaGroup](Get-AppStoreConnectBetaGroup.md)
+Reads App Store Connect TestFlight beta groups for an app.
+
+### [Get-AppStoreConnectBetaTester](Get-AppStoreConnectBetaTester.md)
+Reads App Store Connect TestFlight beta testers.
+
 ### [Get-AppStoreConnectBuild](Get-AppStoreConnectBuild.md)
 Reads build information from App Store Connect.
 
+### [Get-AppStoreConnectScreenshot](Get-AppStoreConnectScreenshot.md)
+Reads screenshots in an App Store Connect screenshot set.
+
 ### [Get-AppStoreConnectScreenshotSet](Get-AppStoreConnectScreenshotSet.md)
 Reads App Store Connect screenshot sets for an App Store version localization.
+
+### [Get-AppStoreConnectSubscription](Get-AppStoreConnectSubscription.md)
+Reads App Store Connect auto-renewable subscription products for an app.
 
 ### [Get-AppStoreConnectVersion](Get-AppStoreConnectVersion.md)
 Reads App Store version information from App Store Connect.
 
 ### [Get-AppStoreConnectVersionLocalization](Get-AppStoreConnectVersionLocalization.md)
 Reads App Store version localizations from App Store Connect.
+
+### [Get-ConfigurationBoolean](Get-ConfigurationBoolean.md)
+Resolves a boolean configuration value from an environment variable with a script-defined default.
 
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
@@ -147,6 +168,9 @@ Creates an Apple app .xcarchive using xcodebuild.
 ### [New-AppleAppBuild](New-AppleAppBuild.md)
 Builds an Apple app for local installation using xcodebuild.
 
+### [New-AppStoreConnectBetaTester](New-AppStoreConnectBetaTester.md)
+Creates an App Store Connect TestFlight beta tester.
+
 ### [New-AppStoreConnectScreenshotSet](New-AppStoreConnectScreenshotSet.md)
 Creates an App Store Connect screenshot set for an App Store version localization.
 
@@ -231,6 +255,9 @@ Creates configuration for file consistency checking (encoding and line endings) 
 ### [New-ConfigurationFormat](New-ConfigurationFormat.md)
 Builds formatting options for code and manifest generation during the build.
 
+### [New-ConfigurationGate](New-ConfigurationGate.md)
+Sets the high-level module pipeline mode for an F5-friendly build DSL.
+
 ### [New-ConfigurationImportModule](New-ConfigurationImportModule.md)
 Creates a configuration for importing PowerShell modules.
 
@@ -312,8 +339,14 @@ Uploads an Apple app .xcarchive to App Store Connect using xcodebuild exportArch
 ### [Publish-AppleAppToDevice](Publish-AppleAppToDevice.md)
 Builds, installs, and optionally launches an Apple app on a physical device.
 
+### [Publish-AppStoreConnectApprovedVersion](Publish-AppStoreConnectApprovedVersion.md)
+Requests release of an approved App Store Connect version in Pending Developer Release.
+
 ### [Publish-AppStoreConnectScreenshot](Publish-AppStoreConnectScreenshot.md)
 Uploads and commits an App Store Connect screenshot file to an existing screenshot set.
+
+### [Publish-AppStoreConnectTestFlightBuild](Publish-AppStoreConnectTestFlightBuild.md)
+Distributes a processed App Store Connect build to TestFlight beta groups and optional testers.
 
 ### [Publish-GitHubReleaseAsset](Publish-GitHubReleaseAsset.md)
 Publishes a release asset to GitHub (creates a release and uploads a zip).
@@ -338,6 +371,12 @@ Removes specific files and folders from a project directory with safety features
 
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
 Creates a new release for the given GitHub repository and optionally uploads assets.
+
+### [Set-AppStoreConnectVersionBuild](Set-AppStoreConnectVersionBuild.md)
+Creates or finds an App Store version and selects a processed build for Distribution.
+
+### [Set-AppStoreConnectVersionLocalization](Set-AppStoreConnectVersionLocalization.md)
+Updates localized metadata fields on an App Store version localization.
 
 ### [Set-ModuleDocumentation](Set-ModuleDocumentation.md)
 Configures repository access for documentation (stores/revokes tokens).
@@ -364,11 +403,20 @@ Launches an installed Apple app on a physical device.
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
 
+### [Submit-AppStoreConnectVersionForReview](Submit-AppStoreConnectVersionForReview.md)
+Submits a prepared App Store Connect Distribution version to App Review.
+
 ### [Sync-AppStoreConnectScreenshots](Sync-AppStoreConnectScreenshots.md)
 Syncs local screenshot folders to App Store Connect screenshot sets.
 
+### [Sync-AppStoreConnectVersionMetadata](Sync-AppStoreConnectVersionMetadata.md)
+Syncs localized App Store version metadata from a JSON configuration file.
+
 ### [Test-AppleAppReleaseDrift](Test-AppleAppReleaseDrift.md)
 Tests local Xcode project version values against App Store Connect.
+
+### [Test-AppStoreConnectReleaseReadiness](Test-AppStoreConnectReleaseReadiness.md)
+Checks whether an App Store Connect Distribution version is ready for submission.
 
 ### [Test-AppStoreConnectScreenshotSyncConfig](Test-AppStoreConnectScreenshotSyncConfig.md)
 Validates an App Store Connect screenshot sync configuration against local files.

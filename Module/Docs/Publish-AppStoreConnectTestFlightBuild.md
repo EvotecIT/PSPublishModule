@@ -4,32 +4,31 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ConfigurationProjectBuild
+# Publish-AppStoreConnectTestFlightBuild
 ## SYNOPSIS
-References an existing project.build.json package build from the module-build DSL.
+Distributes a processed App Store Connect build to TestFlight beta groups and optional testers.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationProjectBuild [-Name <string>] [-ConfigPath <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-UpdateVersions] [-Build] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-Options <IDictionary>] [<CommonParameters>]
+Publish-AppStoreConnectTestFlightBuild -IssuerId <string> -KeyId <string> -AppId <string> -VersionString <string> -BuildNumber <string> -Platform <ApplePlatform> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-BetaGroupId <string[]>] [-BetaGroupName <string[]>] [-TesterEmail <string[]>] [-NoCreateMissingTesters] [-AllowUnprocessedBuild] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Use this cmdlet inside Build-Module { } when package build details already live in a JSON file and the
-module build should coordinate with that package lane.
+Distributes a processed App Store Connect build to TestFlight beta groups and optional testers.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ConfigurationProjectBuild -ConfigPath 'C:\Path'
+Publish-AppStoreConnectTestFlightBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'
 ```
 
 
 ## PARAMETERS
 
-### -Build
-Whether package projects should be built/packed, overriding the referenced JSON when set.
+### -AllowUnprocessedBuild
+Allow a build whose processing state is not VALID.
 
 ```yaml
 Type: SwitchParameter
@@ -44,8 +43,104 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -BuildBeforeModule
-Whether package outputs must be produced before the module lane runs.
+### -AppId
+App Store Connect app id.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -BetaGroupId
+Beta group ids to receive the build.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -BetaGroupName
+Beta group names to resolve and receive the build.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -BuildNumber
+Uploaded build number.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IssuerId
+Issuer ID from App Store Connect API keys.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -KeyId
+Key ID associated with the private key.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NoCreateMissingTesters
+Do not create testers that do not already exist.
 
 ```yaml
 Type: SwitchParameter
@@ -60,8 +155,24 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ConfigPath
-Path to an existing project.build.json file.
+### -Platform
+Apple platform for the build.
+
+```yaml
+Type: ApplePlatform
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: iOS, iPadOS, macOS, tvOS, watchOS, visionOS
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PrivateKey
+Private key text in PEM format.
 
 ```yaml
 Type: String
@@ -76,40 +187,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -CreateReleaseZip
-Whether release ZIPs should be created, overriding the referenced JSON when set.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Enabled
-Whether this project build lane is enabled. Defaults to true.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Name
-Optional friendly name for this package build lane.
+### -PrivateKeyPath
+Path to a private key file in PEM format.
 
 ```yaml
 Type: String
@@ -124,11 +203,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Options
-Additional project-build JSON overrides for less common fields.
+### -TesterEmail
+Tester email addresses to create or resolve and add to target groups.
 
 ```yaml
-Type: IDictionary
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -140,11 +219,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ProvideLocalNuGetFeed
-Whether package outputs should be exposed as a temporary local NuGet feed for the module lane.
+### -TokenLifetimeMinutes
+Token lifetime in minutes, up to 20.
 
 ```yaml
-Type: SwitchParameter
+Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -156,64 +235,16 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -PublishGitHub
-Whether package GitHub release publishing should be enabled, overriding the referenced JSON when set.
+### -VersionString
+App Store marketing version.
 
 ```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PublishNuget
-Whether NuGet packages should be published, overriding the referenced JSON when set.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -UpdateVersions
-Whether project/package versions should be updated, overriding the referenced JSON when set.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -UseAsReleaseVersionSource
-Whether the resolved package version should be used as the unified release version source.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -229,7 +260,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.ConfigurationProjectBuildSegment`
+- `PowerForge.AppStoreConnectTestFlightDistributionResult`
 
 ## RELATED LINKS
 

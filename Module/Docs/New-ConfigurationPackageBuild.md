@@ -11,7 +11,7 @@ Creates inline .NET/NuGet package build configuration from the module-build DSL.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationPackageBuild [-Name <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-RootPath <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-VersionTracks <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-IncludeProjects <string[]>] [-ExcludeProjects <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-Configuration <string>] [-OutputPath <string>] [-ReleaseZipOutputPath <string>] [-StagingPath <string>] [-CleanStaging] [-PlanOnly] [-PlanOutputPath <string>] [-UpdateVersions] [-Build] [-PackStrategy <string>] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-CertificateThumbprint <string>] [-CertificateStore <string>] [-TimeStampServer <string>] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-GitHubAccessToken <string>] [-GitHubAccessTokenFilePath <string>] [-GitHubAccessTokenEnvName <string>] [-GitHubUsername <string>] [-GitHubRepositoryName <string>] [-GitHubIsPreRelease] [-GitHubIncludeProjectNameInTag] [-GitHubGenerateReleaseNotes] [-GitHubReleaseName <string>] [-GitHubTagName <string>] [-GitHubTagTemplate <string>] [-GitHubReleaseMode <string>] [-GitHubPrimaryProject <string>] [-GitHubTagConflictPolicy <string>] [-Options <IDictionary>] [<CommonParameters>]
+New-ConfigurationPackageBuild [-Name <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-RootPath <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-VersionTracks <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-IncludeProjects <string[]>] [-ExcludeProjects <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-Configuration <string>] [-OutputPath <string>] [-ReleaseZipOutputPath <string>] [-StagingPath <string>] [-CleanStaging] [-PlanOnly] [-PlanOutputPath <string>] [-UpdateVersions] [-Build] [-PackStrategy <string>] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-UseGitHubPackages] [-GitHubPackagesOwner <string>] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-CertificateThumbprint <string>] [-CertificateStore <string>] [-TimeStampServer <string>] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-GitHubAccessToken <string>] [-GitHubAccessTokenFilePath <string>] [-GitHubAccessTokenEnvName <string>] [-GitHubUsername <string>] [-GitHubRepositoryName <string>] [-GitHubIsPreRelease] [-GitHubIncludeProjectNameInTag] [-GitHubGenerateReleaseNotes] [-GitHubReleaseName <string>] [-GitHubTagName <string>] [-GitHubTagTemplate <string>] [-GitHubReleaseMode <string>] [-GitHubPrimaryProject <string>] [-GitHubTagConflictPolicy <string>] [-Options <IDictionary>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -337,6 +337,22 @@ Whether GitHub releases should be marked prerelease.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -GitHubPackagesOwner
+GitHub user or organization that owns the GitHub Packages NuGet feed.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -910,6 +926,22 @@ Accept wildcard characters: True
 
 ### -UseAsReleaseVersionSource
 Whether the resolved package version should be used as the unified release version source.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UseGitHubPackages
+Whether GitHub Packages should be used as the NuGet version lookup and publish feed.
 
 ```yaml
 Type: SwitchParameter
