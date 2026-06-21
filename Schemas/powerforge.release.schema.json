@@ -53,6 +53,10 @@
         "TokenEnvName": { "type": [ "string", "null" ] },
         "GenerateReleaseNotes": { "type": "boolean" },
         "IsPreRelease": { "type": "boolean" },
+        "ReplaceExistingAssets": {
+          "type": "boolean",
+          "description": "When true and an existing release is reused, delete same-named assets before uploading replacements."
+        },
         "TagTemplate": { "type": [ "string", "null" ] },
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }
       }
@@ -230,6 +234,10 @@
             "TokenEnvName": { "type": [ "string", "null" ] },
             "GenerateReleaseNotes": { "type": "boolean" },
             "IsPreRelease": { "type": "boolean" },
+            "ReplaceExistingAssets": {
+              "type": "boolean",
+              "description": "When true and an existing release is reused, delete same-named assets before uploading replacements."
+            },
             "TagTemplate": { "type": [ "string", "null" ] },
             "ReleaseNameTemplate": { "type": [ "string", "null" ] }
           }

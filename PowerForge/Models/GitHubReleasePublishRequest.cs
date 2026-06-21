@@ -40,6 +40,9 @@ public sealed class GitHubReleasePublishRequest
     /// <summary>True to reuse an existing release when GitHub reports a tag conflict.</summary>
     public bool ReuseExistingReleaseOnConflict { get; set; } = true;
 
+    /// <summary>True to delete same-named assets from a reused release before uploading new files.</summary>
+    public bool ReplaceExistingAssets { get; set; }
+
     /// <summary>Asset file paths to upload.</summary>
     public IReadOnlyList<string> AssetFilePaths { get; set; } = System.Array.Empty<string>();
 }
