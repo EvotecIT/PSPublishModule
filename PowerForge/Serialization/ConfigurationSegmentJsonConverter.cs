@@ -63,6 +63,7 @@ public sealed class ConfigurationSegmentJsonConverter : JsonConverter<IConfigura
 
         // Fixed segment types
         if (discriminator.Equals("Manifest", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationManifestSegment);
+        if (discriminator.Equals("Gate", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationGateSegment);
         if (discriminator.Equals("Build", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationBuildSegment);
         if (discriminator.Equals("BuildLibraries", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationBuildLibrariesSegment);
         if (discriminator.Equals("Information", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationInformationSegment);

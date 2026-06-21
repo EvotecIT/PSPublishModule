@@ -225,6 +225,20 @@ public sealed class PowerForgeProjectCmdletTests
     }
 
     [Fact]
+    public void NewConfigurationGate_EmitsSegment()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationGate")
+            .AddParameter("Type", ConfigurationGateMode.Build);
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationGateSegment>(Assert.Single(results).BaseObject);
+        Assert.Equal(ConfigurationGateMode.Build, segment.Configuration.Mode);
+    }
+
+    [Fact]
     public void GetConfigurationBoolean_UsesEnvironmentValueOrDefault()
     {
         var name = "POWERFORGE_TEST_BOOL_" + Guid.NewGuid().ToString("N");

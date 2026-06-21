@@ -10,6 +10,12 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildResult buildResult,
         ModulePipelineRunState state)
     {
+        if (plan.GateMode is ConfigurationGateMode.Manifest or ConfigurationGateMode.Build)
+        {
+            _logger.Info($"Gate mode {plan.GateMode} enabled: skipping publish phase for this run.");
+            return;
+        }
+
         var publishOrder = ResolvePublishOrder(plan);
         var packageNuGetPublished = false;
         var packageGitHubPublished = false;

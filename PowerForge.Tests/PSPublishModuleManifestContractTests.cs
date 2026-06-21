@@ -20,7 +20,8 @@ public sealed class PSPublishModuleManifestContractTests
 
     private static readonly string[] DslHelperCmdlets =
     {
-        "Get-ConfigurationBoolean"
+        "Get-ConfigurationBoolean",
+        "New-ConfigurationGate"
     };
 
     [Fact]

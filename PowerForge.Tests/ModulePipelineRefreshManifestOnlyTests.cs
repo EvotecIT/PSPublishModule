@@ -99,6 +99,170 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
     }
 
     [Fact]
+    public void Plan_GateManifest_OverridesEnabledBuildAndPublishConfiguration()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = Path.Combine(root.FullName, "Sources", moduleName, moduleName + ".csproj")
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = true },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Manifest
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            RefreshPSD1Only = false,
+                            Merge = true,
+                            SignMerged = true,
+                            InstallMissingModules = true
+                        }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.Equal(ConfigurationGateMode.Manifest, plan.GateMode);
+            Assert.True(plan.BuildSpec.RefreshManifestOnly);
+            Assert.Empty(plan.ProjectBuilds);
+            Assert.Empty(plan.PackageBuilds);
+            Assert.Empty(plan.Publishes);
+            Assert.False(plan.SignModule);
+            Assert.False(plan.InstallEnabled);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_GatePublish_OverridesDisabledBuildAndPublishConfiguration()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Publish
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            RefreshPSD1Only = true
+                        }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Enabled = false,
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Enabled = false,
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = false,
+                            Destination = PublishDestination.PowerShellGallery
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.Equal(ConfigurationGateMode.Publish, plan.GateMode);
+            Assert.False(plan.BuildSpec.RefreshManifestOnly);
+            Assert.Single(plan.ProjectBuilds);
+            Assert.Single(plan.PackageBuilds);
+            Assert.Single(plan.Publishes);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_RefreshPSD1Only_PreservesResolvedCsprojPath_ForVersionSync()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

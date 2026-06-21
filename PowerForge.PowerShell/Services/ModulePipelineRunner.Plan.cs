@@ -101,6 +101,7 @@ public sealed partial class ModulePipelineRunner
         var projectBuilds = new List<ConfigurationProjectBuildSegment>();
         var packageBuilds = new List<ConfigurationPackageBuildSegment>();
         ConfigurationReleaseSegment? release = null;
+        ConfigurationGateMode? gateMode = null;
         var approvedModules = new List<string>();
         var moduleSkipIgnoreModules = new List<string>();
         var moduleSkipIgnoreFunctions = new List<string>();
@@ -151,6 +152,11 @@ public sealed partial class ModulePipelineRunner
         {
             switch (segment)
             {
+                case ConfigurationGateSegment gate:
+                {
+                    gateMode = gate.Configuration.Mode;
+                    break;
+                }
                 case ConfigurationManifestSegment manifest:
                 {
                     var m = manifest.Configuration;
@@ -579,6 +585,10 @@ public sealed partial class ModulePipelineRunner
         if (typeAcceleratorsRequireAlc && !requestedUseAssemblyLoadContext)
             _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
 
+        ApplyGateModeToPlanInputs(
+            gateMode,
+            ref refreshPsd1Only);
+
         var csprojRequiredReasons = refreshPsd1Only
             ? Array.Empty<string>()
             : BuildMissingCsprojReasonList(
@@ -666,9 +676,7 @@ public sealed partial class ModulePipelineRunner
             _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because module dependencies use Auto/Latest/Guid Auto.");
         }
 
-        var enabledPublishes = publishes
-            .Where(p => p is not null && p.Configuration?.Enabled == true)
-            .ToArray();
+        var enabledPublishes = ResolveGateFilteredPublishes(gateMode, publishes);
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(enabledPublishes);
 
         var approved = NormalizeApprovedModules(approvedModules);
@@ -861,10 +869,10 @@ public sealed partial class ModulePipelineRunner
                 .Where(static project => project?.Configuration?.Enabled != false)
                 .ToArray(),
             projectBuilds: projectBuilds
-                .Where(static projectBuild => projectBuild?.Configuration?.Enabled != false)
+                .Where(projectBuild => IsGateEnabledProjectBuild(gateMode, projectBuild))
                 .ToArray(),
             packageBuilds: packageBuilds
-                .Where(static packageBuild => packageBuild?.Configuration?.Enabled != false)
+                .Where(packageBuild => IsGateEnabledPackageBuild(gateMode, packageBuild))
                 .ToArray(),
             release: release,
             mergeModule: mergeModule,
@@ -875,6 +883,7 @@ public sealed partial class ModulePipelineRunner
             signModule: signModule,
             signing: signing,
             publishes: enabledPublishes,
+            gateMode: gateMode,
             artefacts: enabledArtefacts,
             installEnabled: installEnabled,
             installStrategy: strategy,
@@ -891,6 +900,55 @@ public sealed partial class ModulePipelineRunner
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
     }
+
+    private void ApplyGateModeToPlanInputs(
+        ConfigurationGateMode? gateMode,
+        ref bool refreshPsd1Only)
+    {
+        if (gateMode is null)
+            return;
+
+        switch (gateMode.Value)
+        {
+            case ConfigurationGateMode.Manifest:
+                if (!refreshPsd1Only)
+                    _logger.Info("Gate mode Manifest enabled: forcing RefreshPSD1Only for this run.");
+                refreshPsd1Only = true;
+                break;
+            case ConfigurationGateMode.Build:
+            case ConfigurationGateMode.Publish:
+                if (refreshPsd1Only)
+                    _logger.Info($"Gate mode {gateMode.Value} enabled: disabling RefreshPSD1Only for this run.");
+                refreshPsd1Only = false;
+                break;
+        }
+    }
+
+    private static ConfigurationPublishSegment[] ResolveGateFilteredPublishes(
+        ConfigurationGateMode? gateMode,
+        IEnumerable<ConfigurationPublishSegment> publishes)
+        => gateMode switch
+        {
+            ConfigurationGateMode.Manifest or ConfigurationGateMode.Build => Array.Empty<ConfigurationPublishSegment>(),
+            ConfigurationGateMode.Publish => publishes
+                .Where(static publish => publish?.Configuration is not null)
+                .ToArray(),
+            _ => publishes
+                .Where(static publish => publish?.Configuration?.Enabled == true)
+                .ToArray()
+        };
+
+    private static bool IsGateEnabledProjectBuild(
+        ConfigurationGateMode? gateMode,
+        ConfigurationProjectBuildSegment? segment)
+        => segment?.Configuration is not null &&
+           (gateMode.HasValue || segment.Configuration.Enabled);
+
+    private static bool IsGateEnabledPackageBuild(
+        ConfigurationGateMode? gateMode,
+        ConfigurationPackageBuildSegment? segment)
+        => segment?.Configuration is not null &&
+           (gateMode.HasValue || segment.Configuration.Enabled);
 
     private DependencyVersionSourceRepository? ResolvePublishDependencyVersionSource(ConfigurationPublishSegment[] enabledPublishes)
     {

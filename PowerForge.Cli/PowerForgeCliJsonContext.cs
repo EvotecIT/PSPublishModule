@@ -111,6 +111,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(ConfigurationDocumentationSegment))]
 [JsonSerializable(typeof(ConfigurationFileConsistencySegment))]
 [JsonSerializable(typeof(ConfigurationFormattingSegment))]
+[JsonSerializable(typeof(ConfigurationGateSegment))]
 [JsonSerializable(typeof(ConfigurationValidationSegment))]
 [JsonSerializable(typeof(ConfigurationXcodeProjectVersionSegment))]
 [JsonSerializable(typeof(ConfigurationImportModulesSegment))]
