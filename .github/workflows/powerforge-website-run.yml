@@ -183,6 +183,9 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}
+          LICENSING_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}
+          LICENSING_PACKAGES_USERNAME: ${{ github.repository_owner }}
           INDEXNOW_KEY: ${{ secrets.indexnow_key }}
           POWERFORGE_REPOSITORY_TOKEN: ${{ secrets.repository_read_token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}

@@ -32,6 +32,21 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
+    public void WebsiteRunWorkflow_ShouldExposeGitHubPackagesCredentialsToConsumerRestore()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("GITHUB_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("LICENSING_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("LICENSING_PACKAGES_USERNAME: ${{ github.repository_owner }}", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WebsiteRunWorkflow_ShouldKeepTransientToolCachesInsideWorkspace()
     {
         var repoRoot = FindRepoRoot();
