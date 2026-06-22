@@ -534,9 +534,11 @@ internal static class ModuleBootstrapperGenerator
         => $@"using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
+using System.Text.Json;
 
 namespace {identity.Namespace};
 
@@ -549,6 +551,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     private readonly string _assemblyDirectory;
     private readonly string _moduleAssemblyPath;
     private readonly AssemblyDependencyResolver? _resolver;
+    private readonly DependencyManifestResolver? _manifestResolver;
     private Assembly? _moduleAssembly;
 
     private ModuleAssemblyLoadContext(string moduleAssemblyPath, string contextName)
@@ -557,6 +560,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         _moduleAssemblyPath = Path.GetFullPath(moduleAssemblyPath);
         _assemblyDirectory = Path.GetDirectoryName(_moduleAssemblyPath) ?? string.Empty;
         _resolver = TryCreateResolver(_moduleAssemblyPath);
+        _manifestResolver = DependencyManifestResolver.TryCreate(_moduleAssemblyPath);
     }}
 
     public static Assembly LoadModule(string moduleAssemblyPath, string? contextName)
@@ -594,6 +598,10 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
             return LoadFromAssemblyPath(resolvedPath);
 
+        resolvedPath = _manifestResolver?.ResolveAssemblyToPath(assemblyName);
+        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            return LoadFromAssemblyPath(resolvedPath);
+
         var assemblyPath = Path.Combine(_assemblyDirectory, assemblyName.Name + "".dll"");
         return File.Exists(assemblyPath) ? LoadFromAssemblyPath(assemblyPath) : null;
     }}
@@ -601,6 +609,10 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
     {{
         var resolvedPath = _resolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
+        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            return LoadUnmanagedDllFromPath(resolvedPath);
+
+        resolvedPath = _manifestResolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
             return LoadUnmanagedDllFromPath(resolvedPath);
 
@@ -626,6 +638,228 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         catch (InvalidOperationException)
         {{
             return null;
+        }}
+    }}
+
+    private sealed class DependencyManifestResolver
+    {{
+        private readonly string _assemblyDirectory;
+        private readonly JsonElement _target;
+        private readonly string[] _runtimeIdentifiers;
+
+        private DependencyManifestResolver(string assemblyPath, JsonElement target)
+        {{
+            _assemblyDirectory = Path.GetDirectoryName(assemblyPath) ?? string.Empty;
+            _target = target;
+            _runtimeIdentifiers = BuildRuntimeIdentifiers();
+        }}
+
+        public static DependencyManifestResolver? TryCreate(string assemblyPath)
+        {{
+            var depsPath = Path.ChangeExtension(assemblyPath, "".deps.json"");
+            if (string.IsNullOrWhiteSpace(depsPath) || !File.Exists(depsPath))
+                return null;
+
+            try
+            {{
+                var document = JsonDocument.Parse(File.ReadAllText(depsPath));
+                if (!document.RootElement.TryGetProperty(""targets"", out var targets) || targets.ValueKind != JsonValueKind.Object)
+                {{
+                    document.Dispose();
+                    return null;
+                }}
+
+                JsonElement target;
+                if (document.RootElement.TryGetProperty(""runtimeTarget"", out var runtimeTarget) &&
+                    runtimeTarget.TryGetProperty(""name"", out var targetName) &&
+                    targetName.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(targetName.GetString()) &&
+                    targets.TryGetProperty(targetName.GetString()!, out target))
+                {{
+                    var clonedTarget = target.Clone();
+                    document.Dispose();
+                    return new DependencyManifestResolver(assemblyPath, clonedTarget);
+                }}
+
+                foreach (var candidate in targets.EnumerateObject())
+                {{
+                    var clonedTarget = candidate.Value.Clone();
+                    document.Dispose();
+                    return new DependencyManifestResolver(assemblyPath, clonedTarget);
+                }}
+
+                document.Dispose();
+                return null;
+            }}
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is JsonException || ex is InvalidOperationException)
+            {{
+                return null;
+            }}
+        }}
+
+        public string? ResolveAssemblyToPath(AssemblyName assemblyName)
+        {{
+            if (assemblyName is null || string.IsNullOrWhiteSpace(assemblyName.Name))
+                return null;
+
+            var resolved = SearchRuntimeTargets(assemblyName.Name, ""runtime"");
+            if (!string.IsNullOrWhiteSpace(resolved))
+                return resolved;
+
+            return SearchAssetGroup(assemblyName.Name, ""runtime"");
+        }}
+
+        public string? ResolveUnmanagedDllToPath(string unmanagedDllName)
+        {{
+            if (string.IsNullOrWhiteSpace(unmanagedDllName))
+                return null;
+
+            var names = new HashSet<string>(GetNativeLibraryFileNames(unmanagedDllName), StringComparer.OrdinalIgnoreCase);
+            var resolved = SearchRuntimeTargets(names, ""native"");
+            if (!string.IsNullOrWhiteSpace(resolved))
+                return resolved;
+
+            return SearchAssetGroup(names, ""native"");
+        }}
+
+        private string? SearchRuntimeTargets(string assemblyName, string assetType)
+        {{
+            foreach (var library in _target.EnumerateObject())
+            {{
+                if (!library.Value.TryGetProperty(""runtimeTargets"", out var runtimeTargets) ||
+                    runtimeTargets.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                foreach (var rid in _runtimeIdentifiers)
+                {{
+                    foreach (var asset in runtimeTargets.EnumerateObject())
+                    {{
+                        if (!asset.Value.TryGetProperty(""assetType"", out var declaredAssetType) ||
+                            !string.Equals(declaredAssetType.GetString(), assetType, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (!asset.Value.TryGetProperty(""rid"", out var declaredRid) ||
+                            !string.Equals(declaredRid.GetString(), rid, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (string.Equals(Path.GetFileNameWithoutExtension(asset.Name), assemblyName, StringComparison.OrdinalIgnoreCase))
+                        {{
+                            var resolved = ResolveAssetPath(asset.Name);
+                            if (!string.IsNullOrWhiteSpace(resolved))
+                                return resolved;
+                        }}
+                    }}
+                }}
+            }}
+
+            return null;
+        }}
+
+        private string? SearchRuntimeTargets(HashSet<string> fileNames, string assetType)
+        {{
+            foreach (var library in _target.EnumerateObject())
+            {{
+                if (!library.Value.TryGetProperty(""runtimeTargets"", out var runtimeTargets) ||
+                    runtimeTargets.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                foreach (var rid in _runtimeIdentifiers)
+                {{
+                    foreach (var asset in runtimeTargets.EnumerateObject())
+                    {{
+                        if (!asset.Value.TryGetProperty(""assetType"", out var declaredAssetType) ||
+                            !string.Equals(declaredAssetType.GetString(), assetType, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (!asset.Value.TryGetProperty(""rid"", out var declaredRid) ||
+                            !string.Equals(declaredRid.GetString(), rid, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (fileNames.Contains(Path.GetFileName(asset.Name)))
+                        {{
+                            var resolved = ResolveAssetPath(asset.Name);
+                            if (!string.IsNullOrWhiteSpace(resolved))
+                                return resolved;
+                        }}
+                    }}
+                }}
+            }}
+
+            return null;
+        }}
+
+        private string? SearchAssetGroup(string assemblyName, string groupName)
+        {{
+            foreach (var library in _target.EnumerateObject())
+            {{
+                if (!library.Value.TryGetProperty(groupName, out var assets) || assets.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                foreach (var asset in assets.EnumerateObject())
+                {{
+                    if (string.Equals(Path.GetFileNameWithoutExtension(asset.Name), assemblyName, StringComparison.OrdinalIgnoreCase))
+                    {{
+                        var resolved = ResolveAssetPath(asset.Name);
+                        if (!string.IsNullOrWhiteSpace(resolved))
+                            return resolved;
+                    }}
+                }}
+            }}
+
+            return null;
+        }}
+
+        private string? SearchAssetGroup(HashSet<string> fileNames, string groupName)
+        {{
+            foreach (var library in _target.EnumerateObject())
+            {{
+                if (!library.Value.TryGetProperty(groupName, out var assets) || assets.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                foreach (var asset in assets.EnumerateObject())
+                {{
+                    if (fileNames.Contains(Path.GetFileName(asset.Name)))
+                    {{
+                        var resolved = ResolveAssetPath(asset.Name);
+                        if (!string.IsNullOrWhiteSpace(resolved))
+                            return resolved;
+                    }}
+                }}
+            }}
+
+            return null;
+        }}
+
+        private string? ResolveAssetPath(string assetPath)
+        {{
+            if (string.IsNullOrWhiteSpace(assetPath))
+                return null;
+
+            var normalized = assetPath.Replace('/', Path.DirectorySeparatorChar);
+            foreach (var candidate in new[]
+            {{
+                Path.Combine(_assemblyDirectory, normalized),
+                Path.Combine(_assemblyDirectory, Path.GetFileName(normalized))
+            }})
+            {{
+                if (File.Exists(candidate))
+                    return candidate;
+            }}
+
+            return null;
+        }}
+
+        private static string[] BuildRuntimeIdentifiers()
+        {{
+            var values = new List<string>();
+            foreach (var rid in GetRuntimeIdentifiers())
+            {{
+                if (!string.IsNullOrWhiteSpace(rid) && !values.Contains(rid, StringComparer.OrdinalIgnoreCase))
+                    values.Add(rid);
+            }}
+
+            values.Add(string.Empty);
+            return values.ToArray();
         }}
     }}
 
