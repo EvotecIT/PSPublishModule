@@ -40,6 +40,7 @@ public sealed class ModuleIsolationScriptPatcherTests
         Assert.Contains("Path.Combine(assemblyDirectory, \"runtimes\", rid, \"lib\")", patched, StringComparison.Ordinal);
         Assert.Contains("Path.Combine(assemblyDirectory, \"runtimes\", rid, \"native\", fileName)", patched, StringComparison.Ordinal);
         Assert.Contains("RuntimeInformation.ProcessArchitecture", patched, StringComparison.Ordinal);
+        Assert.Contains("yield return \"unix\"", patched, StringComparison.Ordinal);
     }
 
     [Fact]

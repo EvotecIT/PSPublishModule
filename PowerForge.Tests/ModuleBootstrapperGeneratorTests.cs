@@ -213,6 +213,7 @@ public class ModuleBootstrapperGeneratorTests
         Assert.Contains("yield return \"linux-musl-\" + arch", source);
         Assert.Contains("yield return \"linux-musl\"", source);
         Assert.Contains("yield return \"osx\"", source);
+        Assert.Contains("yield return \"unix\"", source);
         Assert.Contains("yield return unmanagedDllName + \".so\";", source);
         Assert.Contains("yield return \"lib\" + unmanagedDllName + \".so\";", source);
     }

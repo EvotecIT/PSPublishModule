@@ -968,6 +968,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
             if (arch is not null)
                 yield return ""osx-"" + arch;
             yield return ""osx"";
+            yield return ""unix"";
         }}
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {{
@@ -987,6 +988,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
                 }}
             }}
             yield return ""linux"";
+            yield return ""unix"";
         }}
     }}
 

@@ -341,6 +341,7 @@ namespace PowerForge.ModuleIsolation
                 }
 
                 yield return "osx";
+                yield return "unix";
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
@@ -361,6 +362,7 @@ namespace PowerForge.ModuleIsolation
                 }
 
                 yield return "linux";
+                yield return "unix";
             }
         }
 
