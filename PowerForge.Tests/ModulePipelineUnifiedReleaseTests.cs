@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -465,6 +466,154 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var moduleAsset = Assert.Single(result.ReleaseCoordinationResult!.ModuleAssetPaths);
             Assert.StartsWith(Path.Combine(stageRoot, "modules"), moduleAsset, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(gitHubRequest!.AssetFilePaths, path => string.Equals(path, moduleAsset, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_OverwritesStagedReleaseAssetsOnRepeatedBuilds()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
+            var packagePath = Path.Combine(packageOutput, "HtmlTinkerX.1.0.0.nupkg");
+            var packageBuildCalls = 0;
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    packageBuildCalls++;
+                    Directory.CreateDirectory(packageOutput);
+                    File.WriteAllText(packagePath, $"package-{packageBuildCalls}");
+
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    var project = new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "HtmlTinkerX",
+                        PackageId = "HtmlTinkerX",
+                        IsPackable = true,
+                        NewVersion = "1.0.0"
+                    };
+                    project.Packages.Add(packagePath);
+                    release.Projects.Add(project);
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = packageOutput,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var stageRoot = Path.Combine(root.FullName, "Artifacts", "Unified", "<ModuleName>", "<ModuleVersion>");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(root.FullName, "Artifacts", "Module"),
+                            ID = "module"
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = stageRoot
+                        }
+                    }
+                }
+            };
+
+            runner.Run(spec);
+            var second = runner.Run(spec);
+
+            var resolvedStageRoot = Path.Combine(root.FullName, "Artifacts", "Unified", moduleName, "1.0.0");
+            var stagedPackage = Path.Combine(resolvedStageRoot, "nuget", Path.GetFileName(packagePath));
+            Assert.True(File.Exists(stagedPackage), stagedPackage);
+            Assert.Equal("package-2", File.ReadAllText(stagedPackage));
+            Assert.Equal(2, packageBuildCalls);
+            Assert.NotNull(second.ReleaseCoordinationResult);
+            Assert.Contains(second.ReleaseCoordinationResult!.AssetPaths, path => string.Equals(path, stagedPackage, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void StageReleaseAsset_RejectsSameRunFilenameCollisionsButAllowsRepeatedBuildOverwrite()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var firstSource = Path.Combine(root.FullName, "first", "Package.1.0.0.nupkg");
+            var secondSource = Path.Combine(root.FullName, "second", "Package.1.0.0.nupkg");
+            Directory.CreateDirectory(Path.GetDirectoryName(firstSource)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(secondSource)!);
+            File.WriteAllText(firstSource, "first");
+            File.WriteAllText(secondSource, "second");
+
+            var method = typeof(ModulePipelineRunner).GetMethod("StageReleaseAsset", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var currentRunSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var stageRoot = Path.Combine(root.FullName, "stage");
+
+            var stagedPath = Assert.IsType<string>(method.Invoke(null, new object[] { stageRoot, "nuget", firstSource, currentRunSources })!);
+            Assert.Equal("first", File.ReadAllText(stagedPath));
+
+            var collision = Assert.Throws<TargetInvocationException>(() =>
+                method.Invoke(null, new object[] { stageRoot, "nuget", secondSource, currentRunSources }));
+            var invalidOperation = Assert.IsType<InvalidOperationException>(collision.InnerException);
+            Assert.Contains("Release staging collision", invalidOperation.Message, StringComparison.Ordinal);
+            Assert.Equal("first", File.ReadAllText(stagedPath));
+
+            File.WriteAllText(firstSource, "first-updated");
+            var nextRunSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var restagedPath = Assert.IsType<string>(method.Invoke(null, new object[] { stageRoot, "nuget", firstSource, nextRunSources })!);
+
+            Assert.Equal(stagedPath, restagedPath);
+            Assert.Equal("first-updated", File.ReadAllText(restagedPath));
         }
         finally
         {

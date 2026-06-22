@@ -31,6 +31,16 @@ public sealed class ModuleIsolationScriptPatcherTests
         Assert.DoesNotContain("Import-Module $RestModulePath", patched, StringComparison.Ordinal);
         Assert.Contains("Contexts[contextName] = context", patched, StringComparison.Ordinal);
         Assert.Contains("LoadedModuleAssemblies", patched, StringComparison.Ordinal);
+        Assert.Contains("TryCreateResolver(assemblyPath)", patched, StringComparison.Ordinal);
+        Assert.Contains("catch (InvalidOperationException)", patched, StringComparison.Ordinal);
+        Assert.Contains("return null;", patched, StringComparison.Ordinal);
+        Assert.Contains("Path.Combine(directory, assemblyName.Name + \".dll\")", patched, StringComparison.Ordinal);
+        Assert.Contains("ResolvePackagedRuntimeAssembly(directory, assemblyName.Name)", patched, StringComparison.Ordinal);
+        Assert.Contains("LoadPackagedNativeLibrary(directory, unmanagedDllName)", patched, StringComparison.Ordinal);
+        Assert.Contains("Path.Combine(assemblyDirectory, \"runtimes\", rid, \"lib\")", patched, StringComparison.Ordinal);
+        Assert.Contains("Path.Combine(assemblyDirectory, \"runtimes\", rid, \"native\", fileName)", patched, StringComparison.Ordinal);
+        Assert.Contains("RuntimeInformation.ProcessArchitecture", patched, StringComparison.Ordinal);
+        Assert.Contains("yield return \"unix\"", patched, StringComparison.Ordinal);
     }
 
     [Fact]

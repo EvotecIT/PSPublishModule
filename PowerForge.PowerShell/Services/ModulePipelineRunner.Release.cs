@@ -198,31 +198,42 @@ public sealed partial class ModulePipelineRunner
         IReadOnlyList<string> packageAssets)
     {
         var staged = new List<string>();
+        var stagedSourcesByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var asset in moduleAssets)
-            staged.Add(StageReleaseAsset(stageRoot, "modules", asset));
+            staged.Add(StageReleaseAsset(stageRoot, "modules", asset, stagedSourcesByPath));
         foreach (var asset in packageAssets)
-            staged.Add(StageReleaseAsset(stageRoot, "nuget", asset));
+            staged.Add(StageReleaseAsset(stageRoot, "nuget", asset, stagedSourcesByPath));
 
         staged.AddRange(WriteReleaseMetadata(plan, stageRoot, staged));
         return staged.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static string StageReleaseAsset(string stageRoot, string category, string sourcePath)
+    private static string StageReleaseAsset(
+        string stageRoot,
+        string category,
+        string sourcePath,
+        Dictionary<string, string> stagedSourcesByPath)
     {
         var targetRoot = Path.Combine(stageRoot, category);
         Directory.CreateDirectory(targetRoot);
 
-        var targetPath = Path.Combine(targetRoot, Path.GetFileName(sourcePath));
-        if (File.Exists(targetPath))
+        var sourceFullPath = Path.GetFullPath(sourcePath);
+        var targetPath = Path.GetFullPath(Path.Combine(targetRoot, Path.GetFileName(sourcePath)));
+        if (stagedSourcesByPath.TryGetValue(targetPath, out var existingSource))
         {
-            if (PathsEqual(targetPath, sourcePath))
-                return Path.GetFullPath(targetPath);
+            if (!PathsEqual(existingSource, sourceFullPath))
+                throw new InvalidOperationException(
+                    $"Release staging collision: '{existingSource}' and '{sourceFullPath}' both stage to '{targetPath}'. Rename one asset or configure unique output file names.");
 
-            throw new IOException($"Release staging asset collision detected: {targetPath}");
+            return targetPath;
         }
 
+        stagedSourcesByPath[targetPath] = sourceFullPath;
+        if (File.Exists(targetPath) && PathsEqual(targetPath, sourcePath))
+            return targetPath;
+
         File.Copy(sourcePath, targetPath, overwrite: true);
-        return Path.GetFullPath(targetPath);
+        return targetPath;
     }
 
     private static bool PathsEqual(string left, string right)

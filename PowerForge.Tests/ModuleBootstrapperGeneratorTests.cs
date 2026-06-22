@@ -213,8 +213,179 @@ public class ModuleBootstrapperGeneratorTests
         Assert.Contains("yield return \"linux-musl-\" + arch", source);
         Assert.Contains("yield return \"linux-musl\"", source);
         Assert.Contains("yield return \"osx\"", source);
+        Assert.Contains("yield return \"unix\"", source);
         Assert.Contains("yield return unmanagedDllName + \".so\";", source);
         Assert.Contains("yield return \"lib\" + unmanagedDllName + \".so\";", source);
+    }
+
+    [Fact]
+    public void BuildAssemblyLoadContextSource_FallsBackToDirectoryProbingWhenResolverIsUnavailable()
+    {
+        var identity = new ModuleBootstrapperGenerator.AssemblyLoadContextLoaderIdentity(
+            "DemoModule.ModuleLoadContext",
+            "DemoModule.ModuleLoadContext",
+            "DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext");
+        var source = ModuleBootstrapperGenerator.BuildAssemblyLoadContextSource(identity);
+
+        Assert.Contains("private readonly AssemblyDependencyResolver? _resolver;", source);
+        Assert.Contains("private readonly DependencyManifestResolver? _manifestResolver;", source);
+        Assert.Contains("_resolver = TryCreateResolver(_moduleAssemblyPath);", source);
+        Assert.Contains("_manifestResolver = DependencyManifestResolver.TryCreate(_moduleAssemblyPath);", source);
+        Assert.Contains("catch (InvalidOperationException)", source);
+        Assert.Contains("return null;", source);
+        Assert.Contains("_resolver?.ResolveAssemblyToPath(assemblyName)", source);
+        Assert.Contains("_resolver?.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
+        Assert.Contains("_manifestResolver?.ResolveAssemblyToPath(assemblyName)", source);
+        Assert.Contains("_manifestResolver?.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
+        Assert.Contains("ResolvePackagedRuntimeAssembly(assemblyName.Name)", source);
+        Assert.Contains("Path.Combine(_assemblyDirectory, \"runtimes\", rid, \"lib\")", source);
+        Assert.Contains("Path.ChangeExtension(assemblyPath, \".deps.json\")", source);
+        Assert.Contains("Path.Combine(_assemblyDirectory, assemblyName.Name + \".dll\")", source);
+        Assert.Contains("LoadPackagedNativeLibrary(unmanagedDllName)", source);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContext_ResolvesNestedRuntimeAssetFromDepsJson()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-deps-" + Guid.NewGuid().ToString("N"));
+        var libCore = Path.Combine(root, "Lib", "Core");
+        Directory.CreateDirectory(libCore);
+
+        try
+        {
+            var dependencyPath = BuildFixtureProject(
+                root,
+                "NestedDependency",
+                "NestedDependency",
+                """
+                namespace NestedDependency;
+
+                public static class Marker
+                {
+                    public static string Value => "deps";
+                }
+                """);
+
+            var modulePath = BuildFixtureProject(
+                root,
+                "DemoModule",
+                "DemoModule",
+                """
+                namespace DemoModule;
+
+                public static class Entry
+                {
+                    public static string Read() => NestedDependency.Marker.Value;
+                }
+                """,
+                new[] { dependencyPath });
+
+            File.Copy(modulePath, Path.Combine(libCore, "DemoModule.dll"), overwrite: true);
+            var nestedDependencyPath = Path.Combine(libCore, "lib", "net8.0", "NestedDependency.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(nestedDependencyPath)!);
+            File.Copy(dependencyPath, nestedDependencyPath, overwrite: true);
+            WriteDepsJson(Path.Combine(libCore, "DemoModule.deps.json"));
+
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            var loaderAssembly = System.Reflection.Assembly.LoadFile(Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll"));
+            var resolverType = loaderAssembly.GetType("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext+DependencyManifestResolver", throwOnError: true)!;
+            var tryCreate = resolverType.GetMethod("TryCreate", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+            var resolver = tryCreate.Invoke(null, new object[] { Path.Combine(libCore, "DemoModule.dll") });
+            Assert.NotNull(resolver);
+
+            var resolveAssembly = resolverType.GetMethod("ResolveAssemblyToPath", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)!;
+            var resolved = (string?)resolveAssembly.Invoke(resolver, new object[] { new System.Reflection.AssemblyName("NestedDependency") });
+
+            Assert.Equal(nestedDependencyPath, resolved);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                try { Directory.Delete(root, true); } catch { /* generated loader assembly remains locked after reflection load */ }
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContext_ResolvesPackagedRuntimeAssemblyWithoutDepsJson()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-runtime-" + Guid.NewGuid().ToString("N"));
+        var libCore = Path.Combine(root, "Lib", "Core");
+        Directory.CreateDirectory(libCore);
+
+        try
+        {
+            var dependencyPath = BuildFixtureProject(
+                root,
+                "NestedDependency",
+                "NestedDependency",
+                """
+                namespace NestedDependency;
+
+                public static class Marker
+                {
+                    public static string Value => "runtime-probe";
+                }
+                """);
+
+            var modulePath = BuildFixtureProject(
+                root,
+                "DemoModule",
+                "DemoModule",
+                """
+                namespace DemoModule;
+
+                public static class Entry
+                {
+                    public static string Read() => NestedDependency.Marker.Value;
+                }
+                """,
+                new[] { dependencyPath });
+
+            File.Copy(modulePath, Path.Combine(libCore, "DemoModule.dll"), overwrite: true);
+            var nestedDependencyPath = Path.Combine(libCore, "runtimes", GetCurrentRuntimeAssetRid(), "lib", "net8.0", "NestedDependency.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(nestedDependencyPath)!);
+            File.Copy(dependencyPath, nestedDependencyPath, overwrite: true);
+
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            var loaderAssembly = System.Reflection.Assembly.LoadFile(Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll"));
+            var contextType = loaderAssembly.GetType("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", throwOnError: true)!;
+            var loadModule = contextType.GetMethod("LoadModule", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+            var moduleAssembly = (System.Reflection.Assembly)loadModule.Invoke(null, new object?[] { Path.Combine(libCore, "DemoModule.dll"), "DemoModule" })!;
+            var value = moduleAssembly.GetType("DemoModule.Entry", throwOnError: true)!
+                .GetMethod("Read", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!
+                .Invoke(null, null);
+
+            Assert.Equal("runtime-probe", value);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                try { Directory.Delete(root, true); } catch { /* generated loader assembly remains locked after reflection load */ }
+            }
+        }
     }
 
     [Fact]
@@ -444,5 +615,113 @@ public class ModuleBootstrapperGeneratorTests
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    private static string BuildFixtureProject(
+        string root,
+        string projectName,
+        string assemblyName,
+        string source,
+        IReadOnlyList<string>? references = null)
+    {
+        var projectRoot = Directory.CreateDirectory(Path.Combine(root, projectName));
+        var projectPath = Path.Combine(projectRoot.FullName, projectName + ".csproj");
+        var sourcePath = Path.Combine(projectRoot.FullName, "Class1.cs");
+
+        var referenceItems = references is { Count: > 0 }
+            ? string.Join(
+                Environment.NewLine,
+                references.Select((reference, index) => $"""
+                  <Reference Include="Reference{index}">
+                    <HintPath>{reference}</HintPath>
+                  </Reference>
+                """))
+            : string.Empty;
+
+        File.WriteAllText(projectPath, $$"""
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>{{assemblyName}}</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+{{referenceItems}}
+  </ItemGroup>
+</Project>
+""");
+
+        File.WriteAllText(sourcePath, source);
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"build \"{projectPath}\" -c Release -nologo --verbosity quiet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = projectRoot.FullName
+        };
+
+        using var process = System.Diagnostics.Process.Start(psi)!;
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        Assert.True(process.ExitCode == 0, $"dotnet build failed for test fixture.{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}");
+
+        var assemblyPath = Path.Combine(projectRoot.FullName, "bin", "Release", "net8.0", assemblyName + ".dll");
+        Assert.True(File.Exists(assemblyPath), $"Built assembly not found: {assemblyPath}");
+        return assemblyPath;
+    }
+
+    private static string GetCurrentRuntimeAssetRid()
+    {
+        if (OperatingSystem.IsWindows())
+            return "win";
+        if (OperatingSystem.IsMacOS())
+            return "osx";
+
+        return "linux";
+    }
+
+    private static void WriteDepsJson(string path)
+    {
+        File.WriteAllText(path, """
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "DemoModule/1.0.0": {
+        "runtime": {
+          "DemoModule.dll": {}
+        }
+      },
+      "NestedDependency/1.0.0": {
+        "runtime": {
+          "lib/net8.0/NestedDependency.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "DemoModule/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "NestedDependency/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
+""");
     }
 }

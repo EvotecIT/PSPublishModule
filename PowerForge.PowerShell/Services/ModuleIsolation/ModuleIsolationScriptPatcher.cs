@@ -60,6 +60,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
 namespace PowerForge.ModuleIsolation
@@ -131,7 +132,23 @@ namespace PowerForge.ModuleIsolation
                 assemblyDirectories.Add(directory);
             }
 
-            resolvers.Add(new AssemblyDependencyResolver(assemblyPath));
+            var resolver = TryCreateResolver(assemblyPath);
+            if (resolver != null)
+            {
+                resolvers.Add(resolver);
+            }
+        }
+
+        private static AssemblyDependencyResolver TryCreateResolver(string assemblyPath)
+        {
+            try
+            {
+                return new AssemblyDependencyResolver(assemblyPath);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
         }
 
         protected override Assembly Load(AssemblyName assemblyName)
@@ -163,6 +180,12 @@ namespace PowerForge.ModuleIsolation
 
             foreach (var directory in assemblyDirectories)
             {
+                var runtimeCandidatePath = ResolvePackagedRuntimeAssembly(directory, assemblyName.Name);
+                if (!string.IsNullOrWhiteSpace(runtimeCandidatePath) && File.Exists(runtimeCandidatePath))
+                {
+                    return LoadAssemblyFromPath(runtimeCandidatePath);
+                }
+
                 var candidatePath = Path.Combine(directory, assemblyName.Name + ".dll");
                 if (File.Exists(candidatePath))
                 {
@@ -185,7 +208,193 @@ namespace PowerForge.ModuleIsolation
                 }
             }
 
+            foreach (var directory in assemblyDirectories)
+            {
+                var packagedLibrary = LoadPackagedNativeLibrary(directory, unmanagedDllName);
+                if (packagedLibrary != IntPtr.Zero)
+                {
+                    return packagedLibrary;
+                }
+            }
+
             return IntPtr.Zero;
+        }
+
+        private static string ResolvePackagedRuntimeAssembly(string assemblyDirectory, string assemblyName)
+        {
+            if (string.IsNullOrWhiteSpace(assemblyDirectory) || string.IsNullOrWhiteSpace(assemblyName))
+            {
+                return null;
+            }
+
+            var fileName = assemblyName + ".dll";
+            foreach (var rid in GetRuntimeIdentifiers())
+            {
+                var runtimeLibRoot = Path.Combine(assemblyDirectory, "runtimes", rid, "lib");
+                if (!Directory.Exists(runtimeLibRoot))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    foreach (var path in Directory.EnumerateFiles(runtimeLibRoot, fileName, SearchOption.AllDirectories))
+                    {
+                        if (File.Exists(path))
+                        {
+                            return path;
+                        }
+                    }
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
+                {
+                    continue;
+                }
+            }
+
+            return null;
+        }
+
+        private IntPtr LoadPackagedNativeLibrary(string assemblyDirectory, string unmanagedDllName)
+        {
+            if (string.IsNullOrWhiteSpace(assemblyDirectory) || string.IsNullOrWhiteSpace(unmanagedDllName))
+            {
+                return IntPtr.Zero;
+            }
+
+            foreach (var rid in GetRuntimeIdentifiers())
+            {
+                foreach (var fileName in GetNativeLibraryFileNames(unmanagedDllName))
+                {
+                    var path = Path.Combine(assemblyDirectory, "runtimes", rid, "native", fileName);
+                    if (File.Exists(path))
+                    {
+                        var loaded = TryLoadPackagedNativeLibrary(path);
+                        if (loaded != IntPtr.Zero)
+                        {
+                            return loaded;
+                        }
+                    }
+                }
+            }
+
+            foreach (var fileName in GetNativeLibraryFileNames(unmanagedDllName))
+            {
+                var path = Path.Combine(assemblyDirectory, fileName);
+                if (File.Exists(path))
+                {
+                    var loaded = TryLoadPackagedNativeLibrary(path);
+                    if (loaded != IntPtr.Zero)
+                    {
+                        return loaded;
+                    }
+                }
+            }
+
+            return IntPtr.Zero;
+        }
+
+        private IntPtr TryLoadPackagedNativeLibrary(string path)
+        {
+            try
+            {
+                return LoadUnmanagedDllFromPath(path);
+            }
+            catch (Exception ex) when (ex is BadImageFormatException || ex is DllNotFoundException || ex is FileLoadException)
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        private static IEnumerable<string> GetRuntimeIdentifiers()
+        {
+            var runtimeIdentifier = RuntimeInformation.RuntimeIdentifier ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(runtimeIdentifier))
+            {
+                yield return runtimeIdentifier;
+            }
+
+            var arch = RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => "x64",
+                Architecture.X86 => "x86",
+                Architecture.Arm64 => "arm64",
+                Architecture.Arm => "arm",
+                _ => null
+            };
+            var isMusl = runtimeIdentifier.Contains("musl", StringComparison.OrdinalIgnoreCase);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                if (arch is not null)
+                {
+                    yield return "win-" + arch;
+                }
+
+                yield return "win";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                if (arch is not null)
+                {
+                    yield return "osx-" + arch;
+                }
+
+                yield return "osx";
+                yield return "unix";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                if (arch is not null)
+                {
+                    if (isMusl)
+                    {
+                        yield return "linux-musl-" + arch;
+                        yield return "linux-musl";
+                        yield return "linux-" + arch;
+                    }
+                    else
+                    {
+                        yield return "linux-" + arch;
+                        yield return "linux-musl-" + arch;
+                        yield return "linux-musl";
+                    }
+                }
+
+                yield return "linux";
+                yield return "unix";
+            }
+        }
+
+        private static IEnumerable<string> GetNativeLibraryFileNames(string unmanagedDllName)
+        {
+            yield return unmanagedDllName;
+
+            if (Path.HasExtension(unmanagedDllName))
+            {
+                yield break;
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                yield return unmanagedDllName + ".dll";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                yield return unmanagedDllName + ".dylib";
+                if (!unmanagedDllName.StartsWith("lib", StringComparison.Ordinal))
+                {
+                    yield return "lib" + unmanagedDllName + ".dylib";
+                }
+            }
+            else
+            {
+                yield return unmanagedDllName + ".so";
+                if (!unmanagedDllName.StartsWith("lib", StringComparison.Ordinal))
+                {
+                    yield return "lib" + unmanagedDllName + ".so";
+                }
+            }
         }
     }
 }

@@ -29,7 +29,7 @@ public partial class OnModuleImportAndRemove {
                 return;
             }
 
-            _coreResolver = new AssemblyDependencyResolver(assemblyPath);
+            _coreResolver = TryCreateCoreResolver(assemblyPath);
             AssemblyLoadContext.Default.Resolving += ResolveCoreAssembly;
             _coreResolverRegistered = true;
         }
@@ -66,6 +66,14 @@ public partial class OnModuleImportAndRemove {
         }
 
         return null;
+    }
+
+    private static AssemblyDependencyResolver? TryCreateCoreResolver(string assemblyPath) {
+        try {
+            return new AssemblyDependencyResolver(assemblyPath);
+        } catch (InvalidOperationException) {
+            return null;
+        }
     }
 
     private static bool ShouldSkipCoreResolution(AssemblyName assemblyName) {
