@@ -131,7 +131,23 @@ namespace PowerForge.ModuleIsolation
                 assemblyDirectories.Add(directory);
             }
 
-            resolvers.Add(new AssemblyDependencyResolver(assemblyPath));
+            var resolver = TryCreateResolver(assemblyPath);
+            if (resolver != null)
+            {
+                resolvers.Add(resolver);
+            }
+        }
+
+        private static AssemblyDependencyResolver TryCreateResolver(string assemblyPath)
+        {
+            try
+            {
+                return new AssemblyDependencyResolver(assemblyPath);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
         }
 
         protected override Assembly Load(AssemblyName assemblyName)

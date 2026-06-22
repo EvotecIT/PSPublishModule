@@ -548,7 +548,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
     private readonly string _assemblyDirectory;
     private readonly string _moduleAssemblyPath;
-    private readonly AssemblyDependencyResolver _resolver;
+    private readonly AssemblyDependencyResolver? _resolver;
     private Assembly? _moduleAssembly;
 
     private ModuleAssemblyLoadContext(string moduleAssemblyPath, string contextName)
@@ -556,7 +556,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     {{
         _moduleAssemblyPath = Path.GetFullPath(moduleAssemblyPath);
         _assemblyDirectory = Path.GetDirectoryName(_moduleAssemblyPath) ?? string.Empty;
-        _resolver = new AssemblyDependencyResolver(_moduleAssemblyPath);
+        _resolver = TryCreateResolver(_moduleAssemblyPath);
     }}
 
     public static Assembly LoadModule(string moduleAssemblyPath, string? contextName)
@@ -590,7 +590,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (AssemblyName.ReferenceMatchesDefinition(loaderAssembly, assemblyName))
             return typeof(ModuleAssemblyLoadContext).Assembly;
 
-        var resolvedPath = _resolver.ResolveAssemblyToPath(assemblyName);
+        var resolvedPath = _resolver?.ResolveAssemblyToPath(assemblyName);
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
             return LoadFromAssemblyPath(resolvedPath);
 
@@ -600,7 +600,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
     {{
-        var resolvedPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+        var resolvedPath = _resolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
             return LoadUnmanagedDllFromPath(resolvedPath);
 
@@ -615,6 +615,18 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         // Called only while LoadModule holds Sync; keep the one-time main assembly load under that lock.
         _moduleAssembly ??= LoadFromAssemblyPath(_moduleAssemblyPath);
         return _moduleAssembly;
+    }}
+
+    private static AssemblyDependencyResolver? TryCreateResolver(string assemblyPath)
+    {{
+        try
+        {{
+            return new AssemblyDependencyResolver(assemblyPath);
+        }}
+        catch (InvalidOperationException)
+        {{
+            return null;
+        }}
     }}
 
     private IntPtr LoadPackagedNativeLibrary(string unmanagedDllName)

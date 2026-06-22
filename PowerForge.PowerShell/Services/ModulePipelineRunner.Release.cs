@@ -213,13 +213,8 @@ public sealed partial class ModulePipelineRunner
         Directory.CreateDirectory(targetRoot);
 
         var targetPath = Path.Combine(targetRoot, Path.GetFileName(sourcePath));
-        if (File.Exists(targetPath))
-        {
-            if (PathsEqual(targetPath, sourcePath))
-                return Path.GetFullPath(targetPath);
-
-            throw new IOException($"Release staging asset collision detected: {targetPath}");
-        }
+        if (File.Exists(targetPath) && PathsEqual(targetPath, sourcePath))
+            return Path.GetFullPath(targetPath);
 
         File.Copy(sourcePath, targetPath, overwrite: true);
         return Path.GetFullPath(targetPath);

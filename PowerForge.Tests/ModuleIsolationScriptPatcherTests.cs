@@ -31,6 +31,10 @@ public sealed class ModuleIsolationScriptPatcherTests
         Assert.DoesNotContain("Import-Module $RestModulePath", patched, StringComparison.Ordinal);
         Assert.Contains("Contexts[contextName] = context", patched, StringComparison.Ordinal);
         Assert.Contains("LoadedModuleAssemblies", patched, StringComparison.Ordinal);
+        Assert.Contains("TryCreateResolver(assemblyPath)", patched, StringComparison.Ordinal);
+        Assert.Contains("catch (InvalidOperationException)", patched, StringComparison.Ordinal);
+        Assert.Contains("return null;", patched, StringComparison.Ordinal);
+        Assert.Contains("Path.Combine(directory, assemblyName.Name + \".dll\")", patched, StringComparison.Ordinal);
     }
 
     [Fact]

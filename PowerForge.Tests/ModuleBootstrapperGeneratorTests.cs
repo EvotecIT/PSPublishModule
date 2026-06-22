@@ -218,6 +218,25 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void BuildAssemblyLoadContextSource_FallsBackToDirectoryProbingWhenResolverIsUnavailable()
+    {
+        var identity = new ModuleBootstrapperGenerator.AssemblyLoadContextLoaderIdentity(
+            "DemoModule.ModuleLoadContext",
+            "DemoModule.ModuleLoadContext",
+            "DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext");
+        var source = ModuleBootstrapperGenerator.BuildAssemblyLoadContextSource(identity);
+
+        Assert.Contains("private readonly AssemblyDependencyResolver? _resolver;", source);
+        Assert.Contains("_resolver = TryCreateResolver(_moduleAssemblyPath);", source);
+        Assert.Contains("catch (InvalidOperationException)", source);
+        Assert.Contains("return null;", source);
+        Assert.Contains("_resolver?.ResolveAssemblyToPath(assemblyName)", source);
+        Assert.Contains("_resolver?.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
+        Assert.Contains("Path.Combine(_assemblyDirectory, assemblyName.Name + \".dll\")", source);
+        Assert.Contains("LoadPackagedNativeLibrary(unmanagedDllName)", source);
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContextAndDefaultOnlyLib_WritesLoaderBesideDefaultAssembly()
     {
