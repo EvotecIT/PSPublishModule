@@ -602,6 +602,10 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
             return LoadFromAssemblyPath(resolvedPath);
 
+        resolvedPath = ResolvePackagedRuntimeAssembly(assemblyName.Name);
+        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            return LoadFromAssemblyPath(resolvedPath);
+
         var assemblyPath = Path.Combine(_assemblyDirectory, assemblyName.Name + "".dll"");
         return File.Exists(assemblyPath) ? LoadFromAssemblyPath(assemblyPath) : null;
     }}
@@ -861,6 +865,35 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
             values.Add(string.Empty);
             return values.ToArray();
         }}
+    }}
+
+    private string? ResolvePackagedRuntimeAssembly(string assemblyName)
+    {{
+        if (string.IsNullOrWhiteSpace(assemblyName))
+            return null;
+
+        var fileName = assemblyName + "".dll"";
+        foreach (var rid in GetRuntimeIdentifiers())
+        {{
+            var runtimeLibRoot = Path.Combine(_assemblyDirectory, ""runtimes"", rid, ""lib"");
+            if (!Directory.Exists(runtimeLibRoot))
+                continue;
+
+            try
+            {{
+                foreach (var path in Directory.EnumerateFiles(runtimeLibRoot, fileName, SearchOption.AllDirectories))
+                {{
+                    if (File.Exists(path))
+                        return path;
+                }}
+            }}
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
+            {{
+                continue;
+            }}
+        }}
+
+        return null;
     }}
 
     private IntPtr LoadPackagedNativeLibrary(string unmanagedDllName)

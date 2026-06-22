@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -574,6 +575,45 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal(2, packageBuildCalls);
             Assert.NotNull(second.ReleaseCoordinationResult);
             Assert.Contains(second.ReleaseCoordinationResult!.AssetPaths, path => string.Equals(path, stagedPackage, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void StageReleaseAsset_RejectsSameRunFilenameCollisionsButAllowsRepeatedBuildOverwrite()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var firstSource = Path.Combine(root.FullName, "first", "Package.1.0.0.nupkg");
+            var secondSource = Path.Combine(root.FullName, "second", "Package.1.0.0.nupkg");
+            Directory.CreateDirectory(Path.GetDirectoryName(firstSource)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(secondSource)!);
+            File.WriteAllText(firstSource, "first");
+            File.WriteAllText(secondSource, "second");
+
+            var method = typeof(ModulePipelineRunner).GetMethod("StageReleaseAsset", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var currentRunSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var stageRoot = Path.Combine(root.FullName, "stage");
+
+            var stagedPath = Assert.IsType<string>(method.Invoke(null, new object[] { stageRoot, "nuget", firstSource, currentRunSources })!);
+            Assert.Equal("first", File.ReadAllText(stagedPath));
+
+            var collision = Assert.Throws<TargetInvocationException>(() =>
+                method.Invoke(null, new object[] { stageRoot, "nuget", secondSource, currentRunSources }));
+            var invalidOperation = Assert.IsType<InvalidOperationException>(collision.InnerException);
+            Assert.Contains("Release staging collision", invalidOperation.Message, StringComparison.Ordinal);
+            Assert.Equal("first", File.ReadAllText(stagedPath));
+
+            File.WriteAllText(firstSource, "first-updated");
+            var nextRunSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var restagedPath = Assert.IsType<string>(method.Invoke(null, new object[] { stageRoot, "nuget", firstSource, nextRunSources })!);
+
+            Assert.Equal(stagedPath, restagedPath);
+            Assert.Equal("first-updated", File.ReadAllText(restagedPath));
         }
         finally
         {
