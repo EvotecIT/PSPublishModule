@@ -96,6 +96,86 @@ public sealed class PublishConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_allows_enabled_repository_credential_publish_without_inline_api_key()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = "https://packages.example.test/nuget/v3/index.json",
+            Tool = PublishTool.PSResourceGet,
+            RepositoryCredentialUserName = "publisher",
+            RepositoryCredentialSecret = "token",
+            RepositoryCredentialSecretSpecified = true,
+            Enabled = true
+        });
+
+        Assert.Equal(string.Empty, segment.Configuration.ApiKey);
+        Assert.Null(segment.Configuration.ApiKeyFilePath);
+
+        var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
+        var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
+        Assert.Equal("publisher", credential.UserName);
+        Assert.Equal("token", credential.Secret);
+    }
+
+    [Fact]
+    public void Create_rejects_enabled_psgallery_repository_credential_publish_without_api_key_file()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiFromFile",
+            Type = PublishDestination.PowerShellGallery,
+            RepositoryCredentialUserName = "publisher",
+            RepositoryCredentialSecret = "token",
+            RepositoryCredentialSecretSpecified = true,
+            Enabled = true
+        }));
+
+        Assert.Contains("FilePath", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_rejects_enabled_inline_publish_without_api_key()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            Enabled = true
+        }));
+
+        Assert.Contains("ApiKey", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_rejects_enabled_github_publish_without_api_key_file()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.GitHub,
+            UserName = "EvotecIT",
+            RepositoryName = "MyModule",
+            RepositoryCredentialUserName = "publisher",
+            RepositoryCredentialSecret = "token",
+            RepositoryCredentialSecretSpecified = true,
+            Enabled = true
+        }));
+
+        Assert.Contains("ApiKey", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Create_rejects_multiline_publish_api_key_file()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".ps1");
