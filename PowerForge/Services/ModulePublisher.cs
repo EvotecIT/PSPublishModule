@@ -81,7 +81,7 @@ public sealed class ModulePublisher
                 errorMessage: null);
         }
 
-        publish = ResolveRuntimePublishSecrets(publish);
+        publish = ResolveRuntimePublishSecrets(publish, plan.ProjectRoot);
 
         return publish.Destination switch
         {
@@ -91,7 +91,7 @@ public sealed class ModulePublisher
         };
     }
 
-    internal static string ResolvePublishApiKey(PublishConfiguration publish)
+    internal static string ResolvePublishApiKey(PublishConfiguration publish, string? basePath = null)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
 
@@ -99,14 +99,16 @@ public sealed class ModulePublisher
             return ValidateSingleLineSecret(publish.ApiKey, nameof(PublishConfiguration.ApiKey));
 
         if (!string.IsNullOrWhiteSpace(publish.ApiKeyFilePath))
-            return ReadSingleLineSecretFile(publish.ApiKeyFilePath!, nameof(PublishConfiguration.ApiKeyFilePath));
+            return ReadSingleLineSecretFile(
+                ResolvePublishApiKeyFilePath(publish.ApiKeyFilePath!, basePath),
+                nameof(PublishConfiguration.ApiKeyFilePath));
 
         return string.Empty;
     }
 
-    private static PublishConfiguration ResolveRuntimePublishSecrets(PublishConfiguration publish)
+    private static PublishConfiguration ResolveRuntimePublishSecrets(PublishConfiguration publish, string? basePath)
     {
-        var apiKey = ResolvePublishApiKey(publish);
+        var apiKey = ResolvePublishApiKey(publish, basePath);
         if (string.Equals(apiKey, publish.ApiKey, StringComparison.Ordinal))
             return publish;
 
@@ -130,6 +132,14 @@ public sealed class ModulePublisher
             RequiredModuleSourceRepository = publish.RequiredModuleSourceRepository,
             Verbose = publish.Verbose
         };
+    }
+
+    private static string ResolvePublishApiKeyFilePath(string filePath, string? basePath)
+    {
+        if (string.IsNullOrWhiteSpace(basePath))
+            return Path.GetFullPath(PathValueResolver.Clean(filePath));
+
+        return PathValueResolver.Resolve(basePath!, filePath);
     }
 
     private static string ReadSingleLineSecretFile(string filePath, string parameterName)

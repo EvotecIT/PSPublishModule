@@ -27,6 +27,14 @@ internal sealed class PublishConfigurationFactory
             "JFrog" when !string.IsNullOrWhiteSpace(request.FilePath) => request.FilePath.Trim(),
             _ => null
         };
+
+        if (request.Enabled &&
+            string.Equals(request.ParameterSetName, "ApiFromFile", StringComparison.Ordinal) &&
+            string.IsNullOrWhiteSpace(apiKeyFilePathToUse))
+        {
+            throw new ArgumentException("FilePath is required when enabling file-based publish configuration.", nameof(request));
+        }
+
         var shouldResolveApiKeyNow = request.Enabled || string.IsNullOrWhiteSpace(apiKeyFilePathToUse);
         var apiKeyToUse = request.ParameterSetName switch
         {

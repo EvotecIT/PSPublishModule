@@ -53,7 +53,7 @@ public sealed partial class ModulePipelineRunner
             throw new ArgumentNullException(nameof(publish));
         if (string.IsNullOrWhiteSpace(publish.UserName))
             throw new InvalidOperationException("UserName is required for unified GitHub publishing.");
-        var apiKey = ModulePublisher.ResolvePublishApiKey(publish);
+        var apiKey = ModulePublisher.ResolvePublishApiKey(publish, plan.ProjectRoot);
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("API key (token) is required for unified GitHub publishing.");
 
