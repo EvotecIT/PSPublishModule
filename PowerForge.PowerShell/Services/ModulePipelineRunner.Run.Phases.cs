@@ -648,6 +648,8 @@ public sealed partial class ModulePipelineRunner
     {
         var buildResult = state.RequireBuildResult();
 
+        ValidateReleaseArtefactOutputPathConflicts(plan, state);
+
         ExecuteActions(ModulePipelineActionStage.BeforeArtefacts, plan, session, state);
         if (plan.Artefacts is { Length: > 0 })
         {
