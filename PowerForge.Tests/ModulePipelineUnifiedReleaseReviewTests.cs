@@ -554,4 +554,205 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Run_RejectsUnpackedCopyMappingThatWouldClearProjectBuildOutput()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
+            var mappingSource = Path.Combine(root.FullName, "MappingSource");
+            var packageOutput = Path.Combine(artefactsRoot, "ProjectBuild", "packages");
+            var packagePath = Path.Combine(packageOutput, "Mailozaurr.1.0.0.nupkg");
+            Directory.CreateDirectory(mappingSource);
+            File.WriteAllText(Path.Combine(mappingSource, "payload.txt"), "payload");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    Directory.CreateDirectory(packageOutput);
+                    File.WriteAllText(packagePath, "package");
+
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    var project = new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Mailozaurr",
+                        PackageId = "Mailozaurr",
+                        IsPackable = true,
+                        NewVersion = "1.0.0"
+                    };
+                    project.Packages.Add(packagePath);
+                    release.Projects.Add(project);
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = packageOutput,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(artefactsRoot, "Unpacked"),
+                            DirectoryOutput = new[]
+                            {
+                                new ArtefactCopyMapping
+                                {
+                                    Source = mappingSource,
+                                    Destination = packageOutput
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("directory copy mapping output", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project build output path", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(packagePath), "The guard should stop before an unpacked copy mapping clears package output.");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsPackedArtefactZipThatWouldOverwriteProjectBuildReleaseZip()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var releaseOutput = Path.Combine(root.FullName, "Artifacts", "Releases");
+            var releaseZipPath = Path.Combine(releaseOutput, "Mailozaurr.1.0.0.zip");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    Directory.CreateDirectory(releaseOutput);
+                    File.WriteAllText(releaseZipPath, "project-release-zip");
+
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    var project = new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Mailozaurr",
+                        PackageId = "Mailozaurr",
+                        IsPackable = true,
+                        NewVersion = "1.0.0",
+                        ReleaseZipPath = releaseZipPath
+                    };
+                    release.Projects.Add(project);
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        ReleaseZipOutputPath = releaseOutput,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = releaseOutput,
+                            ArtefactName = Path.GetFileName(releaseZipPath)
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("zip output file", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project build release zip asset", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("project-release-zip", File.ReadAllText(releaseZipPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

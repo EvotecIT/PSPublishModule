@@ -76,6 +76,7 @@ public sealed partial class ModulePipelineRunner
                     outputRoot,
                     "output root",
                     ArtefactDestructivePathKind.DirectoryTree));
+                AddArtefactCopyMappingDestructivePaths(paths, cfg, plan, outputRoot, enforceRelativeDestination: false);
                 return paths;
             }
 
@@ -258,6 +259,11 @@ public sealed partial class ModulePipelineRunner
                     ? null
                     : Path.GetDirectoryName(Path.GetFullPath(package.Trim().Trim('"')));
                 AddReleaseProtectedPath(paths, packageDirectory, "project build package directory");
+            }
+
+            foreach (var releaseZipPath in result.Result?.Release?.Projects.Select(static project => project.ReleaseZipPath) ?? Array.Empty<string?>())
+            {
+                AddReleaseProtectedPath(paths, releaseZipPath, "project build release zip asset", isFile: true);
             }
         }
 
