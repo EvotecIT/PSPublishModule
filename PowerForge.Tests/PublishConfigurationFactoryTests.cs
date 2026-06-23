@@ -69,6 +69,33 @@ public sealed class PublishConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_allows_enabled_repository_credential_publish_without_api_key_file()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiFromFile",
+            Type = PublishDestination.PowerShellGallery,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = "https://packages.example.test/nuget/v3/index.json",
+            Tool = PublishTool.PSResourceGet,
+            RepositoryCredentialUserName = "publisher",
+            RepositoryCredentialSecret = "token",
+            RepositoryCredentialSecretSpecified = true,
+            Enabled = true
+        });
+
+        Assert.Equal(string.Empty, segment.Configuration.ApiKey);
+        Assert.Null(segment.Configuration.ApiKeyFilePath);
+
+        var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
+        var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
+        Assert.Equal("publisher", credential.UserName);
+        Assert.Equal("token", credential.Secret);
+    }
+
+    [Fact]
     public void Create_rejects_multiline_publish_api_key_file()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".ps1");

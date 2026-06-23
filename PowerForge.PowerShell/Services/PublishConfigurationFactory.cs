@@ -28,9 +28,15 @@ internal sealed class PublishConfigurationFactory
             _ => null
         };
 
+        var repositorySecretSourceSpecified =
+            request.RepositoryCredentialSecretSpecified ||
+            request.RepositoryCredentialSecretFilePathSpecified ||
+            request.RepositoryCredentialSecretEnvironmentVariableSpecified;
+
         if (request.Enabled &&
             string.Equals(request.ParameterSetName, "ApiFromFile", StringComparison.Ordinal) &&
-            string.IsNullOrWhiteSpace(apiKeyFilePathToUse))
+            string.IsNullOrWhiteSpace(apiKeyFilePathToUse) &&
+            !repositorySecretSourceSpecified)
         {
             throw new ArgumentException("FilePath is required when enabling file-based publish configuration.", nameof(request));
         }
@@ -140,10 +146,6 @@ internal sealed class PublishConfigurationFactory
                 throw new ArgumentException("RepositoryName cannot be 'PSGallery' when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.", nameof(request));
         }
 
-        var repositorySecretSourceSpecified =
-            request.RepositoryCredentialSecretSpecified ||
-            request.RepositoryCredentialSecretFilePathSpecified ||
-            request.RepositoryCredentialSecretEnvironmentVariableSpecified;
         if (repositorySecretSourceSpecified && string.IsNullOrWhiteSpace(repositorySecret))
             throw new ArgumentException("Repository credential secret could not be resolved. Check RepositoryCredentialSecret, RepositoryCredentialSecretFilePath, or RepositoryCredentialSecretEnvironmentVariable.", nameof(request));
 
