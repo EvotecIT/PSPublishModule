@@ -62,9 +62,105 @@ internal static class ArtefactLayoutPathResolver
         return PathValueResolver.Resolve(outputRoot, replaced);
     }
 
+    internal static string ResolveRequiredModulesRootForPacked(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string packedRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+        => ResolvePackedLayoutRoot(
+            cfg.RequiredModules.Path,
+            outputRoot,
+            packedRoot,
+            packedRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+
+    internal static string ResolveModulesRootForPacked(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string packedRoot,
+        string requiredModulesRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+        => ResolvePackedLayoutRoot(
+            cfg.RequiredModules.ModulesPath,
+            outputRoot,
+            packedRoot,
+            requiredModulesRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+
+    private static string ResolvePackedLayoutRoot(
+        string? configuredPath,
+        string outputRoot,
+        string packedRoot,
+        string defaultRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        var raw = ModulePathTokenFormatter.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease);
+        raw = PathValueResolver.Clean(raw);
+        if (string.IsNullOrWhiteSpace(raw))
+            return defaultRoot;
+
+        if (!Path.IsPathRooted(raw))
+        {
+            var resolved = Path.GetFullPath(Path.Combine(packedRoot, raw));
+            if (!IsSameOrChildPath(packedRoot, resolved))
+            {
+                throw new InvalidOperationException(
+                    $"Packed artefact module path '{raw}' resolves outside the temporary packed artefact root '{Path.GetFullPath(packedRoot)}'. Use a path that stays within the packed artefact payload.");
+            }
+
+            return resolved;
+        }
+
+        var rooted = Path.GetFullPath(raw);
+        var resolvedOutputRoot = Path.GetFullPath(outputRoot);
+        if (!IsSameOrChildPath(resolvedOutputRoot, rooted))
+        {
+            throw new InvalidOperationException(
+                $"Packed artefact module paths must resolve under artefact output '{resolvedOutputRoot}', but got '{rooted}'.");
+        }
+
+        var relative = Path.GetRelativePath(resolvedOutputRoot, rooted);
+        if (string.IsNullOrWhiteSpace(relative) || relative == ".")
+            return packedRoot;
+
+        var mapped = Path.GetFullPath(Path.Combine(packedRoot, relative));
+        if (!IsSameOrChildPath(packedRoot, mapped))
+        {
+            throw new InvalidOperationException(
+                $"Packed artefact module path '{raw}' resolves outside the temporary packed artefact root '{Path.GetFullPath(packedRoot)}'. Use a path that stays within the packed artefact payload.");
+        }
+
+        return mapped;
+    }
+
     internal static string NormalizeDeliveryInternalsPath(string? configuredPath)
     {
         var normalized = PathValueResolver.Clean(configuredPath ?? string.Empty);
         return string.IsNullOrWhiteSpace(normalized) ? "Internals" : normalized;
+    }
+
+    private static bool IsSameOrChildPath(string rootPath, string candidatePath)
+    {
+        var root = Path.GetFullPath(rootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidate = Path.GetFullPath(candidatePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (string.Equals(root, candidate, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var rootWithSeparator = root + Path.DirectorySeparatorChar;
+        var candidateWithSeparator = candidate + Path.DirectorySeparatorChar;
+        return candidateWithSeparator.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
     }
 }

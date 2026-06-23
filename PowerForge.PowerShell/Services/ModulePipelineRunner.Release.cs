@@ -114,12 +114,29 @@ public sealed partial class ModulePipelineRunner
 
         if (artefact.ArtefactType == ArtefactType.Packed)
         {
+            var packedRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", "validation", plan.ModuleName);
+            var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForPacked(
+                cfg,
+                outputRoot,
+                packedRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease);
+            var modulesRoot = ArtefactLayoutPathResolver.ResolveModulesRootForPacked(
+                cfg,
+                outputRoot,
+                packedRoot,
+                requiredModulesRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease);
+
             if (cfg.DoNotClear != true)
             {
                 paths.Add(new ArtefactDestructivePath(
                     outputRoot,
                     "direct output files",
-                    ArtefactDestructivePathKind.DirectChildFiles));
+                    ArtefactDestructivePathKind.DirectChildNonZipFiles));
             }
 
             paths.Add(new ArtefactDestructivePath(
@@ -127,11 +144,27 @@ public sealed partial class ModulePipelineRunner
                 "zip output file",
                 ArtefactDestructivePathKind.ExactFile));
 
+            paths.Add(new ArtefactDestructivePath(
+                Path.Combine(modulesRoot, plan.ModuleName),
+                "main packed module copy root",
+                ArtefactDestructivePathKind.DirectoryTree));
+
+            if (cfg.RequiredModules.Enabled == true)
+            {
+                foreach (var requiredModule in FilterRequiredModulesForArtefactValidation(plan.RequiredModulesForPackaging, cfg.RequiredModules.ExcludeModuleName))
+                {
+                    paths.Add(new ArtefactDestructivePath(
+                        Path.Combine(requiredModulesRoot, requiredModule.ModuleName!),
+                        "required packed module copy root",
+                        ArtefactDestructivePathKind.DirectoryTree));
+                }
+            }
+
             AddArtefactCopyMappingDestructivePaths(
                 paths,
                 cfg,
                 plan,
-                Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", "validation", plan.ModuleName),
+                packedRoot,
                 enforceRelativeDestination: true);
         }
 
@@ -189,8 +222,12 @@ public sealed partial class ModulePipelineRunner
         ReleaseProtectedPath protectedPath)
         => destructivePath.Kind switch
         {
-            ArtefactDestructivePathKind.DirectoryTree => IsSameOrChildPath(destructivePath.Path, protectedPath.Path),
-            ArtefactDestructivePathKind.DirectChildFiles => protectedPath.IsFile && IsDirectChildPath(destructivePath.Path, protectedPath.Path),
+            ArtefactDestructivePathKind.DirectoryTree => protectedPath.IsFile
+                ? IsSameOrChildPath(destructivePath.Path, protectedPath.Path)
+                : DoPathsOverlap(destructivePath.Path, protectedPath.Path),
+            ArtefactDestructivePathKind.DirectChildNonZipFiles => protectedPath.IsFile
+                && !IsZipFilePath(protectedPath.Path)
+                && IsDirectChildPath(destructivePath.Path, protectedPath.Path),
             ArtefactDestructivePathKind.ExactFile => PathsEqual(destructivePath.Path, protectedPath.Path),
             _ => false
         };
@@ -248,6 +285,9 @@ public sealed partial class ModulePipelineRunner
 
         return string.Equals(parent, candidateParent, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsZipFilePath(string path)
+        => string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase);
 
     private static List<ReleaseProtectedPath> CollectReleaseProtectedPaths(
         ModulePipelinePlan plan,
@@ -624,7 +664,7 @@ public sealed partial class ModulePipelineRunner
     private enum ArtefactDestructivePathKind
     {
         DirectoryTree,
-        DirectChildFiles,
+        DirectChildNonZipFiles,
         ExactFile
     }
 
