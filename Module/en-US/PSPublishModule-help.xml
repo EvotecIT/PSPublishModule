@@ -38586,12 +38586,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FilePath</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -38880,12 +38880,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="ApiKey">
         <maml:name>New-ConfigurationPublish</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
             <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -39994,12 +39994,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ApiKey</maml:name>
         <maml:description>
           <maml:para>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -40078,12 +40078,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>FilePath</maml:name>
         <maml:description>
           <maml:para>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />

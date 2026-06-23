@@ -11,12 +11,12 @@ Provides a way to configure publishing to PowerShell Gallery, GitHub, JFrog Arti
 ## SYNTAX
 ### ApiFromFile (Default)
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> -FilePath <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> [-FilePath <string>] [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [<CommonParameters>]
 ```
 
 ### ApiKey
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> [-ApiKey <string>] [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [<CommonParameters>]
 ```
 
 ### JFrog
@@ -113,7 +113,7 @@ Parameter Sets: ApiKey, JFrog, Profile
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -225,7 +225,7 @@ Parameter Sets: ApiFromFile, JFrog, Profile
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
