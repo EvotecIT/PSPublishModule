@@ -8,6 +8,108 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private static void ValidateReleaseArtefactOutputPathConflicts(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        if (plan.Artefacts is not { Length: > 0 })
+            return;
+
+        var protectedPaths = CollectReleaseProtectedPaths(plan, state);
+        if (protectedPaths.Count == 0)
+            return;
+
+        var conflicts = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var artefact in plan.Artefacts.Where(static item => item is not null))
+        {
+            var cfg = artefact.Configuration ?? new ArtefactConfiguration();
+            if (cfg.Enabled != true)
+                continue;
+
+            var outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
+                cfg.Path,
+                plan.ProjectRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                artefact.ArtefactType);
+
+            foreach (var protectedPath in protectedPaths)
+            {
+                if (!IsSameOrChildPath(outputRoot, protectedPath.Path))
+                    continue;
+
+                var key = $"{artefact.ArtefactType}|{outputRoot}|{protectedPath.Path}";
+                if (!seen.Add(key))
+                    continue;
+
+                conflicts.Add(
+                    $"Artefact '{artefact.ArtefactType}' output root '{Path.GetFullPath(outputRoot)}' contains {protectedPath.Label} '{Path.GetFullPath(protectedPath.Path)}'. " +
+                    $"Use a dedicated artefact path such as '{GetDedicatedArtefactPathHint(artefact.ArtefactType)}' and keep release staging/project build outputs in separate subdirectories.");
+            }
+        }
+
+        if (conflicts.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            "Release artefact configuration is unsafe:" + Environment.NewLine +
+            string.Join(Environment.NewLine, conflicts.Select(static message => "- " + message)));
+    }
+
+    private static List<ReleaseProtectedPath> CollectReleaseProtectedPaths(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        var paths = new List<ReleaseProtectedPath>();
+        var releaseStageRoot = plan.Release?.Configuration is null
+            ? null
+            : ResolveReleaseStageRoot(plan, plan.Release.Configuration);
+        AddReleaseProtectedPath(paths, releaseStageRoot, "release stage root");
+
+        foreach (var result in state.ProjectBuildResults)
+        {
+            AddReleaseProtectedPath(paths, result.StagingPath, "project build staging path");
+            AddReleaseProtectedPath(paths, result.OutputPath, "project build output path");
+            AddReleaseProtectedPath(paths, result.ReleaseZipOutputPath, "project build release zip output path");
+
+            foreach (var package in result.Result?.Release?.Projects.SelectMany(static project => project.Packages) ?? Array.Empty<string>())
+            {
+                AddReleaseProtectedPath(paths, package, "project build package asset");
+
+                var packageDirectory = string.IsNullOrWhiteSpace(package)
+                    ? null
+                    : Path.GetDirectoryName(Path.GetFullPath(package.Trim().Trim('"')));
+                AddReleaseProtectedPath(paths, packageDirectory, "project build package directory");
+            }
+        }
+
+        return paths;
+    }
+
+    private static void AddReleaseProtectedPath(
+        List<ReleaseProtectedPath> paths,
+        string? path,
+        string label)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        paths.Add(new ReleaseProtectedPath(
+            Path.GetFullPath(path!.Trim().Trim('"')),
+            label));
+    }
+
+    private static string GetDedicatedArtefactPathHint(ArtefactType type)
+        => type switch
+        {
+            ArtefactType.Unpacked => @"Artefacts\Unpacked",
+            ArtefactType.Packed => @"Artefacts\Packed",
+            _ => $@"Artefacts\{type}"
+        };
+
     private ModuleReleaseCoordinationResult? PrepareUnifiedReleaseAssets(
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
@@ -307,4 +409,16 @@ public sealed partial class ModulePipelineRunner
         => path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
             ? path
             : path + Path.DirectorySeparatorChar;
+
+    private readonly struct ReleaseProtectedPath
+    {
+        public ReleaseProtectedPath(string path, string label)
+        {
+            Path = path;
+            Label = label;
+        }
+
+        public string Path { get; }
+        public string Label { get; }
+    }
 }

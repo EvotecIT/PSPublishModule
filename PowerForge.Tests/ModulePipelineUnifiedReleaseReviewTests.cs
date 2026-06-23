@@ -240,4 +240,109 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Run_RejectsArtefactOutputRootThatContainsReleaseAndProjectBuildOutputs()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
+            var packageOutput = Path.Combine(artefactsRoot, "ProjectBuild", "packages");
+            var packagePath = Path.Combine(packageOutput, "Mailozaurr.1.0.0.nupkg");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    Directory.CreateDirectory(packageOutput);
+                    File.WriteAllText(packagePath, "package");
+
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    var project = new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Mailozaurr",
+                        PackageId = "Mailozaurr",
+                        IsPackable = true,
+                        NewVersion = "1.0.0"
+                    };
+                    project.Packages.Add(packagePath);
+                    release.Projects.Add(project);
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        StagingPath = Path.Combine(artefactsRoot, "ProjectBuild"),
+                        OutputPath = packageOutput,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = artefactsRoot
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = Path.Combine(artefactsRoot, "UploadReady")
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("Release artefact configuration is unsafe", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("contains release stage root", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("contains project build output path", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(@"Artefacts\Unpacked", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(packagePath), "The guard should stop before the unpacked artefact clears the package output tree.");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }
