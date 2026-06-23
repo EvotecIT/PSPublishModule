@@ -28,26 +28,21 @@ public sealed partial class ModulePipelineRunner
             if (cfg.Enabled != true)
                 continue;
 
-            var outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
-                cfg.Path,
-                plan.ProjectRoot,
-                plan.ModuleName,
-                plan.ResolvedVersion,
-                plan.PreRelease,
-                artefact.ArtefactType);
-
-            foreach (var protectedPath in protectedPaths)
+            foreach (var destructivePath in CollectArtefactDestructivePaths(plan, artefact, cfg))
             {
-                if (!IsSameOrChildPath(outputRoot, protectedPath.Path))
-                    continue;
+                foreach (var protectedPath in protectedPaths)
+                {
+                    if (!DoesDestructivePathAffectProtectedPath(destructivePath, protectedPath))
+                        continue;
 
-                var key = $"{artefact.ArtefactType}|{outputRoot}|{protectedPath.Path}";
-                if (!seen.Add(key))
-                    continue;
+                    var key = $"{artefact.ArtefactType}|{destructivePath.Kind}|{destructivePath.Path}|{protectedPath.Path}";
+                    if (!seen.Add(key))
+                        continue;
 
-                conflicts.Add(
-                    $"Artefact '{artefact.ArtefactType}' output root '{Path.GetFullPath(outputRoot)}' contains {protectedPath.Label} '{Path.GetFullPath(protectedPath.Path)}'. " +
-                    $"Use a dedicated artefact path such as '{GetDedicatedArtefactPathHint(artefact.ArtefactType)}' and keep release staging/project build outputs in separate subdirectories.");
+                    conflicts.Add(
+                        $"Artefact '{artefact.ArtefactType}' {destructivePath.Label} '{Path.GetFullPath(destructivePath.Path)}' would affect {protectedPath.Label} '{Path.GetFullPath(protectedPath.Path)}'. " +
+                        $"Use a dedicated artefact path such as '{GetDedicatedArtefactPathHint(artefact.ArtefactType)}' and keep release staging/project build outputs in separate subdirectories.");
+                }
             }
         }
 
@@ -57,6 +52,186 @@ public sealed partial class ModulePipelineRunner
         throw new InvalidOperationException(
             "Release artefact configuration is unsafe:" + Environment.NewLine +
             string.Join(Environment.NewLine, conflicts.Select(static message => "- " + message)));
+    }
+
+    private static List<ArtefactDestructivePath> CollectArtefactDestructivePaths(
+        ModulePipelinePlan plan,
+        ConfigurationArtefactSegment artefact,
+        ArtefactConfiguration cfg)
+    {
+        var paths = new List<ArtefactDestructivePath>();
+        var outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
+            cfg.Path,
+            plan.ProjectRoot,
+            plan.ModuleName,
+            plan.ResolvedVersion,
+            plan.PreRelease,
+            artefact.ArtefactType);
+
+        if (artefact.ArtefactType == ArtefactType.Unpacked)
+        {
+            if (cfg.DoNotClear != true)
+            {
+                paths.Add(new ArtefactDestructivePath(
+                    outputRoot,
+                    "output root",
+                    ArtefactDestructivePathKind.DirectoryTree));
+                return paths;
+            }
+
+            var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
+                cfg,
+                outputRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease);
+            var modulesRoot = ArtefactLayoutPathResolver.ResolveModulesRootForUnpacked(
+                cfg,
+                outputRoot,
+                requiredModulesRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease);
+
+            paths.Add(new ArtefactDestructivePath(
+                Path.Combine(modulesRoot, plan.ModuleName),
+                "main module copy root",
+                ArtefactDestructivePathKind.DirectoryTree));
+
+            if (cfg.RequiredModules.Enabled == true)
+            {
+                foreach (var requiredModule in FilterRequiredModulesForArtefactValidation(plan.RequiredModulesForPackaging, cfg.RequiredModules.ExcludeModuleName))
+                {
+                    paths.Add(new ArtefactDestructivePath(
+                        Path.Combine(requiredModulesRoot, requiredModule.ModuleName!),
+                        "required module copy root",
+                        ArtefactDestructivePathKind.DirectoryTree));
+                }
+            }
+
+            AddArtefactCopyMappingDestructivePaths(paths, cfg, plan, outputRoot, enforceRelativeDestination: false);
+            return paths;
+        }
+
+        if (artefact.ArtefactType == ArtefactType.Packed)
+        {
+            if (cfg.DoNotClear != true)
+            {
+                paths.Add(new ArtefactDestructivePath(
+                    outputRoot,
+                    "direct output files",
+                    ArtefactDestructivePathKind.DirectChildFiles));
+            }
+
+            paths.Add(new ArtefactDestructivePath(
+                Path.Combine(outputRoot, ResolveArtefactFileNameForValidation(cfg, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease)),
+                "zip output file",
+                ArtefactDestructivePathKind.ExactFile));
+        }
+
+        return paths;
+    }
+
+    private static void AddArtefactCopyMappingDestructivePaths(
+        List<ArtefactDestructivePath> paths,
+        ArtefactConfiguration cfg,
+        ModulePipelinePlan plan,
+        string destinationRoot,
+        bool enforceRelativeDestination)
+    {
+        foreach (var mapping in cfg.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
+        {
+            if (mapping is null)
+                continue;
+
+            paths.Add(new ArtefactDestructivePath(
+                ResolveArtefactCopyOutputPath(mapping.Destination, destinationRoot, cfg.DestinationDirectoriesRelative == true, enforceRelativeDestination, plan),
+                "directory copy mapping output",
+                ArtefactDestructivePathKind.DirectoryTree));
+        }
+
+        foreach (var mapping in cfg.FilesOutput ?? Array.Empty<ArtefactCopyMapping>())
+        {
+            if (mapping is null)
+                continue;
+
+            paths.Add(new ArtefactDestructivePath(
+                ResolveArtefactCopyOutputPath(mapping.Destination, destinationRoot, cfg.DestinationFilesRelative == true, enforceRelativeDestination, plan),
+                "file copy mapping output",
+                ArtefactDestructivePathKind.ExactFile));
+        }
+    }
+
+    private static RequiredModuleReference[] FilterRequiredModulesForArtefactValidation(
+        IReadOnlyList<RequiredModuleReference>? requiredModules,
+        IReadOnlyList<string>? excludedModuleNames)
+    {
+        var excluded = new HashSet<string>(
+            (excludedModuleNames ?? Array.Empty<string>())
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        return (requiredModules ?? Array.Empty<RequiredModuleReference>())
+            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+            .Where(module => !excluded.Contains(module.ModuleName!))
+            .ToArray();
+    }
+
+    private static bool DoesDestructivePathAffectProtectedPath(
+        ArtefactDestructivePath destructivePath,
+        ReleaseProtectedPath protectedPath)
+        => destructivePath.Kind switch
+        {
+            ArtefactDestructivePathKind.DirectoryTree => IsSameOrChildPath(destructivePath.Path, protectedPath.Path),
+            ArtefactDestructivePathKind.DirectChildFiles => protectedPath.IsFile && IsDirectChildPath(destructivePath.Path, protectedPath.Path),
+            ArtefactDestructivePathKind.ExactFile => PathsEqual(destructivePath.Path, protectedPath.Path),
+            _ => false
+        };
+
+    private static string ResolveArtefactCopyOutputPath(
+        string? value,
+        string destinationRoot,
+        bool relativeToRoot,
+        bool enforceRelativeDestination,
+        ModulePipelinePlan plan)
+    {
+        var raw = ModulePathTokenFormatter.ReplacePathTokens(value ?? string.Empty, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease).Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(raw))
+            return Path.GetFullPath(destinationRoot);
+
+        if (enforceRelativeDestination && Path.IsPathRooted(raw))
+            throw new InvalidOperationException($"Packed artefact copy destinations must be relative, but got rooted path '{raw}'.");
+
+        if (relativeToRoot || !Path.IsPathRooted(raw))
+            return Path.GetFullPath(Path.Combine(destinationRoot, raw));
+
+        return Path.GetFullPath(raw);
+    }
+
+    private static string ResolveArtefactFileNameForValidation(
+        ArtefactConfiguration cfg,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        if (!string.IsNullOrWhiteSpace(cfg.ArtefactName))
+            return ModulePathTokenFormatter.ReplacePathTokens(cfg.ArtefactName!.Trim(), moduleName, moduleVersion, preRelease);
+
+        var tagWithPre = ModulePathTokenFormatter.ReplacePathTokens("<TagModuleVersionWithPreRelease>", moduleName, moduleVersion, preRelease);
+        return cfg.IncludeTagName == true
+            ? $"{moduleName}.{tagWithPre}.zip"
+            : $"{moduleName}.zip";
+    }
+
+    private static bool IsDirectChildPath(string parentPath, string candidatePath)
+    {
+        var parent = Path.GetFullPath(parentPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidateParent = Path.GetDirectoryName(Path.GetFullPath(candidatePath))
+            ?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return string.Equals(parent, candidateParent, StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<ReleaseProtectedPath> CollectReleaseProtectedPaths(
@@ -77,7 +252,7 @@ public sealed partial class ModulePipelineRunner
 
             foreach (var package in result.Result?.Release?.Projects.SelectMany(static project => project.Packages) ?? Array.Empty<string>())
             {
-                AddReleaseProtectedPath(paths, package, "project build package asset");
+                AddReleaseProtectedPath(paths, package, "project build package asset", isFile: true);
 
                 var packageDirectory = string.IsNullOrWhiteSpace(package)
                     ? null
@@ -92,14 +267,16 @@ public sealed partial class ModulePipelineRunner
     private static void AddReleaseProtectedPath(
         List<ReleaseProtectedPath> paths,
         string? path,
-        string label)
+        string label,
+        bool isFile = false)
     {
         if (string.IsNullOrWhiteSpace(path))
             return;
 
         paths.Add(new ReleaseProtectedPath(
             Path.GetFullPath(path!.Trim().Trim('"')),
-            label));
+            label,
+            isFile));
     }
 
     private static string GetDedicatedArtefactPathHint(ArtefactType type)
@@ -410,15 +587,38 @@ public sealed partial class ModulePipelineRunner
             ? path
             : path + Path.DirectorySeparatorChar;
 
-    private readonly struct ReleaseProtectedPath
+    private readonly struct ArtefactDestructivePath
     {
-        public ReleaseProtectedPath(string path, string label)
+        public ArtefactDestructivePath(string path, string label, ArtefactDestructivePathKind kind)
         {
-            Path = path;
+            Path = System.IO.Path.GetFullPath(path);
             Label = label;
+            Kind = kind;
         }
 
         public string Path { get; }
         public string Label { get; }
+        public ArtefactDestructivePathKind Kind { get; }
+    }
+
+    private enum ArtefactDestructivePathKind
+    {
+        DirectoryTree,
+        DirectChildFiles,
+        ExactFile
+    }
+
+    private readonly struct ReleaseProtectedPath
+    {
+        public ReleaseProtectedPath(string path, string label, bool isFile)
+        {
+            Path = path;
+            Label = label;
+            IsFile = isFile;
+        }
+
+        public string Path { get; }
+        public string Label { get; }
+        public bool IsFile { get; }
     }
 }
