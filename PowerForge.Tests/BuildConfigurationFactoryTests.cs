@@ -53,13 +53,28 @@ public sealed class BuildConfigurationFactoryTests
         var libraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(segments[2]);
         Assert.True(libraries.BuildLibraries.Enable);
         Assert.Equal("Release", libraries.BuildLibraries.Configuration);
-        Assert.Equal("src/Sample.csproj", libraries.BuildLibraries.NETProjectPath);
+        Assert.Equal(Normalize("src/Sample.csproj"), libraries.BuildLibraries.NETProjectPath);
         Assert.True(libraries.BuildLibraries.UseAssemblyLoadContext);
         Assert.Equal(AssemblyTypeAcceleratorExportMode.AllowList, libraries.BuildLibraries.AssemblyTypeAcceleratorMode);
         Assert.Equal(new[] { "HtmlAgilityPack.HtmlEntity" }, libraries.BuildLibraries.AssemblyTypeAccelerators);
 
         var placeholder = Assert.IsType<ConfigurationPlaceHolderOptionSegment>(segments[3]);
         Assert.True(placeholder.PlaceHolderOption.SkipBuiltinReplacements);
+    }
+
+    [Fact]
+    public void Create_normalizes_net_project_path_separators()
+    {
+        var factory = new BuildConfigurationFactory();
+
+        var segments = factory.Create(new BuildConfigurationRequest
+        {
+            NETProjectPathSpecified = true,
+            NETProjectPath = "$PSScriptRoot\\..\\Sources\\Sample\\Sample.csproj"
+        });
+
+        var libraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(Assert.Single(segments));
+        Assert.Equal(Normalize("$PSScriptRoot/../Sources/Sample/Sample.csproj"), libraries.BuildLibraries.NETProjectPath);
     }
 
     [Fact]
@@ -117,5 +132,12 @@ public sealed class BuildConfigurationFactoryTests
         }));
 
         Assert.Contains("CertificatePFXPassword", ex.Message, StringComparison.Ordinal);
+    }
+
+    private static string Normalize(string value)
+    {
+        return OperatingSystem.IsWindows()
+            ? value.Replace('/', '\\')
+            : value.Replace('\\', '/');
     }
 }

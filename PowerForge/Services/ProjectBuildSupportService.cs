@@ -50,11 +50,7 @@ internal sealed class ProjectBuildSupportService
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        var trimmed = value!.Trim();
-        if (Path.IsPathRooted(trimmed))
-            return Path.GetFullPath(trimmed);
-
-        return Path.GetFullPath(Path.Combine(basePath, trimmed));
+        return PathValueResolver.Resolve(basePath, value!);
     }
 
     /// <summary>
@@ -66,10 +62,7 @@ internal sealed class ProjectBuildSupportService
         {
             try
             {
-                var resolvedPath = filePath!.Trim();
-                var full = Path.IsPathRooted(resolvedPath)
-                    ? resolvedPath
-                    : Path.GetFullPath(Path.Combine(basePath, resolvedPath));
+                var full = PathValueResolver.Resolve(basePath, filePath!);
                 if (File.Exists(full))
                     return File.ReadAllText(full).Trim();
             }

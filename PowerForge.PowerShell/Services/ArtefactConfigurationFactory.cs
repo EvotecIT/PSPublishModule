@@ -1,6 +1,5 @@
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -162,11 +161,7 @@ public sealed class ArtefactConfigurationFactory
     }
 
     private static string NormalizePath(string value)
-    {
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? value.Replace('/', '\\')
-            : value.Replace('\\', '/');
-    }
+        => PathValueResolver.NormalizeSeparators(value);
 
     private static ArtefactCopyMapping[]? NormalizeMappings(ArtefactCopyMapping[]? input)
     {

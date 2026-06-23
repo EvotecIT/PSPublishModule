@@ -186,9 +186,7 @@ public sealed partial class ModulePipelineRunner
             plan.ResolvedVersion,
             plan.PreRelease);
 
-        return Path.GetFullPath(Path.IsPathRooted(formatted)
-            ? formatted
-            : Path.Combine(plan.ProjectRoot, formatted));
+        return PathValueResolver.Resolve(plan.ProjectRoot, formatted);
     }
 
     private static string[] StageUnifiedReleaseAssets(

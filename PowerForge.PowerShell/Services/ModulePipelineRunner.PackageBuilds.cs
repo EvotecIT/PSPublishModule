@@ -556,10 +556,7 @@ public sealed partial class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(path))
             return null;
 
-        var trimmed = path!.Trim().Trim('"');
-        return Path.GetFullPath(Path.IsPathRooted(trimmed)
-            ? trimmed
-            : Path.Combine(projectRoot, trimmed));
+        return PathValueResolver.Resolve(projectRoot, path!);
     }
 
     private static Dictionary<string, ProjectBuildVersionTrack>? MapVersionTracks(
@@ -853,8 +850,7 @@ public sealed partial class ModulePipelineRunner
 
     private static string ResolvePackageBuildPath(string projectRoot, string path)
     {
-        var trimmed = path.Trim().Trim('"');
-        return Path.GetFullPath(Path.IsPathRooted(trimmed) ? trimmed : Path.Combine(projectRoot, trimmed));
+        return PathValueResolver.Resolve(projectRoot, path);
     }
 
     private enum PackageBuildExecutionMode

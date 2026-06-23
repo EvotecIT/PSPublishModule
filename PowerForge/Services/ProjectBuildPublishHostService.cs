@@ -39,7 +39,7 @@ public sealed class ProjectBuildPublishHostService
     {
         FrameworkCompatibility.NotNullOrWhiteSpace(configPath, nameof(configPath));
 
-        var resolvedConfigPath = Path.GetFullPath(configPath.Trim().Trim('"'));
+        var resolvedConfigPath = PathValueResolver.Resolve(Directory.GetCurrentDirectory(), configPath);
         var configDirectory = Path.GetDirectoryName(resolvedConfigPath);
         if (string.IsNullOrWhiteSpace(configDirectory))
             throw new InvalidOperationException($"Unable to resolve the configuration directory for '{resolvedConfigPath}'.");

@@ -16,12 +16,11 @@ internal static class ArtefactLayoutPathResolver
         ArtefactType type)
     {
         var raw = ModulePathTokenFormatter.ReplacePathTokens(configuredPath, moduleName, moduleVersion, preRelease);
-        raw = raw.Trim();
-        raw = raw.Trim('"');
+        raw = PathValueResolver.Clean(raw);
         if (string.IsNullOrWhiteSpace(raw))
             return Path.GetFullPath(Path.Combine(projectRoot, "Artefacts", type.ToString()));
 
-        return Path.GetFullPath(Path.IsPathRooted(raw) ? raw : Path.Combine(projectRoot, raw));
+        return PathValueResolver.Resolve(projectRoot, raw);
     }
 
     internal static string ResolveRequiredModulesRootForUnpacked(
@@ -36,13 +35,11 @@ internal static class ArtefactLayoutPathResolver
             return outputRoot;
 
         var replaced = ModulePathTokenFormatter.ReplacePathTokens(path, moduleName, moduleVersion, preRelease);
-        replaced = replaced.Trim();
-        replaced = replaced.Trim('"');
+        replaced = PathValueResolver.Clean(replaced);
         if (string.IsNullOrWhiteSpace(replaced))
             return outputRoot;
 
-        var full = Path.IsPathRooted(replaced) ? replaced : Path.Combine(outputRoot, replaced);
-        return Path.GetFullPath(full);
+        return PathValueResolver.Resolve(outputRoot, replaced);
     }
 
     internal static string ResolveModulesRootForUnpacked(
@@ -58,18 +55,16 @@ internal static class ArtefactLayoutPathResolver
             return requiredModulesRoot;
 
         var replaced = ModulePathTokenFormatter.ReplacePathTokens(path, moduleName, moduleVersion, preRelease);
-        replaced = replaced.Trim();
-        replaced = replaced.Trim('"');
+        replaced = PathValueResolver.Clean(replaced);
         if (string.IsNullOrWhiteSpace(replaced))
             return requiredModulesRoot;
 
-        var full = Path.IsPathRooted(replaced) ? replaced : Path.Combine(outputRoot, replaced);
-        return Path.GetFullPath(full);
+        return PathValueResolver.Resolve(outputRoot, replaced);
     }
 
     internal static string NormalizeDeliveryInternalsPath(string? configuredPath)
     {
-        var normalized = (configuredPath ?? string.Empty).Trim().Trim('"');
+        var normalized = PathValueResolver.Clean(configuredPath ?? string.Empty);
         return string.IsNullOrWhiteSpace(normalized) ? "Internals" : normalized;
     }
 }
