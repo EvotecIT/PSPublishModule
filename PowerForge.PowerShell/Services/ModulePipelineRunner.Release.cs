@@ -70,16 +70,6 @@ public sealed partial class ModulePipelineRunner
 
         if (artefact.ArtefactType == ArtefactType.Unpacked)
         {
-            if (cfg.DoNotClear != true)
-            {
-                paths.Add(new ArtefactDestructivePath(
-                    outputRoot,
-                    "output root",
-                    ArtefactDestructivePathKind.DirectoryTree));
-                AddArtefactCopyMappingDestructivePaths(paths, cfg, plan, outputRoot, enforceRelativeDestination: false);
-                return paths;
-            }
-
             var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
                 cfg,
                 outputRoot,
@@ -93,6 +83,14 @@ public sealed partial class ModulePipelineRunner
                 plan.ModuleName,
                 plan.ResolvedVersion,
                 plan.PreRelease);
+
+            if (cfg.DoNotClear != true)
+            {
+                paths.Add(new ArtefactDestructivePath(
+                    outputRoot,
+                    "output root",
+                    ArtefactDestructivePathKind.DirectoryTree));
+            }
 
             paths.Add(new ArtefactDestructivePath(
                 Path.Combine(modulesRoot, plan.ModuleName),
@@ -128,6 +126,13 @@ public sealed partial class ModulePipelineRunner
                 Path.Combine(outputRoot, ResolveArtefactFileNameForValidation(cfg, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease)),
                 "zip output file",
                 ArtefactDestructivePathKind.ExactFile));
+
+            AddArtefactCopyMappingDestructivePaths(
+                paths,
+                cfg,
+                plan,
+                Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", "validation", plan.ModuleName),
+                enforceRelativeDestination: true);
         }
 
         return paths;
@@ -205,7 +210,16 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException($"Packed artefact copy destinations must be relative, but got rooted path '{raw}'.");
 
         if (relativeToRoot || !Path.IsPathRooted(raw))
-            return Path.GetFullPath(Path.Combine(destinationRoot, raw));
+        {
+            var resolved = Path.GetFullPath(Path.Combine(destinationRoot, raw));
+            if (enforceRelativeDestination && !IsSameOrChildPath(destinationRoot, resolved))
+            {
+                throw new InvalidOperationException(
+                    $"Packed artefact copy destination '{raw}' resolves outside the temporary packing root '{Path.GetFullPath(destinationRoot)}'. Use a destination path that stays within the packed artefact payload.");
+            }
+
+            return resolved;
+        }
 
         return Path.GetFullPath(raw);
     }

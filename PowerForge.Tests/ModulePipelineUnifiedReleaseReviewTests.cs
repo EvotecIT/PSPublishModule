@@ -755,4 +755,196 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Run_RejectsUnpackedLayoutModuleRootThatWouldClearProjectBuildStaging()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
+            var projectBuildRoot = Path.Combine(artefactsRoot, "ProjectBuild");
+            var protectedStagingPath = Path.Combine(projectBuildRoot, moduleName);
+            Directory.CreateDirectory(protectedStagingPath);
+            File.WriteAllText(Path.Combine(protectedStagingPath, "project-build.txt"), "project-build");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        StagingPath = protectedStagingPath,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = new DotNetRepositoryReleaseResult { Success = true }
+                        }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(artefactsRoot, "Unpacked"),
+                            RequiredModules = new ArtefactRequiredModulesConfiguration
+                            {
+                                ModulesPath = projectBuildRoot
+                            }
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("main module copy root", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project build staging path", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("project-build", File.ReadAllText(Path.Combine(protectedStagingPath, "project-build.txt")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsPackedCopyMappingThatEscapesTemporaryPayloadRoot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
+            var mappingSource = Path.Combine(root.FullName, "MappingSource");
+            var packageOutput = Path.Combine(artefactsRoot, "ProjectBuild", "packages");
+            var packagePath = Path.Combine(packageOutput, "Mailozaurr.1.0.0.nupkg");
+            Directory.CreateDirectory(mappingSource);
+            File.WriteAllText(Path.Combine(mappingSource, "payload.txt"), "payload");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    Directory.CreateDirectory(packageOutput);
+                    File.WriteAllText(packagePath, "package");
+
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    var project = new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Mailozaurr",
+                        PackageId = "Mailozaurr",
+                        IsPackable = true,
+                        NewVersion = "1.0.0"
+                    };
+                    project.Packages.Add(packagePath);
+                    release.Projects.Add(project);
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = packageOutput,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(artefactsRoot, "Packed"),
+                            DirectoryOutput = new[]
+                            {
+                                new ArtefactCopyMapping
+                                {
+                                    Source = mappingSource,
+                                    Destination = Path.Combine("..", "Escaped")
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("resolves outside the temporary packing root", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(packagePath), "The guard should stop before a packed copy mapping can escape the payload root.");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }
