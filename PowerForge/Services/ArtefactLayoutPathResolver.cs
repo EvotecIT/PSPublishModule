@@ -129,7 +129,7 @@ internal static class ArtefactLayoutPathResolver
                 $"Packed artefact module paths must resolve under artefact output '{resolvedOutputRoot}', but got '{rooted}'.");
         }
 
-        var relative = Path.GetRelativePath(resolvedOutputRoot, rooted);
+        var relative = FrameworkCompatibility.GetRelativePath(resolvedOutputRoot, rooted);
         if (string.IsNullOrWhiteSpace(relative) || relative == ".")
             return packedRoot;
 
