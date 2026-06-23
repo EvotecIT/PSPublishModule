@@ -1,6 +1,5 @@
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -105,6 +104,8 @@ public sealed class ArtefactConfigurationFactory
         {
             var modulesPath = request.ModulesPath;
             artefact.Configuration.RequiredModules.ModulesPath = NormalizePath(modulesPath!);
+            if (string.IsNullOrWhiteSpace(artefact.Configuration.RequiredModules.Path))
+                artefact.Configuration.RequiredModules.Path = NormalizePath(modulesPath!);
         }
 
         if (request.CopyDirectories is { Length: > 0 })
@@ -162,11 +163,7 @@ public sealed class ArtefactConfigurationFactory
     }
 
     private static string NormalizePath(string value)
-    {
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? value.Replace('/', '\\')
-            : value.Replace('\\', '/');
-    }
+        => PathValueResolver.NormalizeSeparators(value);
 
     private static ArtefactCopyMapping[]? NormalizeMappings(ArtefactCopyMapping[]? input)
     {

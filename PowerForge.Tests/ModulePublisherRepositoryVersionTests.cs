@@ -76,6 +76,35 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void ResolvePublishApiKey_ResolvesDeferredFilePathAgainstProjectRoot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N")));
+        var other = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N")));
+        var originalCurrentDirectory = Directory.GetCurrentDirectory();
+        try
+        {
+            var secretDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, ".secrets"));
+            File.WriteAllText(Path.Combine(secretDirectory.FullName, "gallery.key"), " project-token ");
+            Directory.SetCurrentDirectory(other.FullName);
+
+            var apiKey = ModulePublisher.ResolvePublishApiKey(
+                new PublishConfiguration
+                {
+                    ApiKeyFilePath = Path.Combine(".secrets", "gallery.key")
+                },
+                root.FullName);
+
+            Assert.Equal("project-token", apiKey);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalCurrentDirectory);
+            try { root.Delete(recursive: true); } catch { }
+            try { other.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void EnsureVersionIsGreaterThanRepository_UsesUnlistedPowerShellGalleryVersions()
     {
         using var client = new HttpClient(new FakePowerShellGalleryFeedHandler());

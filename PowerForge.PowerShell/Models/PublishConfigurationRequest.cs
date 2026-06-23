@@ -24,8 +24,14 @@ internal sealed class PublishConfigurationRequest
     /// <summary>Path to a file containing the publish API key.</summary>
     public string FilePath { get; set; } = string.Empty;
 
+    /// <summary>Whether <see cref="FilePath"/> was explicitly supplied.</summary>
+    public bool FilePathSpecified { get; set; }
+
     /// <summary>Inline publish API key. For JFrog this is only needed when the feed requires a separate NuGet API key.</summary>
     public string ApiKey { get; set; } = string.Empty;
+
+    /// <summary>Whether <see cref="ApiKey"/> was explicitly supplied.</summary>
+    public bool ApiKeySpecified { get; set; }
 
     /// <summary>GitHub owner or user name used by GitHub release publishing.</summary>
     public string? UserName { get; set; }

@@ -21,11 +21,48 @@ internal sealed class PublishConfigurationFactory
             throw new ArgumentException("Specify either ApiKey or FilePath for JFrog publishing, not both.", nameof(request));
         }
 
+        var hasJFrogShortcut =
+            !string.IsNullOrWhiteSpace(request.JFrogBaseUri) ||
+            !string.IsNullOrWhiteSpace(request.JFrogRepository);
+        var apiKeyFilePathToUse = request.ParameterSetName switch
+        {
+            "ApiFromFile" when !string.IsNullOrWhiteSpace(request.FilePath) => request.FilePath.Trim(),
+            "JFrog" when !string.IsNullOrWhiteSpace(request.FilePath) => request.FilePath.Trim(),
+            _ => null
+        };
+
+        var repositorySecretSourceSpecified =
+            request.RepositoryCredentialSecretSpecified ||
+            request.RepositoryCredentialSecretFilePathSpecified ||
+            request.RepositoryCredentialSecretEnvironmentVariableSpecified;
+        var canUseRepositoryCredentialOnly =
+            repositorySecretSourceSpecified &&
+            IsPrivateRepositoryCredentialPublishTarget(request, destination, hasJFrogShortcut);
+
+        if (request.Enabled &&
+            string.Equals(request.ParameterSetName, "ApiFromFile", StringComparison.Ordinal) &&
+            string.IsNullOrWhiteSpace(apiKeyFilePathToUse) &&
+            !canUseRepositoryCredentialOnly)
+        {
+            throw new ArgumentException("FilePath is required when enabling file-based publish configuration.", nameof(request));
+        }
+
+        if (request.Enabled &&
+            string.Equals(request.ParameterSetName, "ApiKey", StringComparison.Ordinal) &&
+            string.IsNullOrWhiteSpace(request.ApiKey) &&
+            !canUseRepositoryCredentialOnly)
+        {
+            throw new ArgumentException("ApiKey is required when enabling inline-key publish configuration.", nameof(request));
+        }
+
+        var shouldResolveApiKeyNow = request.Enabled || string.IsNullOrWhiteSpace(apiKeyFilePathToUse);
         var apiKeyToUse = request.ParameterSetName switch
         {
-            "ApiFromFile" => ReadSingleLineSecretFile(request.FilePath, nameof(request.FilePath)),
+            "ApiFromFile" when shouldResolveApiKeyNow && !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => ReadSingleLineSecretFile(apiKeyFilePathToUse!, nameof(request.FilePath)),
+            "ApiFromFile" => string.Empty,
             "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
-            "JFrog" when !string.IsNullOrWhiteSpace(request.FilePath) => ReadSingleLineSecretFile(request.FilePath, nameof(request.FilePath)),
+            "JFrog" when shouldResolveApiKeyNow && !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => ReadSingleLineSecretFile(apiKeyFilePathToUse!, nameof(request.FilePath)),
+            "JFrog" when !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => string.Empty,
             _ => ValidateSingleLineSecret(request.ApiKey, nameof(PublishConfigurationRequest.ApiKey))
         };
 
@@ -37,9 +74,6 @@ internal sealed class PublishConfigurationFactory
         var repositorySourceUri = request.RepositorySourceUri;
         var repositoryPublishUri = request.RepositoryPublishUri;
         var repositoryApiVersion = request.RepositoryApiVersion;
-        var hasJFrogShortcut =
-            !string.IsNullOrWhiteSpace(request.JFrogBaseUri) ||
-            !string.IsNullOrWhiteSpace(request.JFrogRepository);
 
         if (isAzureArtifacts && hasJFrogShortcut)
             throw new ArgumentException("JFrogBaseUri/JFrogRepository cannot be combined with the Azure Artifacts preset.", nameof(request));
@@ -123,10 +157,6 @@ internal sealed class PublishConfigurationFactory
                 throw new ArgumentException("RepositoryName cannot be 'PSGallery' when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.", nameof(request));
         }
 
-        var repositorySecretSourceSpecified =
-            request.RepositoryCredentialSecretSpecified ||
-            request.RepositoryCredentialSecretFilePathSpecified ||
-            request.RepositoryCredentialSecretEnvironmentVariableSpecified;
         if (repositorySecretSourceSpecified && string.IsNullOrWhiteSpace(repositorySecret))
             throw new ArgumentException("Repository credential secret could not be resolved. Check RepositoryCredentialSecret, RepositoryCredentialSecretFilePath, or RepositoryCredentialSecretEnvironmentVariable.", nameof(request));
 
@@ -213,6 +243,7 @@ internal sealed class PublishConfigurationFactory
                 Destination = destination,
                 Tool = request.Tool,
                 ApiKey = apiKeyToUse,
+                ApiKeyFilePath = apiKeyFilePathToUse,
                 ID = request.ID,
                 Enabled = request.Enabled,
                 UserName = request.UserName,
@@ -299,4 +330,24 @@ internal sealed class PublishConfigurationFactory
         => MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryUri) ||
            MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositorySourceUri) ||
            MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryPublishUri);
+
+    private static bool IsPrivateRepositoryCredentialPublishTarget(
+        PublishConfigurationRequest request,
+        PublishDestination destination,
+        bool hasJFrogShortcut)
+    {
+        if (destination != PublishDestination.PowerShellGallery)
+            return false;
+
+        if (hasJFrogShortcut)
+            return true;
+
+        if (string.Equals(request.RepositoryName?.Trim(), PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return !string.IsNullOrWhiteSpace(request.RepositoryName) ||
+               !string.IsNullOrWhiteSpace(request.RepositoryUri) ||
+               !string.IsNullOrWhiteSpace(request.RepositorySourceUri) ||
+               !string.IsNullOrWhiteSpace(request.RepositoryPublishUri);
+    }
 }

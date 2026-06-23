@@ -30,6 +30,9 @@ public sealed class PublishConfiguration
     /// <summary>API key used for publishing.</summary>
     public string ApiKey { get; set; } = string.Empty;
 
+    /// <summary>Optional path to a file containing the API key used for publishing.</summary>
+    public string? ApiKeyFilePath { get; set; }
+
     /// <summary>Optional artefact ID used for publishing.</summary>
     public string? ID { get; set; }
 

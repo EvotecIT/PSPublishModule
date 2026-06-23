@@ -21,6 +21,7 @@ public sealed class ModulePublishConfigurationReaderTests
                 "Destination": "PowerShellGallery",
                 "Tool": "PSResourceGet",
                 "ApiKey": "gallery-key",
+                "ApiKeyFilePath": ".secrets/gallery.key",
                 "Enabled": true,
                 "RepositoryName": "PSGallery",
                 "PublishRequiredModules": true,
@@ -69,6 +70,7 @@ public sealed class ModulePublishConfigurationReaderTests
         Assert.Equal(PublishDestination.PowerShellGallery, repositoryPublish.Destination);
         Assert.Equal(PublishTool.PSResourceGet, repositoryPublish.Tool);
         Assert.Equal("gallery-key", repositoryPublish.ApiKey);
+        Assert.Equal(".secrets/gallery.key", repositoryPublish.ApiKeyFilePath);
         Assert.Equal("PSGallery", repositoryPublish.RepositoryName);
         Assert.True(repositoryPublish.PublishRequiredModules);
         Assert.Equal("InternalUpstream", repositoryPublish.RequiredModuleSourceRepository);

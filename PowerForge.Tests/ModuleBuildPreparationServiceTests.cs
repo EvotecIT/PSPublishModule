@@ -312,6 +312,56 @@ public sealed class ModuleBuildPreparationServiceTests
     }
 
     [Fact]
+    public void ResolvePipelineSpecPaths_accepts_powershell_authored_absolute_paths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-pspaths-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var buildRoot = Path.Combine(root.FullName, "Build");
+            var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = root.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = buildRoot + "\\project.build.json",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = buildRoot + "\\..\\Artefacts\\UploadReady",
+                            VersionSource = ReleaseVersionSource.ProjectBuild
+                        }
+                    }
+                }
+            };
+
+            new ModuleBuildPreparationService().ResolvePipelineSpecPaths(spec, jsonPath);
+
+            var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(spec.Segments[0]);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(spec.Segments[1]);
+            Assert.Equal(Path.Combine(buildRoot, "project.build.json"), projectBuild.Configuration.ConfigPath);
+            Assert.Equal(Path.Combine(root.FullName, "Artefacts", "UploadReady"), release.Configuration.StageRoot);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Plan_keeps_package_build_segments()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-plan-packages-" + Guid.NewGuid().ToString("N")));

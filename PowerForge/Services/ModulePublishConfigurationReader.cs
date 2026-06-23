@@ -54,6 +54,7 @@ public sealed class ModulePublishConfigurationReader
             Destination = configuration.Destination,
             Tool = configuration.Tool,
             ApiKey = configuration.ApiKey,
+            ApiKeyFilePath = configuration.ApiKeyFilePath,
             ID = configuration.ID,
             Enabled = configuration.Enabled,
             UserName = configuration.UserName,

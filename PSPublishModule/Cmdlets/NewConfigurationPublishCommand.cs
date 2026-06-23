@@ -87,13 +87,13 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     public string ProfileName { get; set; } = string.Empty;
 
     /// <summary>API key to be used for publishing in clear text in a file. For JFrog, use this only when the feed requires a separate NuGet API key.</summary>
-    [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "Profile")]
     [Parameter(ParameterSetName = "JFrog")]
     public string FilePath { get; set; } = string.Empty;
 
     /// <summary>API key to be used for publishing in clear text. For JFrog, use this only when the feed requires a separate NuGet API key.</summary>
-    [Parameter(Mandatory = true, ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "Profile")]
     [Parameter(ParameterSetName = "JFrog")]
     public string ApiKey { get; set; } = string.Empty;
@@ -370,7 +370,9 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             AzureDevOpsProject = azureDevOpsProject,
             AzureArtifactsFeed = azureArtifactsFeed,
             FilePath = FilePath,
+            FilePathSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(FilePath)),
             ApiKey = ApiKey,
+            ApiKeySpecified = MyInvocation.BoundParameters.ContainsKey(nameof(ApiKey)),
             UserName = UserName,
             RepositoryName = repositoryName,
             Tool = tool,

@@ -52,7 +52,7 @@ public sealed class ProjectBuildHostService
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
         var startedAt = DateTimeOffset.UtcNow;
-        var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        var configPath = PathValueResolver.Resolve(Directory.GetCurrentDirectory(), request.ConfigPath);
         var configDirectory = Path.GetDirectoryName(configPath);
         if (string.IsNullOrWhiteSpace(configDirectory))
             throw new InvalidOperationException($"Unable to resolve the configuration directory for '{configPath}'.");
@@ -78,7 +78,7 @@ public sealed class ProjectBuildHostService
             throw new ArgumentException("Config path is required.", nameof(configPath));
 
         var startedAt = DateTimeOffset.UtcNow;
-        var fullConfigPath = Path.GetFullPath(configPath.Trim().Trim('"'));
+        var fullConfigPath = PathValueResolver.Resolve(Directory.GetCurrentDirectory(), configPath);
         var configDirectory = Path.GetDirectoryName(fullConfigPath);
         if (string.IsNullOrWhiteSpace(configDirectory))
             throw new InvalidOperationException($"Unable to resolve the configuration directory for '{fullConfigPath}'.");

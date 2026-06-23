@@ -316,7 +316,7 @@ internal sealed class ModuleBuildPreparationService
     private static string ResolveConfigPath(string baseDir, string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
-        return Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDir, path));
+        return PathValueResolver.Resolve(baseDir, path!);
     }
 
     private static string? ResolveConfigPathNullable(string baseDir, string? path)

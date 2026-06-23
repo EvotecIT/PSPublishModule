@@ -172,7 +172,7 @@ internal sealed class BuildConfigurationFactory
         if (request.NETBinaryModuleSpecified) { EnsureBuildLibraries(); buildLibraries!.BinaryModule = request.NETBinaryModule; }
         if (request.NETHandleAssemblyWithSameNameSpecified) { EnsureBuildLibraries(); buildLibraries!.HandleAssemblyWithSameName = request.NETHandleAssemblyWithSameName; }
         if (request.NETLineByLineAddTypeSpecified) { EnsureBuildLibraries(); buildLibraries!.NETLineByLineAddType = request.NETLineByLineAddType; }
-        if (request.NETProjectPathSpecified) { EnsureBuildLibraries(); buildLibraries!.NETProjectPath = request.NETProjectPath; }
+        if (request.NETProjectPathSpecified) { EnsureBuildLibraries(); buildLibraries!.NETProjectPath = request.NETProjectPath is null ? null : PathValueResolver.NormalizeSeparators(request.NETProjectPath); }
         if (request.NETBinaryModuleCmdletScanDisabledSpecified) { EnsureBuildLibraries(); buildLibraries!.BinaryModuleCmdletScanDisabled = request.NETBinaryModuleCmdletScanDisabled; }
         if (request.NETSearchClassSpecified) { EnsureBuildLibraries(); buildLibraries!.SearchClass = request.NETSearchClass; }
         if (request.NETBinaryModuleDocumentationSpecified) { EnsureBuildLibraries(); buildLibraries!.NETBinaryModuleDocumentation = request.NETBinaryModuleDocumentation; }
