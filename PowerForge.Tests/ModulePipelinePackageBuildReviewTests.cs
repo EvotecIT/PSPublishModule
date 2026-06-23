@@ -306,7 +306,7 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
-    public void Run_RejectsLatePackageReleaseVersionSourceLane()
+    public void Run_AllowsLatePackageReleaseVersionSourceLane()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -314,6 +314,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
 
+            var packageBuildCalls = 0;
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 powerShellRunner: null,
@@ -322,7 +323,25 @@ public sealed partial class ModulePipelinePackageBuildTests
                 manifestMutator: null,
                 missingFunctionAnalysisService: null,
                 scriptFunctionExportDetector: null,
-                packageBuildExecutor: (request, configuration, configPath) => throw new InvalidOperationException("Package build should not run."));
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    packageBuildCalls++;
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = new DotNetRepositoryReleaseResult
+                            {
+                                Success = true,
+                                ResolvedVersion = "3.4.5"
+                            }
+                        }
+                    };
+                });
 
             var spec = new ModulePipelineSpec
             {
@@ -342,14 +361,24 @@ public sealed partial class ModulePipelinePackageBuildTests
                             RootPath = "Sources",
                             UseAsReleaseVersionSource = true
                         }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified"),
+                            VersionSource = ReleaseVersionSource.PackageBuild
+                        }
                     }
                 }
             };
 
-            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            var result = runner.Run(spec);
 
-            Assert.Contains("UseAsReleaseVersionSource", ex.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("must run before the module build", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, packageBuildCalls);
+            Assert.NotNull(result.ReleaseCoordinationResult);
+            Assert.Equal("1.0.0", result.ReleaseCoordinationResult!.ModuleVersion);
+            Assert.Equal("3.4.5", result.ReleaseCoordinationResult.ReleaseVersion);
         }
         finally
         {

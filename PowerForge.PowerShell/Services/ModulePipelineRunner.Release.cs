@@ -358,6 +358,8 @@ public sealed partial class ModulePipelineRunner
         var moduleAssets = CollectModuleReleaseAssets(state.ArtefactResults, publishId);
         var packageAssets = CollectPackageReleaseAssets(state.ProjectBuildResults);
         var allAssets = moduleAssets.Concat(packageAssets).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var moduleVersion = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
+        var releaseVersion = ResolveRequestedPackageReleaseVersion(plan, state) ?? moduleVersion;
 
         var stageRoot = ResolveReleaseStageRoot(plan, plan.Release.Configuration);
         string[] finalAssets;
@@ -367,12 +369,14 @@ public sealed partial class ModulePipelineRunner
         }
         else
         {
-            finalAssets = StageUnifiedReleaseAssets(plan, stageRoot!, moduleAssets, packageAssets);
+            finalAssets = StageUnifiedReleaseAssets(plan, stageRoot!, moduleAssets, packageAssets, releaseVersion);
         }
 
         return new ModuleReleaseCoordinationResult
         {
             StageRoot = stageRoot ?? string.Empty,
+            ModuleVersion = moduleVersion,
+            ReleaseVersion = releaseVersion,
             ModuleAssetPaths = string.IsNullOrWhiteSpace(stageRoot)
                 ? moduleAssets
                 : finalAssets.Where(path => IsPathBelow(path, Path.Combine(stageRoot!, "modules"))).ToArray(),
@@ -533,7 +537,8 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         string stageRoot,
         IReadOnlyList<string> moduleAssets,
-        IReadOnlyList<string> packageAssets)
+        IReadOnlyList<string> packageAssets,
+        string releaseVersion)
     {
         var staged = new List<string>();
         var stagedSourcesByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -542,7 +547,7 @@ public sealed partial class ModulePipelineRunner
         foreach (var asset in packageAssets)
             staged.Add(StageReleaseAsset(stageRoot, "nuget", asset, stagedSourcesByPath));
 
-        staged.AddRange(WriteReleaseMetadata(plan, stageRoot, staged));
+        staged.AddRange(WriteReleaseMetadata(plan, stageRoot, staged, releaseVersion));
         return staged.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -584,7 +589,7 @@ public sealed partial class ModulePipelineRunner
         return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string[] WriteReleaseMetadata(ModulePipelinePlan plan, string stageRoot, IReadOnlyList<string> stagedAssets)
+    private static string[] WriteReleaseMetadata(ModulePipelinePlan plan, string stageRoot, IReadOnlyList<string> stagedAssets, string releaseVersion)
     {
         var metadataRoot = Path.Combine(stageRoot, "metadata");
         Directory.CreateDirectory(metadataRoot);
@@ -602,10 +607,13 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
 
         var manifestPath = Path.Combine(metadataRoot, "release-manifest.json");
+        var moduleVersion = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var manifest = new
         {
             moduleName = plan.ModuleName,
-            version = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease),
+            version = moduleVersion,
+            moduleVersion,
+            releaseVersion,
             generatedAtUtc = DateTimeOffset.UtcNow,
             assets = assetEntries
         };

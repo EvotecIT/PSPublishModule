@@ -382,7 +382,6 @@ public sealed partial class ModulePipelineRunner
                 cfg.Name ?? cfg.ConfigPath ?? "ProjectBuild",
                 "ProjectBuild",
                 cfg.BuildBeforeModule,
-                cfg.UseAsReleaseVersionSource,
                 cfg.ProvideLocalNuGetFeed);
         }
 
@@ -397,7 +396,6 @@ public sealed partial class ModulePipelineRunner
                 cfg.Name ?? cfg.RootPath ?? "PackageBuild",
                 "PackageBuild",
                 cfg.BuildBeforeModule,
-                cfg.UseAsReleaseVersionSource,
                 cfg.ProvideLocalNuGetFeed);
         }
     }
@@ -407,7 +405,6 @@ public sealed partial class ModulePipelineRunner
         string laneLabel,
         string laneType,
         bool buildBeforeModule,
-        bool useAsReleaseVersionSource,
         bool provideLocalNuGetFeed)
     {
         var runsBeforeModule = ShouldRunPackageBuildBeforeModule(plan, buildBeforeModule);
@@ -415,12 +412,6 @@ public sealed partial class ModulePipelineRunner
         {
             throw new InvalidOperationException(
                 $"{laneType} lane '{laneLabel}' uses ProvideLocalNuGetFeed and must run before the module build. Set BuildBeforeModule to true or configure Release BuildOrder so PackageBuild runs before Module.");
-        }
-
-        if (useAsReleaseVersionSource && !runsBeforeModule)
-        {
-            throw new InvalidOperationException(
-                $"{laneType} lane '{laneLabel}' uses UseAsReleaseVersionSource and must run before the module build so the module manifest, stage-root tokens, and GitHub tag can use the resolved package version.");
         }
     }
 

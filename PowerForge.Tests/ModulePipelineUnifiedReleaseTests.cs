@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -67,7 +68,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         Succeeded = true,
                         ReleaseCreationSucceeded = true,
                         AllAssetUploadsSucceeded = true,
-                        HtmlUrl = "https://github.com/EvotecIT/TestModule/releases/tag/v2.0.1-beta1"
+                        HtmlUrl = "https://github.com/EvotecIT/TestModule/releases/tag/v1.2.3"
                     };
                 });
 
@@ -131,22 +132,23 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.NotNull(gitHubRequest);
             Assert.Equal("EvotecIT", gitHubRequest!.Owner);
             Assert.Equal("TestModule", gitHubRequest.Repository);
-            Assert.Equal("v2.0.1-beta1", gitHubRequest.TagName);
-            Assert.True(gitHubRequest.IsPreRelease);
+            Assert.Equal("v1.2.3", gitHubRequest.TagName);
+            Assert.False(gitHubRequest.IsPreRelease);
             Assert.True(gitHubRequest.GenerateReleaseNotes);
-            Assert.Equal("2.0.1", result.Plan.ResolvedVersion);
-            Assert.Equal("beta1", result.Plan.PreRelease);
-            Assert.Equal("2.0.1", result.Plan.BuildSpec.Version);
+            Assert.Equal("1.2.3", result.Plan.ResolvedVersion);
+            Assert.Null(result.Plan.PreRelease);
+            Assert.Equal("1.2.3", result.Plan.BuildSpec.Version);
             var projectManifestPath = Path.Combine(root.FullName, $"{moduleName}.psd1");
             var projectManifest = File.ReadAllText(projectManifestPath);
-            Assert.Contains("ModuleVersion = '2.0.1'", projectManifest, StringComparison.Ordinal);
+            Assert.Contains("ModuleVersion = '1.2.3'", projectManifest, StringComparison.Ordinal);
             Assert.False(ManifestEditor.TryGetTopLevelString(projectManifestPath, "Prerelease", out _));
-            Assert.True(ManifestEditor.TryGetPsDataStringArray(projectManifestPath, "Prerelease", out var prerelease));
-            Assert.Equal(new[] { "beta1" }, prerelease);
+            Assert.False(ManifestEditor.TryGetPsDataStringArray(projectManifestPath, "Prerelease", out _));
 
-            var resolvedStageRoot = Path.Combine(root.FullName, "Artifacts", "Unified", moduleName, "2.0.1");
+            var resolvedStageRoot = Path.Combine(root.FullName, "Artifacts", "Unified", moduleName, "1.2.3");
             Assert.NotNull(result.ReleaseCoordinationResult);
             Assert.Equal(Path.GetFullPath(resolvedStageRoot), result.ReleaseCoordinationResult!.StageRoot);
+            Assert.Equal("1.2.3", result.ReleaseCoordinationResult.ModuleVersion);
+            Assert.Equal("2.0.1-beta1+build.7", result.ReleaseCoordinationResult.ReleaseVersion);
             Assert.Equal(4, gitHubRequest.AssetFilePaths.Count);
             Assert.Contains(gitHubRequest.AssetFilePaths, path => path.StartsWith(Path.Combine(resolvedStageRoot, "modules"), StringComparison.OrdinalIgnoreCase));
             Assert.Contains(gitHubRequest.AssetFilePaths, path => string.Equals(path, Path.Combine(resolvedStageRoot, "nuget", Path.GetFileName(packagePath)), StringComparison.OrdinalIgnoreCase));
@@ -154,7 +156,10 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Contains(gitHubRequest.AssetFilePaths, path => string.Equals(path, Path.Combine(resolvedStageRoot, "metadata", "SHA256SUMS.txt"), StringComparison.OrdinalIgnoreCase));
             Assert.All(gitHubRequest.AssetFilePaths, path => Assert.True(File.Exists(path), path));
             var manifestJson = File.ReadAllText(Path.Combine(resolvedStageRoot, "metadata", "release-manifest.json"));
-            Assert.Contains("\"version\": \"2.0.1-beta1\"", manifestJson, StringComparison.Ordinal);
+            using var releaseManifest = JsonDocument.Parse(manifestJson);
+            Assert.Equal("1.2.3", releaseManifest.RootElement.GetProperty("version").GetString());
+            Assert.Equal("1.2.3", releaseManifest.RootElement.GetProperty("moduleVersion").GetString());
+            Assert.Equal("2.0.1-beta1+build.7", releaseManifest.RootElement.GetProperty("releaseVersion").GetString());
             Assert.Contains("HtmlTinkerX.2.0.1-beta1.nupkg", manifestJson, StringComparison.Ordinal);
             Assert.Contains("nuget/HtmlTinkerX.2.0.1-beta1.nupkg", File.ReadAllText(Path.Combine(resolvedStageRoot, "metadata", "SHA256SUMS.txt")), StringComparison.Ordinal);
             Assert.Single(result.PublishResults);
@@ -167,7 +172,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
-    public void Run_UsesExplicitPackageLaneAsReleaseVersionSourceWithoutReleaseSegment()
+    public void Run_DoesNotUseExplicitPackageLaneAsModuleVersionSourceWithoutReleaseSegment()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -227,9 +232,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             var result = runner.Run(spec);
 
-            Assert.Equal("3.4.5", result.Plan.ResolvedVersion);
-            Assert.Equal("3.4.5", result.Plan.BuildSpec.Version);
-            Assert.Contains("ModuleVersion = '3.4.5'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+            Assert.Equal("1.0.0", result.Plan.ResolvedVersion);
+            Assert.Equal("1.0.0", result.Plan.BuildSpec.Version);
+            Assert.Contains("ModuleVersion = '1.0.0'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
         }
         finally
         {
@@ -239,7 +244,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
-    public void Run_UsesExplicitPackageLaneAsReleaseVersionSourceWithReleaseSegment()
+    public void Run_UsesExplicitPackageLaneAsDefaultReleaseVersionSourceWithoutChangingModuleVersion()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -306,9 +311,191 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             var result = runner.Run(spec);
 
-            Assert.Equal("3.4.5", result.Plan.ResolvedVersion);
-            Assert.Equal("3.4.5", result.Plan.BuildSpec.Version);
-            Assert.Contains("ModuleVersion = '3.4.5'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+            Assert.Equal("1.0.0", result.Plan.ResolvedVersion);
+            Assert.Equal("1.0.0", result.Plan.BuildSpec.Version);
+            Assert.Contains("ModuleVersion = '1.0.0'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+            Assert.NotNull(result.ReleaseCoordinationResult);
+            Assert.Equal("1.0.0", result.ReleaseCoordinationResult!.ModuleVersion);
+            Assert.Equal("3.4.5", result.ReleaseCoordinationResult.ReleaseVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_ValidatesReleaseVersionSourceBeforeModulePublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var hostedOperations = new FakeHostedOperations(new List<string>());
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hostedOperations,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified"),
+                            VersionSource = ReleaseVersionSource.PackageBuild
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery,
+                            RepositoryName = "PSGallery",
+                            ApiKey = "gallery-token"
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("Release version source 'PackageBuild'", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(hostedOperations.PublishedModuleVersions);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_UsesProjectBuildReleaseVersionWithoutChangingModulePublishVersion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "Mailozaurr";
+            WriteMinimalModule(root.FullName, moduleName, "2.1.6");
+            WriteProjectBuildConfig(root.FullName, Path.Combine("Build", "project.build.json"));
+
+            var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
+            var packagePath = Path.Combine(packageOutput, "Mailozaurr.2.0.11.nupkg");
+            var hostedOperations = new FakeHostedOperations(new List<string>());
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hostedOperations,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    Directory.CreateDirectory(packageOutput);
+                    File.WriteAllText(packagePath, "package");
+
+                    var release = new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = "2.0.11" };
+                    release.ResolvedVersionsByProject[moduleName] = "2.0.11";
+                    var project = new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = moduleName,
+                        PackageId = moduleName,
+                        IsPackable = true,
+                        NewVersion = "2.0.11"
+                    };
+                    project.Packages.Add(packagePath);
+                    release.Projects.Add(project);
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = packageOutput,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.1.6",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = moduleName,
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true,
+                            UseAsReleaseVersionSource = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified"),
+                            VersionSource = ReleaseVersionSource.ProjectBuild,
+                            PrimaryProject = moduleName
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery,
+                            RepositoryName = "PSGallery",
+                            ApiKey = "gallery-token"
+                        }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            Assert.Equal("2.1.6", result.Plan.ResolvedVersion);
+            Assert.Equal("2.1.6", result.Plan.BuildSpec.Version);
+            Assert.Contains("ModuleVersion = '2.1.6'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+            Assert.NotNull(result.ReleaseCoordinationResult);
+            Assert.Equal("2.1.6", result.ReleaseCoordinationResult!.ModuleVersion);
+            Assert.Equal("2.0.11", result.ReleaseCoordinationResult.ReleaseVersion);
+            Assert.Equal(new[] { "2.1.6" }, hostedOperations.PublishedModuleVersions);
         }
         finally
         {
@@ -1015,6 +1202,23 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
     }
 
+    private static void WriteProjectBuildConfig(string rootPath, string relativePath)
+    {
+        var path = Path.Combine(rootPath, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(
+            path,
+            string.Join(Environment.NewLine, new[]
+            {
+                "{",
+                "  \"RootPath\": \"Sources\",",
+                "  \"Build\": true,",
+                "  \"PublishNuget\": false,",
+                "  \"PublishGitHub\": false",
+                "}"
+            }));
+    }
+
     private sealed class FakeHostedOperations : IModulePipelineHostedOperations
     {
         private readonly List<string> _events;
@@ -1023,6 +1227,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         {
             _events = events;
         }
+
+        public List<string> PublishedModuleVersions { get; } = new();
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -1062,6 +1268,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             bool includeScriptFolders)
         {
             _events.Add($"module:{publish.Destination}");
+            PublishedModuleVersions.Add(plan.ResolvedVersion);
             return new ModulePublishResult(
                 publish.Destination,
                 publish.RepositoryName,

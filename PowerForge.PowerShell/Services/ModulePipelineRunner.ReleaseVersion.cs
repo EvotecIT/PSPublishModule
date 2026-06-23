@@ -19,27 +19,6 @@ public sealed partial class ModulePipelineRunner
             result));
     }
 
-    private void ApplyPackageReleaseVersionIfRequested(
-        ModulePipelinePlan plan,
-        ModulePipelineRunState state)
-    {
-        var resolved = ResolveRequestedPackageReleaseVersion(plan, state);
-        if (string.IsNullOrWhiteSpace(resolved))
-            return;
-
-        var version = SplitReleaseVersion(resolved!);
-        if (string.Equals(plan.ResolvedVersion, version.ModuleVersion, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(plan.PreRelease, version.PreRelease, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        plan.ResolvedVersion = version.ModuleVersion;
-        plan.PreRelease = version.PreRelease;
-        plan.BuildSpec.Version = version.ModuleVersion;
-        _logger.Info($"Release: using package/project build version '{resolved}' as the module release version.");
-    }
-
     private static string? ResolveRequestedPackageReleaseVersion(
         ModulePipelinePlan plan,
         ModulePipelineRunState state)
@@ -54,7 +33,7 @@ public sealed partial class ModulePipelineRunner
                     source: null,
                     primaryProject: release.PrimaryProject,
                     explicitOnly: true,
-                    required: false),
+                    required: false) ?? ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease),
                 ReleaseVersionSource.Manual => ResolveManualReleaseVersion(release),
                 ReleaseVersionSource.ProjectBuild => ResolveCandidateVersion(
                     state.ReleaseVersionCandidates,
@@ -78,6 +57,16 @@ public sealed partial class ModulePipelineRunner
             primaryProject: null,
             explicitOnly: true,
             required: false);
+    }
+
+    private static void ValidateRequestedReleaseVersion(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        if (plan.Release?.Configuration is null)
+            return;
+
+        _ = ResolveRequestedPackageReleaseVersion(plan, state);
     }
 
     private static string ResolveManualReleaseVersion(ReleaseConfiguration release)
@@ -181,24 +170,6 @@ public sealed partial class ModulePipelineRunner
         return null;
     }
 
-    private static ModuleReleaseVersion SplitReleaseVersion(string version)
-    {
-        var normalized = version.Trim();
-        var metadataIndex = normalized.IndexOf('+');
-        if (metadataIndex >= 0)
-            normalized = normalized.Substring(0, metadataIndex);
-
-        var prereleaseIndex = normalized.IndexOf('-');
-        if (prereleaseIndex < 0)
-            return new ModuleReleaseVersion(normalized, preRelease: null);
-
-        var moduleVersion = normalized.Substring(0, prereleaseIndex).Trim();
-        var preRelease = normalized.Substring(prereleaseIndex + 1).Trim();
-        return new ModuleReleaseVersion(
-            moduleVersion,
-            string.IsNullOrWhiteSpace(preRelease) ? null : preRelease);
-    }
-
     private static string BuildMissingReleaseVersionMessage(
         ReleaseVersionSource? source,
         string? primaryProject,
@@ -213,15 +184,4 @@ public sealed partial class ModulePipelineRunner
         return $"Release version source '{sourceText}'{primaryText}{explicitText} did not produce a resolved version.";
     }
 
-    private readonly struct ModuleReleaseVersion
-    {
-        public ModuleReleaseVersion(string moduleVersion, string? preRelease)
-        {
-            ModuleVersion = moduleVersion;
-            PreRelease = preRelease;
-        }
-
-        public string ModuleVersion { get; }
-        public string? PreRelease { get; }
-    }
 }
