@@ -8,6 +8,12 @@ public sealed class ModuleReleaseCoordinationResult
     /// <summary>Configured or resolved release stage root. Empty when assets were not staged.</summary>
     public string StageRoot { get; set; } = string.Empty;
 
+    /// <summary>PowerShell module version used for module artefacts and module publishes.</summary>
+    public string ModuleVersion { get; set; } = string.Empty;
+
+    /// <summary>Coordinated release version selected from module, project-build, package-build, or manual release configuration.</summary>
+    public string ReleaseVersion { get; set; } = string.Empty;
+
     /// <summary>Module artifact paths included in the unified release payload.</summary>
     public string[] ModuleAssetPaths { get; set; } = Array.Empty<string>();
 

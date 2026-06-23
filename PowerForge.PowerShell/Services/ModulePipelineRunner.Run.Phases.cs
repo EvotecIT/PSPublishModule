@@ -18,7 +18,6 @@ public sealed partial class ModulePipelineRunner
         ExecuteActions(ModulePipelineActionStage.AfterDependencies, plan, session, state);
 
         ExecutePackageBuildsBeforeModule(plan, session, state);
-        ApplyPackageReleaseVersionIfRequested(plan, state);
 
         ExecuteActions(ModulePipelineActionStage.BeforeVersioning, plan, session, state);
         SyncSourceProjectVersionIfRequested(plan);

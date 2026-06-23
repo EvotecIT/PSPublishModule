@@ -420,7 +420,7 @@ public sealed partial class ModulePipelineRunner
         if (useAsReleaseVersionSource && !runsBeforeModule)
         {
             throw new InvalidOperationException(
-                $"{laneType} lane '{laneLabel}' uses UseAsReleaseVersionSource and must run before the module build so the module manifest, stage-root tokens, and GitHub tag can use the resolved package version.");
+                $"{laneType} lane '{laneLabel}' uses UseAsReleaseVersionSource and must run before the module build so release coordination can use the resolved package version.");
         }
     }
 
