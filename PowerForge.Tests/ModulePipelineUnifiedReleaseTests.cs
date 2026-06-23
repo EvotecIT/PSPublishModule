@@ -244,7 +244,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
-    public void Run_UsesPackageLaneAsReleaseVersionSourceWithoutChangingModuleVersion()
+    public void Run_UsesExplicitPackageLaneAsDefaultReleaseVersionSourceWithoutChangingModuleVersion()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -303,8 +303,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     {
                         Configuration = new ReleaseConfiguration
                         {
-                            StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified", "<ModuleName>", "<ModuleVersion>"),
-                            VersionSource = ReleaseVersionSource.PackageBuild
+                            StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified", "<ModuleName>", "<ModuleVersion>")
                         }
                     }
                 }
@@ -318,6 +317,71 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.NotNull(result.ReleaseCoordinationResult);
             Assert.Equal("1.0.0", result.ReleaseCoordinationResult!.ModuleVersion);
             Assert.Equal("3.4.5", result.ReleaseCoordinationResult.ReleaseVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_ValidatesReleaseVersionSourceBeforeModulePublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var hostedOperations = new FakeHostedOperations(new List<string>());
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hostedOperations,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified"),
+                            VersionSource = ReleaseVersionSource.PackageBuild
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery,
+                            RepositoryName = "PSGallery",
+                            ApiKey = "gallery-token"
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("Release version source 'PackageBuild'", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(hostedOperations.PublishedModuleVersions);
         }
         finally
         {

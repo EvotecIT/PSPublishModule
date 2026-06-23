@@ -682,6 +682,7 @@ public sealed partial class ModulePipelineRunner
         ExecuteActions(ModulePipelineActionStage.AfterArtefacts, plan, session, state);
 
         ExecutePackageBuildsAfterModule(plan, session, state);
+        ValidateRequestedReleaseVersion(plan, state);
 
         ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
         ExecutePublishOperations(plan, session, buildResult, state);

@@ -28,7 +28,12 @@ public sealed partial class ModulePipelineRunner
         {
             return release.VersionSource switch
             {
-                ReleaseVersionSource.Module => ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease),
+                ReleaseVersionSource.Module => ResolveCandidateVersion(
+                    state.ReleaseVersionCandidates,
+                    source: null,
+                    primaryProject: release.PrimaryProject,
+                    explicitOnly: true,
+                    required: false) ?? ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease),
                 ReleaseVersionSource.Manual => ResolveManualReleaseVersion(release),
                 ReleaseVersionSource.ProjectBuild => ResolveCandidateVersion(
                     state.ReleaseVersionCandidates,
@@ -52,6 +57,16 @@ public sealed partial class ModulePipelineRunner
             primaryProject: null,
             explicitOnly: true,
             required: false);
+    }
+
+    private static void ValidateRequestedReleaseVersion(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        if (plan.Release?.Configuration is null)
+            return;
+
+        _ = ResolveRequestedPackageReleaseVersion(plan, state);
     }
 
     private static string ResolveManualReleaseVersion(ReleaseConfiguration release)
