@@ -69,7 +69,7 @@ public sealed class ArtefactConfigurationFactoryTests
 
             Assert.NotNull(segment.Configuration.RequiredModules.Credential);
             Assert.Equal("user", segment.Configuration.RequiredModules.Credential!.UserName);
-            Assert.Equal("top-secret", segment.Configuration.RequiredModules.Credential.Secret);
+        Assert.Equal("top-secret", segment.Configuration.RequiredModules.Credential.Secret);
 
             var ex = Assert.Throws<ArgumentException>(() => factory.Create(new ArtefactConfigurationRequest
             {
@@ -83,6 +83,21 @@ public sealed class ArtefactConfigurationFactoryTests
         {
             try { root.Delete(recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void Create_defaults_required_modules_path_to_modules_path()
+    {
+        var factory = new ArtefactConfigurationFactory(new NullLogger());
+
+        var segment = factory.Create(new ArtefactConfigurationRequest
+        {
+            Type = ArtefactType.Unpacked,
+            ModulesPath = "Artefacts/Modules"
+        });
+
+        Assert.Equal(Normalize("Artefacts/Modules"), segment.Configuration.RequiredModules.ModulesPath);
+        Assert.Equal(Normalize("Artefacts/Modules"), segment.Configuration.RequiredModules.Path);
     }
 
     private static string Normalize(string value)

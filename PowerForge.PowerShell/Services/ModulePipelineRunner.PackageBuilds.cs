@@ -191,6 +191,7 @@ public sealed partial class ModulePipelineRunner
 
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
+        ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode);
         var actions = ResolveEffectiveActions(configuration);
         var request = new ProjectBuildHostRequest
         {
@@ -214,6 +215,7 @@ public sealed partial class ModulePipelineRunner
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
         var projectBuildConfig = MapPackageBuildConfiguration(cfg, plan.ProjectRoot);
+        ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode);
         var actions = ResolveEffectiveActions(projectBuildConfig);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         var request = new ProjectBuildHostRequest
@@ -262,6 +264,18 @@ public sealed partial class ModulePipelineRunner
             target.PublishGitHub = reference.PublishGitHub;
         if (reference.CreateReleaseZip is not null)
             target.CreateReleaseZip = reference.CreateReleaseZip;
+    }
+
+    private static void ApplyProjectBuildGateDefaults(
+        ProjectBuildConfiguration target,
+        PackageBuildExecutionMode mode,
+        ConfigurationGateMode? gateMode)
+    {
+        if (gateMode == ConfigurationGateMode.Build &&
+            mode is PackageBuildExecutionMode.DependencyBuild or PackageBuildExecutionMode.BuildOnly)
+        {
+            target.CertificateThumbprint = null;
+        }
     }
 
     private static bool HasProjectBuildActionOverride(ProjectBuildConfigurationReference reference)

@@ -33,6 +33,26 @@ public sealed class PublishConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_defers_disabled_publish_api_key_file_until_runtime()
+    {
+        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiFromFile",
+            Type = PublishDestination.PowerShellGallery,
+            FilePath = missingPath,
+            FilePathSpecified = true,
+            Enabled = false
+        });
+
+        Assert.Equal(string.Empty, segment.Configuration.ApiKey);
+        Assert.Equal(missingPath, segment.Configuration.ApiKeyFilePath);
+        Assert.False(segment.Configuration.Enabled);
+    }
+
+    [Fact]
     public void Create_rejects_multiline_publish_api_key_file()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".ps1");

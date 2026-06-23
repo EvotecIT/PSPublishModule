@@ -21,11 +21,20 @@ internal sealed class PublishConfigurationFactory
             throw new ArgumentException("Specify either ApiKey or FilePath for JFrog publishing, not both.", nameof(request));
         }
 
+        var apiKeyFilePathToUse = request.ParameterSetName switch
+        {
+            "ApiFromFile" when !string.IsNullOrWhiteSpace(request.FilePath) => request.FilePath.Trim(),
+            "JFrog" when !string.IsNullOrWhiteSpace(request.FilePath) => request.FilePath.Trim(),
+            _ => null
+        };
+        var shouldResolveApiKeyNow = request.Enabled || string.IsNullOrWhiteSpace(apiKeyFilePathToUse);
         var apiKeyToUse = request.ParameterSetName switch
         {
-            "ApiFromFile" => ReadSingleLineSecretFile(request.FilePath, nameof(request.FilePath)),
+            "ApiFromFile" when shouldResolveApiKeyNow && !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => ReadSingleLineSecretFile(apiKeyFilePathToUse!, nameof(request.FilePath)),
+            "ApiFromFile" => string.Empty,
             "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
-            "JFrog" when !string.IsNullOrWhiteSpace(request.FilePath) => ReadSingleLineSecretFile(request.FilePath, nameof(request.FilePath)),
+            "JFrog" when shouldResolveApiKeyNow && !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => ReadSingleLineSecretFile(apiKeyFilePathToUse!, nameof(request.FilePath)),
+            "JFrog" when !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => string.Empty,
             _ => ValidateSingleLineSecret(request.ApiKey, nameof(PublishConfigurationRequest.ApiKey))
         };
 
@@ -213,6 +222,7 @@ internal sealed class PublishConfigurationFactory
                 Destination = destination,
                 Tool = request.Tool,
                 ApiKey = apiKeyToUse,
+                ApiKeyFilePath = apiKeyFilePathToUse,
                 ID = request.ID,
                 Enabled = request.Enabled,
                 UserName = request.UserName,

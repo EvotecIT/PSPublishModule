@@ -104,6 +104,8 @@ public sealed class ArtefactConfigurationFactory
         {
             var modulesPath = request.ModulesPath;
             artefact.Configuration.RequiredModules.ModulesPath = NormalizePath(modulesPath!);
+            if (string.IsNullOrWhiteSpace(artefact.Configuration.RequiredModules.Path))
+                artefact.Configuration.RequiredModules.Path = NormalizePath(modulesPath!);
         }
 
         if (request.CopyDirectories is { Length: > 0 })

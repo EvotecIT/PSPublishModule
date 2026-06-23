@@ -53,7 +53,8 @@ public sealed partial class ModulePipelineRunner
             throw new ArgumentNullException(nameof(publish));
         if (string.IsNullOrWhiteSpace(publish.UserName))
             throw new InvalidOperationException("UserName is required for unified GitHub publishing.");
-        if (string.IsNullOrWhiteSpace(publish.ApiKey))
+        var apiKey = ModulePublisher.ResolvePublishApiKey(publish);
+        if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("API key (token) is required for unified GitHub publishing.");
 
         state.ReleaseCoordinationResult = PrepareUnifiedReleaseAssets(plan, state, publish.ID);
@@ -74,7 +75,7 @@ public sealed partial class ModulePipelineRunner
         {
             Owner = owner,
             Repository = repo,
-            Token = publish.ApiKey,
+            Token = apiKey,
             TagName = tag,
             ReleaseName = tag,
             GenerateReleaseNotes = publish.GenerateReleaseNotes,

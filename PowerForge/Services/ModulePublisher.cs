@@ -81,12 +81,77 @@ public sealed class ModulePublisher
                 errorMessage: null);
         }
 
+        publish = ResolveRuntimePublishSecrets(publish);
+
         return publish.Destination switch
         {
             PublishDestination.PowerShellGallery => PublishToRepository(publish, plan, buildResult, includeScriptFolders),
             PublishDestination.GitHub => PublishToGitHub(publish, plan, artefactResults),
             _ => throw new NotSupportedException($"Unsupported publish destination: {publish.Destination}")
         };
+    }
+
+    internal static string ResolvePublishApiKey(PublishConfiguration publish)
+    {
+        if (publish is null) throw new ArgumentNullException(nameof(publish));
+
+        if (!string.IsNullOrWhiteSpace(publish.ApiKey))
+            return ValidateSingleLineSecret(publish.ApiKey, nameof(PublishConfiguration.ApiKey));
+
+        if (!string.IsNullOrWhiteSpace(publish.ApiKeyFilePath))
+            return ReadSingleLineSecretFile(publish.ApiKeyFilePath!, nameof(PublishConfiguration.ApiKeyFilePath));
+
+        return string.Empty;
+    }
+
+    private static PublishConfiguration ResolveRuntimePublishSecrets(PublishConfiguration publish)
+    {
+        var apiKey = ResolvePublishApiKey(publish);
+        if (string.Equals(apiKey, publish.ApiKey, StringComparison.Ordinal))
+            return publish;
+
+        return new PublishConfiguration
+        {
+            Destination = publish.Destination,
+            Tool = publish.Tool,
+            ApiKey = apiKey,
+            ApiKeyFilePath = publish.ApiKeyFilePath,
+            ID = publish.ID,
+            Enabled = publish.Enabled,
+            UserName = publish.UserName,
+            RepositoryName = publish.RepositoryName,
+            Repository = publish.Repository,
+            Force = publish.Force,
+            OverwriteTagName = publish.OverwriteTagName,
+            DoNotMarkAsPreRelease = publish.DoNotMarkAsPreRelease,
+            GenerateReleaseNotes = publish.GenerateReleaseNotes,
+            UseAsDependencyVersionSource = publish.UseAsDependencyVersionSource,
+            PublishRequiredModules = publish.PublishRequiredModules,
+            RequiredModuleSourceRepository = publish.RequiredModuleSourceRepository,
+            Verbose = publish.Verbose
+        };
+    }
+
+    private static string ReadSingleLineSecretFile(string filePath, string parameterName)
+    {
+        var path = filePath.Trim();
+        var value = File.ReadAllText(path).Trim();
+        return ValidateSingleLineSecret(value, parameterName, path);
+    }
+
+    private static string ValidateSingleLineSecret(string value, string parameterName, string? path = null)
+    {
+        if (value.Contains('\r') || value.Contains('\n'))
+        {
+            var location = string.IsNullOrWhiteSpace(path)
+                ? parameterName
+                : $"{parameterName} '{path}'";
+            throw new ArgumentException(
+                $"{location} resolved to a multi-line secret. Publish API keys and repository credential secrets must be a single line; check that the path points to a secret file, not a script or configuration file.",
+                parameterName);
+        }
+
+        return value.Trim();
     }
 
     private ModulePublishResult PublishToRepository(PublishConfiguration publish, ModulePipelinePlan plan, ModuleBuildResult buildResult, bool includeScriptFolders)
