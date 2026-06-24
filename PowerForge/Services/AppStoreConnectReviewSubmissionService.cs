@@ -107,8 +107,7 @@ public sealed class AppStoreConnectReviewSubmissionService
             var existingItems = await _client.GetReviewSubmissionItemsAsync(
                 existingSubmission.Id,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
-            var existingVersionItem = existingItems.FirstOrDefault(item =>
-                string.Equals(item.AppStoreVersionId, appStoreVersionId, StringComparison.OrdinalIgnoreCase));
+            var existingVersionItem = existingItems.FirstOrDefault(item => MatchesAppStoreVersion(item, appStoreVersionId));
             if (existingVersionItem is not null)
             {
                 messages.Add($"Reused review submission '{existingSubmission.Id}' already containing App Store version '{versionString}'.");
@@ -141,6 +140,10 @@ public sealed class AppStoreConnectReviewSubmissionService
 
     private static bool IsReadyForReview(AppStoreConnectReviewSubmissionInfo submission)
         => string.Equals(submission.State, "READY_FOR_REVIEW", StringComparison.OrdinalIgnoreCase);
+
+    private static bool MatchesAppStoreVersion(AppStoreConnectReviewSubmissionItemInfo item, string appStoreVersionId)
+        => string.Equals(item.AppStoreVersionId, appStoreVersionId, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(item.EncodedAppStoreVersionId, appStoreVersionId, StringComparison.OrdinalIgnoreCase);
 
     private async Task<AppStoreConnectBuildInfo?> ResolveSelectedBuildAsync(
         string versionId,

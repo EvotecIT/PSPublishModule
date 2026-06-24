@@ -32,6 +32,9 @@ public sealed class AppStoreConnectReviewSubmissionItemInfo
     /// <summary>App Store version id associated with the item.</summary>
     public string? AppStoreVersionId { get; set; }
 
+    /// <summary>App Store version id decoded from the review submission item id when Apple returns an alternate relationship id.</summary>
+    public string? EncodedAppStoreVersionId { get; set; }
+
     /// <summary>Review submission item state when reported by App Store Connect.</summary>
     public string? State { get; set; }
 }

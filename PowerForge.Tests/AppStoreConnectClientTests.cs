@@ -1199,7 +1199,7 @@ public sealed class AppStoreConnectClientTests
         Assert.Equal("submission-1", result.ReviewSubmission.Id);
         Assert.True(result.ReviewSubmission.IsSubmitted);
         Assert.Equal("item-1", result.ReviewSubmissionItem?.Id);
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1/items?fields%5BreviewSubmissionItems%5D=state%2CappStoreVersion&limit=50", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1/items?fields%5BreviewSubmissionItems%5D=state%2CappStoreVersion&include=appStoreVersion&limit=50", handler.RequestUris[4].ToString());
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1", handler.RequestUris[5].ToString());
     }
 

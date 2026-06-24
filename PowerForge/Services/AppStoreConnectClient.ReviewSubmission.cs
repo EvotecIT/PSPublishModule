@@ -108,6 +108,7 @@ public sealed partial class AppStoreConnectClient
         var query = new Dictionary<string, string?>
         {
             ["fields[reviewSubmissionItems]"] = "state,appStoreVersion",
+            ["include"] = "appStoreVersion",
             ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
         };
 
@@ -174,8 +175,32 @@ public sealed partial class AppStoreConnectClient
             Id = GetString(item, "id") ?? string.Empty,
             ReviewSubmissionId = GetRelationshipDataId(item, "reviewSubmission"),
             AppStoreVersionId = GetRelationshipDataId(item, "appStoreVersion"),
+            EncodedAppStoreVersionId = DecodeAppStoreVersionIdFromReviewSubmissionItemId(GetString(item, "id")),
             State = GetString(GetAttributes(item), "state")
         };
+    }
+
+    private static string? DecodeAppStoreVersionIdFromReviewSubmissionItemId(string? itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return null;
+
+        try
+        {
+            var padded = itemId!.Trim();
+            var padding = padded.Length % 4;
+            if (padding > 0)
+                padded = padded.PadRight(padded.Length + 4 - padding, '=');
+
+            var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
+            var parts = decoded.Split('|');
+            var versionId = parts.Length >= 3 ? parts[parts.Length - 1] : null;
+            return string.IsNullOrWhiteSpace(versionId) ? null : versionId;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 
 }
