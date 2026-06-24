@@ -206,17 +206,17 @@ public sealed class AppStoreConnectReleaseStateService
 
     private static void AddAppStoreNextActions(AppStoreConnectVersionInfo? version, List<string> nextActions)
     {
-        var state = version?.AppStoreState ?? version?.AppVersionState;
-        if (string.IsNullOrWhiteSpace(state))
+        var state = NormalizeOptional(version?.AppStoreState ?? version?.AppVersionState);
+        if (state is null)
             return;
 
-        if (state.Equals("PREPARE_FOR_SUBMISSION", StringComparison.OrdinalIgnoreCase) ||
-            state.Equals("READY_FOR_REVIEW", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(state, "PREPARE_FOR_SUBMISSION", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "READY_FOR_REVIEW", StringComparison.OrdinalIgnoreCase))
             nextActions.Add("Submit the App Store version for review when readiness passes.");
-        else if (state.Equals("WAITING_FOR_REVIEW", StringComparison.OrdinalIgnoreCase) ||
-                 state.Equals("IN_REVIEW", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(state, "WAITING_FOR_REVIEW", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(state, "IN_REVIEW", StringComparison.OrdinalIgnoreCase))
             nextActions.Add("Wait for App Review.");
-        else if (state.Equals("PENDING_DEVELOPER_RELEASE", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(state, "PENDING_DEVELOPER_RELEASE", StringComparison.OrdinalIgnoreCase))
             nextActions.Add("Release the approved App Store version when ready.");
     }
 
@@ -234,16 +234,16 @@ public sealed class AppStoreConnectReleaseStateService
             return;
         }
 
-        var externalState = betaDetail?.ExternalBuildState;
-        if (string.IsNullOrWhiteSpace(externalState))
+        var externalState = NormalizeOptional(betaDetail?.ExternalBuildState);
+        if (externalState is null)
             return;
 
-        if (externalState.Equals("READY_FOR_BETA_SUBMISSION", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(externalState, "READY_FOR_BETA_SUBMISSION", StringComparison.OrdinalIgnoreCase))
             nextActions.Add("Submit the TestFlight build to Beta App Review.");
-        else if (externalState.Equals("WAITING_FOR_BETA_REVIEW", StringComparison.OrdinalIgnoreCase) ||
+        else if (string.Equals(externalState, "WAITING_FOR_BETA_REVIEW", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(betaSubmission?.BetaReviewState, "WAITING_FOR_REVIEW", StringComparison.OrdinalIgnoreCase))
             nextActions.Add("Wait for Beta App Review.");
-        else if (externalState.Equals("BETA_APPROVED", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(externalState, "BETA_APPROVED", StringComparison.OrdinalIgnoreCase))
             nextActions.Add("External TestFlight is approved; verify public link availability.");
     }
 
@@ -256,7 +256,7 @@ public sealed class AppStoreConnectReleaseStateService
     }
 
     private static string? NormalizeOptional(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 
     private static string[] NormalizeStrings(string[]? values)
         => (values ?? Array.Empty<string>())
