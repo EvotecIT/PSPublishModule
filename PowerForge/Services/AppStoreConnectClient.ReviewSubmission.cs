@@ -95,6 +95,34 @@ public sealed partial class AppStoreConnectClient
     }
 
     /// <summary>
+    /// Submits an App Store version to App Review.
+    /// </summary>
+    public Task<AppStoreConnectAppStoreVersionSubmissionInfo> CreateAppStoreVersionSubmissionAsync(
+        string appStoreVersionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(appStoreVersionId))
+            throw new ArgumentException("App Store version id is required.", nameof(appStoreVersionId));
+
+        var body = new
+        {
+            data = new
+            {
+                type = "appStoreVersionSubmissions",
+                relationships = new
+                {
+                    appStoreVersion = new
+                    {
+                        data = new { type = "appStoreVersions", id = appStoreVersionId.Trim() }
+                    }
+                }
+            }
+        };
+
+        return PostSingleAsync("appStoreVersionSubmissions", body, ParseAppStoreVersionSubmission, cancellationToken);
+    }
+
+    /// <summary>
     /// Marks a review submission as submitted to App Review.
     /// </summary>
     public Task<AppStoreConnectReviewSubmissionInfo> SubmitReviewSubmissionAsync(
@@ -149,6 +177,17 @@ public sealed partial class AppStoreConnectClient
             Id = GetString(item, "id") ?? string.Empty,
             ReviewSubmissionId = GetRelationshipDataId(item, "reviewSubmission"),
             AppStoreVersionId = GetRelationshipDataId(item, "appStoreVersion")
+        };
+    }
+
+    private static AppStoreConnectAppStoreVersionSubmissionInfo ParseAppStoreVersionSubmission(JsonElement item)
+    {
+        var attrs = GetAttributes(item);
+        return new AppStoreConnectAppStoreVersionSubmissionInfo
+        {
+            Id = GetString(item, "id") ?? string.Empty,
+            AppStoreVersionId = GetRelationshipDataId(item, "appStoreVersion"),
+            State = GetString(attrs, "state")
         };
     }
 }

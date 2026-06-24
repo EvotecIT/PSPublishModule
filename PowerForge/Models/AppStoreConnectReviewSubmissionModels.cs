@@ -34,6 +34,21 @@ public sealed class AppStoreConnectReviewSubmissionItemInfo
 }
 
 /// <summary>
+/// App Store Connect App Store version submission summary.
+/// </summary>
+public sealed class AppStoreConnectAppStoreVersionSubmissionInfo
+{
+    /// <summary>App Store version submission id.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>App Store version id associated with the submission.</summary>
+    public string? AppStoreVersionId { get; set; }
+
+    /// <summary>Submission state when reported by App Store Connect.</summary>
+    public string? State { get; set; }
+}
+
+/// <summary>
 /// Request to submit an App Store version to App Review.
 /// </summary>
 public sealed class AppStoreConnectReviewSubmissionRequest
@@ -97,6 +112,9 @@ public sealed class AppStoreConnectReviewSubmissionResult
 
     /// <summary>Review submission item created for the App Store version.</summary>
     public AppStoreConnectReviewSubmissionItemInfo? ReviewSubmissionItem { get; set; }
+
+    /// <summary>App Store version submission created by the operation.</summary>
+    public AppStoreConnectAppStoreVersionSubmissionInfo? AppStoreVersionSubmission { get; set; }
 
     /// <summary>Release readiness result when requested.</summary>
     public AppStoreConnectReleaseReadinessResult? Readiness { get; set; }
