@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.36
+Help Version: 3.0.37
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -45,6 +45,9 @@ Reads App Store Connect TestFlight beta testers.
 
 ### [Get-AppStoreConnectBuild](Get-AppStoreConnectBuild.md)
 Reads build information from App Store Connect.
+
+### [Get-AppStoreConnectReleaseState](Get-AppStoreConnectReleaseState.md)
+Reads a compact App Store Connect release state summary for App Store and TestFlight release work.
 
 ### [Get-AppStoreConnectScreenshot](Get-AppStoreConnectScreenshot.md)
 Reads screenshots in an App Store Connect screenshot set.
@@ -402,6 +405,9 @@ Launches an installed Apple app on a physical device.
 
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
+
+### [Submit-AppStoreConnectTestFlightBuildForReview](Submit-AppStoreConnectTestFlightBuildForReview.md)
+Submits a TestFlight build to Beta App Review for external testing.
 
 ### [Submit-AppStoreConnectVersionForReview](Submit-AppStoreConnectVersionForReview.md)
 Submits a prepared App Store Connect Distribution version to App Review.

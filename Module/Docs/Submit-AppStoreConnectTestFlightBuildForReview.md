@@ -4,63 +4,31 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Submit-AppStoreConnectVersionForReview
+# Submit-AppStoreConnectTestFlightBuildForReview
 ## SYNOPSIS
-Submits a prepared App Store Connect Distribution version to App Review.
+Submits a TestFlight build to Beta App Review for external testing.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Submit-AppStoreConnectVersionForReview -IssuerId <string> -KeyId <string> -AppId <string> -VersionString <string> -BuildNumber <string> -Platform <ApplePlatform> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-Locale <string>] [-RequiredScreenshotDisplayTypes <string[]>] [-ScreenshotConfigPath <string>] [-MinimumScreenshotsPerSet <int>] [-AllowUnselectedBuild] [-AllowUnprocessedBuild] [-SkipReadinessCheck] [-AllowNotReady] [-WhatIf] [-Confirm] [<CommonParameters>]
+Submit-AppStoreConnectTestFlightBuildForReview -IssuerId <string> -KeyId <string> -AppId <string> -VersionString <string> -BuildNumber <string> -Platform <ApplePlatform> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-AllowUnprocessedBuild] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Submits a prepared App Store Connect Distribution version to App Review.
+Submits a TestFlight build to Beta App Review for external testing.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Submit-AppStoreConnectVersionForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'
+Submit-AppStoreConnectTestFlightBuildForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'
 ```
 
 
 ## PARAMETERS
 
-### -AllowNotReady
-Do not fail when readiness checks fail.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -AllowUnprocessedBuild
 Allow submission when the build processing state is not VALID.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -AllowUnselectedBuild
-Allow submission without verifying that the requested build is selected on the Distribution version.
 
 ```yaml
 Type: SwitchParameter
@@ -92,7 +60,7 @@ Accept wildcard characters: True
 ```
 
 ### -BuildNumber
-Uploaded build number expected on the Distribution version.
+Uploaded build number.
 
 ```yaml
 Type: String
@@ -139,40 +107,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Locale
-Localization locale to check during readiness.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -MinimumScreenshotsPerSet
-Minimum screenshot count for each required display type.
-
-```yaml
-Type: Int32
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -Platform
-Apple platform for the Distribution version.
+Apple platform for the build.
 
 ```yaml
 Type: ApplePlatform
@@ -208,54 +144,6 @@ Path to a private key file in PEM format.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -RequiredScreenshotDisplayTypes
-Screenshot display types that must have screenshots during readiness.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ScreenshotConfigPath
-Optional screenshot sync config used to derive required screenshot display types during readiness.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -SkipReadinessCheck
-Skip release readiness checks before submission.
-
-```yaml
-Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -308,7 +196,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.AppStoreConnectReviewSubmissionResult`
+- `PowerForge.AppStoreConnectBetaAppReviewSubmissionResult`
 
 ## RELATED LINKS
 
