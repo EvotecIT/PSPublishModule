@@ -1,4 +1,7 @@
+using System;
+using System.IO;
 using System.Management.Automation;
+using System.Text.Json;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -37,6 +40,18 @@ public sealed class SubmitAppStoreConnectVersionForReviewCommand : PSCmdlet
     /// <summary>Apple platform for the Distribution version.</summary>
     [Parameter(Mandatory = true)] public ApplePlatform Platform { get; set; }
 
+    /// <summary>Localization locale to check during readiness.</summary>
+    [Parameter] public string Locale { get; set; } = "en-US";
+
+    /// <summary>Screenshot display types that must have screenshots during readiness.</summary>
+    [Parameter] public string[] RequiredScreenshotDisplayTypes { get; set; } = System.Array.Empty<string>();
+
+    /// <summary>Optional screenshot sync config used to derive required screenshot display types during readiness.</summary>
+    [Parameter] public string? ScreenshotConfigPath { get; set; }
+
+    /// <summary>Minimum screenshot count for each required display type.</summary>
+    [Parameter] public int MinimumScreenshotsPerSet { get; set; } = 1;
+
     /// <summary>Allow submission without verifying that the requested build is selected on the Distribution version.</summary>
     [Parameter] public SwitchParameter AllowUnselectedBuild { get; set; }
 
@@ -58,6 +73,7 @@ public sealed class SubmitAppStoreConnectVersionForReviewCommand : PSCmdlet
 
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
+        var screenshotSpec = ResolveScreenshotSpec();
         using var client = new AppStoreConnectClient(credential);
         var service = new AppStoreConnectReviewSubmissionService(client);
         var result = service.SubmitAsync(new AppStoreConnectReviewSubmissionRequest
@@ -69,9 +85,46 @@ public sealed class SubmitAppStoreConnectVersionForReviewCommand : PSCmdlet
             RequireSelectedBuild = !AllowUnselectedBuild.IsPresent,
             RequireValidBuild = !AllowUnprocessedBuild.IsPresent,
             CheckReadiness = !SkipReadinessCheck.IsPresent,
-            RequireReady = !AllowNotReady.IsPresent
+            RequireReady = !AllowNotReady.IsPresent,
+            ReadinessRequest = new AppStoreConnectReleaseReadinessRequest
+            {
+                Locale = Locale,
+                RequiredScreenshotDisplayTypes = RequiredScreenshotDisplayTypes,
+                MinimumScreenshotsPerSet = MinimumScreenshotsPerSet,
+                ScreenshotSpec = screenshotSpec
+            }
         }).GetAwaiter().GetResult();
 
         WriteObject(result);
+    }
+
+    private AppStoreConnectScreenshotSyncSpec? ResolveScreenshotSpec()
+    {
+        if (string.IsNullOrWhiteSpace(ScreenshotConfigPath))
+            return null;
+
+        var resolvedPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(ScreenshotConfigPath);
+        var json = File.ReadAllText(resolvedPath);
+        var spec = JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        }) ?? throw new InvalidOperationException($"Unable to deserialize screenshot sync config: {resolvedPath}");
+
+        var specAppId = string.IsNullOrWhiteSpace(spec.AppId) ? null : spec.AppId!.Trim();
+        var specVersionString = string.IsNullOrWhiteSpace(spec.VersionString) ? null : spec.VersionString!.Trim();
+        var appId = AppId.Trim();
+        var versionString = VersionString.Trim();
+        if (specAppId is not null &&
+            !string.Equals(specAppId, appId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Screenshot config '{resolvedPath}' targets app '{spec.AppId}', not '{AppId}'.");
+
+        if (specVersionString is not null &&
+            !string.Equals(specVersionString, versionString, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Screenshot config '{resolvedPath}' targets version '{spec.VersionString}', not '{VersionString}'.");
+
+        if (spec.Platform != Platform)
+            throw new InvalidOperationException($"Screenshot config '{resolvedPath}' targets platform '{spec.Platform}', not '{Platform}'.");
+
+        return spec;
     }
 }

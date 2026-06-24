@@ -906,7 +906,10 @@ internal sealed class PowerForgeReleaseService
     private PowerForgeAppleAppReleaseResult[] RunAppleRelease(PowerForgeAppleReleasePlan plan)
     {
         var results = new List<PowerForgeAppleAppReleaseResult>();
-        var screenshotSpecs = plan.SyncScreenshots
+        var needsScreenshotSpecs = plan.SyncScreenshots ||
+                                   plan.CheckReleaseReadiness ||
+                                   (plan.SubmitForReview && !plan.SkipReviewReadinessCheck);
+        var screenshotSpecs = needsScreenshotSpecs
             ? LoadAppleScreenshotSpecs(plan)
             : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
         var metadataSpecs = plan.SyncMetadata
@@ -982,7 +985,7 @@ internal sealed class PowerForgeReleaseService
             if ((plan.PrepareDistribution || plan.SyncScreenshots || plan.SyncMetadata || plan.CheckReleaseReadiness) && result.Success)
             {
                 var distributionValues = ResolveAppleDistributionValues(app, result.VersionUpdate);
-                var matchingScreenshotSpec = plan.SyncScreenshots
+                var matchingScreenshotSpec = plan.SyncScreenshots || plan.CheckReleaseReadiness
                     ? ResolveMatchingScreenshotSpec(screenshotSpecs, app, distributionValues.MarketingVersion)
                     : null;
                 var matchingMetadataSpec = plan.SyncMetadata
@@ -1034,6 +1037,9 @@ internal sealed class PowerForgeReleaseService
             if (plan.SubmitForReview && result.Success)
             {
                 var reviewValues = ResolveAppleDistributionValues(app, result.VersionUpdate);
+                var matchingScreenshotSpec = !plan.SkipReviewReadinessCheck
+                    ? ResolveMatchingScreenshotSpec(screenshotSpecs, app, reviewValues.MarketingVersion)
+                    : null;
                 result.ReviewSubmission = _submitAppleReview(new AppStoreConnectReviewSubmissionRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -1044,7 +1050,13 @@ internal sealed class PowerForgeReleaseService
                     RequireSelectedBuild = !plan.AllowUnselectedReviewBuild,
                     RequireValidBuild = !plan.AllowUnprocessedReviewBuild,
                     CheckReadiness = !plan.SkipReviewReadinessCheck,
-                    RequireReady = !plan.AllowReviewSubmissionWhenNotReady
+                    RequireReady = !plan.AllowReviewSubmissionWhenNotReady,
+                    ReadinessRequest = matchingScreenshotSpec is null
+                        ? null
+                        : new AppStoreConnectReleaseReadinessRequest
+                        {
+                            ScreenshotSpec = matchingScreenshotSpec.Value.Spec
+                        }
                 });
             }
 

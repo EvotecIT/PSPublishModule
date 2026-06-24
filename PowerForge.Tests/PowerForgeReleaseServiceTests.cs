@@ -915,6 +915,111 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_PassesScreenshotSpecToReviewReadiness()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj", "1.0.2", "6");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            var screenshotConfigPath = Path.Combine(root, "appstoreconnect-screenshots-ios.json");
+            File.WriteAllText(keyPath, "private-key");
+            File.WriteAllText(screenshotConfigPath, """
+{
+  "appId": "app-1",
+  "versionString": "1.0.2",
+  "platform": "iOS",
+  "locale": "en-US",
+  "screenshotSets": [
+    {
+      "screenshotDisplayType": "APP_IPHONE_67",
+      "path": "../build/appstore-screenshots/upload/iphone-6-9-1320x2868",
+      "filter": "*.png"
+    },
+    {
+      "screenshotDisplayType": "APP_IPAD_PRO_3GEN_129",
+      "path": "../build/appstore-screenshots/upload/ipad-13-2064x2752",
+      "filter": "*.png"
+    }
+  ]
+}
+""");
+            var reviewRequests = new List<AppStoreConnectReviewSubmissionRequest>();
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Archive should not run."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."),
+                submitAppleReview: request =>
+                {
+                    reviewRequests.Add(request);
+                    return new AppStoreConnectReviewSubmissionResult
+                    {
+                        AppId = request.AppId,
+                        VersionString = request.VersionString,
+                        BuildNumber = request.BuildNumber,
+                        Platform = request.Platform,
+                        ReviewSubmission = new AppStoreConnectReviewSubmissionInfo
+                        {
+                            Id = "submission-1",
+                            Platform = "IOS",
+                            IsSubmitted = true,
+                            State = "WAITING_FOR_REVIEW"
+                        }
+                    };
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        SubmitForReview = true,
+                        ScreenshotConfigPaths = new[] { screenshotConfigPath },
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                AppStoreConnectAppId = "app-1"
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                });
+
+            Assert.True(result.Success);
+            var request = Assert.Single(reviewRequests);
+            Assert.True(request.CheckReadiness);
+            Assert.NotNull(request.ReadinessRequest?.ScreenshotSpec);
+            Assert.Equal(new[] { "APP_IPHONE_67", "APP_IPAD_PRO_3GEN_129" },
+                request.ReadinessRequest!.ScreenshotSpec!.ScreenshotSets.Select(set => set.ScreenshotDisplayType).ToArray());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleApps_AcceptsApprovedVersionReleaseInUnifiedPlan()
     {
         var root = CreateSandbox();
