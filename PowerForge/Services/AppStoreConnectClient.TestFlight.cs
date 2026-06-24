@@ -135,6 +135,50 @@ public sealed partial class AppStoreConnectClient
             cancellationToken);
     }
 
+    /// <summary>
+    /// Reads the Beta App Review submission associated with a build, when one exists.
+    /// </summary>
+    public Task<AppStoreConnectBetaAppReviewSubmissionInfo?> GetBetaAppReviewSubmissionForBuildAsync(
+        string buildId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(buildId))
+            throw new ArgumentException("Build id is required.", nameof(buildId));
+
+        return GetSingleAsync(
+            $"builds/{Uri.EscapeDataString(buildId.Trim())}/betaAppReviewSubmission",
+            ParseBetaAppReviewSubmission,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Submits a build to Beta App Review for external TestFlight testing.
+    /// </summary>
+    public Task<AppStoreConnectBetaAppReviewSubmissionInfo> CreateBetaAppReviewSubmissionAsync(
+        string buildId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(buildId))
+            throw new ArgumentException("Build id is required.", nameof(buildId));
+
+        var body = new
+        {
+            data = new
+            {
+                type = "betaAppReviewSubmissions",
+                relationships = new
+                {
+                    build = new
+                    {
+                        data = new { type = "builds", id = buildId.Trim() }
+                    }
+                }
+            }
+        };
+
+        return PostSingleAsync("betaAppReviewSubmissions", body, ParseBetaAppReviewSubmission, cancellationToken);
+    }
+
     private async Task SendJsonNoContentAsync(
         HttpMethod method,
         string relativeUrl,
@@ -181,6 +225,18 @@ public sealed partial class AppStoreConnectClient
             FirstName = GetString(attrs, "firstName"),
             LastName = GetString(attrs, "lastName"),
             InviteType = GetString(attrs, "inviteType")
+        };
+    }
+
+    private static AppStoreConnectBetaAppReviewSubmissionInfo ParseBetaAppReviewSubmission(JsonElement item)
+    {
+        var attrs = GetAttributes(item);
+        return new AppStoreConnectBetaAppReviewSubmissionInfo
+        {
+            Id = GetString(item, "id") ?? string.Empty,
+            BetaReviewState = GetString(attrs, "betaReviewState"),
+            SubmittedDate = GetDateTimeOffset(attrs, "submittedDate"),
+            BuildId = GetRelationshipDataId(item, "build")
         };
     }
 

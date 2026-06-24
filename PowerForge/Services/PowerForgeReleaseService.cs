@@ -59,6 +59,7 @@ internal sealed class PowerForgeReleaseService
     private readonly Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult> _uploadAppleApp;
     private readonly Func<AppStoreConnectReleasePreparationRequest, AppStoreConnectReleasePreparationResult> _prepareAppleDistribution;
     private readonly Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult> _distributeTestFlight;
+    private readonly Func<AppStoreConnectBetaAppReviewSubmissionRequest, AppStoreConnectBetaAppReviewSubmissionResult> _submitTestFlightBetaReview;
     private readonly Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult> _submitAppleReview;
     private readonly Func<AppStoreConnectVersionReleaseRequest, AppStoreConnectVersionReleaseResult> _releaseAppleVersion;
 
@@ -118,6 +119,7 @@ internal sealed class PowerForgeReleaseService
         Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult>? uploadAppleApp = null,
         Func<AppStoreConnectReleasePreparationRequest, AppStoreConnectReleasePreparationResult>? prepareAppleDistribution = null,
         Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult>? distributeTestFlight = null,
+        Func<AppStoreConnectBetaAppReviewSubmissionRequest, AppStoreConnectBetaAppReviewSubmissionResult>? submitTestFlightBetaReview = null,
         Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult>? submitAppleReview = null,
         Func<AppStoreConnectVersionReleaseRequest, AppStoreConnectVersionReleaseResult>? releaseAppleVersion = null)
     {
@@ -134,6 +136,7 @@ internal sealed class PowerForgeReleaseService
         _uploadAppleApp = uploadAppleApp ?? (request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult());
         _prepareAppleDistribution = prepareAppleDistribution ?? PrepareAppleDistribution;
         _distributeTestFlight = distributeTestFlight ?? DistributeTestFlight;
+        _submitTestFlightBetaReview = submitTestFlightBetaReview ?? SubmitTestFlightBetaReview;
         _submitAppleReview = submitAppleReview ?? SubmitAppleReview;
         _releaseAppleVersion = releaseAppleVersion ?? ReleaseAppleVersion;
     }
@@ -740,9 +743,9 @@ internal sealed class PowerForgeReleaseService
 
         if (apps.Length == 0)
             throw new InvalidOperationException("AppleApps.Apps must contain at least one enabled app entry.");
-        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitForReview || options.ReleaseApprovedVersion) &&
+        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitTestFlightBetaReview || options.SubmitForReview || options.ReleaseApprovedVersion) &&
             apps.Any(app => string.IsNullOrWhiteSpace(app.AppStoreConnectAppId)))
-            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, SubmitForReview, or ReleaseApprovedVersion requires AppStoreConnectAppId for every selected app.");
+            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, SubmitTestFlightBetaReview, SubmitForReview, or ReleaseApprovedVersion requires AppStoreConnectAppId for every selected app.");
         if (options.DistributeTestFlight &&
             NormalizeStrings(options.TestFlightBetaGroupIds).Length == 0 &&
             NormalizeStrings(options.TestFlightBetaGroupNames).Length == 0)
@@ -781,8 +784,8 @@ internal sealed class PowerForgeReleaseService
                 Environment.GetEnvironmentVariable("ASC_ISSUER_ID"))
             : options.AppStoreConnectApiIssuerId?.Trim();
         var appStoreConnectApiConfiguredCount = (appStoreConnectApiKeyPath is null ? 0 : 1) + (appStoreConnectApiKeyId is null ? 0 : 1) + (appStoreConnectApiIssuerId is null ? 0 : 1);
-        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitForReview || options.ReleaseApprovedVersion) && appStoreConnectApiConfiguredCount != 3)
-            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, SubmitForReview, or ReleaseApprovedVersion requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
+        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitTestFlightBetaReview || options.SubmitForReview || options.ReleaseApprovedVersion) && appStoreConnectApiConfiguredCount != 3)
+            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, SubmitTestFlightBetaReview, SubmitForReview, or ReleaseApprovedVersion requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
         if (appStoreConnectApiConfiguredCount != 0)
         {
             if (appStoreConnectApiConfiguredCount != 3)
@@ -816,6 +819,7 @@ internal sealed class PowerForgeReleaseService
             TestFlightTesterEmails = NormalizeStrings(options.TestFlightTesterEmails),
             CreateMissingTestFlightTesters = options.CreateMissingTestFlightTesters,
             AllowUnprocessedTestFlightBuild = options.AllowUnprocessedTestFlightBuild,
+            SubmitTestFlightBetaReview = options.SubmitTestFlightBetaReview,
             SubmitForReview = options.SubmitForReview,
             AllowUnselectedReviewBuild = options.AllowUnselectedReviewBuild,
             AllowUnprocessedReviewBuild = options.AllowUnprocessedReviewBuild,
@@ -1034,6 +1038,20 @@ internal sealed class PowerForgeReleaseService
                 });
             }
 
+            if (plan.SubmitTestFlightBetaReview && result.Success)
+            {
+                var testFlightValues = ResolveAppleDistributionValues(app, result.VersionUpdate);
+                result.TestFlightBetaReviewSubmission = _submitTestFlightBetaReview(new AppStoreConnectBetaAppReviewSubmissionRequest
+                {
+                    Credential = CreateAppStoreConnectCredential(plan),
+                    AppId = app.AppStoreConnectAppId!,
+                    VersionString = testFlightValues.MarketingVersion,
+                    BuildNumber = testFlightValues.BuildNumber,
+                    Platform = app.Platform,
+                    RequireValidBuild = !plan.AllowUnprocessedTestFlightBuild
+                });
+            }
+
             if (plan.SubmitForReview && result.Success)
             {
                 var reviewValues = ResolveAppleDistributionValues(app, result.VersionUpdate);
@@ -1097,6 +1115,17 @@ internal sealed class PowerForgeReleaseService
 
         using var client = new AppStoreConnectClient(request.Credential);
         return new AppStoreConnectTestFlightDistributionService(client).DistributeAsync(request).GetAwaiter().GetResult();
+    }
+
+    private static AppStoreConnectBetaAppReviewSubmissionResult SubmitTestFlightBetaReview(AppStoreConnectBetaAppReviewSubmissionRequest request)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (request.Credential is null)
+            throw new ArgumentException("Credential is required.", nameof(request));
+
+        using var client = new AppStoreConnectClient(request.Credential);
+        return new AppStoreConnectBetaAppReviewSubmissionService(client).SubmitAsync(request).GetAwaiter().GetResult();
     }
 
     private static AppStoreConnectReviewSubmissionResult SubmitAppleReview(AppStoreConnectReviewSubmissionRequest request)
@@ -3247,6 +3276,7 @@ internal sealed class PowerForgeReleaseService
                 TestFlightTesterCount = plan.TestFlightTesterEmails.Length,
                 plan.CreateMissingTestFlightTesters,
                 plan.AllowUnprocessedTestFlightBuild,
+                plan.SubmitTestFlightBetaReview,
                 plan.SubmitForReview,
                 plan.AllowUnselectedReviewBuild,
                 plan.AllowUnprocessedReviewBuild,
@@ -3352,6 +3382,18 @@ internal sealed class PowerForgeReleaseService
                     }).ToArray(),
                     TesterCount = result.TestFlight.Testers.Length,
                     result.TestFlight.Messages
+                },
+                testFlightBetaReviewSubmission = result.TestFlightBetaReviewSubmission is null ? null : new
+                {
+                    result.TestFlightBetaReviewSubmission.AppId,
+                    result.TestFlightBetaReviewSubmission.VersionString,
+                    result.TestFlightBetaReviewSubmission.BuildNumber,
+                    Platform = result.TestFlightBetaReviewSubmission.Platform.ToString(),
+                    BuildId = result.TestFlightBetaReviewSubmission.Build.Id,
+                    SubmissionId = result.TestFlightBetaReviewSubmission.Submission.Id,
+                    result.TestFlightBetaReviewSubmission.Submission.BetaReviewState,
+                    result.TestFlightBetaReviewSubmission.Submission.SubmittedDate,
+                    result.TestFlightBetaReviewSubmission.Messages
                 },
                 reviewSubmission = result.ReviewSubmission is null ? null : new
                 {
