@@ -116,3 +116,72 @@ public sealed class AppStoreConnectTestFlightDistributionResult
     /// <summary>Distribution messages useful for release logs.</summary>
     public string[] Messages { get; set; } = Array.Empty<string>();
 }
+
+/// <summary>
+/// App Store Connect Beta App Review submission summary.
+/// </summary>
+public sealed class AppStoreConnectBetaAppReviewSubmissionInfo
+{
+    /// <summary>Beta App Review submission id.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Current beta review state reported by App Store Connect.</summary>
+    public string? BetaReviewState { get; set; }
+
+    /// <summary>Date the beta submission was submitted, when reported by App Store Connect.</summary>
+    public DateTimeOffset? SubmittedDate { get; set; }
+
+    /// <summary>Build id associated with the beta submission when included.</summary>
+    public string? BuildId { get; set; }
+}
+
+/// <summary>
+/// Request to submit a TestFlight build to Beta App Review for external testing.
+/// </summary>
+public sealed class AppStoreConnectBetaAppReviewSubmissionRequest
+{
+    /// <summary>App Store Connect API credential. Required when the request is executed by the default release runner.</summary>
+    public AppStoreConnectApiCredential? Credential { get; set; }
+
+    /// <summary>App Store Connect app id.</summary>
+    public string AppId { get; set; } = string.Empty;
+
+    /// <summary>App Store marketing version.</summary>
+    public string VersionString { get; set; } = string.Empty;
+
+    /// <summary>Uploaded build number.</summary>
+    public string BuildNumber { get; set; } = string.Empty;
+
+    /// <summary>Apple platform for the build.</summary>
+    public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
+
+    /// <summary>Require the build to be valid and not expired before Beta App Review submission.</summary>
+    public bool RequireValidBuild { get; set; } = true;
+}
+
+/// <summary>
+/// Result of submitting a TestFlight build to Beta App Review.
+/// </summary>
+public sealed class AppStoreConnectBetaAppReviewSubmissionResult
+{
+    /// <summary>App Store Connect app id.</summary>
+    public string AppId { get; set; } = string.Empty;
+
+    /// <summary>App Store marketing version.</summary>
+    public string VersionString { get; set; } = string.Empty;
+
+    /// <summary>Uploaded build number.</summary>
+    public string BuildNumber { get; set; } = string.Empty;
+
+    /// <summary>Apple platform for the submission.</summary>
+    public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
+
+    /// <summary>Matched build.</summary>
+    public AppStoreConnectBuildInfo Build { get; set; } = new();
+
+    /// <summary>Beta App Review submission created or reused by the operation.</summary>
+    public AppStoreConnectBetaAppReviewSubmissionInfo Submission { get; set; } = new();
+
+    /// <summary>Submission messages useful for release logs.</summary>
+    public string[] Messages { get; set; } = Array.Empty<string>();
+}

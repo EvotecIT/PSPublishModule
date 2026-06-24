@@ -860,6 +860,145 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_AcceptsTestFlightBetaReviewSubmissionInUnifiedPlan()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        SubmitTestFlightBetaReview = true,
+                        AllowUnprocessedTestFlightBuild = true,
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                AppStoreConnectAppId = "app-1"
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.AppleAppPlan);
+            Assert.True(result.AppleAppPlan!.SubmitTestFlightBetaReview);
+            Assert.True(result.AppleAppPlan.AllowUnprocessedTestFlightBuild);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_SubmitsTestFlightBetaReviewThroughSharedService()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj", "1.0.2", "6");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var betaReviewRequests = new List<AppStoreConnectBetaAppReviewSubmissionRequest>();
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                archiveAppleApp: _ => throw new InvalidOperationException("Archive should not run."),
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."),
+                submitTestFlightBetaReview: request =>
+                {
+                    betaReviewRequests.Add(request);
+                    return new AppStoreConnectBetaAppReviewSubmissionResult
+                    {
+                        AppId = request.AppId,
+                        VersionString = request.VersionString,
+                        BuildNumber = request.BuildNumber,
+                        Platform = request.Platform,
+                        Build = new AppStoreConnectBuildInfo { Id = "build-6", Version = request.BuildNumber },
+                        Submission = new AppStoreConnectBetaAppReviewSubmissionInfo
+                        {
+                            Id = "submission-6",
+                            BetaReviewState = "WAITING_FOR_REVIEW",
+                            BuildId = "build-6"
+                        }
+                    };
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        SubmitTestFlightBetaReview = true,
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "ABC123DEFG",
+                        AppStoreConnectApiIssuerId = "issuer-id",
+                        Apps = new[]
+                        {
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS,
+                                AppStoreConnectAppId = "app-1"
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                });
+
+            Assert.True(result.Success);
+            var appResult = Assert.Single(result.AppleApps);
+            Assert.NotNull(appResult.TestFlightBetaReviewSubmission);
+            var request = Assert.Single(betaReviewRequests);
+            Assert.Equal("app-1", request.AppId);
+            Assert.Equal("1.0.2", request.VersionString);
+            Assert.Equal("6", request.BuildNumber);
+            Assert.Equal(ApplePlatform.iOS, request.Platform);
+            Assert.True(request.RequireValidBuild);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleApps_AcceptsReviewSubmissionInUnifiedPlan()
     {
         var root = CreateSandbox();

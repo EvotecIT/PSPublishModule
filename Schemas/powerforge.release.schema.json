@@ -296,6 +296,7 @@
         },
         "CreateMissingTestFlightTesters": { "type": "boolean" },
         "AllowUnprocessedTestFlightBuild": { "type": "boolean" },
+        "SubmitTestFlightBetaReview": { "type": "boolean" },
         "SubmitForReview": { "type": "boolean" },
         "AllowUnselectedReviewBuild": { "type": "boolean" },
         "AllowUnprocessedReviewBuild": { "type": "boolean" },

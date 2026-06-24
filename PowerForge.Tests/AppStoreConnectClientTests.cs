@@ -962,6 +962,113 @@ public sealed class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task BetaAppReviewSubmissionService_SubmitsBuildForExternalTesting()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-6",
+                      "type": "builds",
+                      "attributes": { "version": "6", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.2", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": null }"""),
+            new SequenceResponse(HttpStatusCode.Created,
+                """
+                {
+                  "data": {
+                    "id": "submission-6",
+                    "type": "betaAppReviewSubmissions",
+                    "attributes": { "betaReviewState": "WAITING_FOR_REVIEW" },
+                    "relationships": {
+                      "build": { "data": { "type": "builds", "id": "build-6" } }
+                    }
+                  }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectBetaAppReviewSubmissionService(client);
+
+        var result = await service.SubmitAsync(new AppStoreConnectBetaAppReviewSubmissionRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.2",
+            BuildNumber = "6",
+            Platform = ApplePlatform.iOS
+        });
+
+        Assert.Equal("build-6", result.Build.Id);
+        Assert.Equal("submission-6", result.Submission.Id);
+        Assert.Equal("WAITING_FOR_REVIEW", result.Submission.BetaReviewState);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/builds/build-6/betaAppReviewSubmission", handler.RequestUris[1].ToString());
+        Assert.Equal(HttpMethod.Post, handler.Methods[2]);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions", handler.RequestUris[2].ToString());
+        Assert.Contains("\"type\":\"betaAppReviewSubmissions\"", handler.RequestBodies[2], StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"builds\",\"id\":\"build-6\"", handler.RequestBodies[2], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BetaAppReviewSubmissionService_ReusesExistingSubmission()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-6",
+                      "type": "builds",
+                      "attributes": { "version": "6", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.2", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "submission-6",
+                    "type": "betaAppReviewSubmissions",
+                    "attributes": { "betaReviewState": "APPROVED" },
+                    "relationships": {
+                      "build": { "data": { "type": "builds", "id": "build-6" } }
+                    }
+                  }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectBetaAppReviewSubmissionService(client);
+
+        var result = await service.SubmitAsync(new AppStoreConnectBetaAppReviewSubmissionRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.2",
+            BuildNumber = "6",
+            Platform = ApplePlatform.iOS
+        });
+
+        Assert.Equal("submission-6", result.Submission.Id);
+        Assert.Equal("APPROVED", result.Submission.BetaReviewState);
+        Assert.Equal(2, handler.RequestUris.Count);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
+    [Fact]
     public async Task ReviewSubmissionClient_CreatesItemAndSubmits()
     {
         var handler = new SequenceHandler(
