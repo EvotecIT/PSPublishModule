@@ -1054,6 +1054,7 @@ public sealed class AppStoreConnectClientTests
                 }
                 """),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": { "type": "builds", "id": "build-5" } }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.Created,
                 """
                 {
@@ -1106,8 +1107,99 @@ public sealed class AppStoreConnectClientTests
         Assert.True(result.ReviewSubmission.IsSubmitted);
         Assert.Equal("item-1", result.ReviewSubmissionItem?.Id);
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/appStoreVersions/version-1/relationships/build", handler.RequestUris[2].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions", handler.RequestUris[3].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions?filter%5Bapp%5D=app-1&limit=50&filter%5Bplatform%5D=IOS", handler.RequestUris[3].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems", handler.RequestUris[5].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1", handler.RequestUris[6].ToString());
+    }
+
+    [Fact]
+    public async Task ReviewSubmissionService_ReusesExistingReadySubmissionItem()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "version-1",
+                      "type": "appStoreVersions",
+                      "attributes": { "versionString": "1.0.1", "platform": "IOS", "appStoreState": "PREPARE_FOR_SUBMISSION" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-5",
+                      "type": "builds",
+                      "attributes": { "version": "5", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.1", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": { "type": "builds", "id": "build-5" } }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "submission-1",
+                      "type": "reviewSubmissions",
+                      "attributes": { "platform": "IOS", "state": "READY_FOR_REVIEW" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "item-1",
+                      "type": "reviewSubmissionItems",
+                      "attributes": { "state": "READY_FOR_REVIEW" },
+                      "relationships": {
+                        "appStoreVersion": { "data": { "type": "appStoreVersions", "id": "version-1" } }
+                      }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "submission-1",
+                    "type": "reviewSubmissions",
+                    "attributes": { "platform": "IOS", "state": "WAITING_FOR_REVIEW" }
+                  }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReviewSubmissionService(client);
+
+        var result = await service.SubmitAsync(new AppStoreConnectReviewSubmissionRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.1",
+            BuildNumber = "5",
+            Platform = ApplePlatform.iOS,
+            CheckReadiness = false
+        });
+
+        Assert.Equal("submission-1", result.ReviewSubmission.Id);
+        Assert.True(result.ReviewSubmission.IsSubmitted);
+        Assert.Equal("item-1", result.ReviewSubmissionItem?.Id);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1/items?fields%5BreviewSubmissionItems%5D=state%2CappStoreVersion&limit=50", handler.RequestUris[4].ToString());
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/reviewSubmissions/submission-1", handler.RequestUris[5].ToString());
     }
 

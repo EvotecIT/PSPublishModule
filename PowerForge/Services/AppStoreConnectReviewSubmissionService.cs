@@ -60,11 +60,13 @@ public sealed class AppStoreConnectReviewSubmissionService
                     string.Join("; ", readiness.Checks.Where(static check => !check.Passed).Select(static check => check.Message)));
         }
 
-        var reviewSubmission = await _client.CreateReviewSubmissionAsync(appId, request.Platform, cancellationToken).ConfigureAwait(false);
-        messages.Add($"Created review submission '{reviewSubmission.Id}' for platform '{request.Platform}'.");
-
-        var reviewSubmissionItem = await _client.CreateReviewSubmissionItemAsync(reviewSubmission.Id, version.Id, cancellationToken).ConfigureAwait(false);
-        messages.Add($"Added App Store version '{versionString}' to review submission '{reviewSubmission.Id}'.");
+        var (reviewSubmission, reviewSubmissionItem) = await ResolveReviewSubmissionAsync(
+            appId,
+            request.Platform,
+            version.Id,
+            versionString,
+            messages,
+            cancellationToken).ConfigureAwait(false);
 
         reviewSubmission = await _client.SubmitReviewSubmissionAsync(reviewSubmission.Id, cancellationToken).ConfigureAwait(false);
         messages.Add($"Submitted App Store version '{versionString}' to App Review.");
@@ -83,6 +85,62 @@ public sealed class AppStoreConnectReviewSubmissionService
             Messages = messages.ToArray()
         };
     }
+
+    private async Task<(AppStoreConnectReviewSubmissionInfo Submission, AppStoreConnectReviewSubmissionItemInfo Item)> ResolveReviewSubmissionAsync(
+        string appId,
+        ApplePlatform platform,
+        string appStoreVersionId,
+        string versionString,
+        List<string> messages,
+        CancellationToken cancellationToken)
+    {
+        AppStoreConnectReviewSubmissionInfo? emptyReadySubmission = null;
+
+        var existingSubmissions = await _client.GetReviewSubmissionsAsync(
+            appId,
+            platform,
+            limit: 50,
+            cancellationToken).ConfigureAwait(false);
+
+        foreach (var existingSubmission in existingSubmissions.Where(IsReadyForReview))
+        {
+            var existingItems = await _client.GetReviewSubmissionItemsAsync(
+                existingSubmission.Id,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            var existingVersionItem = existingItems.FirstOrDefault(item =>
+                string.Equals(item.AppStoreVersionId, appStoreVersionId, StringComparison.OrdinalIgnoreCase));
+            if (existingVersionItem is not null)
+            {
+                messages.Add($"Reused review submission '{existingSubmission.Id}' already containing App Store version '{versionString}'.");
+                return (existingSubmission, existingVersionItem);
+            }
+
+            if (emptyReadySubmission is null && existingItems.Length == 0)
+                emptyReadySubmission = existingSubmission;
+        }
+
+        var reviewSubmission = emptyReadySubmission;
+        if (reviewSubmission is null)
+        {
+            reviewSubmission = await _client.CreateReviewSubmissionAsync(appId, platform, cancellationToken).ConfigureAwait(false);
+            messages.Add($"Created review submission '{reviewSubmission.Id}' for platform '{platform}'.");
+        }
+        else
+        {
+            messages.Add($"Reused empty review submission '{reviewSubmission.Id}' for platform '{platform}'.");
+        }
+
+        var reviewSubmissionItem = await _client.CreateReviewSubmissionItemAsync(
+            reviewSubmission.Id,
+            appStoreVersionId,
+            cancellationToken).ConfigureAwait(false);
+        messages.Add($"Added App Store version '{versionString}' to review submission '{reviewSubmission.Id}'.");
+
+        return (reviewSubmission, reviewSubmissionItem);
+    }
+
+    private static bool IsReadyForReview(AppStoreConnectReviewSubmissionInfo submission)
+        => string.Equals(submission.State, "READY_FOR_REVIEW", StringComparison.OrdinalIgnoreCase);
 
     private async Task<AppStoreConnectBuildInfo?> ResolveSelectedBuildAsync(
         string versionId,

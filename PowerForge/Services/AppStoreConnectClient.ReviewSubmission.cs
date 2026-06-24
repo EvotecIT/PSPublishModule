@@ -95,9 +95,32 @@ public sealed partial class AppStoreConnectClient
     }
 
     /// <summary>
+    /// Lists items in a review submission.
+    /// </summary>
+    public Task<AppStoreConnectReviewSubmissionItemInfo[]> GetReviewSubmissionItemsAsync(
+        string reviewSubmissionId,
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(reviewSubmissionId))
+            throw new ArgumentException("Review submission id is required.", nameof(reviewSubmissionId));
+
+        var query = new Dictionary<string, string?>
+        {
+            ["fields[reviewSubmissionItems]"] = "state,appStoreVersion",
+            ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
+        };
+
+        return GetArrayAsync(
+            $"reviewSubmissions/{Uri.EscapeDataString(reviewSubmissionId.Trim())}/items" + BuildQuery(query),
+            ParseReviewSubmissionItem,
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Marks a review submission as submitted to App Review.
     /// </summary>
-    public Task<AppStoreConnectReviewSubmissionInfo> SubmitReviewSubmissionAsync(
+    public async Task<AppStoreConnectReviewSubmissionInfo> SubmitReviewSubmissionAsync(
         string reviewSubmissionId,
         CancellationToken cancellationToken = default)
     {
@@ -114,11 +137,13 @@ public sealed partial class AppStoreConnectClient
             }
         };
 
-        return PatchSingleAsync(
+        var result = await PatchSingleAsync(
             $"reviewSubmissions/{Uri.EscapeDataString(reviewSubmissionId.Trim())}",
             body,
             ParseReviewSubmission,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        result.IsSubmitted ??= true;
+        return result;
     }
 
     private async Task<T> PatchSingleAsync<T>(string relativeUrl, object body, Func<JsonElement, T> parse, CancellationToken cancellationToken)
@@ -148,7 +173,8 @@ public sealed partial class AppStoreConnectClient
         {
             Id = GetString(item, "id") ?? string.Empty,
             ReviewSubmissionId = GetRelationshipDataId(item, "reviewSubmission"),
-            AppStoreVersionId = GetRelationshipDataId(item, "appStoreVersion")
+            AppStoreVersionId = GetRelationshipDataId(item, "appStoreVersion"),
+            State = GetString(GetAttributes(item), "state")
         };
     }
 
