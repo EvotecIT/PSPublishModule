@@ -16,7 +16,7 @@ public sealed class AppStoreConnectReviewSubmissionService
     }
 
     /// <summary>
-    /// Submits the selected App Store version to App Review.
+    /// Creates a review submission, adds the App Store version, and submits it.
     /// </summary>
     public async Task<AppStoreConnectReviewSubmissionResult> SubmitAsync(
         AppStoreConnectReviewSubmissionRequest request,
@@ -60,16 +60,14 @@ public sealed class AppStoreConnectReviewSubmissionService
                     string.Join("; ", readiness.Checks.Where(static check => !check.Passed).Select(static check => check.Message)));
         }
 
-        var appStoreVersionSubmission = await _client.CreateAppStoreVersionSubmissionAsync(version.Id, cancellationToken).ConfigureAwait(false);
-        messages.Add($"Submitted App Store version '{versionString}' to App Review.");
+        var reviewSubmission = await _client.CreateReviewSubmissionAsync(appId, request.Platform, cancellationToken).ConfigureAwait(false);
+        messages.Add($"Created review submission '{reviewSubmission.Id}' for platform '{request.Platform}'.");
 
-        var reviewSubmission = new AppStoreConnectReviewSubmissionInfo
-        {
-            Id = appStoreVersionSubmission.Id,
-            Platform = request.Platform.ToString(),
-            IsSubmitted = true,
-            State = appStoreVersionSubmission.State
-        };
+        var reviewSubmissionItem = await _client.CreateReviewSubmissionItemAsync(reviewSubmission.Id, version.Id, cancellationToken).ConfigureAwait(false);
+        messages.Add($"Added App Store version '{versionString}' to review submission '{reviewSubmission.Id}'.");
+
+        reviewSubmission = await _client.SubmitReviewSubmissionAsync(reviewSubmission.Id, cancellationToken).ConfigureAwait(false);
+        messages.Add($"Submitted App Store version '{versionString}' to App Review.");
 
         return new AppStoreConnectReviewSubmissionResult
         {
@@ -80,7 +78,7 @@ public sealed class AppStoreConnectReviewSubmissionService
             Version = version,
             Build = build,
             ReviewSubmission = reviewSubmission,
-            AppStoreVersionSubmission = appStoreVersionSubmission,
+            ReviewSubmissionItem = reviewSubmissionItem,
             Readiness = readiness,
             Messages = messages.ToArray()
         };
