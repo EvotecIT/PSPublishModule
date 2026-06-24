@@ -3,6 +3,7 @@
   [string]$RequiredVersion,
   [string]$MinimumVersion,
   [string]$Repository,
+  [string]$Scope,
   [string]$CredentialUser,
   [string]$CredentialSecret
 )
@@ -28,9 +29,9 @@ try {
     Force = $true
     ErrorAction = 'Stop'
     SkipPublisherCheck = $true
-    Scope = 'CurrentUser'
     AcceptLicense = $true
   }
+  if ([string]::IsNullOrWhiteSpace($Scope)) { $params.Scope = 'CurrentUser' } else { $params.Scope = $Scope }
   if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
   if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
   elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }

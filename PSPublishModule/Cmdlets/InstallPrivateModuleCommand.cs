@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -19,6 +21,10 @@ namespace PSPublishModule;
 /// <code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'</code>
 /// </example>
 /// <example>
+/// <summary>Install an exact module version</summary>
+/// <code>Install-PrivateModule -Name 'ModuleA' -Repository 'Company' -RequiredVersion '1.2.0'</code>
+/// </example>
+/// <example>
 /// <summary>Install modules from a saved Azure Artifacts profile</summary>
 /// <code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -ProfileName 'Company' -InstallPrerequisites</code>
 /// </example>
@@ -36,6 +42,16 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
+
+    /// <summary>Exact module version to install for every requested module name.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? RequiredVersion { get; set; }
+
+    /// <summary>PowerShell module installation scope.</summary>
+    [Parameter]
+    [ValidateSet("CurrentUser", "AllUsers")]
+    public string Scope { get; set; } = "CurrentUser";
 
     /// <summary>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetRepository)]
@@ -211,6 +227,8 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
             {
                 Operation = PrivateModuleWorkflowOperation.Install,
                 ModuleNames = Name,
+                RequiredVersions = BuildRequiredVersions(Name, RequiredVersion),
+                InstallScope = Scope,
                 UseAzureArtifacts = useAzureArtifacts,
                 UseMicrosoftArtifactRegistry = useMicrosoftArtifactRegistry,
                 ProfileName = ParameterSetName == ParameterSetProfile ? ProfileName : null,
@@ -243,5 +261,17 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
             return;
 
         WriteObject(result.DependencyResults, enumerateCollection: true);
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildRequiredVersions(IEnumerable<string> names, string? requiredVersion)
+    {
+        if (string.IsNullOrWhiteSpace(requiredVersion))
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        return (names ?? Array.Empty<string>())
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static name => name, _ => requiredVersion!.Trim(), StringComparer.OrdinalIgnoreCase);
     }
 }

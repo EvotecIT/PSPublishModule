@@ -34,6 +34,15 @@ public sealed class PrivateModuleWorkflowServiceTests
             {
                 Operation = PrivateModuleWorkflowOperation.Install,
                 ModuleNames = new[] { "ModuleA", "ModuleA", "ModuleB" },
+                RequiredVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ModuleA"] = "1.2.0"
+                },
+                InstallScope = "CurrentUser",
+                InstallScopes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ModuleA"] = "AllUsers"
+                },
                 UseAzureArtifacts = false,
                 RepositoryName = "Company",
                 Prerelease = true,
@@ -58,8 +67,18 @@ public sealed class PrivateModuleWorkflowServiceTests
         Assert.Null(capturedRequest.Credential);
         Assert.Collection(
             capturedRequest.Modules,
-            first => Assert.Equal("ModuleA", first.Name),
-            second => Assert.Equal("ModuleB", second.Name));
+            first =>
+            {
+                Assert.Equal("ModuleA", first.Name);
+                Assert.Equal("1.2.0", first.RequiredVersion);
+                Assert.Equal("AllUsers", first.InstallScope);
+            },
+            second =>
+            {
+                Assert.Equal("ModuleB", second.Name);
+                Assert.Null(second.RequiredVersion);
+                Assert.Equal("CurrentUser", second.InstallScope);
+            });
         Assert.Equal("2 module(s) from repository 'Company'", capturedTarget);
         Assert.Equal("Install or reinstall private modules", capturedAction);
     }
