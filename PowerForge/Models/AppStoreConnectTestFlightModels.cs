@@ -49,6 +49,24 @@ public sealed class AppStoreConnectBetaTesterInfo
 }
 
 /// <summary>
+/// App Store Connect TestFlight build beta detail summary.
+/// </summary>
+public sealed class AppStoreConnectBuildBetaDetailInfo
+{
+    /// <summary>Build beta detail id.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Internal TestFlight build state.</summary>
+    public string? InternalBuildState { get; set; }
+
+    /// <summary>External TestFlight build state.</summary>
+    public string? ExternalBuildState { get; set; }
+
+    /// <summary>Whether App Store Connect automatically notifies testers when available.</summary>
+    public bool? AutoNotifyEnabled { get; set; }
+}
+
+/// <summary>
 /// Tester specification for TestFlight distribution.
 /// </summary>
 public sealed class AppStoreConnectBetaTesterSpec
