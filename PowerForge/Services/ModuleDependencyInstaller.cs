@@ -249,6 +249,27 @@ public sealed partial class ModuleDependencyInstaller
                     var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet, perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Installed, installer: installStatus, message: "Not installed"));
                 }
+                else if (!string.IsNullOrWhiteSpace(dep.RequiredVersion))
+                {
+                    var exactRequiredVersion = dep.RequiredVersion!.Trim();
+                    if (HasInstalledRequiredVersion(dep.Name, exactRequiredVersion))
+                    {
+                        var exactMessage = VersionsEquivalent(installedBefore, exactRequiredVersion)
+                            ? $"Exact required version {exactRequiredVersion} already installed"
+                            : $"Exact required version {exactRequiredVersion} already present (latest installed: {installedBefore})";
+                        actions.Add(new ActionItem(
+                            dep.Name,
+                            installedBefore,
+                            exactRequiredVersion,
+                            ModuleDependencyInstallStatus.Satisfied,
+                            installer: null,
+                            message: exactMessage));
+                        continue;
+                    }
+
+                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet, perModuleTimeout);
+                    actions.Add(new ActionItem(dep.Name, installedBefore, exactRequiredVersion, ModuleDependencyInstallStatus.Updated, installer: installStatus, message: $"Exact version required: {exactRequiredVersion} (installed: {installedBefore})"));
+                }
                 else
                 {
                     var updateStatus = TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
@@ -270,6 +291,7 @@ public sealed partial class ModuleDependencyInstaller
                 var message = a.Message;
 
                 if (a.Status == ModuleDependencyInstallStatus.Updated &&
+                    string.IsNullOrWhiteSpace(a.RequestedVersion) &&
                     VersionsEquivalent(a.InstalledBefore, resolvedVersion))
                 {
                     status = ModuleDependencyInstallStatus.Satisfied;
@@ -379,7 +401,7 @@ public sealed partial class ModuleDependencyInstaller
                 name: dep.Name,
                 version: versionArgument,
                 repository: repository,
-                scope: "CurrentUser",
+                scope: ResolveInstallScope(dep),
                 prerelease: prerelease,
                 reinstall: force,
                 trustRepository: true,
@@ -453,15 +475,19 @@ public sealed partial class ModuleDependencyInstaller
         }
     }
 
+    private static string ResolveInstallScope(ModuleDependency dep)
+        => string.IsNullOrWhiteSpace(dep.InstallScope) ? "CurrentUser" : dep.InstallScope!;
+
     private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, TimeSpan timeout)
     {
         var script = BuildInstallModuleScript();
-        var args = new List<string>(6)
+        var args = new List<string>(7)
         {
             dep.Name,
             dep.RequiredVersion ?? string.Empty,
             dep.MinimumVersion ?? string.Empty,
             repository ?? string.Empty,
+            ResolveInstallScope(dep),
             credential?.UserName ?? string.Empty,
             credential?.Secret ?? string.Empty
         };
@@ -513,7 +539,7 @@ public sealed partial class ModuleDependencyInstaller
             if (CompareVersionStrings(latestRepositoryVersion, installedVersion) <= 0)
                 return null;
 
-            InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion), scopedRepository, credential, timeout);
+            InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion, installScope: dep.InstallScope), scopedRepository, credential, timeout);
             return "PowerShellGet";
         }
 

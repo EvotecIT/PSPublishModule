@@ -34,13 +34,24 @@ internal sealed class PrivateGalleryService
             throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, GitHubPackages, NuGet.", nameof(provider));
     }
 
-    public IReadOnlyList<ModuleDependency> BuildDependencies(IEnumerable<string> names)
+    public IReadOnlyList<ModuleDependency> BuildDependencies(
+        IEnumerable<string> names,
+        IReadOnlyDictionary<string, string>? requiredVersions = null,
+        string? installScope = null,
+        IReadOnlyDictionary<string, string>? installScopes = null)
     {
         var dependencies = (names ?? Array.Empty<string>())
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .Select(static name => name.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(static name => new ModuleDependency(name))
+            .Select(name => new ModuleDependency(
+                name,
+                requiredVersion: requiredVersions is not null && requiredVersions.TryGetValue(name, out var requiredVersion)
+                    ? requiredVersion
+                    : null,
+                installScope: installScopes is not null && installScopes.TryGetValue(name, out var moduleScope)
+                    ? moduleScope
+                    : installScope))
             .ToArray();
 
         if (dependencies.Length == 0)
