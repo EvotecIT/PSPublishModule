@@ -1069,6 +1069,141 @@ public sealed class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task ReleaseStateService_SummarizesAppStoreTestFlightAndBetaGroups()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "version-1",
+                      "type": "appStoreVersions",
+                      "attributes": { "versionString": "1.0.2", "platform": "IOS", "appStoreState": "WAITING_FOR_REVIEW", "appVersionState": "WAITING_FOR_REVIEW" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-6",
+                      "type": "builds",
+                      "attributes": { "version": "6", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.2", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": { "type": "builds", "id": "build-6" } }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "build-6",
+                    "type": "builds",
+                    "attributes": { "version": "6", "processingState": "VALID", "expired": false },
+                    "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                  },
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.2", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "review-1",
+                      "type": "reviewSubmissions",
+                      "attributes": { "platform": "IOS", "state": "WAITING_FOR_REVIEW", "submitted": true }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "detail-1",
+                    "type": "buildBetaDetails",
+                    "attributes": { "internalBuildState": "IN_BETA_TESTING", "externalBuildState": "WAITING_FOR_BETA_REVIEW", "autoNotifyEnabled": true }
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "beta-review-1",
+                    "type": "betaAppReviewSubmissions",
+                    "attributes": { "betaReviewState": "WAITING_FOR_REVIEW" },
+                    "relationships": { "build": { "data": { "type": "builds", "id": "build-6" } } }
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-1",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Discord Testers", "publicLinkEnabled": true, "publicLinkLimit": 10, "publicLink": "https://testflight.apple.com/join/example", "isInternalGroup": false }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "tester-1",
+                      "type": "betaTesters",
+                      "attributes": { "email": "tester@example.test" }
+                    }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReleaseStateService(client);
+
+        var result = await service.GetAsync(new AppStoreConnectReleaseStateRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.2",
+            BuildNumber = "6",
+            Platforms = new[] { ApplePlatform.iOS },
+            BetaGroupNames = new[] { "Discord Testers" }
+        });
+
+        var platform = Assert.Single(result.Platforms);
+        Assert.Equal("version-1", platform.Version?.Id);
+        Assert.Equal("build-6", platform.MatchedBuild?.Id);
+        Assert.Equal("build-6", platform.SelectedBuild?.Id);
+        Assert.True(platform.MatchedBuildSelected);
+        Assert.Equal("WAITING_FOR_REVIEW", Assert.Single(platform.ReviewSubmissions).State);
+        Assert.Equal("WAITING_FOR_BETA_REVIEW", platform.BetaDetail?.ExternalBuildState);
+        Assert.Equal("WAITING_FOR_REVIEW", platform.BetaReviewSubmission?.BetaReviewState);
+        Assert.Contains("iOS: Wait for App Review.", result.NextActions);
+        Assert.Contains("iOS: Wait for Beta App Review.", result.NextActions);
+
+        var group = Assert.Single(result.BetaGroups);
+        Assert.Equal("Discord Testers", group.Name);
+        Assert.True(group.PublicLinkEnabled);
+        Assert.Equal(1, group.TesterCount);
+        Assert.False(group.IsFull);
+    }
+
+    [Fact]
     public async Task ReviewSubmissionClient_CreatesItemAndSubmits()
     {
         var handler = new SequenceHandler(

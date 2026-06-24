@@ -48,6 +48,28 @@ public sealed partial class AppStoreConnectClient
     }
 
     /// <summary>
+    /// Lists beta testers in a beta group.
+    /// </summary>
+    public Task<AppStoreConnectBetaTesterInfo[]> GetBetaTestersForGroupAsync(
+        string betaGroupId,
+        int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(betaGroupId))
+            throw new ArgumentException("Beta group id is required.", nameof(betaGroupId));
+
+        var query = new Dictionary<string, string?>
+        {
+            ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
+        };
+
+        return GetArrayAsync(
+            $"betaGroups/{Uri.EscapeDataString(betaGroupId.Trim())}/betaTesters" + BuildQuery(query),
+            ParseBetaTester,
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Creates a beta tester and optionally adds the tester to beta groups.
     /// </summary>
     public Task<AppStoreConnectBetaTesterInfo> CreateBetaTesterAsync(
@@ -152,6 +174,22 @@ public sealed partial class AppStoreConnectClient
     }
 
     /// <summary>
+    /// Reads TestFlight beta detail for a build.
+    /// </summary>
+    public Task<AppStoreConnectBuildBetaDetailInfo?> GetBuildBetaDetailAsync(
+        string buildId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(buildId))
+            throw new ArgumentException("Build id is required.", nameof(buildId));
+
+        return GetSingleAsync(
+            $"builds/{Uri.EscapeDataString(buildId.Trim())}/buildBetaDetail",
+            ParseBuildBetaDetail,
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Submits a build to Beta App Review for external TestFlight testing.
     /// </summary>
     public Task<AppStoreConnectBetaAppReviewSubmissionInfo> CreateBetaAppReviewSubmissionAsync(
@@ -225,6 +263,18 @@ public sealed partial class AppStoreConnectClient
             FirstName = GetString(attrs, "firstName"),
             LastName = GetString(attrs, "lastName"),
             InviteType = GetString(attrs, "inviteType")
+        };
+    }
+
+    private static AppStoreConnectBuildBetaDetailInfo ParseBuildBetaDetail(JsonElement item)
+    {
+        var attrs = GetAttributes(item);
+        return new AppStoreConnectBuildBetaDetailInfo
+        {
+            Id = GetString(item, "id") ?? string.Empty,
+            InternalBuildState = GetString(attrs, "internalBuildState"),
+            ExternalBuildState = GetString(attrs, "externalBuildState"),
+            AutoNotifyEnabled = GetBool(attrs, "autoNotifyEnabled")
         };
     }
 
