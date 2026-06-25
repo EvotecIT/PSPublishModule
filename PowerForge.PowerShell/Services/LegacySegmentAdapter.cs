@@ -131,6 +131,13 @@ public static class LegacySegmentAdapter
                             : HasKey(buildLibraries, "NETAssemblyLoadContext")
                                 ? GetBool(buildLibraries, "NETAssemblyLoadContext")
                                 : null,
+                        DevelopmentBinaries = HasKey(buildLibraries, "DevelopmentBinaries")
+                            ? GetBool(buildLibraries, "DevelopmentBinaries")
+                            : null,
+                        DevelopmentBinariesMode = TryParseDevelopmentBinaryMode(GetString(buildLibraries, "DevelopmentBinariesMode")),
+                        DevelopmentBinariesPath = GetString(buildLibraries, "DevelopmentBinariesPath"),
+                        DevelopmentBinariesEnvironmentVariable = GetString(buildLibraries, "DevelopmentBinariesEnvironmentVariable"),
+                        DevelopmentConfigurationEnvironmentVariable = GetString(buildLibraries, "DevelopmentConfigurationEnvironmentVariable"),
                         AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "AssemblyTypeAcceleratorMode"))
                             ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "NETAssemblyTypeAcceleratorMode")),
                         AssemblyTypeAccelerators = GetStringArray(buildLibraries, "AssemblyTypeAccelerators")
@@ -214,6 +221,13 @@ public static class LegacySegmentAdapter
                         : HasKey(conf, "NETAssemblyLoadContext")
                             ? GetBool(conf, "NETAssemblyLoadContext")
                             : null,
+                    DevelopmentBinaries = HasKey(conf, "DevelopmentBinaries")
+                        ? GetBool(conf, "DevelopmentBinaries")
+                        : null,
+                    DevelopmentBinariesMode = TryParseDevelopmentBinaryMode(GetString(conf, "DevelopmentBinariesMode")),
+                    DevelopmentBinariesPath = GetString(conf, "DevelopmentBinariesPath"),
+                    DevelopmentBinariesEnvironmentVariable = GetString(conf, "DevelopmentBinariesEnvironmentVariable"),
+                    DevelopmentConfigurationEnvironmentVariable = GetString(conf, "DevelopmentConfigurationEnvironmentVariable"),
                     AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "AssemblyTypeAcceleratorMode"))
                         ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "NETAssemblyTypeAcceleratorMode")),
                     AssemblyTypeAccelerators = GetStringArray(conf, "AssemblyTypeAccelerators")
@@ -298,6 +312,14 @@ public static class LegacySegmentAdapter
         var trimmed = value.Trim();
         if (trimmed.Length == 0) return null;
         return Enum.TryParse<AssemblyTypeAcceleratorExportMode>(trimmed, ignoreCase: true, out var parsed) ? parsed : null;
+    }
+
+    private static ModuleDevelopmentBinaryMode? TryParseDevelopmentBinaryMode(string? value)
+    {
+        if (value is null) return null;
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0) return null;
+        return Enum.TryParse<ModuleDevelopmentBinaryMode>(trimmed, ignoreCase: true, out var parsed) ? parsed : null;
     }
 
     private static IDictionary? GetDictionary(IDictionary dict, string key)

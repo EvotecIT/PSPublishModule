@@ -10,6 +10,9 @@ internal static partial class ModuleBootstrapperGenerator
         string libraryName,
         bool useAssemblyLoadContext,
         AssemblyLoadContextLoaderIdentity? loaderIdentity,
+        AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
+        IReadOnlyList<string>? assemblyTypeAccelerators,
+        IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
         ModuleDevelopmentBinaryBootstrapperOptions options)
     {
         var binaryRootExpression = BuildPowerShellPathExpression(moduleRoot, options.BinaryRootPath);
@@ -20,6 +23,12 @@ internal static partial class ModuleBootstrapperGenerator
         var loaderTypeName = loaderIdentity?.TypeName ?? string.Empty;
         var loaderSource = useAssemblyLoadContext && loaderIdentity is not null
             ? BuildDevelopmentAssemblyLoadContextSource(loaderIdentity)
+            : string.Empty;
+        var typeAcceleratorBlock = useAssemblyLoadContext && loaderIdentity is not null
+            ? BuildTypeAcceleratorBlock(
+                assemblyTypeAcceleratorMode,
+                assemblyTypeAccelerators,
+                assemblyTypeAcceleratorAssemblies)
             : string.Empty;
 
         var sb = new StringBuilder(8192);
@@ -75,6 +84,12 @@ internal static partial class ModuleBootstrapperGenerator
             sb.AppendLine("                }");
             sb.AppendLine("                $PowerForgeDevelopmentModuleAssembly = [" + loaderTypeName + "]::LoadModule($PowerForgeDevelopmentBinaryPath, '" + EscapePsSingleQuoted(moduleName) + ".Development')");
             sb.AppendLine("                $PowerForgeDevelopmentInnerModule = & $ImportModule -Assembly $PowerForgeDevelopmentModuleAssembly -Force -PassThru -ErrorAction Stop");
+            if (!string.IsNullOrWhiteSpace(typeAcceleratorBlock))
+            {
+                sb.AppendLine("                $ModuleAssembly = $PowerForgeDevelopmentModuleAssembly");
+                sb.AppendLine("                $LibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)");
+                sb.AppendLine(IndentPowerShell(typeAcceleratorBlock.TrimEnd(), 16));
+            }
             sb.AppendLine("                if ($PowerForgeDevelopmentInnerModule) {");
             sb.AppendLine(IndentPowerShell(BuildPowerShellModuleExportBridge("$PowerForgeDevelopmentInnerModule", libraryName).TrimEnd(), 20));
             sb.AppendLine("                }");
@@ -145,31 +160,47 @@ if ($null -ne $AddExportedCmdlet) {{
             ? string.Empty
             : Path.GetFullPath(moduleRoot);
 
-        if (!string.IsNullOrWhiteSpace(fullRoot) && IsChildOrSamePath(fullTarget, fullRoot))
+        if (!string.IsNullOrWhiteSpace(fullRoot) &&
+            TryBuildRelativePowerShellPathExpression(fullRoot, fullTarget, out var relativeExpression))
+        {
+            return relativeExpression;
+        }
+
+        return "'" + EscapePsSingleQuoted(fullTarget) + "'";
+    }
+
+    private static bool TryBuildRelativePowerShellPathExpression(
+        string fullRoot,
+        string fullTarget,
+        out string expression)
+    {
+        expression = string.Empty;
+
+        try
         {
             var relative = FrameworkCompatibility.GetRelativePath(fullRoot, fullTarget);
+            if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.IndexOf(':') >= 0)
+                return false;
+
             var parts = relative
                 .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries)
                 .Where(static part => part != ".")
                 .ToArray();
 
             if (parts.Length == 0)
-                return "$PSScriptRoot";
+            {
+                expression = "$PSScriptRoot";
+                return true;
+            }
 
             var args = string.Join(", ", new[] { "$PSScriptRoot" }.Concat(parts.Select(part => "'" + EscapePsSingleQuoted(part) + "'")));
-            return "[IO.Path]::GetFullPath([IO.Path]::Combine(" + args + "))";
+            expression = "[IO.Path]::GetFullPath([IO.Path]::Combine(" + args + "))";
+            return true;
         }
-
-        return "'" + EscapePsSingleQuoted(fullTarget) + "'";
-    }
-
-    private static bool IsChildOrSamePath(string candidatePath, string parentPath)
-    {
-        var parent = Path.GetFullPath(parentPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var candidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return string.Equals(candidate, parent, StringComparison.OrdinalIgnoreCase) ||
-               candidate.StartsWith(parent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-               candidate.StartsWith(parent + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        catch
+        {
+            return false;
+        }
     }
 
     private static string IndentPowerShell(string content, int spaces)

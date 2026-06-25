@@ -401,6 +401,10 @@ public sealed partial class ModulePipelineRunner
             }
 
             var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
+            var conditionalExportDependencies = ResolveConditionalExportDependencies(
+                plan,
+                ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information),
+                exports);
             var envName = string.IsNullOrWhiteSpace(plan.BuildSpec.DevelopmentBinariesEnvironmentVariable)
                 ? BuildDefaultEnvironmentVariableName(plan.ModuleName, "USE_DEVELOPMENT_BINARIES")
                 : plan.BuildSpec.DevelopmentBinariesEnvironmentVariable!;
@@ -427,6 +431,7 @@ public sealed partial class ModulePipelineRunner
                 assemblyTypeAccelerators: plan.BuildSpec.AssemblyTypeAccelerators,
                 assemblyTypeAcceleratorAssemblies: plan.BuildSpec.AssemblyTypeAcceleratorAssemblies,
                 ignoreLibrariesOnLoad: plan.BuildSpec.IgnoreLibraryOnLoad,
+                conditionalFunctionDependencies: conditionalExportDependencies,
                 developmentBinaries: developmentOptions,
                 targetFrameworks: plan.BuildSpec.Frameworks,
                 log: message => _logger.Info(message));

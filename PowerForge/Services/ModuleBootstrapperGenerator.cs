@@ -300,6 +300,9 @@ internal static partial class ModuleBootstrapperGenerator
                 libraryName,
                 useAssemblyLoadContext,
                 loaderIdentity,
+                assemblyTypeAcceleratorMode,
+                assemblyTypeAccelerators,
+                assemblyTypeAcceleratorAssemblies,
                 developmentBinaries);
 
             binaryLoaderBlock = string.IsNullOrWhiteSpace(binaryLoaderBlock)
@@ -1136,9 +1139,14 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         return
     }}
 
-    if ([IO.Path]::IsPathRooted($LibFolder) -or $LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
-        Write-Warning -Message ""Module library folder '$LibFolder' must be a simple folder name. ALC dependency type exposure is disabled.""
+    $PowerForgeAlcLibraryDirectory = $null
+    if ([IO.Path]::IsPathRooted($LibFolder)) {{
+        $PowerForgeAlcLibraryDirectory = [IO.Path]::GetFullPath($LibFolder)
+    }} elseif ($LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
+        Write-Warning -Message ""Module library folder '$LibFolder' must be a simple folder name or a rooted development binary directory. ALC dependency type exposure is disabled.""
         return
+    }} else {{
+        $PowerForgeAlcLibraryDirectory = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)
     }}
 
     if ($Mode -eq 'AllowList' -and $RequestedTypes.Count -eq 0) {{
@@ -1190,7 +1198,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         try {{
             return $ModuleAlc.LoadFromAssemblyName([System.Reflection.AssemblyName]::new($AssemblyName))
         }} catch {{
-            $AssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $AssemblyName + '.dll')
+            $AssemblyPath = [IO.Path]::Combine($PowerForgeAlcLibraryDirectory, $AssemblyName + '.dll')
             if (Test-Path -LiteralPath $AssemblyPath) {{
                 try {{
                     $AssemblyNameObject = [System.Reflection.AssemblyName]::GetAssemblyName($AssemblyPath)
@@ -1214,7 +1222,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
             }}
         }}
 
-        $LibDirectory = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)
+        $LibDirectory = $PowerForgeAlcLibraryDirectory
         if (-not (Test-Path -LiteralPath $LibDirectory)) {{
             return $null
         }}
