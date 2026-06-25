@@ -6,7 +6,7 @@ using System.Text;
 
 namespace PowerForge;
 
-internal static class ModuleBootstrapperGenerator
+internal static partial class ModuleBootstrapperGenerator
 {
     // net8.0 is the default modern PowerShell LTS baseline when the module build does not declare a Core TFM.
     private const string DefaultAssemblyLoadContextTargetFramework = "net8.0";
@@ -24,6 +24,7 @@ internal static class ModuleBootstrapperGenerator
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies = null,
         IReadOnlyList<string>? ignoreLibrariesOnLoad = null,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
+        ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
         IReadOnlyList<string>? targetFrameworks = null,
         Action<string>? log = null)
     {
@@ -36,10 +37,11 @@ internal static class ModuleBootstrapperGenerator
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
         var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
+        var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
         // If there is no Lib and no folder-based layout, leave the existing PSM1 intact.
-        if (!hasLib && !hasScriptFolders) return;
+        if (!hasLib && !hasScriptFolders && !hasDevelopmentBinaryLoader) return;
 
         var exportAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
@@ -72,7 +74,9 @@ internal static class ModuleBootstrapperGenerator
             assemblyTypeAcceleratorMode: assemblyTypeAcceleratorMode,
             assemblyTypeAccelerators: assemblyTypeAccelerators,
             assemblyTypeAcceleratorAssemblies: assemblyTypeAcceleratorAssemblies,
-            conditionalFunctionDependencies: conditionalFunctionDependencies);
+            conditionalFunctionDependencies: conditionalFunctionDependencies,
+            developmentBinaries: developmentBinaries,
+            moduleRoot: root);
         WritePowerShellFile(psm1Path, psm1Content);
     }
 
@@ -260,7 +264,9 @@ internal static class ModuleBootstrapperGenerator
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
         IReadOnlyList<string>? assemblyTypeAccelerators,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
-        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies)
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
+        ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
+        string? moduleRoot = null)
     {
         var loaderIdentity = useAssemblyLoadContext
             ? CreateAssemblyLoadContextLoaderIdentity(moduleName)
@@ -285,6 +291,25 @@ internal static class ModuleBootstrapperGenerator
                         assemblyTypeAcceleratorAssemblies)
                 })
             : string.Empty;
+
+        if (developmentBinaries?.Enabled == true)
+        {
+            var developmentBlock = BuildDevelopmentBinaryLoaderBlock(
+                moduleRoot ?? string.Empty,
+                moduleName,
+                libraryName,
+                useAssemblyLoadContext,
+                loaderIdentity,
+                developmentBinaries);
+
+            binaryLoaderBlock = string.IsNullOrWhiteSpace(binaryLoaderBlock)
+                ? "$PowerForgeDevelopmentBinaryLoaded = $false\r\n" + developmentBlock.TrimEnd()
+                : "$PowerForgeDevelopmentBinaryLoaded = $false\r\n" +
+                  developmentBlock.TrimEnd() +
+                  "\r\n\r\nif (-not $PowerForgeDevelopmentBinaryLoaded) {\r\n" +
+                  IndentPowerShell(binaryLoaderBlock.TrimEnd(), 4) +
+                  "\r\n}";
+        }
 
         var scriptLoaderBlock = includeScriptLoader
             ? RenderModuleBootstrapperTemplate(

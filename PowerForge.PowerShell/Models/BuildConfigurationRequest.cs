@@ -102,6 +102,16 @@ internal sealed class BuildConfigurationRequest
     public bool NETHandleRuntimes { get; set; }
     public bool NETAssemblyLoadContextSpecified { get; set; }
     public bool NETAssemblyLoadContext { get; set; }
+    public bool NETDevelopmentBinariesSpecified { get; set; }
+    public bool NETDevelopmentBinaries { get; set; }
+    public bool NETDevelopmentBinariesModeSpecified { get; set; }
+    public ModuleDevelopmentBinaryMode? NETDevelopmentBinariesMode { get; set; }
+    public bool NETDevelopmentBinariesPathSpecified { get; set; }
+    public string? NETDevelopmentBinariesPath { get; set; }
+    public bool NETDevelopmentBinariesEnvironmentVariableSpecified { get; set; }
+    public string? NETDevelopmentBinariesEnvironmentVariable { get; set; }
+    public bool NETDevelopmentConfigurationEnvironmentVariableSpecified { get; set; }
+    public string? NETDevelopmentConfigurationEnvironmentVariable { get; set; }
     public bool NETAssemblyTypeAcceleratorModeSpecified { get; set; }
     public AssemblyTypeAcceleratorExportMode? NETAssemblyTypeAcceleratorMode { get; set; }
     public bool NETAssemblyTypeAcceleratorsSpecified { get; set; }

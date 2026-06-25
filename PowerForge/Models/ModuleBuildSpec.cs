@@ -124,6 +124,27 @@ public sealed class ModuleBuildSpec
     public bool UseAssemblyLoadContext { get; set; }
 
     /// <summary>
+    /// Controls whether the checked-in source module bootstrapper should load binaries from local build output.
+    /// Packaged/staged bootstrapper generation remains production-only.
+    /// </summary>
+    public ModuleDevelopmentBinaryMode DevelopmentBinariesMode { get; set; } = ModuleDevelopmentBinaryMode.Off;
+
+    /// <summary>
+    /// Optional root folder containing development binary outputs. When empty, PowerForge derives it from the .csproj path.
+    /// </summary>
+    public string? DevelopmentBinariesPath { get; set; }
+
+    /// <summary>
+    /// Optional environment variable used by Environment mode. Defaults to MODULE_USE_DEVELOPMENT_BINARIES.
+    /// </summary>
+    public string? DevelopmentBinariesEnvironmentVariable { get; set; }
+
+    /// <summary>
+    /// Optional environment variable used to choose the development build configuration. Defaults to MODULE_DEVELOPMENT_CONFIGURATION.
+    /// </summary>
+    public string? DevelopmentConfigurationEnvironmentVariable { get; set; }
+
+    /// <summary>
     /// Controls optional type accelerator exposure for assemblies loaded in the module AssemblyLoadContext.
     /// </summary>
     public AssemblyTypeAcceleratorExportMode? AssemblyTypeAcceleratorMode { get; set; }

@@ -384,6 +384,119 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private void TryRegenerateSourceDevelopmentBootstrapperFromManifest(
+        ModuleBuildResult buildResult,
+        ModulePipelinePlan plan)
+    {
+        if (plan.BuildSpec.DevelopmentBinariesMode == ModuleDevelopmentBinaryMode.Off)
+            return;
+
+        try
+        {
+            var binaryRoot = ResolveDevelopmentBinaryRoot(plan.BuildSpec);
+            if (string.IsNullOrWhiteSpace(binaryRoot))
+            {
+                _logger.Warn($"Development binary bootstrapper requested for '{plan.ModuleName}', but no development binary root could be resolved. Configure NETProjectPath or NETDevelopmentBinariesPath.");
+                return;
+            }
+
+            var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
+            var envName = string.IsNullOrWhiteSpace(plan.BuildSpec.DevelopmentBinariesEnvironmentVariable)
+                ? BuildDefaultEnvironmentVariableName(plan.ModuleName, "USE_DEVELOPMENT_BINARIES")
+                : plan.BuildSpec.DevelopmentBinariesEnvironmentVariable!;
+            var configEnvName = string.IsNullOrWhiteSpace(plan.BuildSpec.DevelopmentConfigurationEnvironmentVariable)
+                ? BuildDefaultEnvironmentVariableName(plan.ModuleName, "DEVELOPMENT_CONFIGURATION")
+                : plan.BuildSpec.DevelopmentConfigurationEnvironmentVariable!;
+
+            var developmentOptions = new ModuleDevelopmentBinaryBootstrapperOptions(
+                plan.BuildSpec.DevelopmentBinariesMode,
+                binaryRoot!,
+                envName,
+                configEnvName,
+                BuildDevelopmentFrameworkCandidates(plan.BuildSpec.Frameworks, core: true),
+                BuildDevelopmentFrameworkCandidates(plan.BuildSpec.Frameworks, core: false));
+
+            ModuleBootstrapperGenerator.Generate(
+                plan.BuildSpec.SourcePath,
+                plan.ModuleName,
+                exports,
+                plan.BuildSpec.ExportAssemblies,
+                plan.BuildSpec.HandleRuntimes,
+                useAssemblyLoadContext: plan.BuildSpec.UseAssemblyLoadContext,
+                assemblyTypeAcceleratorMode: plan.BuildSpec.AssemblyTypeAcceleratorMode ?? AssemblyTypeAcceleratorExportMode.None,
+                assemblyTypeAccelerators: plan.BuildSpec.AssemblyTypeAccelerators,
+                assemblyTypeAcceleratorAssemblies: plan.BuildSpec.AssemblyTypeAcceleratorAssemblies,
+                ignoreLibrariesOnLoad: plan.BuildSpec.IgnoreLibraryOnLoad,
+                developmentBinaries: developmentOptions,
+                targetFrameworks: plan.BuildSpec.Frameworks,
+                log: message => _logger.Info(message));
+
+            _logger.Info($"Updated source development bootstrapper: {Path.Combine(plan.BuildSpec.SourcePath, plan.ModuleName + ".psm1")}");
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to update source development bootstrapper for '{plan.ModuleName}'. Error: {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+        }
+    }
+
+    private static string? ResolveDevelopmentBinaryRoot(ModuleBuildSpec spec)
+    {
+        if (!string.IsNullOrWhiteSpace(spec.DevelopmentBinariesPath))
+            return PathValueResolver.Resolve(spec.SourcePath, spec.DevelopmentBinariesPath!);
+
+        if (string.IsNullOrWhiteSpace(spec.CsprojPath))
+            return null;
+
+        var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(spec.CsprojPath));
+        return string.IsNullOrWhiteSpace(projectDirectory)
+            ? null
+            : Path.Combine(projectDirectory!, "bin");
+    }
+
+    private static string BuildDefaultEnvironmentVariableName(string moduleName, string suffix)
+    {
+        var chars = (moduleName ?? string.Empty)
+            .Select(static c => char.IsLetterOrDigit(c) ? char.ToUpperInvariant(c) : '_')
+            .ToArray();
+
+        var prefix = new string(chars);
+        while (prefix.Contains("__", StringComparison.Ordinal))
+            prefix = prefix.Replace("__", "_");
+
+        prefix = prefix.Trim('_');
+        if (string.IsNullOrWhiteSpace(prefix))
+            prefix = "POWERFORGE_MODULE";
+
+        return prefix + "_" + suffix;
+    }
+
+    private static string[] BuildDevelopmentFrameworkCandidates(string[]? frameworks, bool core)
+    {
+        var declared = (frameworks ?? Array.Empty<string>())
+            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
+            .Select(static framework => framework.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (declared.Length == 0)
+            declared = new[] { "net8.0", "net472", "netstandard2.0" };
+
+        static bool IsDesktopFramework(string framework)
+            => framework.StartsWith("net4", StringComparison.OrdinalIgnoreCase);
+
+        var ordered = core
+            ? declared.Where(static framework => !IsDesktopFramework(framework))
+                .Concat(declared.Where(static framework => IsDesktopFramework(framework)))
+            : declared.Where(static framework => IsDesktopFramework(framework))
+                .Concat(declared.Where(static framework => framework.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase)))
+                .Concat(declared.Where(static framework => !IsDesktopFramework(framework) && !framework.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase)));
+
+        return ordered
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private void SyncMergedPsm1WithGeneratedScripts(string manifestPath, string stagingPath, string moduleName, IEnumerable<string> scriptPaths)
         => ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(manifestPath, stagingPath, moduleName, scriptPaths);
 

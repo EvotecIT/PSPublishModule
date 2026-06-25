@@ -73,6 +73,11 @@ public sealed partial class ModulePipelineRunner
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? handleRuntimesFromSegments = null;
         bool? useAssemblyLoadContextFromSegments = null;
+        bool? developmentBinariesEnabledFromSegments = null;
+        ModuleDevelopmentBinaryMode? developmentBinariesModeFromSegments = null;
+        string? developmentBinariesPathFromSegments = null;
+        string? developmentBinariesEnvironmentVariableFromSegments = null;
+        string? developmentConfigurationEnvironmentVariableFromSegments = null;
         AssemblyTypeAcceleratorExportMode? assemblyTypeAcceleratorModeFromSegments = null;
         string[]? assemblyTypeAcceleratorsFromSegments = null;
         string[]? assemblyTypeAcceleratorAssembliesFromSegments = null;
@@ -250,6 +255,16 @@ public sealed partial class ModulePipelineRunner
                         useAssemblyLoadContextFromSegments = bl.UseAssemblyLoadContext.Value;
                     else if (bl.NETAssemblyLoadContext.HasValue)
                         useAssemblyLoadContextFromSegments = bl.NETAssemblyLoadContext.Value;
+                    if (bl.DevelopmentBinaries.HasValue)
+                        developmentBinariesEnabledFromSegments = bl.DevelopmentBinaries.Value;
+                    if (bl.DevelopmentBinariesMode.HasValue)
+                        developmentBinariesModeFromSegments = bl.DevelopmentBinariesMode.Value;
+                    if (!string.IsNullOrWhiteSpace(bl.DevelopmentBinariesPath))
+                        developmentBinariesPathFromSegments = bl.DevelopmentBinariesPath;
+                    if (!string.IsNullOrWhiteSpace(bl.DevelopmentBinariesEnvironmentVariable))
+                        developmentBinariesEnvironmentVariableFromSegments = bl.DevelopmentBinariesEnvironmentVariable;
+                    if (!string.IsNullOrWhiteSpace(bl.DevelopmentConfigurationEnvironmentVariable))
+                        developmentConfigurationEnvironmentVariableFromSegments = bl.DevelopmentConfigurationEnvironmentVariable;
                     if (bl.AssemblyTypeAcceleratorMode.HasValue)
                         assemblyTypeAcceleratorModeFromSegments = bl.AssemblyTypeAcceleratorMode.Value;
                     else if (bl.NETAssemblyTypeAcceleratorMode.HasValue)
@@ -585,6 +600,11 @@ public sealed partial class ModulePipelineRunner
         if (typeAcceleratorsRequireAlc && !requestedUseAssemblyLoadContext)
             _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
 
+        var developmentBinariesMode = ResolveDevelopmentBinariesMode(
+            developmentBinariesEnabledFromSegments,
+            developmentBinariesModeFromSegments,
+            spec.Build.DevelopmentBinariesMode);
+
         ApplyGateModeToPlanInputs(
             gateMode,
             ref refreshPsd1Only);
@@ -626,6 +646,10 @@ public sealed partial class ModulePipelineRunner
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
             UseAssemblyLoadContext = effectiveUseAssemblyLoadContext,
+            DevelopmentBinariesMode = developmentBinariesMode,
+            DevelopmentBinariesPath = developmentBinariesPathFromSegments ?? spec.Build.DevelopmentBinariesPath,
+            DevelopmentBinariesEnvironmentVariable = developmentBinariesEnvironmentVariableFromSegments ?? spec.Build.DevelopmentBinariesEnvironmentVariable,
+            DevelopmentConfigurationEnvironmentVariable = developmentConfigurationEnvironmentVariableFromSegments ?? spec.Build.DevelopmentConfigurationEnvironmentVariable,
             AssemblyTypeAcceleratorMode = assemblyTypeAcceleratorMode,
             AssemblyTypeAccelerators = assemblyTypeAccelerators,
             AssemblyTypeAcceleratorAssemblies = assemblyTypeAcceleratorAssemblies,
@@ -923,6 +947,22 @@ public sealed partial class ModulePipelineRunner
                 refreshPsd1Only = false;
                 break;
         }
+    }
+
+    private static ModuleDevelopmentBinaryMode ResolveDevelopmentBinariesMode(
+        bool? enabledFromSegments,
+        ModuleDevelopmentBinaryMode? modeFromSegments,
+        ModuleDevelopmentBinaryMode modeFromSpec)
+    {
+        if (enabledFromSegments.HasValue)
+        {
+            if (!enabledFromSegments.Value)
+                return ModuleDevelopmentBinaryMode.Off;
+
+            return modeFromSegments ?? ModuleDevelopmentBinaryMode.Environment;
+        }
+
+        return modeFromSegments ?? modeFromSpec;
     }
 
     private static ConfigurationPublishSegment[] ResolveGateFilteredPublishes(
