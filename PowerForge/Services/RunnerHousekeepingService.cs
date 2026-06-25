@@ -144,6 +144,14 @@ public sealed class RunnerHousekeepingService
         }
 
         var freeAfter = normalized.DryRun ? freeBefore : GetFreeBytes(normalized.FreeSpaceProbePath);
+        var failedSteps = steps
+            .Where(s => !s.Success && !s.Skipped)
+            .ToArray();
+        var freeRequirementMet = normalized.RequiredFreeBytes.HasValue && freeAfter >= normalized.RequiredFreeBytes.Value;
+        var fatalSteps = failedSteps
+            .Where(step => IsRunnerStepFailureFatal(step, freeRequirementMet))
+            .ToArray();
+
         var result = new RunnerHousekeepingResult
         {
             RunnerRootPath = normalized.RunnerRootPath,
@@ -158,7 +166,7 @@ public sealed class RunnerHousekeepingService
             AggressiveApplied = aggressiveApplied,
             DryRun = normalized.DryRun,
             Steps = steps.ToArray(),
-            Success = steps.All(s => s.Success || s.Skipped)
+            Success = fatalSteps.Length == 0
         };
 
         if (!normalized.DryRun)
@@ -169,8 +177,28 @@ public sealed class RunnerHousekeepingService
             result.Success = false;
             result.Message = $"Free disk after cleanup is {FormatGiB(freeAfter)} GiB (required: {FormatGiB(normalized.RequiredFreeBytes.Value)} GiB).";
         }
+        else if (failedSteps.Length > 0 && fatalSteps.Length == 0)
+        {
+            result.Message = $"Cleanup completed with {failedSteps.Length} non-fatal filesystem warning(s) because the free disk requirement was met.";
+        }
 
         return result;
+    }
+
+    /// <summary>
+    /// Determines whether a failed step should fail the runner cleanup after disk pressure is relieved.
+    /// Filesystem cleanup can leave locked Windows workspaces behind while still reclaiming enough space;
+    /// command failures remain fatal because they may indicate tooling or host-level problems.
+    /// </summary>
+    internal static bool IsRunnerStepFailureFatal(RunnerHousekeepingStepResult step, bool freeRequirementMet)
+    {
+        if (step.Success || step.Skipped)
+            return false;
+
+        if (!freeRequirementMet)
+            return true;
+
+        return step.Id is not ("diag" or "runner-temp" or "workspaces" or "actions-cache" or "tool-cache");
     }
 
     private sealed class NormalizedSpec
