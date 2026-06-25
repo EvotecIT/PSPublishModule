@@ -56,25 +56,23 @@ jobs:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 
   cleanup-windows-runner:
-    # Windows runners currently share the default self-hosted labels. Run enough
-    # parallel slots to let GitHub spread housekeeping across the Windows pool.
     if: ${{ github.repository == 'EvotecIT/PSPublishModule' || github.event.repository.private }}
     strategy:
       fail-fast: false
       matrix:
         runner:
-          - name: windows-runner-01
-            labels: '["self-hosted","windows","X64"]'
-          - name: windows-runner-02
-            labels: '["self-hosted","windows","X64"]'
-          - name: windows-runner-03
-            labels: '["self-hosted","windows","X64"]'
-          - name: windows-runner-04
-            labels: '["self-hosted","windows","X64"]'
-          - name: windows-runner-05
-            labels: '["self-hosted","windows","X64"]'
-          - name: windows-runner-06
-            labels: '["self-hosted","windows","X64"]'
+          - name: GITHUB-RUNNER-W
+            labels: '["self-hosted","windows","runner-github-runner-w"]'
+          - name: GITHUBRUNNERX1
+            labels: '["self-hosted","windows","runner-githubrunnerx1"]'
+          - name: GITHUBRUNNERX2
+            labels: '["self-hosted","windows","runner-githubrunnerx2"]'
+          - name: GITHUBRUNNERX3
+            labels: '["self-hosted","windows","runner-githubrunnerx3"]'
+          - name: GITHUBRUNNERX4
+            labels: '["self-hosted","windows","runner-githubrunnerx4"]'
+          - name: GITHUBRUNNERX5
+            labels: '["self-hosted","windows","runner-githubrunnerx5"]'
     name: ${{ matrix.runner.name }}
     uses: ./.github/workflows/powerforge-github-runner-housekeeping.yml
     with:
