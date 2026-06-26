@@ -555,11 +555,12 @@ public sealed partial class ModulePipelineRunner
 
     private static bool HasCustomIncludeScriptFiles(string sourcePath, InformationConfiguration? information)
     {
-        if (information?.IncludePS1 is not { Length: > 0 })
+        var includeFolders = ResolveScriptIncludeFolders(information);
+        if (includeFolders.Length == 0)
             return false;
 
         var standardFolders = new HashSet<string>(new[] { "Classes", "Enums", "Private", "Public" }, StringComparer.OrdinalIgnoreCase);
-        foreach (var include in information.IncludePS1)
+        foreach (var include in includeFolders)
         {
             if (string.IsNullOrWhiteSpace(include) || standardFolders.Contains(include))
                 continue;
@@ -580,6 +581,31 @@ public sealed partial class ModulePipelineRunner
         }
 
         return false;
+    }
+
+    private static string[] ResolveScriptIncludeFolders(InformationConfiguration? information)
+    {
+        var includes = new List<string>();
+        if (information?.IncludePS1 is { Length: > 0 })
+            includes.AddRange(information.IncludePS1);
+
+        if (information?.IncludeToArray is { Length: > 0 })
+        {
+            foreach (var entry in information.IncludeToArray)
+            {
+                if (entry is null || !string.Equals(entry.Key, "IncludePS1", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (entry.Values is { Length: > 0 })
+                    includes.AddRange(entry.Values);
+            }
+        }
+
+        return includes
+            .Where(static include => !string.IsNullOrWhiteSpace(include))
+            .Select(static include => include.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static string? ResolveDevelopmentBinaryRoot(ModuleBuildSpec spec)

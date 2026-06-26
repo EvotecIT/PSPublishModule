@@ -221,6 +221,54 @@ public sealed class ModulePipelineDevelopmentBootstrapperTests
     }
 
     [Fact]
+    public void SourceRefresh_WithDevelopmentBinaries_DoesNotOverwriteIncludeToArrayCustomIncludeSourceModule()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "repo"));
+            ModulePipelineMissingAnalysisServiceTests.WriteMinimalModule(projectRoot.FullName, moduleName, "1.0.0");
+            var commands = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Commands"));
+            File.WriteAllText(Path.Combine(commands.FullName, "Get-Demo.ps1"), "function Get-Demo { 'demo' }");
+            var psm1Path = Path.Combine(projectRoot.FullName, moduleName + ".psm1");
+            const string handAuthored = "# local IncludeToArray source module\r\n. $PSScriptRoot\\Commands\\Get-Demo.ps1\r\n";
+            File.WriteAllText(psm1Path, handAuthored);
+            WriteDemoCsproj(projectRoot.FullName, "<TargetFramework>net8.0</TargetFramework>");
+
+            var spec = CreateDevelopmentBinarySpec(projectRoot.FullName, moduleName, ModuleDevelopmentBinaryMode.Auto);
+            spec.Segments = spec.Segments!
+                .Concat(new IConfigurationSegment[]
+                {
+                    new ConfigurationInformationSegment
+                    {
+                        Configuration = new InformationConfiguration
+                        {
+                            IncludeToArray = new[]
+                            {
+                                new IncludeToArrayEntry
+                                {
+                                    Key = "IncludePS1",
+                                    Values = new[] { "Commands" }
+                                }
+                            }
+                        }
+                    }
+                })
+                .ToArray();
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            InvokeSourceBootstrapperRefresh(runner, spec, projectRoot.FullName, moduleName);
+
+            Assert.Equal(handAuthored, File.ReadAllText(psm1Path));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void SourceRefresh_WithDevelopmentBinaries_GeneratesLibOnlySourceModule()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

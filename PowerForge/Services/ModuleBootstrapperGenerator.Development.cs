@@ -249,7 +249,7 @@ namespace {identity.Namespace}
 
         private readonly string _assemblyDirectory;
         private readonly string _moduleAssemblyPath;
-        private readonly AssemblyDependencyResolver? _resolver;
+        private readonly AssemblyDependencyResolver _resolver;
         private Assembly _moduleAssembly;
 
         private ModuleAssemblyLoadContext(string moduleAssemblyPath, string contextName)
@@ -308,7 +308,7 @@ namespace {identity.Namespace}
             return IntPtr.Zero;
         }}
 
-        private static AssemblyDependencyResolver? TryCreateResolver(string assemblyPath)
+        private static AssemblyDependencyResolver TryCreateResolver(string assemblyPath)
         {{
             try
             {{

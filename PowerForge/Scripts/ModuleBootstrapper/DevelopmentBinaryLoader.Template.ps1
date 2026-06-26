@@ -45,7 +45,10 @@ if ($PowerForgeDevelopmentEnabled) {
 {{AssemblyLoadContextImportBlock}}
             } else {
                 $PowerForgeDevelopmentLoadedType = '{{LibraryTypeName}}' -as [type]
-                if ($PowerForgeDevelopmentLoadedType -and $PowerForgeDevelopmentLoadedType.Assembly) {
+                $PowerForgeDevelopmentLoadedAssembly = if ($PowerForgeDevelopmentLoadedType -and $PowerForgeDevelopmentLoadedType.Assembly) { $PowerForgeDevelopmentLoadedType.Assembly } else { $null }
+                $PowerForgeDevelopmentLoadedAssemblyPath = if ($PowerForgeDevelopmentLoadedAssembly -and -not [string]::IsNullOrWhiteSpace($PowerForgeDevelopmentLoadedAssembly.Location)) { [IO.Path]::GetFullPath($PowerForgeDevelopmentLoadedAssembly.Location) } else { $null }
+                $PowerForgeDevelopmentSelectedBinaryPath = [IO.Path]::GetFullPath($PowerForgeDevelopmentBinaryPath)
+                if ($PowerForgeDevelopmentLoadedAssembly -and [string]::Equals($PowerForgeDevelopmentLoadedAssemblyPath, $PowerForgeDevelopmentSelectedBinaryPath, [StringComparison]::OrdinalIgnoreCase)) {
                     & $ImportModule -Assembly $PowerForgeDevelopmentLoadedType.Assembly -Force -ErrorAction Stop
                 } else {
                     & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop

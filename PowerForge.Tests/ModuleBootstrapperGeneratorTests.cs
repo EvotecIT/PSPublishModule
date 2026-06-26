@@ -668,13 +668,16 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$LibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)", bootstrapper);
             Assert.Contains("$RequestedTypes = @('Demo.Dependency')", bootstrapper);
             Assert.Contains("& $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder", bootstrapper);
-            Assert.Contains("private readonly AssemblyDependencyResolver? _resolver;", bootstrapper);
+            Assert.Contains("private readonly AssemblyDependencyResolver _resolver;", bootstrapper);
+            Assert.DoesNotContain("AssemblyDependencyResolver?", bootstrapper);
             Assert.Contains("_resolver = TryCreateResolver(_moduleAssemblyPath);", bootstrapper);
             Assert.Contains("catch (InvalidOperationException)", bootstrapper);
             Assert.Contains("_resolver?.ResolveAssemblyToPath(assemblyName)", bootstrapper);
             Assert.Contains("_resolver?.ResolveUnmanagedDllToPath(unmanagedDllName)", bootstrapper);
             Assert.Contains("Falling back to direct Import-Module; cmdlets from DemoModule will load from the default context.", bootstrapper);
             Assert.Contains("$PowerForgeDevelopmentLoadedType = 'DemoModule.Initialize' -as [type]", bootstrapper);
+            Assert.Contains("$PowerForgeDevelopmentSelectedBinaryPath = [IO.Path]::GetFullPath($PowerForgeDevelopmentBinaryPath)", bootstrapper);
+            Assert.Contains("[string]::Equals($PowerForgeDevelopmentLoadedAssemblyPath, $PowerForgeDevelopmentSelectedBinaryPath, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
             Assert.Contains("& $ImportModule -Assembly $PowerForgeDevelopmentLoadedType.Assembly -Force -ErrorAction Stop", bootstrapper);
             Assert.Contains("& $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop", bootstrapper);
             Assert.Contains("$PowerForgeCommandModuleDependencies = @", bootstrapper);
