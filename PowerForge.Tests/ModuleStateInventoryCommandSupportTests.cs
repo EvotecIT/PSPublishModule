@@ -90,7 +90,7 @@ public sealed class ModuleStateInventoryCommandSupportTests
             Assert.Equal("Company.Runtime", module.Name);
             Assert.Equal("2.0.0", module.Version);
             Assert.True(module.IsLoaded);
-            Assert.True(module.IsEffectiveImportCandidate);
+            Assert.False(module.IsEffectiveImportCandidate);
         }
         finally
         {
