@@ -64,6 +64,24 @@ public sealed class ModuleStateFamilyCoherenceAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_PrefersLoadedVersionOverHigherDiskEffectiveCandidate()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.36.0", isLoaded: true, isEffectiveImportCandidate: true),
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.38.0", isEffectiveImportCandidate: true),
+            new ModuleStateInstalledModule("Microsoft.Graph.Users", "2.38.0", isEffectiveImportCandidate: true)
+        });
+        var policy = new ModuleStateFamilyPolicy(
+            "Graph",
+            new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Users" });
+
+        var finding = Assert.Single(new ModuleStateFamilyCoherenceAnalyzer().Analyze(inventory, new[] { policy }));
+
+        Assert.Equal(new[] { "2.36.0", "2.38.0" }, finding.Versions);
+    }
+
+    [Fact]
     public void Analyze_IgnoresModulesOutsideFamilyPolicy()
     {
         var inventory = new ModuleStateInventory(new[]

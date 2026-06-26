@@ -53,10 +53,8 @@ internal sealed class ModuleStateFamilyCoherenceAnalyzer
 
     private static ModuleStateInstalledModule? SelectInstalledModule(IEnumerable<ModuleStateInstalledModule> installedModules)
         => installedModules
-            .Where(static module => module.IsEffectiveImportCandidate)
-            .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-            .FirstOrDefault()
-            ?? installedModules
-                .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-                .FirstOrDefault();
+            .OrderByDescending(static module => module.IsLoaded)
+            .ThenByDescending(static module => module.IsEffectiveImportCandidate)
+            .ThenByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+            .FirstOrDefault();
 }

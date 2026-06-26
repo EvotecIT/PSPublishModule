@@ -26,12 +26,16 @@ internal sealed class ModuleStateRepairPlanner
             {
                 var repairAction = CreateRepairAction(inventory, receiptModule);
                 if (repairAction is not null)
+                {
+                    actionsByModule.Remove(CreateBaseActionKey(repairAction));
                     actionsByModule[CreateActionKey(repairAction)] = repairAction;
+                }
             }
         }
 
         foreach (var repairAction in CreateFamilyRepairActions(inventory, familyPolicies))
         {
+            actionsByModule.Remove(CreateBaseActionKey(repairAction));
             actionsByModule[CreateActionKey(repairAction)] = repairAction;
         }
 
@@ -42,7 +46,15 @@ internal sealed class ModuleStateRepairPlanner
     }
 
     private static string CreateActionKey(ModuleStatePlanAction action)
-        => string.Join("|", action.ModuleName, action.TargetScope ?? string.Empty);
+        => string.Join(
+            "|",
+            action.ModuleName,
+            action.TargetScope ?? string.Empty,
+            action.IsRepair ? action.VersionPolicy ?? string.Empty : string.Empty,
+            action.IsRepair ? action.TargetRepository ?? string.Empty : string.Empty);
+
+    private static string CreateBaseActionKey(ModuleStatePlanAction action)
+        => string.Join("|", action.ModuleName, action.TargetScope ?? string.Empty, string.Empty, string.Empty);
 
     private static IEnumerable<ModuleStatePlanAction> CreateFamilyRepairActions(
         ModuleStateInventory inventory,
@@ -169,12 +181,10 @@ internal sealed class ModuleStateRepairPlanner
 
     private static ModuleStateInstalledModule? SelectInstalledModule(IEnumerable<ModuleStateInstalledModule> installedModules)
         => installedModules
-            .Where(static module => module.IsEffectiveImportCandidate)
-            .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-            .FirstOrDefault()
-            ?? installedModules
-                .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-                .FirstOrDefault();
+            .OrderByDescending(static module => module.IsLoaded)
+            .ThenByDescending(static module => module.IsEffectiveImportCandidate)
+            .ThenByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+            .FirstOrDefault();
 
     private static bool VersionsEqual(string installedVersion, string receiptVersion)
     {

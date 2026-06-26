@@ -13,19 +13,24 @@ internal static class ModuleStateMaintenanceEvidenceMapper
         string? sourceRepository)
     {
         var modules = new List<ModuleStateInstalledModule>();
-        foreach (var dependency in (executionResults ?? Array.Empty<ModuleStateDeliveryExecutionResult>())
-            .SelectMany(static result => result.DependencyResults ?? Array.Empty<ModuleStateDependencyResult>()))
+        foreach (var executionResult in executionResults ?? Array.Empty<ModuleStateDeliveryExecutionResult>())
         {
-            if (string.IsNullOrWhiteSpace(dependency.Name) ||
-                string.IsNullOrWhiteSpace(dependency.ResolvedVersion))
+            var executionRepository = string.IsNullOrWhiteSpace(executionResult.RepositoryName)
+                ? sourceRepository
+                : executionResult.RepositoryName;
+            foreach (var dependency in executionResult.DependencyResults ?? Array.Empty<ModuleStateDependencyResult>())
             {
-                continue;
-            }
+                if (string.IsNullOrWhiteSpace(dependency.Name) ||
+                    string.IsNullOrWhiteSpace(dependency.ResolvedVersion))
+                {
+                    continue;
+                }
 
-            modules.Add(new ModuleStateInstalledModule(
-                dependency.Name,
-                dependency.ResolvedVersion!,
-                sourceRepository: sourceRepository));
+                modules.Add(new ModuleStateInstalledModule(
+                    dependency.Name,
+                    dependency.ResolvedVersion!,
+                    sourceRepository: executionRepository));
+            }
         }
 
         foreach (var module in postApplyInventory?.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())
