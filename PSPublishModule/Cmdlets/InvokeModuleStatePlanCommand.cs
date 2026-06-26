@@ -337,6 +337,9 @@ public sealed class InvokeModuleStatePlanCommand : PSCmdlet
             if (maintenanceReceiptOutputPath is not null &&
                 ShouldProcess(maintenanceReceiptOutputPath, "Write ModuleState maintenance receipt"))
             {
+                if (HasFailedExecutionResult(executionResults))
+                    throw new InvalidOperationException("ModuleState maintenance receipt cannot be written because one or more private-module delivery operations failed.");
+
                 var observedModules = ModuleStateMaintenanceEvidenceMapper.ToObservedModules(
                     executionResults,
                     postApplyInventory,
@@ -444,4 +447,9 @@ public sealed class InvokeModuleStatePlanCommand : PSCmdlet
 
         File.WriteAllText(path, JsonSerializer.Serialize(result, JsonOptions));
     }
+
+    private static bool HasFailedExecutionResult(ModuleStateDeliveryExecutionResult[] executionResults)
+        => executionResults.Any(static result =>
+            (result.DependencyResults ?? Array.Empty<ModuleStateDependencyResult>())
+            .Any(static dependency => string.Equals(dependency.Status, "Failed", StringComparison.OrdinalIgnoreCase)));
 }

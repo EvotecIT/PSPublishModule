@@ -24,7 +24,13 @@ internal sealed class ModuleStatePrivateDeliveryService
 
         var actionable = applyResult.Plan.Actions
             .Where(static action => action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update)
-            .GroupBy(action => new DeliveryGroupKey(action.Kind, ResolveActionRepository(action, options), ResolveActionForce(action, options)), DeliveryGroupKeyComparer.Instance)
+            .GroupBy(action => new DeliveryGroupKey(
+                action.Kind,
+                ResolveActionRepository(action, options),
+                ResolveActionForce(action, options),
+                action.ModuleName,
+                action.TargetScope),
+                DeliveryGroupKeyComparer.Instance)
             .OrderBy(static group => group.Key.Kind == ModuleStatePlanActionKind.Update ? 0 : 1)
             .ToArray();
 
@@ -246,11 +252,13 @@ internal readonly struct ModuleStateVersionConstraint
 
 internal readonly struct DeliveryGroupKey
 {
-    internal DeliveryGroupKey(ModuleStatePlanActionKind kind, string? repository, bool force)
+    internal DeliveryGroupKey(ModuleStatePlanActionKind kind, string? repository, bool force, string moduleName, string? targetScope)
     {
         Kind = kind;
         Repository = string.IsNullOrWhiteSpace(repository) ? null : repository!.Trim();
         Force = force;
+        ModuleName = moduleName;
+        TargetScope = string.IsNullOrWhiteSpace(targetScope) ? null : targetScope!.Trim();
     }
 
     internal ModuleStatePlanActionKind Kind { get; }
@@ -258,6 +266,10 @@ internal readonly struct DeliveryGroupKey
     internal string? Repository { get; }
 
     internal bool Force { get; }
+
+    internal string ModuleName { get; }
+
+    internal string? TargetScope { get; }
 }
 
 internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroupKey>
@@ -267,14 +279,18 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
     public bool Equals(DeliveryGroupKey x, DeliveryGroupKey y)
         => x.Kind == y.Kind &&
            x.Force == y.Force &&
-           string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase);
+           string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(x.ModuleName, y.ModuleName, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(x.TargetScope, y.TargetScope, StringComparison.OrdinalIgnoreCase);
 
     public int GetHashCode(DeliveryGroupKey obj)
     {
         unchecked
         {
             var hash = ((int)obj.Kind * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Repository ?? string.Empty);
-            return (hash * 397) ^ obj.Force.GetHashCode();
+            hash = (hash * 397) ^ obj.Force.GetHashCode();
+            hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.ModuleName ?? string.Empty);
+            return (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetScope ?? string.Empty);
         }
     }
 }

@@ -81,8 +81,13 @@ internal sealed class ModuleStateCleanupPlanner
         {
             if (!string.Equals(receiptModule.Name, moduleName, StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (installedModules.Any(module => string.Equals(module.Version, receiptModule.Version, StringComparison.OrdinalIgnoreCase)))
+            if (installedModules.Any(module =>
+                string.Equals(module.Version, receiptModule.Version, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
+                 string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase))))
+            {
                 keepVersions.Add(receiptModule.Version);
+            }
         }
 
         foreach (var desiredModule in request.DesiredModules)
@@ -91,11 +96,18 @@ internal sealed class ModuleStateCleanupPlanner
                 continue;
 
             var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
-            var selectedModule = installedModules
+            var candidates = installedModules
+                .Where(module => string.IsNullOrWhiteSpace(desiredModule.Scope) ||
+                                 string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (candidates.Length == 0)
+                continue;
+
+            var selectedModule = candidates
                 .Where(module => policy.IsSatisfiedBy(module.Version))
                 .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
                 .FirstOrDefault();
-            selectedModule ??= installedModules
+            selectedModule ??= candidates
                 .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
                 .FirstOrDefault();
             if (selectedModule is not null)

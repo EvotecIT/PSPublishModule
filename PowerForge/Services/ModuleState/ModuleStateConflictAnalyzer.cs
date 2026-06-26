@@ -17,14 +17,16 @@ internal sealed class ModuleStateConflictAnalyzer
             var installedModules = inventory.InstalledModules
                 .Where(module => string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
+            var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
 
             if (installedModules.Length == 0)
                 continue;
 
             AddScopeAmbiguityFinding(findings, desiredModule, installedModules);
             AddDesiredScopeFinding(findings, desiredModule, installedModules);
-            AddSourcePreferenceFinding(findings, desiredModule, installedModules);
-            AddLoadedModuleFinding(findings, desiredModule, installedModules);
+            AddSourcePreferenceFinding(findings, desiredModule, installedModules, policy);
+            AddDowngradeBlockFinding(findings, desiredModule, installedModules, policy);
+            AddLoadedModuleFinding(findings, desiredModule, installedModules, policy);
         }
 
         return findings.ToArray();
@@ -79,7 +81,7 @@ internal sealed class ModuleStateConflictAnalyzer
             .ToArray();
 
         findings.Add(new ModuleStateConflictFinding(
-            ModuleStateConflictSeverity.Error,
+            ModuleStateConflictSeverity.Warning,
             "ModuleState.ScopeMismatch",
             $"Module '{desiredModule.Name}' is required in scope '{desiredModule.Scope}', but installed copies are in: {string.Join(", ", scopes)}.",
             string.Empty,
@@ -90,13 +92,16 @@ internal sealed class ModuleStateConflictAnalyzer
     private static void AddSourcePreferenceFinding(
         List<ModuleStateConflictFinding> findings,
         ModuleStateDesiredModule desiredModule,
-        ModuleStateInstalledModule[] installedModules)
+        ModuleStateInstalledModule[] installedModules,
+        ModuleStateVersionPolicy policy)
     {
         if (desiredModule.AllowedSources.Length == 0)
             return;
 
         var selectedModule = SelectInstalledModule(installedModules, desiredModule.Scope);
         if (selectedModule is null)
+            return;
+        if (!policy.IsSatisfiedBy(selectedModule.Version))
             return;
 
         if (string.IsNullOrWhiteSpace(selectedModule.SourceRepository))
@@ -126,9 +131,9 @@ internal sealed class ModuleStateConflictAnalyzer
     private static void AddLoadedModuleFinding(
         List<ModuleStateConflictFinding> findings,
         ModuleStateDesiredModule desiredModule,
-        ModuleStateInstalledModule[] installedModules)
+        ModuleStateInstalledModule[] installedModules,
+        ModuleStateVersionPolicy policy)
     {
-        var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
         foreach (var loadedModule in installedModules.Where(static module => module.IsLoaded))
         {
             if (policy.IsSatisfiedBy(loadedModule.Version))
@@ -143,6 +148,45 @@ internal sealed class ModuleStateConflictAnalyzer
                 new[] { loadedModule.Version }));
         }
     }
+
+    private static void AddDowngradeBlockFinding(
+        List<ModuleStateConflictFinding> findings,
+        ModuleStateDesiredModule desiredModule,
+        ModuleStateInstalledModule[] installedModules,
+        ModuleStateVersionPolicy policy)
+    {
+        var selectedModule = SelectInstalledModule(installedModules, desiredModule.Scope);
+        if (selectedModule is null ||
+            policy.IsSatisfiedBy(selectedModule.Version) ||
+            !ModuleStateVersion.TryParse(selectedModule.Version, out var installedVersion))
+        {
+            return;
+        }
+
+        if (policy.ExactVersion.HasValue && installedVersion.CompareTo(policy.ExactVersion.Value) > 0)
+        {
+            findings.Add(CreateDowngradeFinding(desiredModule, selectedModule));
+            return;
+        }
+
+        if (policy.MaximumVersion.HasValue)
+        {
+            var maximumComparison = installedVersion.CompareTo(policy.MaximumVersion.Value);
+            if (maximumComparison > 0 || (maximumComparison == 0 && !policy.MaximumInclusive))
+                findings.Add(CreateDowngradeFinding(desiredModule, selectedModule));
+        }
+    }
+
+    private static ModuleStateConflictFinding CreateDowngradeFinding(
+        ModuleStateDesiredModule desiredModule,
+        ModuleStateInstalledModule installedModule)
+        => new(
+            ModuleStateConflictSeverity.Error,
+            "ModuleState.DowngradeRequiresCleanup",
+            $"Module '{desiredModule.Name}' is installed at version {installedModule.Version}, which is above desired policy '{desiredModule.VersionPolicy}'. Remove or isolate the higher version before applying the downgrade policy.",
+            string.Empty,
+            new[] { desiredModule.Name },
+            new[] { installedModule.Version });
 
     private static ModuleStateInstalledModule? SelectInstalledModule(IEnumerable<ModuleStateInstalledModule> installedModules, string? desiredScope)
     {

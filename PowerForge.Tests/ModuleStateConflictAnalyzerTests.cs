@@ -130,10 +130,44 @@ public sealed class ModuleStateConflictAnalyzerTests
 
         var finding = Assert.Single(new ModuleStateConflictAnalyzer().Analyze(inventory, desired));
 
-        Assert.Equal(ModuleStateConflictSeverity.Error, finding.Severity);
+        Assert.Equal(ModuleStateConflictSeverity.Warning, finding.Severity);
         Assert.Equal("ModuleState.ScopeMismatch", finding.Code);
         Assert.Equal(new[] { "Company.Tools" }, finding.ModuleNames);
         Assert.Equal(new[] { "1.3.0" }, finding.Versions);
+    }
+
+    [Fact]
+    public void Analyze_DoesNotBlockPlannedVersionRepairForDifferentSource()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.0.0", sourceRepository: "PublicGallery", isEffectiveImportCandidate: true)
+        });
+        var desired = new[]
+        {
+            new ModuleStateDesiredModule("Company.Tools", ">=2.0.0", new[] { "CompanyModules" })
+        };
+
+        Assert.Empty(new ModuleStateConflictAnalyzer().Analyze(inventory, desired));
+    }
+
+    [Fact]
+    public void Analyze_BlocksDowngradePolicyUntilHigherVersionIsCleaned()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "2.0.0", sourceRepository: "CompanyModules", isEffectiveImportCandidate: true)
+        });
+        var desired = new[]
+        {
+            new ModuleStateDesiredModule("Company.Tools", "<2.0.0", new[] { "CompanyModules" })
+        };
+
+        var finding = Assert.Single(new ModuleStateConflictAnalyzer().Analyze(inventory, desired));
+
+        Assert.Equal(ModuleStateConflictSeverity.Error, finding.Severity);
+        Assert.Equal("ModuleState.DowngradeRequiresCleanup", finding.Code);
+        Assert.Equal(new[] { "2.0.0" }, finding.Versions);
     }
 
     [Fact]

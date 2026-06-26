@@ -84,4 +84,21 @@ public sealed class ModuleStateReceiptDriftAnalyzerTests
 
         Assert.Empty(new ModuleStateReceiptDriftAnalyzer().Analyze(inventory, new[] { receipt }));
     }
+
+    [Fact]
+    public void Analyze_FlagsReceiptDriftWhenSourceAndScopeMatchDifferentCopies()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.2.0", scope: "CurrentUser", sourceRepository: "CompanyModules"),
+            new ModuleStateInstalledModule("Company.Tools", "1.2.0", scope: "AllUsers", sourceRepository: "PublicGallery")
+        });
+        var receipt = new ModuleStateMaintenanceReceipt(
+            null,
+            new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2.0", sourceRepository: "CompanyModules", scope: "AllUsers") });
+
+        var findings = new ModuleStateReceiptDriftAnalyzer().Analyze(inventory, new[] { receipt });
+
+        Assert.Contains(findings, static finding => finding.Code == "ModuleState.ReceiptScopeDrift");
+    }
 }

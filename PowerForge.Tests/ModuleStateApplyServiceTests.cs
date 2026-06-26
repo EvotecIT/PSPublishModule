@@ -221,6 +221,26 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void CreateMaintenanceReceipt_PreservesSameModuleAcrossScopes()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.NoAction, "Company.Tools", "1.2.0", "=1.2.0", "satisfied", targetScope: "CurrentUser"),
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.NoAction, "Company.Tools", "1.2.0", "=1.2.0", "satisfied", targetScope: "AllUsers")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+        var service = new ModuleStateApplyService();
+        var result = service.Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
+
+        var receipt = service.CreateMaintenanceReceipt(result, sourceRepository: "Company");
+
+        Assert.Equal(2, receipt.Modules.Length);
+        Assert.Contains(receipt.Modules, static module => module.Name == "Company.Tools" && module.Scope == "CurrentUser");
+        Assert.Contains(receipt.Modules, static module => module.Name == "Company.Tools" && module.Scope == "AllUsers");
+    }
+
+    [Fact]
     public void WriteMaintenanceReceipt_WritesDriftCheckableJson()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

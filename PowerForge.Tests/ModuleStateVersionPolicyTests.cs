@@ -49,4 +49,13 @@ public sealed class ModuleStateVersionPolicyTests
         Assert.True(policy.IsSatisfiedBy("1.2.0-preview1"));
         Assert.False(policy.IsSatisfiedBy("1.2.0-preview2"));
     }
+
+    [Fact]
+    public void IsSatisfiedBy_SortsMixedPrereleaseIdentifiersNaturally()
+    {
+        var policy = ModuleStateVersionPolicy.Parse(">=1.2.0-preview9", allowPrerelease: true);
+
+        Assert.True(policy.IsSatisfiedBy("1.2.0-preview10"));
+        Assert.False(policy.IsSatisfiedBy("1.2.0-preview8"));
+    }
 }
