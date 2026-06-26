@@ -389,7 +389,8 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan)
     {
         var sourceIsSingleFileModule = IsSourceSingleFileModule(plan);
-        var sourceCanUseGeneratedBootstrapper = SourceCanUseGeneratedBootstrapper(plan);
+        var sourcePsm1Path = Path.Combine(plan.BuildSpec.SourcePath, plan.ModuleName + ".psm1");
+        var sourceCanUseGeneratedBootstrapper = SourceCanUseGeneratedBootstrapper(plan, sourcePsm1Path);
 
         if (plan.BuildSpec.DevelopmentBinariesMode == ModuleDevelopmentBinaryMode.Off)
         {
@@ -530,10 +531,28 @@ public sealed partial class ModulePipelineRunner
            content.Contains("# " + moduleName + " bootstrapper", StringComparison.Ordinal);
 
     private static bool IsSourceSingleFileModule(ModulePipelinePlan plan)
-        => ModuleMergeComposer.ResolveScriptFiles(plan.BuildSpec.SourcePath, null).Length == 0;
+        => ModuleMergeComposer.ResolveScriptFiles(plan.BuildSpec.SourcePath, null).Length == 0 &&
+           !HasSourceLibLayout(plan.BuildSpec.SourcePath);
 
-    private static bool SourceCanUseGeneratedBootstrapper(ModulePipelinePlan plan)
-        => !IsSourceSingleFileModule(plan) && !HasCustomIncludeScriptFiles(plan.BuildSpec.SourcePath, plan.Information);
+    private static bool SourceCanUseGeneratedBootstrapper(ModulePipelinePlan plan, string sourcePsm1Path)
+        => !HasCustomIncludeScriptFiles(plan.BuildSpec.SourcePath, plan.Information) &&
+           (!IsSourceSingleFileModule(plan) || IsGeneratedSourceDevelopmentBootstrapper(sourcePsm1Path, plan.ModuleName));
+
+    private static bool HasSourceLibLayout(string sourcePath)
+    {
+        var libPath = Path.Combine(sourcePath, "Lib");
+        if (!Directory.Exists(libPath))
+            return false;
+
+        try
+        {
+            return Directory.EnumerateDirectories(libPath).Any();
+        }
+        catch
+        {
+            return true;
+        }
+    }
 
     private static bool HasCustomIncludeScriptFiles(string sourcePath, InformationConfiguration? information)
     {

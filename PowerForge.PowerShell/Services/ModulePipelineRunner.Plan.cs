@@ -258,16 +258,28 @@ public sealed partial class ModulePipelineRunner
                         useAssemblyLoadContextFromSegments = bl.NETAssemblyLoadContext.Value;
                     if (bl.DevelopmentBinaries.HasValue)
                         developmentBinariesEnabledFromSegments = bl.DevelopmentBinaries.Value;
+                    else if (bl.NETDevelopmentBinaries.HasValue)
+                        developmentBinariesEnabledFromSegments = bl.NETDevelopmentBinaries.Value;
                     if (bl.DevelopmentBinariesMode.HasValue)
                         developmentBinariesModeFromSegments = bl.DevelopmentBinariesMode.Value;
+                    else if (bl.NETDevelopmentBinariesMode.HasValue)
+                        developmentBinariesModeFromSegments = bl.NETDevelopmentBinariesMode.Value;
                     if (!string.IsNullOrWhiteSpace(bl.DevelopmentBinariesPath))
                         developmentBinariesPathFromSegments = bl.DevelopmentBinariesPath;
+                    else if (!string.IsNullOrWhiteSpace(bl.NETDevelopmentBinariesPath))
+                        developmentBinariesPathFromSegments = bl.NETDevelopmentBinariesPath;
                     if (!string.IsNullOrWhiteSpace(bl.DevelopmentBinariesEnvironmentVariable))
                         developmentBinariesEnvironmentVariableFromSegments = bl.DevelopmentBinariesEnvironmentVariable;
+                    else if (!string.IsNullOrWhiteSpace(bl.NETDevelopmentBinariesEnvironmentVariable))
+                        developmentBinariesEnvironmentVariableFromSegments = bl.NETDevelopmentBinariesEnvironmentVariable;
                     if (!string.IsNullOrWhiteSpace(bl.DevelopmentConfigurationEnvironmentVariable))
                         developmentConfigurationEnvironmentVariableFromSegments = bl.DevelopmentConfigurationEnvironmentVariable;
+                    else if (!string.IsNullOrWhiteSpace(bl.NETDevelopmentConfigurationEnvironmentVariable))
+                        developmentConfigurationEnvironmentVariableFromSegments = bl.NETDevelopmentConfigurationEnvironmentVariable;
                     if (bl.DevelopmentSourceBootstrapperMode.HasValue)
                         developmentSourceBootstrapperModeFromSegments = bl.DevelopmentSourceBootstrapperMode.Value;
+                    else if (bl.NETDevelopmentSourceBootstrapperMode.HasValue)
+                        developmentSourceBootstrapperModeFromSegments = bl.NETDevelopmentSourceBootstrapperMode.Value;
                     if (bl.AssemblyTypeAcceleratorMode.HasValue)
                         assemblyTypeAcceleratorModeFromSegments = bl.AssemblyTypeAcceleratorMode.Value;
                     else if (bl.NETAssemblyTypeAcceleratorMode.HasValue)

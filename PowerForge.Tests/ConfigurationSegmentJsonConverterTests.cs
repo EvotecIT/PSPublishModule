@@ -244,4 +244,49 @@ public sealed class ConfigurationSegmentJsonConverterTests
         Assert.Equal(ReleaseVersionSource.PackageBuild, release.Configuration.VersionSource);
         Assert.Equal("HtmlTinkerX", release.Configuration.PrimaryProject);
     }
+
+    [Fact]
+    public void Deserialize_ReadsBuildLibrariesNetDevelopmentAliases()
+    {
+        const string json = """
+            {
+              "Build": {
+                "Name": "DemoModule",
+                "SourcePath": ".",
+                "Version": "1.0.0"
+              },
+              "Install": {
+                "Enabled": false
+              },
+              "Segments": [
+                {
+                  "Type": "BuildLibraries",
+                  "BuildLibraries": {
+                    "NETDevelopmentBinaries": true,
+                    "NETDevelopmentBinariesMode": "Auto",
+                    "NETDevelopmentBinariesPath": "Sources/Demo/bin",
+                    "NETDevelopmentBinariesEnvironmentVariable": "DEMO_DEV",
+                    "NETDevelopmentConfigurationEnvironmentVariable": "DEMO_CONFIGURATION",
+                    "NETDevelopmentSourceBootstrapperMode": "ReplaceSingleFile"
+                  }
+                }
+              ]
+            }
+            """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+
+        Assert.NotNull(spec);
+        var segment = Assert.IsType<ConfigurationBuildLibrariesSegment>(Assert.Single(spec!.Segments));
+        Assert.True(segment.BuildLibraries.NETDevelopmentBinaries);
+        Assert.Equal(ModuleDevelopmentBinaryMode.Auto, segment.BuildLibraries.NETDevelopmentBinariesMode);
+        Assert.Equal("Sources/Demo/bin", segment.BuildLibraries.NETDevelopmentBinariesPath);
+        Assert.Equal("DEMO_DEV", segment.BuildLibraries.NETDevelopmentBinariesEnvironmentVariable);
+        Assert.Equal("DEMO_CONFIGURATION", segment.BuildLibraries.NETDevelopmentConfigurationEnvironmentVariable);
+        Assert.Equal(ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile, segment.BuildLibraries.NETDevelopmentSourceBootstrapperMode);
+    }
 }
