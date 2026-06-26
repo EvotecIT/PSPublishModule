@@ -335,7 +335,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             : null;
 
         if (Inventory is not null)
-            return Inventory;
+            return ModuleStateInventoryCommandSupport.IncludeLoadedModules(Inventory, loadedModules);
         if (!string.IsNullOrWhiteSpace(InventoryPath))
             return ModuleStateInventoryCommandSupport.CreateInventoryResultFromFile(
                 ResolveFilePath(InventoryPath!, nameof(InventoryPath)),

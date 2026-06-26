@@ -14,7 +14,7 @@ internal static class ModuleStateInventoryCommandSupport
         IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules = null)
     {
         var inventory = new ModuleStateJsonService().LoadInventory(inventoryPath);
-        inventory = IncludeLoadedModules(inventory, loadedModules);
+        inventory = IncludeLoadedModulesCore(inventory, loadedModules);
         return ModuleStateInventoryResultMapper.ToCmdletResult(
             inventory,
             inventoryPath,
@@ -35,8 +35,29 @@ internal static class ModuleStateInventoryCommandSupport
             InferPowerShellEdition(path),
             InferScope(path))));
         var inventory = new ModuleStateInventoryService().Collect(request);
-        inventory = IncludeLoadedModules(inventory, loadedModules);
+        inventory = IncludeLoadedModulesCore(inventory, loadedModules);
         return ModuleStateInventoryResultMapper.ToCmdletResult(inventory, "ModulePath", paths);
+    }
+
+    internal static ModuleStateInventoryResult IncludeLoadedModules(
+        ModuleStateInventoryResult inventory,
+        IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules)
+    {
+        if (inventory is null)
+            throw new ArgumentNullException(nameof(inventory));
+
+        var loaded = (loadedModules ?? Array.Empty<ModuleStateLoadedModuleEvidence>())
+            .Where(static module => !string.IsNullOrWhiteSpace(module.Name) && !string.IsNullOrWhiteSpace(module.Version))
+            .ToArray();
+        if (loaded.Length == 0)
+            return inventory;
+
+        var coreInventory = ModuleStateInventoryResultMapper.ToCoreInventory(inventory);
+        var mergedInventory = IncludeLoadedModulesCore(coreInventory, loaded);
+        return ModuleStateInventoryResultMapper.ToCmdletResult(
+            mergedInventory,
+            inventory.Source,
+            inventory.ModulePaths ?? Array.Empty<string>());
     }
 
     internal static ModuleStateLoadedModuleEvidence[] GetLoadedModules(PSCmdlet cmdlet)
@@ -129,7 +150,7 @@ internal static class ModuleStateInventoryCommandSupport
         => Path.GetFullPath(path)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-    private static ModuleStateInventory IncludeLoadedModules(
+    private static ModuleStateInventory IncludeLoadedModulesCore(
         ModuleStateInventory inventory,
         IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules)
     {

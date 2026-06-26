@@ -132,6 +132,20 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void Prepare_PreservesActionTargetRepositoryOverGlobalRepository()
+    {
+        var plan = new ModuleStatePlan(
+            new[] { new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Tools", "1.2.0", ">=1.2.0", "source policy", targetRepository: "CompanyModules") },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(repository: "PSGallery"));
+
+        Assert.True(result.Receipt.CanApply);
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-Repository", "CompanyModules" }, command.Arguments);
+    }
+
+    [Fact]
     public void Prepare_DoesNotCreatePrivateDeliveryCommandForCleanupAction()
     {
         var plan = new ModuleStatePlan(

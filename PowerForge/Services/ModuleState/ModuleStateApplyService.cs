@@ -187,7 +187,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add(action.TargetScope!);
         }
 
-        if (!string.IsNullOrWhiteSpace(deliveryOptions.ProfileName))
+        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+        {
+            arguments.Add("-Repository");
+            arguments.Add(action.TargetRepository!);
+        }
+        else if (!string.IsNullOrWhiteSpace(deliveryOptions.ProfileName))
         {
             arguments.Add("-ProfileName");
             arguments.Add(deliveryOptions.ProfileName!);
@@ -196,11 +201,6 @@ internal sealed class ModuleStateApplyService
         {
             arguments.Add("-Repository");
             arguments.Add(deliveryOptions.Repository!);
-        }
-        else if (!string.IsNullOrWhiteSpace(action.TargetRepository))
-        {
-            arguments.Add("-Repository");
-            arguments.Add(action.TargetRepository!);
         }
 
         if (deliveryOptions.InstallPrerequisites)

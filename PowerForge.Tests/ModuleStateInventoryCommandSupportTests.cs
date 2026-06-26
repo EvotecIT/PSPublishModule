@@ -98,6 +98,36 @@ public sealed class ModuleStateInventoryCommandSupportTests
         }
     }
 
+    [Fact]
+    public void IncludeLoadedModules_MergesLoadedEvidenceIntoPipedInventory()
+    {
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Pipeline",
+            ModulePaths = new[] { @"C:\Modules" },
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.2.0",
+                    Path = @"C:\Modules\Company.Tools\1.2.0"
+                }
+            }
+        };
+
+        var result = ModuleStateInventoryCommandSupport.IncludeLoadedModules(
+            inventory,
+            new[] { new ModuleStateLoadedModuleEvidence("Company.Tools", "1.2", @"C:\Modules\Company.Tools\1.2.0\Company.Tools.psm1") });
+
+        Assert.Equal("Pipeline", result.Source);
+        Assert.Equal(new[] { @"C:\Modules" }, result.ModulePaths);
+        var module = Assert.Single(result.InstalledModules);
+        Assert.True(module.IsLoaded);
+        Assert.True(module.IsEffectiveImportCandidate);
+        Assert.Equal(@"C:\Modules\Company.Tools\1.2.0", module.Path);
+    }
+
     private static string? InvokeInferScope(string path)
     {
         var result = InvokeInferScopeNullable(path);
