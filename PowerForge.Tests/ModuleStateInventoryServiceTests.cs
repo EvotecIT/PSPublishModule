@@ -191,6 +191,28 @@ public sealed class ModuleStateInventoryServiceTests
     }
 
     [Fact]
+    public void Collect_AppendsManifestPrereleaseWhenFolderVersionIsStable()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteManifest(Path.Combine(root.FullName, "Company.Tools", "1.2.0"), "Company.Tools", "1.2.0", prerelease: "preview1");
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            var module = Assert.Single(inventory.InstalledModules);
+            Assert.Equal("1.2.0-preview1", module.Version);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Collect_ReadsRepositoryMetadataFromPSGetModuleInfo()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -220,17 +242,26 @@ public sealed class ModuleStateInventoryServiceTests
         }
     }
 
-    private static void WriteManifest(string directoryPath, string moduleName, string version, string? repository = null)
+    private static void WriteManifest(string directoryPath, string moduleName, string version, string? repository = null, string? prerelease = null)
     {
         Directory.CreateDirectory(directoryPath);
         var repositoryLine = string.IsNullOrWhiteSpace(repository)
             ? string.Empty
             : $"    Repository = '{repository}'{Environment.NewLine}";
+        var prereleaseBlock = string.IsNullOrWhiteSpace(prerelease)
+            ? string.Empty
+            : $$"""
+    PrivateData = @{
+        PSData = @{
+            Prerelease = '{{prerelease}}'
+        }
+    }
+""";
         File.WriteAllText(Path.Combine(directoryPath, moduleName + ".psd1"), $$"""
 @{
     RootModule = '{{moduleName}}.psm1'
     ModuleVersion = '{{version}}'
-{{repositoryLine}}}
+{{repositoryLine}}{{prereleaseBlock}}}
 """);
     }
 }

@@ -12,6 +12,9 @@ internal sealed class ModuleStateInventoryService
     private static readonly Regex ModuleVersionPattern = new(
         @"(?im)^\s*ModuleVersion\s*=\s*['""]?(?<version>[0-9]+(?:\.[0-9]+){0,3}(?:-[A-Za-z0-9.-]+)?)['""]?",
         RegexOptions.Compiled);
+    private static readonly Regex PrereleasePattern = new(
+        @"(?im)^\s*Prerelease\s*=\s*['""](?<prerelease>[^'""]+)['""]",
+        RegexOptions.Compiled);
     private static readonly Regex SourceRepositoryPattern = new(
         @"(?im)^\s*(?:SourceRepository|Repository)\s*=\s*['""](?<repository>[^'""]+)['""]",
         RegexOptions.Compiled);
@@ -188,7 +191,27 @@ internal sealed class ModuleStateInventoryService
         if (ModuleStateVersion.TryParse(fallbackVersion, out var fallback) && fallback.IsPrerelease)
             return fallbackVersion;
 
-        return TryReadManifestVersion(manifestText) ?? fallbackVersion;
+        var manifestVersion = TryReadManifestVersion(manifestText);
+        if (string.IsNullOrWhiteSpace(manifestVersion))
+            return fallbackVersion;
+
+        var resolvedManifestVersion = manifestVersion!;
+        if (ModuleStateVersion.TryParse(resolvedManifestVersion, out var parsedManifest) && parsedManifest.IsPrerelease)
+            return resolvedManifestVersion;
+
+        var prerelease = TryReadManifestPrerelease(manifestText);
+        return string.IsNullOrWhiteSpace(prerelease)
+            ? resolvedManifestVersion
+            : resolvedManifestVersion + "-" + prerelease!.Trim().TrimStart('-');
+    }
+
+    private static string? TryReadManifestPrerelease(string? manifestText)
+    {
+        if (string.IsNullOrWhiteSpace(manifestText))
+            return null;
+
+        var match = PrereleasePattern.Match(manifestText!);
+        return match.Success ? match.Groups["prerelease"].Value.Trim() : null;
     }
 
     private static string? TryReadSourceRepository(string? manifestText, DirectoryInfo? moduleDirectory)
