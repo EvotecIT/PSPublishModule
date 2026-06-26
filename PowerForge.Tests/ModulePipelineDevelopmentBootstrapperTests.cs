@@ -100,7 +100,7 @@ public sealed class ModulePipelineDevelopmentBootstrapperTests
                 projectRoot.FullName,
                 moduleName,
                 ModuleDevelopmentBinaryMode.Environment,
-                replaceSingleFileSource: true);
+                sourceBootstrapperMode: ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile);
 
             var runner = new ModulePipelineRunner(new NullLogger());
             InvokeSourceBootstrapperRefresh(runner, spec, projectRoot.FullName, moduleName, sourceIsSingleFileModule: true);
@@ -183,7 +183,7 @@ public sealed class ModulePipelineDevelopmentBootstrapperTests
         string sourcePath,
         string moduleName,
         ModuleDevelopmentBinaryMode mode,
-        bool replaceSingleFileSource = false)
+        ModuleDevelopmentSourceBootstrapperMode sourceBootstrapperMode = ModuleDevelopmentSourceBootstrapperMode.PreserveSingleFile)
         => new()
         {
             Build = new ModuleBuildSpec
@@ -206,7 +206,7 @@ public sealed class ModulePipelineDevelopmentBootstrapperTests
                         DevelopmentBinariesPath = "Sources/Demo/bin",
                         DevelopmentBinariesEnvironmentVariable = "DEMO_DEV",
                         DevelopmentConfigurationEnvironmentVariable = "DEMO_CONFIGURATION",
-                        DevelopmentBinariesReplaceSingleFileSource = replaceSingleFileSource
+                        DevelopmentSourceBootstrapperMode = sourceBootstrapperMode
                     }
                 }
             },

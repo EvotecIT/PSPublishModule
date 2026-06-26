@@ -112,8 +112,8 @@ internal sealed class BuildConfigurationRequest
     public string? NETDevelopmentBinariesEnvironmentVariable { get; set; }
     public bool NETDevelopmentConfigurationEnvironmentVariableSpecified { get; set; }
     public string? NETDevelopmentConfigurationEnvironmentVariable { get; set; }
-    public bool NETDevelopmentBinariesReplaceSingleFileSourceSpecified { get; set; }
-    public bool NETDevelopmentBinariesReplaceSingleFileSource { get; set; }
+    public bool NETDevelopmentSourceBootstrapperModeSpecified { get; set; }
+    public ModuleDevelopmentSourceBootstrapperMode? NETDevelopmentSourceBootstrapperMode { get; set; }
     public bool NETAssemblyTypeAcceleratorModeSpecified { get; set; }
     public AssemblyTypeAcceleratorExportMode? NETAssemblyTypeAcceleratorMode { get; set; }
     public bool NETAssemblyTypeAcceleratorsSpecified { get; set; }

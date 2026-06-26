@@ -145,9 +145,10 @@ public sealed class ModuleBuildSpec
     public string? DevelopmentConfigurationEnvironmentVariable { get; set; }
 
     /// <summary>
-    /// When true, allows source development bootstrapper generation to replace a hand-authored single-file source PSM1.
+    /// Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.
     /// </summary>
-    public bool DevelopmentBinariesReplaceSingleFileSource { get; set; }
+    public ModuleDevelopmentSourceBootstrapperMode DevelopmentSourceBootstrapperMode { get; set; } =
+        ModuleDevelopmentSourceBootstrapperMode.PreserveSingleFile;
 
     /// <summary>
     /// Controls optional type accelerator exposure for assemblies loaded in the module AssemblyLoadContext.

@@ -138,9 +138,7 @@ public static class LegacySegmentAdapter
                         DevelopmentBinariesPath = GetString(buildLibraries, "DevelopmentBinariesPath"),
                         DevelopmentBinariesEnvironmentVariable = GetString(buildLibraries, "DevelopmentBinariesEnvironmentVariable"),
                         DevelopmentConfigurationEnvironmentVariable = GetString(buildLibraries, "DevelopmentConfigurationEnvironmentVariable"),
-                        DevelopmentBinariesReplaceSingleFileSource = HasKey(buildLibraries, "DevelopmentBinariesReplaceSingleFileSource")
-                            ? GetBool(buildLibraries, "DevelopmentBinariesReplaceSingleFileSource")
-                            : null,
+                        DevelopmentSourceBootstrapperMode = TryParseDevelopmentSourceBootstrapperMode(GetString(buildLibraries, "DevelopmentSourceBootstrapperMode")),
                         AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "AssemblyTypeAcceleratorMode"))
                             ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "NETAssemblyTypeAcceleratorMode")),
                         AssemblyTypeAccelerators = GetStringArray(buildLibraries, "AssemblyTypeAccelerators")
@@ -231,9 +229,7 @@ public static class LegacySegmentAdapter
                     DevelopmentBinariesPath = GetString(conf, "DevelopmentBinariesPath"),
                     DevelopmentBinariesEnvironmentVariable = GetString(conf, "DevelopmentBinariesEnvironmentVariable"),
                     DevelopmentConfigurationEnvironmentVariable = GetString(conf, "DevelopmentConfigurationEnvironmentVariable"),
-                    DevelopmentBinariesReplaceSingleFileSource = HasKey(conf, "DevelopmentBinariesReplaceSingleFileSource")
-                        ? GetBool(conf, "DevelopmentBinariesReplaceSingleFileSource")
-                        : null,
+                    DevelopmentSourceBootstrapperMode = TryParseDevelopmentSourceBootstrapperMode(GetString(conf, "DevelopmentSourceBootstrapperMode")),
                     AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "AssemblyTypeAcceleratorMode"))
                         ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "NETAssemblyTypeAcceleratorMode")),
                     AssemblyTypeAccelerators = GetStringArray(conf, "AssemblyTypeAccelerators")
@@ -326,6 +322,14 @@ public static class LegacySegmentAdapter
         var trimmed = value.Trim();
         if (trimmed.Length == 0) return null;
         return Enum.TryParse<ModuleDevelopmentBinaryMode>(trimmed, ignoreCase: true, out var parsed) ? parsed : null;
+    }
+
+    private static ModuleDevelopmentSourceBootstrapperMode? TryParseDevelopmentSourceBootstrapperMode(string? value)
+    {
+        if (value is null) return null;
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0) return null;
+        return Enum.TryParse<ModuleDevelopmentSourceBootstrapperMode>(trimmed, ignoreCase: true, out var parsed) ? parsed : null;
     }
 
     private static IDictionary? GetDictionary(IDictionary dict, string key)

@@ -291,9 +291,9 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     [Parameter]
     public string? NETDevelopmentConfigurationEnvironmentVariable { get; set; }
 
-    /// <summary>Allow generated development-bootstrapper code to replace a hand-authored single-file source PSM1.</summary>
+    /// <summary>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</summary>
     [Parameter]
-    public SwitchParameter NETDevelopmentBinariesReplaceSingleFileSource { get; set; }
+    public ModuleDevelopmentSourceBootstrapperMode? NETDevelopmentSourceBootstrapperMode { get; set; }
 
     /// <summary>Controls optional type accelerator exposure for dependency types loaded in the module AssemblyLoadContext.</summary>
     [Parameter]
@@ -435,8 +435,8 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             NETDevelopmentBinariesEnvironmentVariable = NETDevelopmentBinariesEnvironmentVariable,
             NETDevelopmentConfigurationEnvironmentVariableSpecified = bound.ContainsKey(nameof(NETDevelopmentConfigurationEnvironmentVariable)),
             NETDevelopmentConfigurationEnvironmentVariable = NETDevelopmentConfigurationEnvironmentVariable,
-            NETDevelopmentBinariesReplaceSingleFileSourceSpecified = bound.ContainsKey(nameof(NETDevelopmentBinariesReplaceSingleFileSource)),
-            NETDevelopmentBinariesReplaceSingleFileSource = NETDevelopmentBinariesReplaceSingleFileSource.IsPresent,
+            NETDevelopmentSourceBootstrapperModeSpecified = bound.ContainsKey(nameof(NETDevelopmentSourceBootstrapperMode)),
+            NETDevelopmentSourceBootstrapperMode = NETDevelopmentSourceBootstrapperMode,
             NETAssemblyTypeAcceleratorModeSpecified = bound.ContainsKey(nameof(NETAssemblyTypeAcceleratorMode)),
             NETAssemblyTypeAcceleratorMode = NETAssemblyTypeAcceleratorMode,
             NETAssemblyTypeAcceleratorsSpecified = bound.ContainsKey(nameof(NETAssemblyTypeAccelerators)),

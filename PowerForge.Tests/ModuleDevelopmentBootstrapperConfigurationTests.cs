@@ -21,7 +21,7 @@ public sealed class ModuleDevelopmentBootstrapperConfigurationTests
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentBinariesPath", out _));
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentBinariesEnvironmentVariable", out _));
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentConfigurationEnvironmentVariable", out _));
-        Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentBinariesReplaceSingleFileSource", out _));
+        Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentSourceBootstrapperMode", out _));
 
         using var buildSpecSchema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.buildspec.schema.json")));
         var buildSpecProperties = buildSpecSchema.RootElement.GetProperty("properties");
@@ -30,7 +30,7 @@ public sealed class ModuleDevelopmentBootstrapperConfigurationTests
         Assert.True(buildSpecProperties.TryGetProperty("DevelopmentBinariesPath", out _));
         Assert.True(buildSpecProperties.TryGetProperty("DevelopmentBinariesEnvironmentVariable", out _));
         Assert.True(buildSpecProperties.TryGetProperty("DevelopmentConfigurationEnvironmentVariable", out _));
-        Assert.True(buildSpecProperties.TryGetProperty("DevelopmentBinariesReplaceSingleFileSource", out _));
+        Assert.True(buildSpecProperties.TryGetProperty("DevelopmentSourceBootstrapperMode", out _));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class ModuleDevelopmentBootstrapperConfigurationTests
                     ["DevelopmentBinariesPath"] = "Sources/Demo/bin",
                     ["DevelopmentBinariesEnvironmentVariable"] = "DEMO_DEV",
                     ["DevelopmentConfigurationEnvironmentVariable"] = "DEMO_CONFIGURATION",
-                    ["DevelopmentBinariesReplaceSingleFileSource"] = true
+                    ["DevelopmentSourceBootstrapperMode"] = "ReplaceSingleFile"
                 }
             }
         };
@@ -60,7 +60,7 @@ public sealed class ModuleDevelopmentBootstrapperConfigurationTests
         Assert.Equal("Sources/Demo/bin", libraries.BuildLibraries.DevelopmentBinariesPath);
         Assert.Equal("DEMO_DEV", libraries.BuildLibraries.DevelopmentBinariesEnvironmentVariable);
         Assert.Equal("DEMO_CONFIGURATION", libraries.BuildLibraries.DevelopmentConfigurationEnvironmentVariable);
-        Assert.True(libraries.BuildLibraries.DevelopmentBinariesReplaceSingleFileSource);
+        Assert.Equal(ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile, libraries.BuildLibraries.DevelopmentSourceBootstrapperMode);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class ModuleDevelopmentBootstrapperConfigurationTests
                     DevelopmentBinariesPath = 'Sources/Demo/bin'
                     DevelopmentBinariesEnvironmentVariable = 'DEMO_DEV'
                     DevelopmentConfigurationEnvironmentVariable = 'DEMO_CONFIGURATION'
-                    DevelopmentBinariesReplaceSingleFileSource = $true
+                    DevelopmentSourceBootstrapperMode = 'ReplaceSingleFile'
                 }
             }
             """);
@@ -95,7 +95,7 @@ public sealed class ModuleDevelopmentBootstrapperConfigurationTests
             Assert.Equal("Sources/Demo/bin", libraries.BuildLibraries.DevelopmentBinariesPath);
             Assert.Equal("DEMO_DEV", libraries.BuildLibraries.DevelopmentBinariesEnvironmentVariable);
             Assert.Equal("DEMO_CONFIGURATION", libraries.BuildLibraries.DevelopmentConfigurationEnvironmentVariable);
-            Assert.True(libraries.BuildLibraries.DevelopmentBinariesReplaceSingleFileSource);
+            Assert.Equal(ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile, libraries.BuildLibraries.DevelopmentSourceBootstrapperMode);
         }
         finally
         {

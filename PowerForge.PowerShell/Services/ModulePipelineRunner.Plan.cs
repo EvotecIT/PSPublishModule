@@ -78,7 +78,7 @@ public sealed partial class ModulePipelineRunner
         string? developmentBinariesPathFromSegments = null;
         string? developmentBinariesEnvironmentVariableFromSegments = null;
         string? developmentConfigurationEnvironmentVariableFromSegments = null;
-        bool? developmentBinariesReplaceSingleFileSourceFromSegments = null;
+        ModuleDevelopmentSourceBootstrapperMode? developmentSourceBootstrapperModeFromSegments = null;
         AssemblyTypeAcceleratorExportMode? assemblyTypeAcceleratorModeFromSegments = null;
         string[]? assemblyTypeAcceleratorsFromSegments = null;
         string[]? assemblyTypeAcceleratorAssembliesFromSegments = null;
@@ -266,8 +266,8 @@ public sealed partial class ModulePipelineRunner
                         developmentBinariesEnvironmentVariableFromSegments = bl.DevelopmentBinariesEnvironmentVariable;
                     if (!string.IsNullOrWhiteSpace(bl.DevelopmentConfigurationEnvironmentVariable))
                         developmentConfigurationEnvironmentVariableFromSegments = bl.DevelopmentConfigurationEnvironmentVariable;
-                    if (bl.DevelopmentBinariesReplaceSingleFileSource.HasValue)
-                        developmentBinariesReplaceSingleFileSourceFromSegments = bl.DevelopmentBinariesReplaceSingleFileSource.Value;
+                    if (bl.DevelopmentSourceBootstrapperMode.HasValue)
+                        developmentSourceBootstrapperModeFromSegments = bl.DevelopmentSourceBootstrapperMode.Value;
                     if (bl.AssemblyTypeAcceleratorMode.HasValue)
                         assemblyTypeAcceleratorModeFromSegments = bl.AssemblyTypeAcceleratorMode.Value;
                     else if (bl.NETAssemblyTypeAcceleratorMode.HasValue)
@@ -653,7 +653,7 @@ public sealed partial class ModulePipelineRunner
             DevelopmentBinariesPath = developmentBinariesPathFromSegments ?? spec.Build.DevelopmentBinariesPath,
             DevelopmentBinariesEnvironmentVariable = developmentBinariesEnvironmentVariableFromSegments ?? spec.Build.DevelopmentBinariesEnvironmentVariable,
             DevelopmentConfigurationEnvironmentVariable = developmentConfigurationEnvironmentVariableFromSegments ?? spec.Build.DevelopmentConfigurationEnvironmentVariable,
-            DevelopmentBinariesReplaceSingleFileSource = developmentBinariesReplaceSingleFileSourceFromSegments ?? spec.Build.DevelopmentBinariesReplaceSingleFileSource,
+            DevelopmentSourceBootstrapperMode = developmentSourceBootstrapperModeFromSegments ?? spec.Build.DevelopmentSourceBootstrapperMode,
             AssemblyTypeAcceleratorMode = assemblyTypeAcceleratorMode,
             AssemblyTypeAccelerators = assemblyTypeAccelerators,
             AssemblyTypeAcceleratorAssemblies = assemblyTypeAcceleratorAssemblies,

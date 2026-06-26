@@ -94,8 +94,8 @@ public sealed class BuildConfigurationFactoryTests
             NETDevelopmentBinariesEnvironmentVariable = "SAMPLE_DEV",
             NETDevelopmentConfigurationEnvironmentVariableSpecified = true,
             NETDevelopmentConfigurationEnvironmentVariable = "SAMPLE_CONFIG",
-            NETDevelopmentBinariesReplaceSingleFileSourceSpecified = true,
-            NETDevelopmentBinariesReplaceSingleFileSource = true
+            NETDevelopmentSourceBootstrapperModeSpecified = true,
+            NETDevelopmentSourceBootstrapperMode = ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile
         });
 
         var libraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(Assert.Single(segments));
@@ -104,7 +104,7 @@ public sealed class BuildConfigurationFactoryTests
         Assert.Equal(Normalize("Sources/Sample/bin"), libraries.BuildLibraries.DevelopmentBinariesPath);
         Assert.Equal("SAMPLE_DEV", libraries.BuildLibraries.DevelopmentBinariesEnvironmentVariable);
         Assert.Equal("SAMPLE_CONFIG", libraries.BuildLibraries.DevelopmentConfigurationEnvironmentVariable);
-        Assert.True(libraries.BuildLibraries.DevelopmentBinariesReplaceSingleFileSource);
+        Assert.Equal(ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile, libraries.BuildLibraries.DevelopmentSourceBootstrapperMode);
     }
 
     [Fact]
