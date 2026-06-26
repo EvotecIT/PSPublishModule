@@ -374,6 +374,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             throw new InvalidOperationException("MinimumVersion cannot be combined with VersionPolicy.");
 
         var explicitPolicy = ResolveExplicitVersionPolicy();
+        var desiredRepository = ResolveRepositoryName();
         var modules = new ArrayList();
         foreach (var name in ModuleName)
         {
@@ -384,8 +385,8 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
                 ["Name"] = name,
                 ["VersionPolicy"] = policy
             };
-            if (!string.IsNullOrWhiteSpace(Repository))
-                module["Repository"] = Repository!;
+            if (!string.IsNullOrWhiteSpace(desiredRepository))
+                module["Repository"] = desiredRepository!;
             if (!string.IsNullOrWhiteSpace(Scope))
                 module["Scope"] = Scope!;
 
@@ -565,7 +566,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             ? ModuleStateCleanupMode.OldVersions
             : ModuleStateCleanupMode.None;
 
-    private string? ResolveMaintenanceReceiptSourceRepository()
+    private string? ResolveRepositoryName()
     {
         if (!string.IsNullOrWhiteSpace(Repository))
             return Repository;
@@ -577,6 +578,9 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             ? ProfileName
             : profile.RepositoryName;
     }
+
+    private string? ResolveMaintenanceReceiptSourceRepository()
+        => ResolveRepositoryName();
 
     private void ApplyLatestUpdateIntent(ModuleStatePlanResult plan)
     {

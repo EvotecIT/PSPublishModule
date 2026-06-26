@@ -85,7 +85,12 @@ internal sealed class ModuleStateVersionPolicy
         if (exact.HasValue && (minimum.HasValue || maximum.HasValue))
             throw new ArgumentException("Exact module version policy cannot be combined with range constraints.", nameof(expression));
 
-        return new ModuleStateVersionPolicy(exact, minimum, minimumInclusive, maximum, maximumInclusive, allowPrerelease);
+        var effectiveAllowPrerelease = allowPrerelease ||
+                                       exact is { IsPrerelease: true } ||
+                                       minimum is { IsPrerelease: true } ||
+                                       maximum is { IsPrerelease: true };
+
+        return new ModuleStateVersionPolicy(exact, minimum, minimumInclusive, maximum, maximumInclusive, effectiveAllowPrerelease);
     }
 
     internal bool IsSatisfiedBy(string version)

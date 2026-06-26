@@ -125,9 +125,7 @@ internal sealed class ModuleStateRepairPlanner
         }
 
         if (!string.IsNullOrWhiteSpace(receiptModule.SourceRepository) &&
-            !installedModules.Any(module =>
-                VersionsEqual(module.Version, receiptModule.Version) &&
-                string.Equals(module.SourceRepository, receiptModule.SourceRepository, StringComparison.OrdinalIgnoreCase)))
+            !HasInstalledReceiptCopy(installedModules, receiptModule))
         {
             return new ModuleStatePlanAction(
                 ModuleStatePlanActionKind.Install,
@@ -142,9 +140,7 @@ internal sealed class ModuleStateRepairPlanner
         }
 
         if (!string.IsNullOrWhiteSpace(receiptModule.Scope) &&
-            !installedModules.Any(module =>
-                VersionsEqual(module.Version, receiptModule.Version) &&
-                string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)))
+            !HasInstalledReceiptCopy(installedModules, receiptModule))
         {
             return new ModuleStatePlanAction(
                 ModuleStatePlanActionKind.Install,
@@ -159,6 +155,16 @@ internal sealed class ModuleStateRepairPlanner
 
         return null;
     }
+
+    private static bool HasInstalledReceiptCopy(
+        IEnumerable<ModuleStateInstalledModule> installedModules,
+        ModuleStateMaintenanceReceiptModule receiptModule)
+        => installedModules.Any(module =>
+            VersionsEqual(module.Version, receiptModule.Version) &&
+            (string.IsNullOrWhiteSpace(receiptModule.SourceRepository) ||
+             string.Equals(module.SourceRepository, receiptModule.SourceRepository, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
+             string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)));
 
     private static ModuleStateInstalledModule? SelectInstalledModule(IEnumerable<ModuleStateInstalledModule> installedModules)
         => installedModules
