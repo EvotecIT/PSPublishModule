@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -81,6 +82,41 @@ internal static class ModulePipelinePlanningHelpers
 
         return Path.Combine(basePath, projectName + ".csproj");
     }
+
+    internal static string[] TryReadTargetFrameworks(string? projectPath)
+    {
+        if (string.IsNullOrWhiteSpace(projectPath) || !File.Exists(projectPath))
+            return Array.Empty<string>();
+
+        try
+        {
+            var doc = XDocument.Load(projectPath, LoadOptions.None);
+            var single = ReadFirstProperty(doc, "TargetFramework");
+            if (!string.IsNullOrWhiteSpace(single))
+                return NormalizeFrameworks(single);
+
+            var multi = ReadFirstProperty(doc, "TargetFrameworks");
+            return NormalizeFrameworks(multi);
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static string[] NormalizeFrameworks(string? value)
+        => (value ?? string.Empty)
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static framework => framework.Trim())
+            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static string? ReadFirstProperty(XDocument doc, string name)
+        => doc.Descendants()
+            .Where(e => string.Equals(e.Name.LocalName, name, StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.Value)
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
     private static string? TryResolveConventionalCsprojPath(string projectRoot, string projectName)
     {

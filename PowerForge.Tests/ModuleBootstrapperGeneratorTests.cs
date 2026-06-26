@@ -661,14 +661,57 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$PowerForgeDevelopmentBinaryEnvironmentVariable = 'DEMO_USE_DEVELOPMENT_BINARIES'", bootstrapper);
             Assert.Contains("[IO.Path]::Combine($PSScriptRoot, '..', 'Sources', 'Demo', 'bin')", bootstrapper);
             Assert.Contains("Add-Type -TypeDefinition @'", bootstrapper);
+            Assert.Contains("DemoModule.DevelopmentModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
+            Assert.DoesNotContain("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
             Assert.Contains("DemoModule.Development", bootstrapper);
             Assert.Contains("$ModuleAssembly = $PowerForgeDevelopmentModuleAssembly", bootstrapper);
             Assert.Contains("$LibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)", bootstrapper);
             Assert.Contains("$RequestedTypes = @('Demo.Dependency')", bootstrapper);
             Assert.Contains("& $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder", bootstrapper);
+            Assert.Contains("Falling back to direct Import-Module; cmdlets from DemoModule will load from the default context.", bootstrapper);
+            Assert.Contains("& $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop", bootstrapper);
             Assert.Contains("$PowerForgeCommandModuleDependencies = @", bootstrapper);
             Assert.Contains("'Required.Demo' = @('Get-Demo')", bootstrapper);
             Assert.DoesNotContain("No assemblies found", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithDevelopmentBinariesAndHandleRuntimes_ProbesSelectedBinaryRuntimePath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-dev-runtime-" + Guid.NewGuid().ToString("N"));
+        var moduleRoot = Path.Combine(root, "Module");
+        Directory.CreateDirectory(moduleRoot);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            var developmentOptions = new ModuleDevelopmentBinaryBootstrapperOptions(
+                ModuleDevelopmentBinaryMode.Auto,
+                Path.Combine(root, "Sources", "Demo", "bin"),
+                "DEMO_USE_DEVELOPMENT_BINARIES",
+                "DEMO_DEVELOPMENT_CONFIGURATION",
+                new[] { "net9.0" },
+                new[] { "net472" });
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: true,
+                developmentBinaries: developmentOptions);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(moduleRoot, "DemoModule.psm1"));
+            Assert.Contains("$PowerForgeDevelopmentLibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)", bootstrapper);
+            Assert.Contains("Join-Path -Path $PowerForgeDevelopmentLibFolder -ChildPath (\"runtimes\\{0}\\native\" -f $PowerForgeDevelopmentArchFolder)", bootstrapper);
+            Assert.Contains("$PowerForgeDevelopmentPathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH))", bootstrapper);
+            Assert.Contains("$env:PATH = \"$PowerForgeDevelopmentNativePath$([IO.Path]::PathSeparator)$env:PATH\"", bootstrapper);
         }
         finally
         {

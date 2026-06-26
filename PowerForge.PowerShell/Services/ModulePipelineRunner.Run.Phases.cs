@@ -87,7 +87,7 @@ public sealed partial class ModulePipelineRunner
                     plan);
 
             if (!plan.BuildSpec.RefreshManifestOnly)
-                TryRegenerateSourceDevelopmentBootstrapperFromManifest(buildResult, plan);
+                TryRegenerateSourceDevelopmentBootstrapperFromManifest(buildResult, plan, state.PackageWithoutScriptFolders);
 
             session.Done(session.ManifestStep);
         }

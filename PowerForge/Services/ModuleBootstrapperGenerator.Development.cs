@@ -10,6 +10,7 @@ internal static partial class ModuleBootstrapperGenerator
         string libraryName,
         bool useAssemblyLoadContext,
         AssemblyLoadContextLoaderIdentity? loaderIdentity,
+        bool handleRuntimes,
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
         IReadOnlyList<string>? assemblyTypeAccelerators,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
@@ -74,6 +75,10 @@ internal static partial class ModuleBootstrapperGenerator
         sb.AppendLine("    if ($PowerForgeDevelopmentBinaryPath) {");
         sb.AppendLine("        try {");
         sb.AppendLine("            $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core");
+        if (handleRuntimes)
+        {
+            sb.AppendLine(IndentPowerShell(BuildDevelopmentRuntimeHandlerBlock().TrimEnd(), 12));
+        }
         sb.AppendLine("            if ($PSEdition -eq 'Core' -and $PowerForgeDevelopmentUseAssemblyLoadContext) {");
         if (useAssemblyLoadContext && loaderIdentity is not null)
         {
@@ -91,7 +96,7 @@ internal static partial class ModuleBootstrapperGenerator
                 sb.AppendLine(IndentPowerShell(typeAcceleratorBlock.TrimEnd(), 16));
             }
             sb.AppendLine("                if ($PowerForgeDevelopmentInnerModule) {");
-            sb.AppendLine(IndentPowerShell(BuildPowerShellModuleExportBridge("$PowerForgeDevelopmentInnerModule", libraryName).TrimEnd(), 20));
+            sb.AppendLine(IndentPowerShell(BuildPowerShellModuleExportBridge("$PowerForgeDevelopmentInnerModule", libraryName, "$PowerForgeDevelopmentBinaryPath").TrimEnd(), 20));
             sb.AppendLine("                }");
         }
         else
@@ -115,8 +120,17 @@ internal static partial class ModuleBootstrapperGenerator
         return sb.ToString();
     }
 
-    private static string BuildPowerShellModuleExportBridge(string innerModuleExpression, string libraryName)
-        => $@"# Import-Module -Assembly loads the inner binary module into its own module object. PowerShell has no
+    private static string BuildPowerShellModuleExportBridge(string innerModuleExpression, string libraryName, string? fallbackImportPathExpression = null)
+    {
+        var fallbackImport = string.IsNullOrWhiteSpace(fallbackImportPathExpression)
+            ? string.Empty
+            : "\r\n    & $ImportModule " + fallbackImportPathExpression + " -ErrorAction Stop";
+
+        var unavailableMessage = string.IsNullOrWhiteSpace(fallbackImportPathExpression)
+            ? $"AddExportedCmdlet is not available on this PowerShell version. Cmdlets from {EscapePsSingleQuoted(libraryName)} may not be re-exported to the module scope."
+            : $"AddExportedCmdlet is not available on this PowerShell version. Falling back to direct Import-Module; cmdlets from {EscapePsSingleQuoted(libraryName)} will load from the default context.";
+
+        return $@"# Import-Module -Assembly loads the inner binary module into its own module object. PowerShell has no
 # public API to copy those exported cmdlets back to the script-module wrapper, so this uses the same
 # private PSModuleInfo hook used by community ALC loaders.
 $AddExportedCmdlet = [System.Management.Automation.PSModuleInfo].GetMethod(
@@ -150,8 +164,44 @@ if ($null -ne $AddExportedCmdlet) {{
         Write-Warning -Message ""AddExportedAlias is not available on this PowerShell version. Aliases from {EscapePsSingleQuoted(libraryName)} will not be re-exported to the module scope.""
     }}
 }} else {{
-    Write-Warning -Message ""AddExportedCmdlet is not available on this PowerShell version. Cmdlets from {EscapePsSingleQuoted(libraryName)} may not be re-exported to the module scope.""
+    Write-Warning -Message ""{unavailableMessage}""{fallbackImport}
 }}";
+    }
+
+    private static string BuildDevelopmentRuntimeHandlerBlock()
+        => string.Join(
+            "\r\n",
+            new[]
+            {
+                "# Ensure native runtime libraries are discoverable for the selected development binary.",
+                "$PowerForgeDevelopmentIsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)",
+                "if ($PowerForgeDevelopmentIsWindowsPlatform) {",
+                "    $PowerForgeDevelopmentArch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
+                "    $PowerForgeDevelopmentArchFolder = switch ($PowerForgeDevelopmentArch) {",
+                "        'X64'   { 'win-x64' }",
+                "        'X86'   { 'win-x86' }",
+                "        'Arm64' { 'win-arm64' }",
+                "        'Arm'   { 'win-arm' }",
+                "        Default {",
+                "            Write-Warning -Message (\"Unknown Windows architecture '{0}'. Falling back to win-x64 native runtime probing.\" -f $PowerForgeDevelopmentArch)",
+                "            'win-x64'",
+                "        }",
+                "    }",
+                "    $PowerForgeDevelopmentLibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)",
+                "    if ($PowerForgeDevelopmentLibFolder) {",
+                "        $PowerForgeDevelopmentNativePath = Join-Path -Path $PowerForgeDevelopmentLibFolder -ChildPath (\"runtimes\\{0}\\native\" -f $PowerForgeDevelopmentArchFolder)",
+                "        $PowerForgeDevelopmentPathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }",
+                "        if ((Test-Path -LiteralPath $PowerForgeDevelopmentNativePath) -and ($PowerForgeDevelopmentPathEntries -notcontains $PowerForgeDevelopmentNativePath)) {",
+                "            if ([string]::IsNullOrWhiteSpace($env:PATH)) {",
+                "                $env:PATH = $PowerForgeDevelopmentNativePath",
+                "            } else {",
+                "                $env:PATH = \"$PowerForgeDevelopmentNativePath$([IO.Path]::PathSeparator)$env:PATH\"",
+                "            }",
+                "        }",
+                "    }",
+                "}",
+                string.Empty
+            });
 
     private static string BuildPowerShellPathExpression(string moduleRoot, string targetPath)
     {

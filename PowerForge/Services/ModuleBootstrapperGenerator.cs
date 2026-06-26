@@ -294,12 +294,16 @@ internal static partial class ModuleBootstrapperGenerator
 
         if (developmentBinaries?.Enabled == true)
         {
+            var developmentLoaderIdentity = useAssemblyLoadContext
+                ? CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName)
+                : null;
             var developmentBlock = BuildDevelopmentBinaryLoaderBlock(
                 moduleRoot ?? string.Empty,
                 moduleName,
                 libraryName,
                 useAssemblyLoadContext,
-                loaderIdentity,
+                developmentLoaderIdentity,
+                handleRuntimes,
                 assemblyTypeAcceleratorMode,
                 assemblyTypeAccelerators,
                 assemblyTypeAcceleratorAssemblies,
@@ -457,6 +461,14 @@ internal static partial class ModuleBootstrapperGenerator
         var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
         var assemblyName = SanitizeAssemblyName(moduleName) + ".ModuleLoadContext";
         var ns = safeNamespaceRoot + ".ModuleLoadContext";
+        return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
+    }
+
+    private static AssemblyLoadContextLoaderIdentity CreateDevelopmentAssemblyLoadContextLoaderIdentity(string moduleName)
+    {
+        var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
+        var assemblyName = SanitizeAssemblyName(moduleName) + ".DevelopmentModuleLoadContext";
+        var ns = safeNamespaceRoot + ".DevelopmentModuleLoadContext";
         return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
     }
 
