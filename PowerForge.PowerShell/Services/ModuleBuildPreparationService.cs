@@ -177,6 +177,7 @@ internal sealed class ModuleBuildPreparationService
         var projectRoot = string.IsNullOrWhiteSpace(spec.Build.SourcePath) ? baseDir : spec.Build.SourcePath;
         spec.Build.StagingPath = ResolveConfigPathNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = ResolveConfigPathNullable(baseDir, spec.Build.CsprojPath);
+        spec.Build.DevelopmentBinariesPath = ResolveConfigPathNullable(baseDir, spec.Build.DevelopmentBinariesPath);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
             spec.Diagnostics.BaselinePath = ResolveConfigPath(baseDir, spec.Diagnostics.BaselinePath!);
 
@@ -336,6 +337,7 @@ internal sealed class ModuleBuildPreparationService
         spec.Build.SourcePath = MakeRelativeForConfig(baseDir, spec.Build.SourcePath);
         spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = MakeRelativeForConfigNullable(baseDir, spec.Build.CsprojPath);
+        spec.Build.DevelopmentBinariesPath = MakeRelativeForConfigNullable(baseDir, spec.Build.DevelopmentBinariesPath);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
             spec.Diagnostics.BaselinePath = MakeRelativeForConfig(baseDir, spec.Diagnostics.BaselinePath!);
 

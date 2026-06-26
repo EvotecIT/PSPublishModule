@@ -86,6 +86,9 @@ public sealed partial class ModulePipelineRunner
                     plan.BuildSpec.HandleRuntimes,
                     plan);
 
+            if (!plan.BuildSpec.RefreshManifestOnly)
+                TryRegenerateSourceDevelopmentBootstrapperFromManifest(buildResult, plan);
+
             session.Done(session.ManifestStep);
         }
         catch (Exception ex)

@@ -78,6 +78,36 @@ public sealed class BuildConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_emits_development_binary_options()
+    {
+        var factory = new BuildConfigurationFactory();
+
+        var segments = factory.Create(new BuildConfigurationRequest
+        {
+            NETDevelopmentBinariesSpecified = true,
+            NETDevelopmentBinaries = true,
+            NETDevelopmentBinariesModeSpecified = true,
+            NETDevelopmentBinariesMode = ModuleDevelopmentBinaryMode.Auto,
+            NETDevelopmentBinariesPathSpecified = true,
+            NETDevelopmentBinariesPath = "Sources\\Sample\\bin",
+            NETDevelopmentBinariesEnvironmentVariableSpecified = true,
+            NETDevelopmentBinariesEnvironmentVariable = "SAMPLE_DEV",
+            NETDevelopmentConfigurationEnvironmentVariableSpecified = true,
+            NETDevelopmentConfigurationEnvironmentVariable = "SAMPLE_CONFIG",
+            NETDevelopmentSourceBootstrapperModeSpecified = true,
+            NETDevelopmentSourceBootstrapperMode = ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile
+        });
+
+        var libraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(Assert.Single(segments));
+        Assert.True(libraries.BuildLibraries.DevelopmentBinaries);
+        Assert.Equal(ModuleDevelopmentBinaryMode.Auto, libraries.BuildLibraries.DevelopmentBinariesMode);
+        Assert.Equal(Normalize("Sources/Sample/bin"), libraries.BuildLibraries.DevelopmentBinariesPath);
+        Assert.Equal("SAMPLE_DEV", libraries.BuildLibraries.DevelopmentBinariesEnvironmentVariable);
+        Assert.Equal("SAMPLE_CONFIG", libraries.BuildLibraries.DevelopmentConfigurationEnvironmentVariable);
+        Assert.Equal(ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile, libraries.BuildLibraries.DevelopmentSourceBootstrapperMode);
+    }
+
+    [Fact]
     public void Create_reads_missing_module_secret_from_file()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");

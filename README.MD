@@ -469,6 +469,7 @@ Start here:
 - [Docs/PSPublishModule.ModuleDocumentation.md](Docs/PSPublishModule.ModuleDocumentation.md)
 - [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
+- [Docs/PSPublishModule.DevelopmentBootstrapper.md](Docs/PSPublishModule.DevelopmentBootstrapper.md)
 - [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md)
 - [Docs/PowerForge.Web.QualityGates.md](Docs/PowerForge.Web.QualityGates.md)
 - [Docs/PowerForge.Web.Roadmap.md](Docs/PowerForge.Web.Roadmap.md)

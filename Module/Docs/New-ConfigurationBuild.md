@@ -11,7 +11,7 @@ Allows configuring the build process for a module.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-SyncNETProjectVersion] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-NETAssemblyLoadContext] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
+New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-SyncNETProjectVersion] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-NETAssemblyLoadContext] [-NETDevelopmentBinaries] [-NETDevelopmentBinariesMode <ModuleDevelopmentBinaryMode>] [-NETDevelopmentBinariesPath <string>] [-NETDevelopmentBinariesEnvironmentVariable <string>] [-NETDevelopmentConfigurationEnvironmentVariable <string>] [-NETDevelopmentSourceBootstrapperMode <ModuleDevelopmentSourceBootstrapperMode>] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -479,6 +479,102 @@ Fully-qualified dependency type names to expose as PowerShell type accelerators 
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: AssemblyTypeAccelerators
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETDevelopmentBinaries
+Generate checked-in source bootstrapper logic for local development binary outputs.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETDevelopmentBinariesEnvironmentVariable
+Optional environment variable used by Environment development-binary mode.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETDevelopmentBinariesMode
+Controls when the generated source bootstrapper loads local development binaries.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETDevelopmentBinariesPath
+Optional root folder that contains configuration/framework development binary outputs.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETDevelopmentConfigurationEnvironmentVariable
+Optional environment variable that chooses the development build configuration.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETDevelopmentSourceBootstrapperMode
+Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False

@@ -70,6 +70,42 @@ public sealed class BuildLibrariesConfiguration
     /// <summary>Legacy alias for <see cref="UseAssemblyLoadContext"/>.</summary>
     public bool? NETAssemblyLoadContext { get; set; }
 
+    /// <summary>Generate source-module development bootstrapper logic for local binary build outputs.</summary>
+    public bool? DevelopmentBinaries { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="DevelopmentBinaries"/>.</summary>
+    public bool? NETDevelopmentBinaries { get; set; }
+
+    /// <summary>Controls when the generated source bootstrapper loads local development binaries.</summary>
+    public ModuleDevelopmentBinaryMode? DevelopmentBinariesMode { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="DevelopmentBinariesMode"/>.</summary>
+    public ModuleDevelopmentBinaryMode? NETDevelopmentBinariesMode { get; set; }
+
+    /// <summary>Optional root folder that contains configuration/framework development binary outputs.</summary>
+    public string? DevelopmentBinariesPath { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="DevelopmentBinariesPath"/>.</summary>
+    public string? NETDevelopmentBinariesPath { get; set; }
+
+    /// <summary>Optional environment variable used when <see cref="DevelopmentBinariesMode"/> is Environment.</summary>
+    public string? DevelopmentBinariesEnvironmentVariable { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="DevelopmentBinariesEnvironmentVariable"/>.</summary>
+    public string? NETDevelopmentBinariesEnvironmentVariable { get; set; }
+
+    /// <summary>Optional environment variable that chooses the development build configuration.</summary>
+    public string? DevelopmentConfigurationEnvironmentVariable { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="DevelopmentConfigurationEnvironmentVariable"/>.</summary>
+    public string? NETDevelopmentConfigurationEnvironmentVariable { get; set; }
+
+    /// <summary>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</summary>
+    public ModuleDevelopmentSourceBootstrapperMode? DevelopmentSourceBootstrapperMode { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="DevelopmentSourceBootstrapperMode"/>.</summary>
+    public ModuleDevelopmentSourceBootstrapperMode? NETDevelopmentSourceBootstrapperMode { get; set; }
+
     /// <summary>Controls optional PowerShell type accelerator exposure for assemblies loaded in the module AssemblyLoadContext.</summary>
     public AssemblyTypeAcceleratorExportMode? AssemblyTypeAcceleratorMode { get; set; }
 

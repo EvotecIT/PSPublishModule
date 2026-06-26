@@ -271,6 +271,30 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     [Alias("UseAssemblyLoadContext")]
     public SwitchParameter NETAssemblyLoadContext { get; set; }
 
+    /// <summary>Generate checked-in source bootstrapper logic for local development binary outputs.</summary>
+    [Parameter]
+    public SwitchParameter NETDevelopmentBinaries { get; set; }
+
+    /// <summary>Controls when the generated source bootstrapper loads local development binaries.</summary>
+    [Parameter]
+    public ModuleDevelopmentBinaryMode? NETDevelopmentBinariesMode { get; set; }
+
+    /// <summary>Optional root folder that contains configuration/framework development binary outputs.</summary>
+    [Parameter]
+    public string? NETDevelopmentBinariesPath { get; set; }
+
+    /// <summary>Optional environment variable used by Environment development-binary mode.</summary>
+    [Parameter]
+    public string? NETDevelopmentBinariesEnvironmentVariable { get; set; }
+
+    /// <summary>Optional environment variable that chooses the development build configuration.</summary>
+    [Parameter]
+    public string? NETDevelopmentConfigurationEnvironmentVariable { get; set; }
+
+    /// <summary>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</summary>
+    [Parameter]
+    public ModuleDevelopmentSourceBootstrapperMode? NETDevelopmentSourceBootstrapperMode { get; set; }
+
     /// <summary>Controls optional type accelerator exposure for dependency types loaded in the module AssemblyLoadContext.</summary>
     [Parameter]
     [Alias("AssemblyTypeAcceleratorMode")]
@@ -401,6 +425,18 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             NETHandleRuntimes = NETHandleRuntimes.IsPresent,
             NETAssemblyLoadContextSpecified = bound.ContainsKey(nameof(NETAssemblyLoadContext)),
             NETAssemblyLoadContext = NETAssemblyLoadContext.IsPresent,
+            NETDevelopmentBinariesSpecified = bound.ContainsKey(nameof(NETDevelopmentBinaries)),
+            NETDevelopmentBinaries = NETDevelopmentBinaries.IsPresent,
+            NETDevelopmentBinariesModeSpecified = bound.ContainsKey(nameof(NETDevelopmentBinariesMode)),
+            NETDevelopmentBinariesMode = NETDevelopmentBinariesMode,
+            NETDevelopmentBinariesPathSpecified = bound.ContainsKey(nameof(NETDevelopmentBinariesPath)),
+            NETDevelopmentBinariesPath = NETDevelopmentBinariesPath,
+            NETDevelopmentBinariesEnvironmentVariableSpecified = bound.ContainsKey(nameof(NETDevelopmentBinariesEnvironmentVariable)),
+            NETDevelopmentBinariesEnvironmentVariable = NETDevelopmentBinariesEnvironmentVariable,
+            NETDevelopmentConfigurationEnvironmentVariableSpecified = bound.ContainsKey(nameof(NETDevelopmentConfigurationEnvironmentVariable)),
+            NETDevelopmentConfigurationEnvironmentVariable = NETDevelopmentConfigurationEnvironmentVariable,
+            NETDevelopmentSourceBootstrapperModeSpecified = bound.ContainsKey(nameof(NETDevelopmentSourceBootstrapperMode)),
+            NETDevelopmentSourceBootstrapperMode = NETDevelopmentSourceBootstrapperMode,
             NETAssemblyTypeAcceleratorModeSpecified = bound.ContainsKey(nameof(NETAssemblyTypeAcceleratorMode)),
             NETAssemblyTypeAcceleratorMode = NETAssemblyTypeAcceleratorMode,
             NETAssemblyTypeAcceleratorsSpecified = bound.ContainsKey(nameof(NETAssemblyTypeAccelerators)),

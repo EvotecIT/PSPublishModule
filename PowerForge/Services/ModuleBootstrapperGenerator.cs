@@ -6,7 +6,7 @@ using System.Text;
 
 namespace PowerForge;
 
-internal static class ModuleBootstrapperGenerator
+internal static partial class ModuleBootstrapperGenerator
 {
     // net8.0 is the default modern PowerShell LTS baseline when the module build does not declare a Core TFM.
     private const string DefaultAssemblyLoadContextTargetFramework = "net8.0";
@@ -24,7 +24,9 @@ internal static class ModuleBootstrapperGenerator
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies = null,
         IReadOnlyList<string>? ignoreLibrariesOnLoad = null,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
+        ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
         IReadOnlyList<string>? targetFrameworks = null,
+        bool forceBootstrapperWrite = false,
         Action<string>? log = null)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
@@ -36,10 +38,11 @@ internal static class ModuleBootstrapperGenerator
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
         var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
+        var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
         // If there is no Lib and no folder-based layout, leave the existing PSM1 intact.
-        if (!hasLib && !hasScriptFolders) return;
+        if (!hasLib && !hasScriptFolders && !hasDevelopmentBinaryLoader && !forceBootstrapperWrite) return;
 
         var exportAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
@@ -72,7 +75,9 @@ internal static class ModuleBootstrapperGenerator
             assemblyTypeAcceleratorMode: assemblyTypeAcceleratorMode,
             assemblyTypeAccelerators: assemblyTypeAccelerators,
             assemblyTypeAcceleratorAssemblies: assemblyTypeAcceleratorAssemblies,
-            conditionalFunctionDependencies: conditionalFunctionDependencies);
+            conditionalFunctionDependencies: conditionalFunctionDependencies,
+            developmentBinaries: developmentBinaries,
+            moduleRoot: root);
         WritePowerShellFile(psm1Path, psm1Content);
     }
 
@@ -260,7 +265,9 @@ internal static class ModuleBootstrapperGenerator
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
         IReadOnlyList<string>? assemblyTypeAccelerators,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
-        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies)
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
+        ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
+        string? moduleRoot = null)
     {
         var loaderIdentity = useAssemblyLoadContext
             ? CreateAssemblyLoadContextLoaderIdentity(moduleName)
@@ -285,6 +292,32 @@ internal static class ModuleBootstrapperGenerator
                         assemblyTypeAcceleratorAssemblies)
                 })
             : string.Empty;
+
+        if (developmentBinaries?.Enabled == true)
+        {
+            var developmentLoaderIdentity = useAssemblyLoadContext
+                ? CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName)
+                : null;
+            var developmentBlock = BuildDevelopmentBinaryLoaderBlock(
+                moduleRoot ?? string.Empty,
+                moduleName,
+                libraryName,
+                useAssemblyLoadContext,
+                developmentLoaderIdentity,
+                handleRuntimes,
+                assemblyTypeAcceleratorMode,
+                assemblyTypeAccelerators,
+                assemblyTypeAcceleratorAssemblies,
+                developmentBinaries);
+
+            binaryLoaderBlock = string.IsNullOrWhiteSpace(binaryLoaderBlock)
+                ? "$PowerForgeDevelopmentBinaryLoaded = $false\r\n" + developmentBlock.TrimEnd()
+                : "$PowerForgeDevelopmentBinaryLoaded = $false\r\n" +
+                  developmentBlock.TrimEnd() +
+                  "\r\n\r\nif (-not $PowerForgeDevelopmentBinaryLoaded) {\r\n" +
+                  IndentPowerShell(binaryLoaderBlock.TrimEnd(), 4) +
+                  "\r\n}";
+        }
 
         var scriptLoaderBlock = includeScriptLoader
             ? RenderModuleBootstrapperTemplate(
@@ -429,6 +462,14 @@ internal static class ModuleBootstrapperGenerator
         var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
         var assemblyName = SanitizeAssemblyName(moduleName) + ".ModuleLoadContext";
         var ns = safeNamespaceRoot + ".ModuleLoadContext";
+        return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
+    }
+
+    private static AssemblyLoadContextLoaderIdentity CreateDevelopmentAssemblyLoadContextLoaderIdentity(string moduleName)
+    {
+        var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
+        var assemblyName = SanitizeAssemblyName(moduleName) + ".DevelopmentModuleLoadContext";
+        var ns = safeNamespaceRoot + ".DevelopmentModuleLoadContext";
         return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
     }
 
@@ -1111,9 +1152,14 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         return
     }}
 
-    if ([IO.Path]::IsPathRooted($LibFolder) -or $LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
-        Write-Warning -Message ""Module library folder '$LibFolder' must be a simple folder name. ALC dependency type exposure is disabled.""
+    $PowerForgeAlcLibraryDirectory = $null
+    if ([IO.Path]::IsPathRooted($LibFolder)) {{
+        $PowerForgeAlcLibraryDirectory = [IO.Path]::GetFullPath($LibFolder)
+    }} elseif ($LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
+        Write-Warning -Message ""Module library folder '$LibFolder' must be a simple folder name or a rooted development binary directory. ALC dependency type exposure is disabled.""
         return
+    }} else {{
+        $PowerForgeAlcLibraryDirectory = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)
     }}
 
     if ($Mode -eq 'AllowList' -and $RequestedTypes.Count -eq 0) {{
@@ -1165,7 +1211,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         try {{
             return $ModuleAlc.LoadFromAssemblyName([System.Reflection.AssemblyName]::new($AssemblyName))
         }} catch {{
-            $AssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $AssemblyName + '.dll')
+            $AssemblyPath = [IO.Path]::Combine($PowerForgeAlcLibraryDirectory, $AssemblyName + '.dll')
             if (Test-Path -LiteralPath $AssemblyPath) {{
                 try {{
                     $AssemblyNameObject = [System.Reflection.AssemblyName]::GetAssemblyName($AssemblyPath)
@@ -1189,7 +1235,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
             }}
         }}
 
-        $LibDirectory = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)
+        $LibDirectory = $PowerForgeAlcLibraryDirectory
         if (-not (Test-Path -LiteralPath $LibDirectory)) {{
             return $null
         }}

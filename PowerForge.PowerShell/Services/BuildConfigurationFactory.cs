@@ -178,6 +178,18 @@ internal sealed class BuildConfigurationFactory
         if (request.NETBinaryModuleDocumentationSpecified) { EnsureBuildLibraries(); buildLibraries!.NETBinaryModuleDocumentation = request.NETBinaryModuleDocumentation; }
         if (request.NETHandleRuntimesSpecified) { EnsureBuildLibraries(); buildLibraries!.HandleRuntimes = request.NETHandleRuntimes; }
         if (request.NETAssemblyLoadContextSpecified) { EnsureBuildLibraries(); buildLibraries!.UseAssemblyLoadContext = request.NETAssemblyLoadContext; }
+        if (request.NETDevelopmentBinariesSpecified)
+        {
+            EnsureBuildLibraries();
+            buildLibraries!.DevelopmentBinaries = request.NETDevelopmentBinaries;
+            if (request.NETDevelopmentBinaries && !request.NETDevelopmentBinariesModeSpecified)
+                buildLibraries.DevelopmentBinariesMode = ModuleDevelopmentBinaryMode.Environment;
+        }
+        if (request.NETDevelopmentBinariesModeSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentBinariesMode = request.NETDevelopmentBinariesMode; }
+        if (request.NETDevelopmentBinariesPathSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentBinariesPath = request.NETDevelopmentBinariesPath is null ? null : PathValueResolver.NormalizeSeparators(request.NETDevelopmentBinariesPath); }
+        if (request.NETDevelopmentBinariesEnvironmentVariableSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentBinariesEnvironmentVariable = request.NETDevelopmentBinariesEnvironmentVariable; }
+        if (request.NETDevelopmentConfigurationEnvironmentVariableSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentConfigurationEnvironmentVariable = request.NETDevelopmentConfigurationEnvironmentVariable; }
+        if (request.NETDevelopmentSourceBootstrapperModeSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentSourceBootstrapperMode = request.NETDevelopmentSourceBootstrapperMode; }
         if (request.NETAssemblyTypeAcceleratorModeSpecified) { EnsureBuildLibraries(); buildLibraries!.AssemblyTypeAcceleratorMode = request.NETAssemblyTypeAcceleratorMode; }
         if (request.NETAssemblyTypeAcceleratorsSpecified) { EnsureBuildLibraries(); buildLibraries!.AssemblyTypeAccelerators = request.NETAssemblyTypeAccelerators; }
         if (request.NETAssemblyTypeAcceleratorAssembliesSpecified) { EnsureBuildLibraries(); buildLibraries!.AssemblyTypeAcceleratorAssemblies = request.NETAssemblyTypeAcceleratorAssemblies; }

@@ -589,6 +589,7 @@ public sealed class ModuleBuildPreparationServiceTests
     "SourcePath": "../Module",
     "StagingPath": "../Build/Artifacts/Module/Staging",
     "CsprojPath": "../TierBridge.PowerShell/TierBridge.PowerShell.csproj",
+    "DevelopmentBinariesPath": "../Sources/Demo/bin",
     "Version": "4.0.X"
   },
   "Diagnostics": {
@@ -613,6 +614,7 @@ public sealed class ModuleBuildPreparationServiceTests
             Assert.Equal(configPath, prepared.ConfigFilePath);
             Assert.Equal(Path.Combine(root.FullName, "Build", "Artifacts", "Module", "Staging"), prepared.PipelineSpec.Build.StagingPath);
             Assert.Equal(Path.Combine(root.FullName, "TierBridge.PowerShell", "TierBridge.PowerShell.csproj"), prepared.PipelineSpec.Build.CsprojPath);
+            Assert.Equal(Path.Combine(root.FullName, "Sources", "Demo", "bin"), prepared.PipelineSpec.Build.DevelopmentBinariesPath);
             Assert.Equal(Path.Combine(configDir.FullName, ".powerforge", "module-baseline.json"), prepared.PipelineSpec.Diagnostics.BaselinePath);
         }
         finally
@@ -645,5 +647,8 @@ public sealed class ModuleBuildPreparationServiceTests
 
         if (!string.IsNullOrWhiteSpace(spec.Build.CsprojPath))
             spec.Build.CsprojPath = Path.GetFullPath(Path.IsPathRooted(spec.Build.CsprojPath) ? spec.Build.CsprojPath! : Path.Combine(baseDir, spec.Build.CsprojPath!));
+
+        if (!string.IsNullOrWhiteSpace(spec.Build.DevelopmentBinariesPath))
+            spec.Build.DevelopmentBinariesPath = Path.GetFullPath(Path.IsPathRooted(spec.Build.DevelopmentBinariesPath) ? spec.Build.DevelopmentBinariesPath! : Path.Combine(baseDir, spec.Build.DevelopmentBinariesPath!));
     }
 }
