@@ -157,12 +157,76 @@ public sealed class InvokeModuleStateCommandTests
         }
     }
 
+    [Fact]
+    public void ResolveDesiredState_UsesProfileRepositoryForInstalledBaseline()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var userPath = Path.Combine(root, "profiles.json");
+        var previousUserPath = Environment.GetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH");
+        var previousMachinePath = Environment.GetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", userPath);
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH", Path.Combine(root, "machine.json"));
+            new ModuleRepositoryProfileStore(userPath).SaveProfile(new ModuleRepositoryProfile
+            {
+                Name = "Company",
+                AzureDevOpsOrganization = "contoso",
+                AzureArtifactsFeed = "Modules",
+                RepositoryName = "CompanyModules"
+            });
+            var command = new InvokeModuleStateCommand
+            {
+                Installed = new SwitchParameter(true),
+                ProfileName = "Company"
+            };
+            var inventory = new ModuleStateInventoryResult
+            {
+                Source = "Test",
+                InstalledModules = new[]
+                {
+                    new ModuleStateInstalledModuleResult
+                    {
+                        Name = "Company.Tools",
+                        Version = "1.2.0",
+                        IsEffectiveImportCandidate = true
+                    }
+                }
+            };
+
+            var desired = Assert.IsType<Hashtable>(InvokeCreateDesiredStateForInstalledModules(command, inventory));
+            var modules = Assert.IsAssignableFrom<IEnumerable>(desired["Modules"]);
+            var module = Assert.IsType<Hashtable>(modules.Cast<object>().Single());
+
+            Assert.Equal("CompanyModules", module["Repository"]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", previousUserPath);
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH", previousMachinePath);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static object? InvokeResolveDesiredState(
         InvokeModuleStateCommand command,
         ModuleStateInventoryResult inventory)
     {
         var method = typeof(InvokeModuleStateCommand).GetMethod(
             "ResolveDesiredState",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        return method!.Invoke(command, new object[] { inventory });
+    }
+
+    private static object? InvokeCreateDesiredStateForInstalledModules(
+        InvokeModuleStateCommand command,
+        ModuleStateInventoryResult inventory)
+    {
+        var method = typeof(InvokeModuleStateCommand).GetMethod(
+            "CreateDesiredStateForInstalledModules",
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
 

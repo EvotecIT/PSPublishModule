@@ -47,6 +47,27 @@ public sealed class ModuleStateObjectAdapterTests
     }
 
     [Fact]
+    public void ToDesiredState_AcceptsSingleModuleHashtableUnderModules()
+    {
+        var desired = new Hashtable
+        {
+            ["Modules"] = new Hashtable
+            {
+                ["Name"] = "Company.Tools",
+                ["Version"] = "=1.2.0",
+                ["Repository"] = "CompanyModules"
+            }
+        };
+
+        var state = ModuleStateObjectAdapter.ToDesiredState(desired);
+
+        var module = Assert.Single(state.Modules);
+        Assert.Equal("Company.Tools", module.Name);
+        Assert.Equal("=1.2.0", module.VersionPolicy);
+        Assert.Equal("CompanyModules", Assert.Single(module.AllowedSources));
+    }
+
+    [Fact]
     public void ToDesiredState_AcceptsModuleNameArray()
     {
         var state = ModuleStateObjectAdapter.ToDesiredState(new[] { "Company.Tools", "Company.Runtime" });

@@ -71,6 +71,71 @@ public sealed class ModuleStateInventoryServiceTests
     }
 
     [Fact]
+    public void Collect_MarksEffectiveImportWinnerPerPowerShellEdition()
+    {
+        var desktopRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var coreRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteManifest(Path.Combine(desktopRoot.FullName, "Company.Tools", "1.0.0"), "Company.Tools", "1.0.0");
+            WriteManifest(Path.Combine(coreRoot.FullName, "Company.Tools", "2.0.0"), "Company.Tools", "2.0.0");
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(desktopRoot.FullName, "Desktop", "CurrentUser"),
+                new ModuleStateModulePath(coreRoot.FullName, "Core", "CurrentUser")
+            }));
+
+            var winners = inventory.InstalledModules
+                .Where(static module => module.IsEffectiveImportCandidate)
+                .OrderBy(static module => module.PowerShellEdition, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            Assert.Equal(2, winners.Length);
+            Assert.Contains(winners, static module => module.PowerShellEdition == "Core" && module.Version == "2.0.0");
+            Assert.Contains(winners, static module => module.PowerShellEdition == "Desktop" && module.Version == "1.0.0");
+        }
+        finally
+        {
+            try { desktopRoot.Delete(recursive: true); } catch { /* best effort */ }
+            try { coreRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Collect_DiscoversManifestlessScriptModules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var flatModule = Path.Combine(root.FullName, "Company.ScriptOnly");
+            Directory.CreateDirectory(flatModule);
+            File.WriteAllText(Path.Combine(flatModule, "Company.ScriptOnly.psm1"), string.Empty);
+            var versionedModule = Path.Combine(root.FullName, "Company.VersionedScript", "1.2.3");
+            Directory.CreateDirectory(versionedModule);
+            File.WriteAllText(Path.Combine(versionedModule, "Company.VersionedScript.psm1"), string.Empty);
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            Assert.Contains(inventory.InstalledModules, static module =>
+                module.Name == "Company.ScriptOnly" &&
+                module.Version == "0.0" &&
+                module.Path!.EndsWith("Company.ScriptOnly", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(inventory.InstalledModules, static module =>
+                module.Name == "Company.VersionedScript" &&
+                module.Version == "1.2.3" &&
+                module.Path!.EndsWith(Path.Combine("Company.VersionedScript", "1.2.3"), StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Collect_SkipsMissingModuleRoots()
     {
         var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]

@@ -73,6 +73,50 @@ public sealed class ModuleDependencyInstallerUpdateTests
     }
 
     [Fact]
+    public void EnsureUpdated_DoesNotPassScopeToPSResourceGetUpdateWhenUnspecified()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFMOD::UPDATE::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.1.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA") },
+            repository: "Company");
+
+        Assert.Equal(3, runner.Requests.Count);
+        Assert.Equal(string.Empty, runner.Requests[1].Arguments[5]);
+        Assert.Contains("if (-not [string]::IsNullOrWhiteSpace($Scope))", runner.ScriptTexts[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EnsureUpdated_SkipsExactProbeForPrereleaseRequiredVersion()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFPSRG::INSTALL::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.2.0-preview1")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA", requiredVersion: "1.2.0-preview1") },
+            repository: "Company",
+            prerelease: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("1.2.0-preview1", result.ResolvedVersion);
+        Assert.Equal(3, runner.Requests.Count);
+        Assert.Contains("Install-PSResource", runner.ScriptTexts[1], StringComparison.Ordinal);
+        Assert.Equal("1.2.0-preview1", runner.Requests[1].Arguments[1]);
+    }
+
+    [Fact]
     public void EnsureUpdated_UsesRepositoryScopedPowerShellGetFallback_WhenRequested()
     {
         var runner = new QueuePowerShellRunner(new[]

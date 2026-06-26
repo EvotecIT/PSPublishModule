@@ -127,6 +127,36 @@ public sealed class PrivateModuleWorkflowServiceTests
     }
 
     [Fact]
+    public void Execute_UpdateRepositoryMode_LeavesInstallScopeUnsetWhenNotRequested()
+    {
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        PrivateModuleDependencyExecutionRequest? capturedRequest = null;
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            request =>
+            {
+                capturedRequest = request;
+                return Array.Empty<ModuleDependencyInstallResult>();
+            });
+
+        service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Update,
+                ModuleNames = new[] { "ModuleA" },
+                UseAzureArtifacts = false,
+                RepositoryName = "Company"
+            },
+            (_, _) => true);
+
+        var module = Assert.Single(capturedRequest!.Modules);
+        Assert.Null(module.InstallScope);
+    }
+
+    [Fact]
     public void Execute_RepositoryMode_DoesNotResolveOptionalCredentialsWhenShouldProcessDeclines()
     {
         var host = new FakePrivateGalleryHost();

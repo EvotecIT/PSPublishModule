@@ -401,6 +401,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
 
     private object CreateDesiredStateForInstalledModules(ModuleStateInventoryResult inventory)
     {
+        var desiredRepository = ResolveRepositoryName();
         var modules = new ArrayList();
         foreach (var selected in (inventory.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())
             .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
@@ -414,8 +415,8 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
                 ["Name"] = selected.Name,
                 ["VersionPolicy"] = "*"
             };
-            if (!string.IsNullOrWhiteSpace(Repository))
-                module["Repository"] = Repository!;
+            if (!string.IsNullOrWhiteSpace(desiredRepository))
+                module["Repository"] = desiredRepository!;
             if (!string.IsNullOrWhiteSpace(Scope))
                 module["Scope"] = Scope!;
             else if (!string.IsNullOrWhiteSpace(selected.Scope))
