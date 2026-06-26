@@ -56,6 +56,26 @@ public sealed class ModuleStateObjectAdapterTests
     }
 
     [Fact]
+    public void ToDesiredState_AcceptsSingleModuleHashtable()
+    {
+        var desired = new Hashtable
+        {
+            ["Name"] = "Company.Tools",
+            ["Version"] = "=1.2.0",
+            ["Repository"] = "CompanyModules",
+            ["Scope"] = "AllUsers"
+        };
+
+        var state = ModuleStateObjectAdapter.ToDesiredState(desired);
+
+        var module = Assert.Single(state.Modules);
+        Assert.Equal("Company.Tools", module.Name);
+        Assert.Equal("=1.2.0", module.VersionPolicy);
+        Assert.Equal("CompanyModules", Assert.Single(module.AllowedSources));
+        Assert.Equal("AllUsers", module.Scope);
+    }
+
+    [Fact]
     public void ToDesiredState_AcceptsPSCustomObject()
     {
         var desired = new PSObject();

@@ -38,6 +38,25 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.False(request.MaximumVersionInclusivity["Company.Range"]);
     }
 
+    [Fact]
+    public void CreateRequest_ForcesActionRequestedRepair()
+    {
+        var request = InvokeCreateRequest(new[]
+        {
+            new ModuleStatePlanAction(
+                ModuleStatePlanActionKind.Install,
+                "Company.Tools",
+                "1.2.0",
+                "=1.2.0",
+                "source repair",
+                isRepair: true,
+                force: true,
+                targetRepository: "CompanyModules")
+        });
+
+        Assert.True(request.Force);
+    }
+
     private static PrivateModuleWorkflowRequest InvokeCreateRequest(IReadOnlyList<ModuleStatePlanAction> actions)
     {
         var method = typeof(ModuleStatePrivateDeliveryService).GetMethod(
@@ -51,6 +70,7 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
             {
                 ModuleStatePlanActionKind.Install,
                 "Company",
+                actions.Any(static action => action.Force),
                 actions,
                 new ModuleStatePrivateDeliveryOptions()
             });

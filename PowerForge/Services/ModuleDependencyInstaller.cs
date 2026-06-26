@@ -273,7 +273,9 @@ public sealed partial class ModuleDependencyInstaller
                 }
                 else
                 {
-                    var updateStatus = TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                    var updateStatus = HasVersionConstraint(dep)
+                        ? TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet, perModuleTimeout)
+                        : TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: updateStatus, message: "Update requested"));
                 }
             }
@@ -651,13 +653,18 @@ public sealed partial class ModuleDependencyInstaller
         if (string.IsNullOrWhiteSpace(minimumVersion) && string.IsNullOrWhiteSpace(maximumVersion))
             return string.Empty;
 
-        var minimumDelimiter = minimumInclusive ? "[" : "(";
-        var maximumDelimiter = maximumInclusive ? "]" : ")";
         var minimum = string.IsNullOrWhiteSpace(minimumVersion) ? string.Empty : minimumVersion!.Trim();
         var maximum = string.IsNullOrWhiteSpace(maximumVersion) ? string.Empty : maximumVersion!.Trim();
+        var minimumDelimiter = minimum.Length == 0 ? "(" : minimumInclusive ? "[" : "(";
+        var maximumDelimiter = maximum.Length == 0 ? ")" : maximumInclusive ? "]" : ")";
 
         return $"{minimumDelimiter}{minimum}, {maximum}{maximumDelimiter}";
     }
+
+    private static bool HasVersionConstraint(ModuleDependency dep)
+        => !string.IsNullOrWhiteSpace(dep.RequiredVersion) ||
+           !string.IsNullOrWhiteSpace(dep.MinimumVersion) ||
+           !string.IsNullOrWhiteSpace(dep.MaximumVersion);
 
     private static bool RequiresPSResourceGetVersionRange(ModuleDependency dep)
         => string.IsNullOrWhiteSpace(dep.RequiredVersion) &&

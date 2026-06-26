@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using Xunit;
 
@@ -148,6 +149,41 @@ public sealed class ModuleDependencyInstallerUpdateTests
         Assert.Equal("Already up to date", result.Message);
     }
 
+    [Fact]
+    public void EnsureUpdated_UsesInstallWithVersionRange_WhenPolicyIsConstrained()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.2.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFPSRG::INSTALL::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.9.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(
+            new[]
+            {
+                new ModuleDependency(
+                    "ModuleA",
+                    minimumVersion: "1.2.0",
+                    maximumVersion: "2.0.0",
+                    maximumVersionInclusive: false)
+            },
+            repository: "Company");
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("PSResourceGet", result.Installer);
+        Assert.Equal("1.9.0", result.ResolvedVersion);
+        Assert.Equal(3, runner.Requests.Count);
+
+        var installRequest = runner.Requests[1];
+        var installScript = runner.ScriptTexts[1];
+        Assert.Contains("Install-PSResource", installScript, StringComparison.Ordinal);
+        Assert.Equal("[1.2.0, 2.0.0)", installRequest.Arguments[1]);
+        Assert.Equal("1", installRequest.Arguments[5]);
+    }
+
     private static string BuildInstalledVersionsStdOut(params (string Name, string Version)[] items)
     {
         var lines = new List<string>(items.Length);
@@ -177,6 +213,10 @@ public sealed class ModuleDependencyInstallerUpdateTests
     {
         private readonly Queue<PowerShellRunResult> _results;
 
+        public List<PowerShellRunRequest> Requests { get; } = new();
+
+        public List<string> ScriptTexts { get; } = new();
+
         public QueuePowerShellRunner(IEnumerable<PowerShellRunResult> results)
         {
             _results = new Queue<PowerShellRunResult>(results);
@@ -184,6 +224,8 @@ public sealed class ModuleDependencyInstallerUpdateTests
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
+            Requests.Add(request);
+            ScriptTexts.Add(File.ReadAllText(request.ScriptPath!));
             return _results.Dequeue();
         }
     }

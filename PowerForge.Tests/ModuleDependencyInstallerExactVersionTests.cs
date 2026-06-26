@@ -228,6 +228,29 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     }
 
     [Fact]
+    public void EnsureInstalled_UsesOpenLowerBoundForMaxOnlyPSResourceRange()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase),
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    maximumVersion: "2.0.0",
+                    maximumVersionInclusive: false)
+            },
+            repository: "Company");
+
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("(, 2.0.0)", runner.LastInstallArguments![1]);
+    }
+
+    [Fact]
     public void EnsureInstalled_BootstrapsPSResourceGetDirectly_WhenRepositoryClientsAreUnavailable()
     {
         var moduleRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

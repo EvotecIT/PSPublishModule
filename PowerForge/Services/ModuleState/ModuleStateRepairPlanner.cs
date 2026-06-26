@@ -132,6 +132,7 @@ internal sealed class ModuleStateRepairPlanner
                 exactPolicy,
                 "Maintenance receipt repair: reinstall the receipt-managed version from the expected source.",
                 isRepair: true,
+                force: true,
                 targetScope: receiptModule.Scope,
                 targetRepository: receiptModule.SourceRepository);
         }

@@ -186,14 +186,38 @@ public sealed class ModuleStateApplyServiceTests
         var withEvidence = service.CreateMaintenanceReceipt(
             result,
             sourceRepository: "Company",
-            observedModules: new[] { new ModuleStateInstalledModule("Company.Tools", "1.4.0", scope: "CurrentUser", sourceRepository: "Company") });
+            observedModules: new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "2.0.0", scope: "CurrentUser", sourceRepository: "Company"),
+                new ModuleStateInstalledModule("Company.Tools", "1.4.0", scope: "AllUsers", sourceRepository: "Company")
+            });
 
         Assert.Empty(withoutEvidence.Modules);
         var module = Assert.Single(withEvidence.Modules);
         Assert.Equal("Company.Tools", module.Name);
         Assert.Equal("1.4.0", module.Version);
         Assert.Equal("Company", module.SourceRepository);
-        Assert.Equal("CurrentUser", module.Scope);
+        Assert.Equal("AllUsers", module.Scope);
+    }
+
+    [Fact]
+    public void CreateMaintenanceReceipt_DoesNotUseObservedModuleFromWrongScope()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, ">=1.2.0", "missing", targetScope: "AllUsers")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+        var service = new ModuleStateApplyService();
+        var result = service.Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
+
+        var receipt = service.CreateMaintenanceReceipt(
+            result,
+            sourceRepository: "Company",
+            observedModules: new[] { new ModuleStateInstalledModule("Company.Tools", "2.0.0", scope: "CurrentUser", sourceRepository: "Company") });
+
+        Assert.Empty(receipt.Modules);
     }
 
     [Fact]

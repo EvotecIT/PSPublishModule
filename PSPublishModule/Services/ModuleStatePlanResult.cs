@@ -72,6 +72,11 @@ public sealed class ModuleStatePlanActionResult
     public bool IsRepair { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this action must force reinstall even when a matching version exists.
+    /// </summary>
+    public bool Force { get; set; }
+
+    /// <summary>
     /// Gets or sets the scope targeted by this action when applicable.
     /// </summary>
     public string? TargetScope { get; set; }

@@ -29,6 +29,7 @@ internal static class ModuleStatePlanResultMapper
                 VersionPolicy = action.VersionPolicy,
                 Reason = action.Reason,
                 IsRepair = action.IsRepair,
+                Force = action.Force,
                 TargetScope = action.TargetScope,
                 TargetPath = action.TargetPath,
                 TargetRepository = action.TargetRepository
@@ -57,10 +58,11 @@ internal static class ModuleStatePlanResultMapper
                 action.InstalledVersion,
                 action.VersionPolicy,
                 action.Reason,
-                action.IsRepair,
-                action.TargetScope,
-                action.TargetPath,
-                action.TargetRepository)).ToArray(),
+                isRepair: action.IsRepair,
+                force: action.Force,
+                targetScope: action.TargetScope,
+                targetPath: action.TargetPath,
+                targetRepository: action.TargetRepository)).ToArray(),
             (result.Findings ?? Array.Empty<ModuleStateConflictFindingResult>()).Select(static finding => new ModuleStateConflictFinding(
                 ParseEnum<ModuleStateConflictSeverity>(finding.Severity, nameof(finding.Severity)),
                 finding.Code,

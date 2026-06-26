@@ -16,7 +16,8 @@ internal static class ModuleStateObjectAdapter
             throw new ArgumentNullException(nameof(input));
 
         var value = Unwrap(input);
-        var modulesValue = GetPropertyValue(value, "Modules") ?? value;
+        var explicitModulesValue = GetPropertyValue(value, "Modules");
+        var modulesValue = explicitModulesValue ?? (IsSingleDesiredModule(value) ? new[] { value } : value);
         var modules = ToEnumerable(modulesValue)
             .Select(ToDesiredModule)
             .ToArray();
@@ -65,6 +66,9 @@ internal static class ModuleStateObjectAdapter
 
     private static object Unwrap(object value)
         => value is PSObject psObject ? psObject.BaseObject is PSCustomObject ? psObject : psObject.BaseObject : value;
+
+    private static bool IsSingleDesiredModule(object value)
+        => GetPropertyValue(value, "Name") is not null;
 
     private static IEnumerable<object> ToEnumerable(object value)
     {

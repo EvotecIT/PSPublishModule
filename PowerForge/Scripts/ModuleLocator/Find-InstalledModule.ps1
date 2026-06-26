@@ -34,6 +34,8 @@ try {
           $scopeRoots += (Join-Path $programFiles 'PowerShell/Modules')
           $scopeRoots += (Join-Path $programFiles 'WindowsPowerShell/Modules')
         }
+        $scopeRoots += '/usr/local/share/powershell/Modules'
+        $scopeRoots += '/opt/microsoft/powershell/7/Modules'
       }
 
       $normalizedRoots = @($scopeRoots | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object {
@@ -48,6 +50,8 @@ try {
           }
           return $false
         }
+      } else {
+        $filtered = @()
       }
     }
 
