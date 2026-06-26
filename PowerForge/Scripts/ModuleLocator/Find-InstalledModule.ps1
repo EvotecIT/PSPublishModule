@@ -37,6 +37,7 @@ try {
           $scopeRoots += (Join-Path $programFiles 'WindowsPowerShell/Modules')
         }
         $scopeRoots += '/usr/local/share/powershell/Modules'
+        $scopeRoots += '/usr/share/powershell/Modules'
         $scopeRoots += '/opt/microsoft/powershell/7/Modules'
       }
 
