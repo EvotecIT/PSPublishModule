@@ -48,7 +48,11 @@ try {
           if (-not $_.ModuleBase) { return $false }
           $moduleBase = [System.IO.Path]::GetFullPath($_.ModuleBase).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
           foreach ($root in $normalizedRoots) {
-            if ($moduleBase.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+            if ($moduleBase.Equals($root, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+            $rootWithSeparator = $root + [System.IO.Path]::DirectorySeparatorChar
+            if ($moduleBase.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+            $rootWithAltSeparator = $root + [System.IO.Path]::AltDirectorySeparatorChar
+            if ($rootWithAltSeparator -ne $rootWithSeparator -and $moduleBase.StartsWith($rootWithAltSeparator, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
           }
           return $false
         }

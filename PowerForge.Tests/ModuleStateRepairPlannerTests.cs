@@ -106,6 +106,34 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
+    public void CreateRepairActions_RequiresReceiptSourceAndScopeOnSameCopy()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.2.0", scope: "CurrentUser", sourceRepository: "CompanyModules"),
+            new ModuleStateInstalledModule("Company.Tools", "1.2.0", scope: "AllUsers", sourceRepository: "PublicGallery")
+        });
+        var receipts = new[]
+        {
+            new ModuleStateMaintenanceReceipt(
+                null,
+                new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2.0", sourceRepository: "CompanyModules", scope: "AllUsers") })
+        };
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            receipts,
+            Array.Empty<ModuleStatePlanAction>()));
+
+        Assert.Equal(ModuleStatePlanActionKind.Install, action.Kind);
+        Assert.Equal("Company.Tools", action.ModuleName);
+        Assert.Equal("AllUsers", action.TargetScope);
+        Assert.Equal("CompanyModules", action.TargetRepository);
+        Assert.True(action.Force);
+        Assert.True(action.IsRepair);
+    }
+
+    [Fact]
     public void CreateRepairActions_PreservesSameModuleRepairsAcrossScopes()
     {
         var inventory = new ModuleStateInventory(Array.Empty<ModuleStateInstalledModule>());

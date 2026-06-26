@@ -219,6 +219,40 @@ public sealed class ModuleDependencyInstallerUpdateTests
         Assert.Equal("1", installRequest.Arguments[5]);
     }
 
+    [Fact]
+    public void EnsureInstalled_PreservesMaximumRange_WhenRequestedScopeIsMissing()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "3.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFPSRG::INSTALL::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.9.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "ModuleA",
+                    maximumVersion: "2.0.0",
+                    maximumVersionInclusive: false,
+                    installScope: "AllUsers")
+            },
+            repository: "Company");
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("PSResourceGet", result.Installer);
+        Assert.Equal(4, runner.Requests.Count);
+
+        var installRequest = runner.Requests[2];
+        Assert.Contains("Install-PSResource", runner.ScriptTexts[2], StringComparison.Ordinal);
+        Assert.Equal("(, 2.0.0)", installRequest.Arguments[1]);
+        Assert.Equal("AllUsers", installRequest.Arguments[3]);
+    }
+
     private static string BuildInstalledVersionsStdOut(params (string Name, string Version)[] items)
     {
         var lines = new List<string>(items.Length);

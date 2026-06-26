@@ -58,4 +58,13 @@ public sealed class ModuleStateVersionPolicyTests
         Assert.True(policy.IsSatisfiedBy("1.2.0-preview10"));
         Assert.False(policy.IsSatisfiedBy("1.2.0-preview8"));
     }
+
+    [Fact]
+    public void Parse_RangeWithPrereleaseBoundAllowsPrereleaseByDefault()
+    {
+        var policy = ModuleStateVersionPolicy.Parse(">=1.2.0-preview1 <1.2.0");
+
+        Assert.True(policy.IsSatisfiedBy("1.2.0-preview2"));
+        Assert.False(policy.IsSatisfiedBy("1.2.0"));
+    }
 }

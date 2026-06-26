@@ -119,7 +119,7 @@ public sealed partial class ModuleDependencyInstaller
                 {
                     if (RequiresScopedInstall(dep) && !HasInstalledModuleSatisfyingDependency(dep))
                     {
-                        var scopedInstallStatus = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, preferPowerShellGet, perModuleTimeout);
+                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, perModuleTimeout);
                         actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
                         continue;
                     }
