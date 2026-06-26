@@ -100,6 +100,23 @@ public sealed class ModuleStateFamilyCoherenceAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_UsesFamilyPrefixesForInstalledGraphSubmodules()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.36.0"),
+            new ModuleStateInstalledModule("Microsoft.Graph.Applications", "2.38.0")
+        });
+        var policy = Assert.Single(new ModuleStateFamilyCatalog().Resolve(new[] { "Graph" }));
+
+        var finding = Assert.Single(new ModuleStateFamilyCoherenceAnalyzer().Analyze(inventory, new[] { policy }));
+
+        Assert.Equal("MicrosoftGraph", finding.FamilyName);
+        Assert.Equal(new[] { "Microsoft.Graph.Applications", "Microsoft.Graph.Authentication" }, finding.ModuleNames);
+        Assert.Equal(new[] { "2.36.0", "2.38.0" }, finding.Versions);
+    }
+
+    [Fact]
     public void Analyze_DeduplicatesCaseInsensitiveModuleNamesAndVersions()
     {
         var inventory = new ModuleStateInventory(new[]
@@ -125,7 +142,10 @@ public sealed class ModuleStateFamilyCoherenceAnalyzerTests
 
         var policy = Assert.Single(policies);
         Assert.Equal("MicrosoftGraph", policy.Name);
-        Assert.Contains("Microsoft.Graph.Authentication", policy.Modules);
+        Assert.Contains("Microsoft.Graph", policy.Modules);
+        Assert.Contains("Microsoft.Graph.", policy.ModulePrefixes);
+        Assert.True(policy.Matches("Microsoft.Graph.Authentication"));
+        Assert.True(policy.Matches("Microsoft.Graph.Applications"));
         Assert.Equal(ModuleStateFamilyCoherenceRule.SameVersion, policy.CoherenceRule);
     }
 

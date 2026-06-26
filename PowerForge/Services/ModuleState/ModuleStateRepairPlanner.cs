@@ -66,7 +66,7 @@ internal sealed class ModuleStateRepairPlanner
                 continue;
 
             var installedFamilyModules = inventory.InstalledModules
-                .Where(module => policy.Modules.Contains(module.Name, StringComparer.OrdinalIgnoreCase))
+                .Where(module => policy.Matches(module.Name))
                 .ToArray();
 
             if (installedFamilyModules.Length <= 1)
@@ -76,7 +76,13 @@ internal sealed class ModuleStateRepairPlanner
             if (targetModule is null)
                 continue;
 
-            foreach (var moduleName in policy.Modules)
+            var installedFamilyModuleNames = installedFamilyModules
+                .Select(static module => module.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (var moduleName in installedFamilyModuleNames)
             {
                 var installedModules = installedFamilyModules
                     .Where(module => string.Equals(module.Name, moduleName, StringComparison.OrdinalIgnoreCase))

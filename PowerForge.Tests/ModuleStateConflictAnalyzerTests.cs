@@ -43,6 +43,26 @@ public sealed class ModuleStateConflictAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_PrefersLoadedModuleForSourcePreference()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.0.0", sourceRepository: "PublicGallery", isLoaded: true, isEffectiveImportCandidate: true),
+            new ModuleStateInstalledModule("Company.Tools", "1.3.0", sourceRepository: "CompanyModules", isEffectiveImportCandidate: true)
+        });
+        var desired = new[]
+        {
+            new ModuleStateDesiredModule("Company.Tools", ">=1.0.0", new[] { "CompanyModules" })
+        };
+
+        var finding = Assert.Single(new ModuleStateConflictAnalyzer().Analyze(inventory, desired));
+
+        Assert.Equal(ModuleStateConflictSeverity.Error, finding.Severity);
+        Assert.Equal("ModuleState.SourcePreferenceMismatch", finding.Code);
+        Assert.Equal(new[] { "1.0.0" }, finding.Versions);
+    }
+
+    [Fact]
     public void Analyze_UsesDesiredScopeForSourcePreference()
     {
         var inventory = new ModuleStateInventory(new[]

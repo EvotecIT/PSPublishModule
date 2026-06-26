@@ -136,6 +136,35 @@ public sealed class ModuleStateInventoryServiceTests
     }
 
     [Fact]
+    public void Collect_DiscoversVersionedBinaryOnlyModules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleDirectory = Path.Combine(root.FullName, "Company.BinaryOnly", "1.2.3");
+            Directory.CreateDirectory(moduleDirectory);
+            File.WriteAllBytes(Path.Combine(moduleDirectory, "Company.BinaryOnly.dll"), Array.Empty<byte>());
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            var module = Assert.Single(inventory.InstalledModules);
+            Assert.Equal("Company.BinaryOnly", module.Name);
+            Assert.Equal("1.2.3", module.Version);
+            Assert.Equal("Core", module.PowerShellEdition);
+            Assert.Equal("CurrentUser", module.Scope);
+            Assert.True(module.IsEffectiveImportCandidate);
+            Assert.EndsWith(Path.Combine("Company.BinaryOnly", "1.2.3"), module.Path!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Collect_SkipsMissingModuleRoots()
     {
         var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
