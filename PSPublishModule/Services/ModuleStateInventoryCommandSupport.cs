@@ -189,7 +189,7 @@ internal static class ModuleStateInventoryCommandSupport
                 loadedModule.Version!,
                 path: loadedModule.Path,
                 isLoaded: true,
-                isEffectiveImportCandidate: true));
+                isEffectiveImportCandidate: false));
         }
 
         return new ModuleStateInventory(modules);
