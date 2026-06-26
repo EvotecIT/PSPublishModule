@@ -103,6 +103,58 @@ public sealed class ModuleStateInventoryServiceTests
         }
     }
 
+    [Fact]
+    public void Collect_PreservesPrereleaseVersionFolderWhenManifestHasStableVersion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteManifest(Path.Combine(root.FullName, "Company.Tools", "1.2.0-preview1"), "Company.Tools", "1.2.0");
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            var module = Assert.Single(inventory.InstalledModules);
+            Assert.Equal("1.2.0-preview1", module.Version);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Collect_ReadsRepositoryMetadataFromPSGetModuleInfo()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleDirectory = Path.Combine(root.FullName, "Company.Tools", "1.2.3");
+            WriteManifest(moduleDirectory, "Company.Tools", "1.2.3");
+            File.WriteAllText(Path.Combine(moduleDirectory, "PSGetModuleInfo.xml"), """
+<Obj>
+  <MS>
+    <S N="Repository">CompanyModules</S>
+  </MS>
+</Obj>
+""");
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            var module = Assert.Single(inventory.InstalledModules);
+            Assert.Equal("CompanyModules", module.SourceRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteManifest(string directoryPath, string moduleName, string version, string? repository = null)
     {
         Directory.CreateDirectory(directoryPath);

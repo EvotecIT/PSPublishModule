@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -94,14 +95,14 @@ internal sealed class ModuleStateInventoryService
         string fallbackVersion)
     {
         var manifestText = TryReadManifestText(manifest.FullName);
-        var version = TryReadManifestVersion(manifestText) ?? fallbackVersion;
+        var version = ResolveDiscoveredVersion(manifestText, fallbackVersion);
         return new ModuleStateInstalledModule(
             moduleName,
             version,
             modulePath.PowerShellEdition,
             modulePath.Scope,
             manifest.DirectoryName ?? manifest.FullName,
-            TryReadManifestSourceRepository(manifestText));
+            TryReadSourceRepository(manifestText, manifest.Directory));
     }
 
     private static FileInfo? FindManifest(DirectoryInfo directory, string moduleName)
@@ -143,6 +144,19 @@ internal sealed class ModuleStateInventoryService
         return match.Success ? match.Groups["version"].Value : null;
     }
 
+    private static string ResolveDiscoveredVersion(string? manifestText, string fallbackVersion)
+    {
+        if (ModuleStateVersion.TryParse(fallbackVersion, out var fallback) && fallback.IsPrerelease)
+            return fallbackVersion;
+
+        return TryReadManifestVersion(manifestText) ?? fallbackVersion;
+    }
+
+    private static string? TryReadSourceRepository(string? manifestText, DirectoryInfo? moduleDirectory)
+        => TryReadManifestSourceRepository(manifestText)
+           ?? TryReadPSGetModuleInfoRepository(moduleDirectory)
+           ?? TryReadNuspecRepository(moduleDirectory);
+
     private static string? TryReadManifestSourceRepository(string? manifestText)
     {
         if (string.IsNullOrWhiteSpace(manifestText))
@@ -150,6 +164,59 @@ internal sealed class ModuleStateInventoryService
 
         var match = SourceRepositoryPattern.Match(manifestText!);
         return match.Success ? match.Groups["repository"].Value.Trim() : null;
+    }
+
+    private static string? TryReadPSGetModuleInfoRepository(DirectoryInfo? moduleDirectory)
+    {
+        var file = moduleDirectory is null ? null : Path.Combine(moduleDirectory.FullName, "PSGetModuleInfo.xml");
+        if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+            return null;
+
+        try
+        {
+            var document = XDocument.Load(file);
+            return document
+                .Descendants()
+                .FirstOrDefault(static element =>
+                    string.Equals(element.Name.LocalName, "Repository", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(element.Name.LocalName, "RepositoryName", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(element.Attribute("N")?.Value, "Repository", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(element.Attribute("N")?.Value, "RepositoryName", StringComparison.OrdinalIgnoreCase))
+                ?.Value
+                ?.Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? TryReadNuspecRepository(DirectoryInfo? moduleDirectory)
+    {
+        if (moduleDirectory is null)
+            return null;
+
+        try
+        {
+            var nuspec = moduleDirectory.EnumerateFiles("*.nuspec", SearchOption.TopDirectoryOnly)
+                .OrderBy(static file => file.Name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            if (nuspec is null)
+                return null;
+
+            var document = XDocument.Load(nuspec.FullName);
+            return document
+                .Descendants()
+                .FirstOrDefault(static element => string.Equals(element.Name.LocalName, "repository", StringComparison.OrdinalIgnoreCase)
+                                                  || string.Equals(element.Name.LocalName, "repositoryName", StringComparison.OrdinalIgnoreCase))
+                ?.Attribute("name")
+                ?.Value
+                ?.Trim();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static IEnumerable<DirectoryInfo> EnumerateDirectoriesSafe(string path)

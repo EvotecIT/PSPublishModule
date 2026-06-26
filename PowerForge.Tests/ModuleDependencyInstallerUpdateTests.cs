@@ -169,6 +169,22 @@ public sealed class ModuleDependencyInstallerUpdateTests
     }
 
     [Fact]
+    public void SatisfiesVersionBounds_AcceptsPrereleaseWithSemanticBounds()
+    {
+        var method = typeof(ModuleDependencyInstaller).GetMethod(
+            "SatisfiesVersionBounds",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var dependency = new ModuleDependency(
+            "ModuleA",
+            minimumVersion: "1.2.0-preview1",
+            maximumVersion: "1.2.0-preview3");
+
+        Assert.True((bool)method!.Invoke(null, new object[] { "1.2.0-preview2", dependency })!);
+        Assert.False((bool)method.Invoke(null, new object[] { "1.2.0-preview4", dependency })!);
+    }
+
+    [Fact]
     public void EnsureUpdated_UsesInstallWithVersionRange_WhenPolicyIsConstrained()
     {
         var runner = new QueuePowerShellRunner(new[]
