@@ -26,6 +26,7 @@ internal static partial class ModuleBootstrapperGenerator
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
         ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
         IReadOnlyList<string>? targetFrameworks = null,
+        bool forceBootstrapperWrite = false,
         Action<string>? log = null)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
@@ -41,7 +42,7 @@ internal static partial class ModuleBootstrapperGenerator
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
         // If there is no Lib and no folder-based layout, leave the existing PSM1 intact.
-        if (!hasLib && !hasScriptFolders && !hasDevelopmentBinaryLoader) return;
+        if (!hasLib && !hasScriptFolders && !hasDevelopmentBinaryLoader && !forceBootstrapperWrite) return;
 
         var exportAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");

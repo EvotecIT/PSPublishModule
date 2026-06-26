@@ -390,16 +390,18 @@ public sealed partial class ModulePipelineRunner
     {
         var sourceIsSingleFileModule = IsSourceSingleFileModule(plan);
         var sourcePsm1Path = Path.Combine(plan.BuildSpec.SourcePath, plan.ModuleName + ".psm1");
-        var sourceCanUseGeneratedBootstrapper = SourceCanUseGeneratedBootstrapper(plan, sourcePsm1Path);
+        var sourceHasCustomIncludeScripts = HasCustomIncludeScriptFiles(plan.BuildSpec.SourcePath, plan.Information);
+        var sourceCanUseGeneratedBootstrapper = SourceCanUseGeneratedBootstrapper(plan, sourcePsm1Path, sourceIsSingleFileModule, sourceHasCustomIncludeScripts);
 
         if (plan.BuildSpec.DevelopmentBinariesMode == ModuleDevelopmentBinaryMode.Off)
         {
-            TryClearSourceDevelopmentBootstrapper(buildResult, plan, sourceIsSingleFileModule, sourceCanUseGeneratedBootstrapper);
+            TryClearSourceDevelopmentBootstrapper(buildResult, plan, sourceCanUseGeneratedBootstrapper);
             return;
         }
 
-        if (!sourceCanUseGeneratedBootstrapper &&
-            plan.BuildSpec.DevelopmentSourceBootstrapperMode != ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile)
+        if (sourceHasCustomIncludeScripts ||
+            (!sourceCanUseGeneratedBootstrapper &&
+             plan.BuildSpec.DevelopmentSourceBootstrapperMode != ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile))
         {
             _logger.Info($"Skipped source development bootstrapper for '{plan.ModuleName}' because the source module PSM1 cannot be regenerated without dropping local script imports.");
             return;
@@ -463,7 +465,6 @@ public sealed partial class ModulePipelineRunner
     private void TryClearSourceDevelopmentBootstrapper(
         ModuleBuildResult buildResult,
         ModulePipelinePlan plan,
-        bool sourceIsSingleFileModule,
         bool sourceCanUseGeneratedBootstrapper)
     {
         try
@@ -471,13 +472,6 @@ public sealed partial class ModulePipelineRunner
             var sourcePsm1Path = Path.Combine(plan.BuildSpec.SourcePath, plan.ModuleName + ".psm1");
             if (!IsGeneratedSourceDevelopmentBootstrapper(sourcePsm1Path, plan.ModuleName))
                 return;
-
-            if (sourceIsSingleFileModule)
-            {
-                File.Delete(sourcePsm1Path);
-                _logger.Info($"Removed generated source development bootstrapper because DevelopmentBinariesMode is Off: {sourcePsm1Path}");
-                return;
-            }
 
             if (!sourceCanUseGeneratedBootstrapper)
             {
@@ -504,6 +498,7 @@ public sealed partial class ModulePipelineRunner
                 ignoreLibrariesOnLoad: plan.BuildSpec.IgnoreLibraryOnLoad,
                 conditionalFunctionDependencies: conditionalExportDependencies,
                 targetFrameworks: plan.BuildSpec.Frameworks,
+                forceBootstrapperWrite: true,
                 log: message => _logger.Info(message));
 
             _logger.Info($"Cleared source development bootstrapper: {sourcePsm1Path}");
@@ -534,9 +529,13 @@ public sealed partial class ModulePipelineRunner
         => ModuleMergeComposer.ResolveScriptFiles(plan.BuildSpec.SourcePath, null).Length == 0 &&
            !HasSourceLibLayout(plan.BuildSpec.SourcePath);
 
-    private static bool SourceCanUseGeneratedBootstrapper(ModulePipelinePlan plan, string sourcePsm1Path)
-        => !HasCustomIncludeScriptFiles(plan.BuildSpec.SourcePath, plan.Information) &&
-           (!IsSourceSingleFileModule(plan) || IsGeneratedSourceDevelopmentBootstrapper(sourcePsm1Path, plan.ModuleName));
+    private static bool SourceCanUseGeneratedBootstrapper(
+        ModulePipelinePlan plan,
+        string sourcePsm1Path,
+        bool sourceIsSingleFileModule,
+        bool sourceHasCustomIncludeScripts)
+        => !sourceHasCustomIncludeScripts &&
+           (!sourceIsSingleFileModule || IsGeneratedSourceDevelopmentBootstrapper(sourcePsm1Path, plan.ModuleName));
 
     private static bool HasSourceLibLayout(string sourcePath)
     {
