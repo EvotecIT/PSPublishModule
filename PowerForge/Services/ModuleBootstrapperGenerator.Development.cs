@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace PowerForge;
 
 internal static partial class ModuleBootstrapperGenerator
@@ -20,104 +18,74 @@ internal static partial class ModuleBootstrapperGenerator
         var coreFrameworks = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(options.CoreFrameworkCandidates));
         var desktopFrameworks = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(options.DesktopFrameworkCandidates));
         var useAlcLiteral = useAssemblyLoadContext ? "$true" : "$false";
-        var mode = options.Mode.ToString();
-        var loaderTypeName = loaderIdentity?.TypeName ?? string.Empty;
-        var loaderSource = useAssemblyLoadContext && loaderIdentity is not null
-            ? BuildDevelopmentAssemblyLoadContextSource(loaderIdentity)
-            : string.Empty;
-        var typeAcceleratorBlock = useAssemblyLoadContext && loaderIdentity is not null
-            ? BuildTypeAcceleratorBlock(
-                assemblyTypeAcceleratorMode,
-                assemblyTypeAccelerators,
-                assemblyTypeAcceleratorAssemblies)
-            : string.Empty;
-
-        var sb = new StringBuilder(8192);
-        sb.AppendLine("# Source development binary loader");
-        sb.AppendLine("$PowerForgeDevelopmentBinaryRoot = " + binaryRootExpression);
-        sb.AppendLine("$PowerForgeDevelopmentBinaryMode = '" + EscapePsSingleQuoted(mode) + "'");
-        sb.AppendLine("$PowerForgeDevelopmentBinaryEnvironmentVariable = '" + EscapePsSingleQuoted(options.EnvironmentVariable) + "'");
-        sb.AppendLine("$PowerForgeDevelopmentConfigurationEnvironmentVariable = '" + EscapePsSingleQuoted(options.ConfigurationEnvironmentVariable) + "'");
-        sb.AppendLine("$PowerForgeDevelopmentCoreFrameworks = " + coreFrameworks);
-        sb.AppendLine("$PowerForgeDevelopmentDesktopFrameworks = " + desktopFrameworks);
-        sb.AppendLine("$PowerForgeDevelopmentUseAssemblyLoadContext = " + useAlcLiteral);
-        sb.AppendLine("$PowerForgeDevelopmentEnabled = $false");
-        sb.AppendLine("if ($PowerForgeDevelopmentBinaryMode -eq 'Auto') {");
-        sb.AppendLine("    $PowerForgeDevelopmentEnabled = $true");
-        sb.AppendLine("} elseif ($PowerForgeDevelopmentBinaryMode -eq 'Environment') {");
-        sb.AppendLine("    $PowerForgeDevelopmentRequestedValue = [Environment]::GetEnvironmentVariable($PowerForgeDevelopmentBinaryEnvironmentVariable)");
-        sb.AppendLine("    $PowerForgeDevelopmentEnabled = [string]::Equals($PowerForgeDevelopmentRequestedValue, 'true', [StringComparison]::OrdinalIgnoreCase)");
-        sb.AppendLine("}");
-        sb.AppendLine();
-        sb.AppendLine("if ($PowerForgeDevelopmentEnabled) {");
-        sb.AppendLine("    $PowerForgeDevelopmentConfigurations = @()");
-        sb.AppendLine("    $PowerForgeDevelopmentRequestedConfiguration = [Environment]::GetEnvironmentVariable($PowerForgeDevelopmentConfigurationEnvironmentVariable)");
-        sb.AppendLine("    if (-not [string]::IsNullOrWhiteSpace($PowerForgeDevelopmentRequestedConfiguration)) {");
-        sb.AppendLine("        $PowerForgeDevelopmentConfigurations += $PowerForgeDevelopmentRequestedConfiguration");
-        sb.AppendLine("    }");
-        sb.AppendLine("    $PowerForgeDevelopmentConfigurations += 'Debug'");
-        sb.AppendLine("    $PowerForgeDevelopmentConfigurations += 'Release'");
-        sb.AppendLine("    $PowerForgeDevelopmentConfigurations = @($PowerForgeDevelopmentConfigurations | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)");
-        sb.AppendLine();
-        sb.AppendLine("    $PowerForgeDevelopmentFrameworks = if ($PSEdition -eq 'Core') { $PowerForgeDevelopmentCoreFrameworks } else { $PowerForgeDevelopmentDesktopFrameworks }");
-        sb.AppendLine("    $PowerForgeDevelopmentBinaryPath = $null");
-        sb.AppendLine("    foreach ($PowerForgeDevelopmentConfiguration in $PowerForgeDevelopmentConfigurations) {");
-        sb.AppendLine("        foreach ($PowerForgeDevelopmentFramework in $PowerForgeDevelopmentFrameworks) {");
-        sb.AppendLine("            $PowerForgeDevelopmentCandidate = [IO.Path]::Combine($PowerForgeDevelopmentBinaryRoot, $PowerForgeDevelopmentConfiguration, $PowerForgeDevelopmentFramework, '" + EscapePsSingleQuoted(libraryName) + ".dll')");
-        sb.AppendLine("            if (Test-Path -LiteralPath $PowerForgeDevelopmentCandidate) {");
-        sb.AppendLine("                $PowerForgeDevelopmentBinaryPath = $PowerForgeDevelopmentCandidate");
-        sb.AppendLine("                break");
-        sb.AppendLine("            }");
-        sb.AppendLine("        }");
-        sb.AppendLine("        if ($PowerForgeDevelopmentBinaryPath) { break }");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-        sb.AppendLine("    if ($PowerForgeDevelopmentBinaryPath) {");
-        sb.AppendLine("        try {");
-        sb.AppendLine("            $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core");
-        if (handleRuntimes)
-        {
-            sb.AppendLine(IndentPowerShell(BuildDevelopmentRuntimeHandlerBlock().TrimEnd(), 12));
-        }
-        sb.AppendLine("            if ($PSEdition -eq 'Core' -and $PowerForgeDevelopmentUseAssemblyLoadContext) {");
-        if (useAssemblyLoadContext && loaderIdentity is not null)
-        {
-            sb.AppendLine("                if (-not ('" + loaderTypeName + "' -as [type])) {");
-            sb.AppendLine("                    Add-Type -TypeDefinition @'");
-            sb.AppendLine(loaderSource.TrimEnd());
-            sb.AppendLine("'@ -Language CSharp -ErrorAction Stop");
-            sb.AppendLine("                }");
-            sb.AppendLine("                $PowerForgeDevelopmentModuleAssembly = [" + loaderTypeName + "]::LoadModule($PowerForgeDevelopmentBinaryPath, '" + EscapePsSingleQuoted(moduleName) + ".Development')");
-            sb.AppendLine("                $PowerForgeDevelopmentInnerModule = & $ImportModule -Assembly $PowerForgeDevelopmentModuleAssembly -Force -PassThru -ErrorAction Stop");
-            if (!string.IsNullOrWhiteSpace(typeAcceleratorBlock))
+        return RenderModuleBootstrapperTemplate(
+            "DevelopmentBinaryLoader",
+            "Scripts/ModuleBootstrapper/DevelopmentBinaryLoader.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                sb.AppendLine("                $ModuleAssembly = $PowerForgeDevelopmentModuleAssembly");
-                sb.AppendLine("                $LibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)");
-                sb.AppendLine(IndentPowerShell(typeAcceleratorBlock.TrimEnd(), 16));
-            }
-            sb.AppendLine("                if ($PowerForgeDevelopmentInnerModule) {");
-            sb.AppendLine(IndentPowerShell(BuildPowerShellModuleExportBridge("$PowerForgeDevelopmentInnerModule", libraryName, "$PowerForgeDevelopmentBinaryPath").TrimEnd(), 20));
-            sb.AppendLine("                }");
-        }
-        else
-        {
-            sb.AppendLine("                & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop");
-        }
-        sb.AppendLine("            } else {");
-        sb.AppendLine("                & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop");
-        sb.AppendLine("            }");
-        sb.AppendLine("            $PowerForgeDevelopmentBinaryLoaded = $true");
-        sb.AppendLine("        } catch {");
-        sb.AppendLine("            if ($ErrorActionPreference -eq 'Stop') {");
-        sb.AppendLine("                throw");
-        sb.AppendLine("            } else {");
-        sb.AppendLine("                Write-Warning -Message \"Importing development binary $PowerForgeDevelopmentBinaryPath failed. Falling back to packaged loader when available. Error: $($_.Exception.Message)\"");
-        sb.AppendLine("            }");
-        sb.AppendLine("        }");
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
+                ["BinaryRootExpression"] = binaryRootExpression,
+                ["DevelopmentBinaryMode"] = EscapePsSingleQuoted(options.Mode.ToString()),
+                ["DevelopmentBinaryEnvironmentVariable"] = EscapePsSingleQuoted(options.EnvironmentVariable),
+                ["DevelopmentConfigurationEnvironmentVariable"] = EscapePsSingleQuoted(options.ConfigurationEnvironmentVariable),
+                ["DevelopmentCoreFrameworks"] = coreFrameworks,
+                ["DevelopmentDesktopFrameworks"] = desktopFrameworks,
+                ["UseAssemblyLoadContext"] = useAlcLiteral,
+                ["LibraryFileName"] = EscapePsSingleQuoted(libraryName + ".dll"),
+                ["RuntimeHandlerBlock"] = handleRuntimes
+                    ? IndentPowerShell(BuildDevelopmentRuntimeHandlerBlock().TrimEnd(), 12)
+                    : string.Empty,
+                ["AssemblyLoadContextImportBlock"] = BuildDevelopmentAssemblyLoadContextImportBlock(
+                    moduleName,
+                    libraryName,
+                    useAssemblyLoadContext,
+                    loaderIdentity,
+                    assemblyTypeAcceleratorMode,
+                    assemblyTypeAccelerators,
+                    assemblyTypeAcceleratorAssemblies)
+            });
+    }
 
-        return sb.ToString();
+    private static string BuildDevelopmentAssemblyLoadContextImportBlock(
+        string moduleName,
+        string libraryName,
+        bool useAssemblyLoadContext,
+        AssemblyLoadContextLoaderIdentity? loaderIdentity,
+        AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
+        IReadOnlyList<string>? assemblyTypeAccelerators,
+        IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies)
+    {
+        if (!useAssemblyLoadContext || loaderIdentity is null)
+            return "                & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop";
+
+        var loaderTypeName = loaderIdentity.TypeName;
+        var loaderSource = BuildDevelopmentAssemblyLoadContextSource(loaderIdentity);
+        var lines = new List<string>
+        {
+            "                if (-not ('" + loaderTypeName + "' -as [type])) {",
+            "                    Add-Type -TypeDefinition @'",
+            loaderSource.TrimEnd(),
+            "'@ -Language CSharp -ErrorAction Stop",
+            "                }",
+            "                $PowerForgeDevelopmentModuleAssembly = [" + loaderTypeName + "]::LoadModule($PowerForgeDevelopmentBinaryPath, '" + EscapePsSingleQuoted(moduleName) + ".Development')",
+            "                $PowerForgeDevelopmentInnerModule = & $ImportModule -Assembly $PowerForgeDevelopmentModuleAssembly -Force -PassThru -ErrorAction Stop"
+        };
+
+        var typeAcceleratorBlock = BuildTypeAcceleratorBlock(
+            assemblyTypeAcceleratorMode,
+            assemblyTypeAccelerators,
+            assemblyTypeAcceleratorAssemblies);
+        if (!string.IsNullOrWhiteSpace(typeAcceleratorBlock))
+        {
+            lines.Add("                $ModuleAssembly = $PowerForgeDevelopmentModuleAssembly");
+            lines.Add("                $LibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)");
+            lines.Add(IndentPowerShell(typeAcceleratorBlock.TrimEnd(), 16));
+        }
+
+        lines.Add("                if ($PowerForgeDevelopmentInnerModule) {");
+        lines.Add(IndentPowerShell(BuildPowerShellModuleExportBridge("$PowerForgeDevelopmentInnerModule", libraryName, "$PowerForgeDevelopmentBinaryPath").TrimEnd(), 20));
+        lines.Add("                }");
+
+        return string.Join("\r\n", lines);
     }
 
     private static string BuildPowerShellModuleExportBridge(string innerModuleExpression, string libraryName, string? fallbackImportPathExpression = null)
