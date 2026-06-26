@@ -251,6 +251,31 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     }
 
     [Fact]
+    public void EnsureInstalled_InstallsWhenOnlyAnotherScopeSatisfiesAnyVersionPolicy()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "0.26.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[] { new ModuleDependency("PSSharedGoods", installScope: "AllUsers") });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("Module is not installed in requested scope", result.Message);
+        Assert.Equal(1, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastExactProbeArguments);
+        Assert.Equal("AllUsers", runner.LastExactProbeArguments![4]);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("AllUsers", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
     public void EnsureInstalled_BootstrapsPSResourceGetDirectly_WhenRepositoryClientsAreUnavailable()
     {
         var moduleRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

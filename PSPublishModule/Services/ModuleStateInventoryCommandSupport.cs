@@ -81,15 +81,37 @@ internal static class ModuleStateInventoryCommandSupport
     private static string? InferScope(string path)
     {
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        if (!string.IsNullOrWhiteSpace(programFiles) && path.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(programFiles) && IsPathUnder(path, programFiles))
             return "AllUsers";
+        if (IsPathUnder(path, "/usr/local/share/powershell/Modules") ||
+            IsPathUnder(path, "/opt/microsoft/powershell/7/Modules") ||
+            IsPathUnder(path, "/usr/share/powershell/Modules"))
+        {
+            return "AllUsers";
+        }
 
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrWhiteSpace(userProfile) && path.StartsWith(userProfile, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(userProfile) && IsPathUnder(path, userProfile))
             return "CurrentUser";
 
         return null;
     }
+
+    private static bool IsPathUnder(string path, string root)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(root))
+            return false;
+
+        var normalizedPath = NormalizePath(path);
+        var normalizedRoot = NormalizePath(root);
+        return string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.StartsWith(normalizedRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+        => Path.GetFullPath(path)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private static ModuleStateInventory IncludeLoadedModules(
         ModuleStateInventory inventory,

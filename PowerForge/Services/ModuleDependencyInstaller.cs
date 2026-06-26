@@ -117,6 +117,13 @@ public sealed partial class ModuleDependencyInstaller
 
                 if (!currentDecision.NeedsInstall)
                 {
+                    if (RequiresScopedInstall(dep) && !HasInstalledModuleSatisfyingDependency(dep))
+                    {
+                        var scopedInstallStatus = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, preferPowerShellGet, perModuleTimeout);
+                        actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
+                        continue;
+                    }
+
                     actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: currentDecision.Reason));
                     continue;
                 }
@@ -160,7 +167,7 @@ public sealed partial class ModuleDependencyInstaller
         var installedBefore = before.TryGetValue(dependency.Name, out var version) ? version : null;
         var decision = Decide(dependency, installedBefore, force);
         if (!decision.NeedsInstall)
-            return false;
+            return RequiresScopedInstall(dependency) && !HasInstalledModuleSatisfyingDependency(dependency);
 
         var requiredVersion = dependency.RequiredVersion;
         if (!force &&
@@ -189,6 +196,28 @@ public sealed partial class ModuleDependencyInstaller
             string.Empty,
             string.Empty,
             installScope ?? string.Empty
+        };
+
+        var result = RunScript(script, args, ExactVersionProbeTimeout);
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractModuleLocatorError(result.StdOut) ?? result.StdErr;
+            throw new InvalidOperationException($"Get-Module -ListAvailable failed (exit {result.ExitCode}). {msg}".Trim());
+        }
+
+        return SplitLines(result.StdOut).Any(static line => line.StartsWith("PFMODLOC::FOUND::", StringComparison.Ordinal));
+    }
+
+    private bool HasInstalledModuleSatisfyingDependency(ModuleDependency dependency)
+    {
+        var script = BuildFindInstalledModuleScript();
+        var args = new List<string>(5)
+        {
+            dependency.Name,
+            dependency.RequiredVersion ?? string.Empty,
+            dependency.MinimumVersion ?? string.Empty,
+            dependency.MaximumVersion ?? string.Empty,
+            dependency.InstallScope ?? string.Empty
         };
 
         var result = RunScript(script, args, ExactVersionProbeTimeout);
@@ -512,13 +541,14 @@ public sealed partial class ModuleDependencyInstaller
     private void UpdateWithPSResourceGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
     {
         var script = BuildUpdatePSResourceScript();
-        var args = new List<string>(5)
+        var args = new List<string>(6)
         {
             dep.Name,
             repository ?? string.Empty,
             prerelease ? "1" : "0",
             credential?.UserName ?? string.Empty,
-            credential?.Secret ?? string.Empty
+            credential?.Secret ?? string.Empty,
+            ResolveInstallScope(dep)
         };
         var result = RunScript(script, args, timeout);
         if (result.ExitCode != 0)
@@ -665,6 +695,9 @@ public sealed partial class ModuleDependencyInstaller
         => !string.IsNullOrWhiteSpace(dep.RequiredVersion) ||
            !string.IsNullOrWhiteSpace(dep.MinimumVersion) ||
            !string.IsNullOrWhiteSpace(dep.MaximumVersion);
+
+    private static bool RequiresScopedInstall(ModuleDependency dep)
+        => !string.IsNullOrWhiteSpace(dep.InstallScope);
 
     private static bool RequiresPSResourceGetVersionRange(ModuleDependency dep)
         => string.IsNullOrWhiteSpace(dep.RequiredVersion) &&

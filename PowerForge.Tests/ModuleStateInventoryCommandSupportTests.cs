@@ -1,9 +1,18 @@
 using PSPublishModule;
+using System.Reflection;
 
 namespace PowerForge.Tests;
 
 public sealed class ModuleStateInventoryCommandSupportTests
 {
+    [Fact]
+    public void InferScope_RecognizesUnixAllUsersRoots()
+    {
+        var scope = InvokeInferScope("/usr/local/share/powershell/Modules/Company.Tools");
+
+        Assert.Equal("AllUsers", scope);
+    }
+
     [Fact]
     public void CreateInventoryResultFromFile_MarksMatchingLoadedModule()
     {
@@ -63,5 +72,15 @@ public sealed class ModuleStateInventoryCommandSupportTests
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    private static string? InvokeInferScope(string path)
+    {
+        var method = typeof(ModuleStateInventoryCommandSupport).GetMethod(
+            "InferScope",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        return Assert.IsType<string>(method!.Invoke(null, new object[] { path }));
     }
 }
