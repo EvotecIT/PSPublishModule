@@ -14,8 +14,14 @@ public sealed class ModuleDependency
     /// <summary>Minimum required version.</summary>
     public string? MinimumVersion { get; }
 
+    /// <summary>Whether the minimum version boundary is inclusive.</summary>
+    public bool MinimumVersionInclusive { get; }
+
     /// <summary>Maximum allowed version.</summary>
     public string? MaximumVersion { get; }
+
+    /// <summary>Whether the maximum version boundary is inclusive.</summary>
+    public bool MaximumVersionInclusive { get; }
 
     /// <summary>Preferred install scope when a module needs to be installed.</summary>
     public string? InstallScope { get; }
@@ -28,13 +34,17 @@ public sealed class ModuleDependency
         string? requiredVersion = null,
         string? minimumVersion = null,
         string? maximumVersion = null,
-        string? installScope = null)
+        string? installScope = null,
+        bool minimumVersionInclusive = true,
+        bool maximumVersionInclusive = true)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Dependency name is required.", nameof(name));
         Name = name.Trim();
         RequiredVersion = string.IsNullOrWhiteSpace(requiredVersion) ? null : requiredVersion!.Trim();
         MinimumVersion = string.IsNullOrWhiteSpace(minimumVersion) ? null : minimumVersion!.Trim();
+        MinimumVersionInclusive = minimumVersionInclusive;
         MaximumVersion = string.IsNullOrWhiteSpace(maximumVersion) ? null : maximumVersion!.Trim();
+        MaximumVersionInclusive = maximumVersionInclusive;
         InstallScope = string.IsNullOrWhiteSpace(installScope) ? null : installScope!.Trim();
     }
 }

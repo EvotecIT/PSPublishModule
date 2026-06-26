@@ -2,6 +2,7 @@
   [string]$Name,
   [string]$RequiredVersion,
   [string]$MinimumVersion,
+  [string]$MaximumVersion,
   [string]$Repository,
   [string]$Scope,
   [string]$CredentialUser,
@@ -35,6 +36,7 @@ try {
   if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
   if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
   elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }
+  if (-not [string]::IsNullOrWhiteSpace($MaximumVersion)) { $params.MaximumVersion = $MaximumVersion }
   if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
     $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
     $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)

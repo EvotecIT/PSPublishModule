@@ -96,6 +96,43 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     }
 
     [Fact]
+    public void EnsureUpdated_InstallsExactRequiredVersion_WhenOnlyDifferentScopeHasRequiredVersion()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "0.26.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = new HashSet<string>(new[] { "0.25.0" }, StringComparer.OrdinalIgnoreCase)
+            },
+            installedExactScopes: new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["0.25.0"] = "AllUsers"
+                }
+            });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(new[]
+        {
+            new ModuleDependency("PSSharedGoods", requiredVersion: "0.25.0", installScope: "CurrentUser")
+        });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("0.25.0", result.RequestedVersion);
+        Assert.Equal(1, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastExactProbeArguments);
+        Assert.Equal("CurrentUser", runner.LastExactProbeArguments![4]);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("CurrentUser", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
     public void EnsureInstalled_ReportsProbeFailureForCurrentDependency_AndContinuesProcessing()
     {
         var runner = new StubPowerShellRunner(
@@ -241,19 +278,23 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     {
         private readonly IReadOnlyDictionary<string, string?> _latestInstalledVersions;
         private readonly IReadOnlyDictionary<string, HashSet<string>> _installedExactVersions;
+        private readonly IReadOnlyDictionary<string, Dictionary<string, string>> _installedExactScopes;
         private readonly IReadOnlyDictionary<string, string> _failingExactVersions;
 
         public int ExactProbeCalls { get; private set; }
         public int InstallCalls { get; private set; }
         public IReadOnlyList<string>? LastInstallArguments { get; private set; }
+        public IReadOnlyList<string>? LastExactProbeArguments { get; private set; }
 
         public StubPowerShellRunner(
             IReadOnlyDictionary<string, string?> latestInstalledVersions,
             IReadOnlyDictionary<string, HashSet<string>> installedExactVersions,
+            IReadOnlyDictionary<string, Dictionary<string, string>>? installedExactScopes = null,
             IReadOnlyDictionary<string, string>? failingExactVersions = null)
         {
             _latestInstalledVersions = latestInstalledVersions;
             _installedExactVersions = installedExactVersions;
+            _installedExactScopes = installedExactScopes ?? new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
             _failingExactVersions = failingExactVersions ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -277,6 +318,7 @@ public sealed class ModuleDependencyInstallerExactVersionTests
             if (script.Contains(ExactVersionProbeMarker, StringComparison.Ordinal))
             {
                 ExactProbeCalls++;
+                LastExactProbeArguments = request.Arguments;
                 var name = request.Arguments[0];
                 var requiredVersion = request.Arguments[1];
                 if (_failingExactVersions.TryGetValue(name, out var failingVersion) &&
@@ -286,6 +328,15 @@ public sealed class ModuleDependencyInstallerExactVersionTests
                 }
 
                 var found = _installedExactVersions.TryGetValue(name, out var versions) && versions.Contains(requiredVersion);
+                if (found &&
+                    _installedExactScopes.TryGetValue(name, out var scopedVersions) &&
+                    scopedVersions.TryGetValue(requiredVersion, out var installedScope) &&
+                    request.Arguments.Count > 4 &&
+                    !string.IsNullOrWhiteSpace(request.Arguments[4]) &&
+                    !string.Equals(installedScope, request.Arguments[4], StringComparison.OrdinalIgnoreCase))
+                {
+                    found = false;
+                }
                 if (!found)
                     return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
 

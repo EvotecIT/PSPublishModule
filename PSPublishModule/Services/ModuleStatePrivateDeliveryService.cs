@@ -73,11 +73,11 @@ internal sealed class ModuleStatePrivateDeliveryService
                 ? PrivateModuleWorkflowOperation.Update
                 : PrivateModuleWorkflowOperation.Install,
             ModuleNames = actions.Select(static action => action.ModuleName).ToArray(),
-            RequiredVersions = actions
-                .Select(static action => new { action.ModuleName, RequiredVersion = GetExactVersionPolicyValue(action.VersionPolicy) })
-                .Where(static item => !string.IsNullOrWhiteSpace(item.RequiredVersion))
-                .GroupBy(static item => item.ModuleName, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(static group => group.Key, static group => group.First().RequiredVersion!, StringComparer.OrdinalIgnoreCase),
+            RequiredVersions = CreateVersionDictionary(actions, static constraint => constraint.RequiredVersion),
+            MinimumVersions = CreateVersionDictionary(actions, static constraint => constraint.MinimumVersion),
+            MinimumVersionInclusivity = CreateVersionInclusivityDictionary(actions, static constraint => constraint.MinimumVersion, static constraint => constraint.MinimumVersionInclusive),
+            MaximumVersions = CreateVersionDictionary(actions, static constraint => constraint.MaximumVersion),
+            MaximumVersionInclusivity = CreateVersionInclusivityDictionary(actions, static constraint => constraint.MaximumVersion, static constraint => constraint.MaximumVersionInclusive),
             InstallScopes = actions
                 .Where(static action => !string.IsNullOrWhiteSpace(action.TargetScope))
                 .GroupBy(static action => action.ModuleName, StringComparer.OrdinalIgnoreCase)
@@ -127,17 +127,117 @@ internal sealed class ModuleStatePrivateDeliveryService
         return action.TargetRepository;
     }
 
-    private static string? GetExactVersionPolicyValue(string? versionPolicy)
+    private static Dictionary<string, string> CreateVersionDictionary(
+        IEnumerable<ModuleStatePlanAction> actions,
+        Func<ModuleStateVersionConstraint, string?> selector)
+        => actions
+            .Select(action => new { action.ModuleName, Version = selector(ParseVersionConstraint(action.ModuleName, action.VersionPolicy)) })
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Version))
+            .GroupBy(static item => item.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First().Version!, StringComparer.OrdinalIgnoreCase);
+
+    private static Dictionary<string, bool> CreateVersionInclusivityDictionary(
+        IEnumerable<ModuleStatePlanAction> actions,
+        Func<ModuleStateVersionConstraint, string?> boundarySelector,
+        Func<ModuleStateVersionConstraint, bool> inclusivitySelector)
+        => actions
+            .Select(action =>
+            {
+                var constraint = ParseVersionConstraint(action.ModuleName, action.VersionPolicy);
+                return new
+                {
+                    action.ModuleName,
+                    Boundary = boundarySelector(constraint),
+                    Inclusive = inclusivitySelector(constraint)
+                };
+            })
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Boundary))
+            .GroupBy(static item => item.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First().Inclusive, StringComparer.OrdinalIgnoreCase);
+
+    private static ModuleStateVersionConstraint ParseVersionConstraint(string moduleName, string? versionPolicy)
     {
         if (string.IsNullOrWhiteSpace(versionPolicy))
-            return null;
+            return ModuleStateVersionConstraint.Empty;
 
         var trimmed = versionPolicy!.Trim();
-        if (trimmed.StartsWith("=", StringComparison.Ordinal))
-            return trimmed.Substring(1).Trim();
+        if (trimmed.Length == 0 || string.Equals(trimmed, "*", StringComparison.Ordinal))
+            return ModuleStateVersionConstraint.Empty;
 
-        return null;
+        string? requiredVersion = null;
+        string? minimumVersion = null;
+        var minimumVersionInclusive = true;
+        string? maximumVersion = null;
+        var maximumVersionInclusive = true;
+        foreach (var token in trimmed.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token.StartsWith(">=", StringComparison.Ordinal))
+            {
+                minimumVersion = token.Substring(2).Trim();
+                minimumVersionInclusive = true;
+            }
+            else if (token.StartsWith(">", StringComparison.Ordinal))
+            {
+                minimumVersion = token.Substring(1).Trim();
+                minimumVersionInclusive = false;
+            }
+            else if (token.StartsWith("<=", StringComparison.Ordinal))
+            {
+                maximumVersion = token.Substring(2).Trim();
+                maximumVersionInclusive = true;
+            }
+            else if (token.StartsWith("<", StringComparison.Ordinal))
+            {
+                maximumVersion = token.Substring(1).Trim();
+                maximumVersionInclusive = false;
+            }
+            else if (token.StartsWith("=", StringComparison.Ordinal))
+            {
+                requiredVersion = token.Substring(1).Trim();
+            }
+            else
+            {
+                requiredVersion = token.Trim();
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredVersion) &&
+            (!string.IsNullOrWhiteSpace(minimumVersion) || !string.IsNullOrWhiteSpace(maximumVersion)))
+        {
+            throw new InvalidOperationException($"Module '{moduleName}' combines exact and range version policies. Private module delivery requires one version policy shape per module.");
+        }
+
+        return new ModuleStateVersionConstraint(requiredVersion, minimumVersion, minimumVersionInclusive, maximumVersion, maximumVersionInclusive);
     }
+}
+
+internal readonly struct ModuleStateVersionConstraint
+{
+    internal static readonly ModuleStateVersionConstraint Empty = new(null, null, true, null, true);
+
+    internal ModuleStateVersionConstraint(
+        string? requiredVersion,
+        string? minimumVersion,
+        bool minimumVersionInclusive,
+        string? maximumVersion,
+        bool maximumVersionInclusive)
+    {
+        RequiredVersion = string.IsNullOrWhiteSpace(requiredVersion) ? null : requiredVersion!.Trim();
+        MinimumVersion = string.IsNullOrWhiteSpace(minimumVersion) ? null : minimumVersion!.Trim();
+        MinimumVersionInclusive = minimumVersionInclusive;
+        MaximumVersion = string.IsNullOrWhiteSpace(maximumVersion) ? null : maximumVersion!.Trim();
+        MaximumVersionInclusive = maximumVersionInclusive;
+    }
+
+    internal string? RequiredVersion { get; }
+
+    internal string? MinimumVersion { get; }
+
+    internal bool MinimumVersionInclusive { get; }
+
+    internal string? MaximumVersion { get; }
+
+    internal bool MaximumVersionInclusive { get; }
 }
 
 internal readonly struct DeliveryGroupKey

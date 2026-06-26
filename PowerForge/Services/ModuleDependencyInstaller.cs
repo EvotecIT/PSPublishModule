@@ -100,7 +100,7 @@ public sealed partial class ModuleDependencyInstaller
                     currentDecision.NeedsInstall &&
                     !string.IsNullOrWhiteSpace(installedBefore) &&
                     exactRequiredVersion is not null &&
-                    HasInstalledRequiredVersion(dep.Name, exactRequiredVersion))
+                    HasInstalledRequiredVersion(dep.Name, exactRequiredVersion, dep.InstallScope))
                 {
                     var exactMessage = string.IsNullOrWhiteSpace(installedBefore) || string.Equals(installedBefore, exactRequiredVersion, StringComparison.OrdinalIgnoreCase)
                         ? $"Exact required version {exactRequiredVersion} already installed"
@@ -166,7 +166,7 @@ public sealed partial class ModuleDependencyInstaller
         if (!force &&
             !string.IsNullOrWhiteSpace(installedBefore) &&
             !string.IsNullOrWhiteSpace(requiredVersion) &&
-            HasInstalledRequiredVersion(dependency.Name, requiredVersion!.Trim()))
+            HasInstalledRequiredVersion(dependency.Name, requiredVersion!.Trim(), dependency.InstallScope))
         {
             return false;
         }
@@ -174,7 +174,7 @@ public sealed partial class ModuleDependencyInstaller
         return true;
     }
 
-    private bool HasInstalledRequiredVersion(string name, string requiredVersion)
+    private bool HasInstalledRequiredVersion(string name, string requiredVersion, string? installScope = null)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(requiredVersion))
             return false;
@@ -187,7 +187,8 @@ public sealed partial class ModuleDependencyInstaller
             // The shared locator script expects positional Required/Minimum/Maximum values.
             // Keep blank placeholders here so the exact-version probe stays aligned with that signature.
             string.Empty,
-            string.Empty
+            string.Empty,
+            installScope ?? string.Empty
         };
 
         var result = RunScript(script, args, ExactVersionProbeTimeout);
@@ -252,7 +253,7 @@ public sealed partial class ModuleDependencyInstaller
                 else if (!string.IsNullOrWhiteSpace(dep.RequiredVersion))
                 {
                     var exactRequiredVersion = dep.RequiredVersion!.Trim();
-                    if (HasInstalledRequiredVersion(dep.Name, exactRequiredVersion))
+                    if (HasInstalledRequiredVersion(dep.Name, exactRequiredVersion, dep.InstallScope))
                     {
                         var exactMessage = VersionsEquivalent(installedBefore, exactRequiredVersion)
                             ? $"Exact required version {exactRequiredVersion} already installed"
@@ -351,9 +352,9 @@ public sealed partial class ModuleDependencyInstaller
                 return new Decision(needsInstall: true, requestedVersion: dep.MinimumVersion, versionArgument: arg, reason: $"Unable to parse MinimumVersion '{dep.MinimumVersion}'");
             }
 
-            if (installed < min)
+            if (installed < min || (installed == min && !dep.MinimumVersionInclusive))
             {
-                var arg = BuildNuGetRange(minInclusive: dep.MinimumVersion, maxInclusive: dep.MaximumVersion);
+                var arg = BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
                 return new Decision(needsInstall: true, requestedVersion: dep.MinimumVersion, versionArgument: arg, reason: $"Below minimum version: {dep.MinimumVersion} (installed: {installedVersion})");
             }
         }
@@ -362,7 +363,7 @@ public sealed partial class ModuleDependencyInstaller
         {
             if (TryParseVersion(dep.MaximumVersion, out var max))
             {
-                if (installed > max)
+                if (installed > max || (installed == max && !dep.MaximumVersionInclusive))
                     return new Decision(needsInstall: false, requestedVersion: null, versionArgument: null, reason: $"Above maximum version: {dep.MaximumVersion} (installed: {installedVersion}) - keeping newer");
             }
         }
@@ -480,12 +481,16 @@ public sealed partial class ModuleDependencyInstaller
 
     private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, TimeSpan timeout)
     {
+        if (RequiresPSResourceGetVersionRange(dep))
+            throw new InvalidOperationException($"PowerShellGet Install-Module cannot preserve the requested version range for '{dep.Name}'. Use PSResourceGet for range-constrained delivery.");
+
         var script = BuildInstallModuleScript();
-        var args = new List<string>(7)
+        var args = new List<string>(8)
         {
             dep.Name,
             dep.RequiredVersion ?? string.Empty,
             dep.MinimumVersion ?? string.Empty,
+            dep.MaximumVersion ?? string.Empty,
             repository ?? string.Empty,
             ResolveInstallScope(dep),
             credential?.UserName ?? string.Empty,
@@ -529,7 +534,7 @@ public sealed partial class ModuleDependencyInstaller
         if (!string.IsNullOrWhiteSpace(repository))
         {
             var scopedRepository = repository!;
-            var latestRepositoryVersion = GetLatestPowerShellGetRepositoryVersion(dep.Name, scopedRepository, credential, prerelease, timeout);
+            var latestRepositoryVersion = GetLatestPowerShellGetRepositoryVersion(dep, scopedRepository, credential, prerelease, timeout);
             if (string.IsNullOrWhiteSpace(latestRepositoryVersion))
                 throw new InvalidOperationException($"Unable to find module '{dep.Name}' in repository '{scopedRepository}' for PowerShellGet update fallback.");
 
@@ -564,12 +569,12 @@ public sealed partial class ModuleDependencyInstaller
         return "PowerShellGet";
     }
 
-    private string? GetLatestPowerShellGetRepositoryVersion(string moduleName, string repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    private string? GetLatestPowerShellGetRepositoryVersion(ModuleDependency dep, string repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
     {
         var client = new PowerShellGetClient(_runner, _logger);
         var items = client.Find(
             new PowerShellGetFindOptions(
-                names: new[] { moduleName },
+                names: new[] { dep.Name },
                 prerelease: prerelease,
                 repositories: new[] { repository },
                 credential: credential),
@@ -577,6 +582,7 @@ public sealed partial class ModuleDependencyInstaller
 
         return items
             .Where(static item => !string.IsNullOrWhiteSpace(item.Version))
+            .Where(item => SatisfiesVersionBounds(item.Version, dep))
             .OrderByDescending(static item => item.Version, Comparer<string>.Create(CompareVersionStrings))
             .Select(static item => item.Version)
             .FirstOrDefault();
@@ -630,24 +636,57 @@ public sealed partial class ModuleDependencyInstaller
     {
         if (!string.IsNullOrWhiteSpace(dep.RequiredVersion)) return dep.RequiredVersion;
         if (!string.IsNullOrWhiteSpace(dep.MinimumVersion))
-            return BuildNuGetRange(minInclusive: dep.MinimumVersion, maxInclusive: dep.MaximumVersion);
+            return BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
+        if (!string.IsNullOrWhiteSpace(dep.MaximumVersion))
+            return BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
         return null;
     }
 
-    private static string BuildNuGetRange(string? minInclusive, string? maxInclusive)
+    private static string BuildNuGetRange(
+        string? minimumVersion,
+        string? maximumVersion,
+        bool minimumInclusive = true,
+        bool maximumInclusive = true)
     {
-        if (string.IsNullOrWhiteSpace(minInclusive) && string.IsNullOrWhiteSpace(maxInclusive))
+        if (string.IsNullOrWhiteSpace(minimumVersion) && string.IsNullOrWhiteSpace(maximumVersion))
             return string.Empty;
 
-        // NuGet version range syntax. See Install-PSResource -Version help.
-        // [min, ] = minimum inclusive
-        // (, max] = maximum inclusive
-        // [min, max] = inclusive range
-        if (!string.IsNullOrWhiteSpace(minInclusive) && !string.IsNullOrWhiteSpace(maxInclusive))
-            return $"[{minInclusive}, {maxInclusive}]";
-        if (!string.IsNullOrWhiteSpace(minInclusive))
-            return $"[{minInclusive}, ]";
-        return $"[, {maxInclusive}]";
+        var minimumDelimiter = minimumInclusive ? "[" : "(";
+        var maximumDelimiter = maximumInclusive ? "]" : ")";
+        var minimum = string.IsNullOrWhiteSpace(minimumVersion) ? string.Empty : minimumVersion!.Trim();
+        var maximum = string.IsNullOrWhiteSpace(maximumVersion) ? string.Empty : maximumVersion!.Trim();
+
+        return $"{minimumDelimiter}{minimum}, {maximum}{maximumDelimiter}";
+    }
+
+    private static bool RequiresPSResourceGetVersionRange(ModuleDependency dep)
+        => string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
+           (!dep.MinimumVersionInclusive ||
+            !dep.MaximumVersionInclusive);
+
+    private static bool SatisfiesVersionBounds(string? version, ModuleDependency dep)
+    {
+        if (string.IsNullOrWhiteSpace(dep.MinimumVersion) && string.IsNullOrWhiteSpace(dep.MaximumVersion))
+            return true;
+
+        if (!TryParseVersion(version, out var parsed))
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(dep.MinimumVersion) && TryParseVersion(dep.MinimumVersion, out var minimum))
+        {
+            var comparison = parsed.CompareTo(minimum);
+            if (comparison < 0 || (comparison == 0 && !dep.MinimumVersionInclusive))
+                return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(dep.MaximumVersion) && TryParseVersion(dep.MaximumVersion, out var maximum))
+        {
+            var comparison = parsed.CompareTo(maximum);
+            if (comparison > 0 || (comparison == 0 && !dep.MaximumVersionInclusive))
+                return false;
+        }
+
+        return true;
     }
 
     private static bool TryParseVersion(string? text, out Version version)

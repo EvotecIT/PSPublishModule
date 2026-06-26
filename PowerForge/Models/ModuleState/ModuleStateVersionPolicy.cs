@@ -93,11 +93,11 @@ internal sealed class ModuleStateVersionPolicy
         if (!ModuleStateVersion.TryParse(version, out var parsed))
             return false;
 
-        if (parsed.IsPrerelease && !AllowPrerelease)
-            return false;
-
         if (ExactVersion.HasValue)
             return parsed.Equals(ExactVersion.Value);
+
+        if (parsed.IsPrerelease && !AllowPrerelease)
+            return false;
 
         if (MinimumVersion.HasValue)
         {

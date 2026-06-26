@@ -38,6 +38,14 @@ public sealed class PrivateModuleWorkflowServiceTests
                 {
                     ["ModuleA"] = "1.2.0"
                 },
+                MinimumVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ModuleB"] = "2.0.0"
+                },
+                MaximumVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ModuleB"] = "2.5.0"
+                },
                 InstallScope = "CurrentUser",
                 InstallScopes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
@@ -77,6 +85,8 @@ public sealed class PrivateModuleWorkflowServiceTests
             {
                 Assert.Equal("ModuleB", second.Name);
                 Assert.Null(second.RequiredVersion);
+                Assert.Equal("2.0.0", second.MinimumVersion);
+                Assert.Equal("2.5.0", second.MaximumVersion);
                 Assert.Equal("CurrentUser", second.InstallScope);
             });
         Assert.Equal("2 module(s) from repository 'Company'", capturedTarget);

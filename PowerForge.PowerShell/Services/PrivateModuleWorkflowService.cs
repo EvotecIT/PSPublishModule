@@ -35,6 +35,10 @@ internal sealed class PrivateModuleWorkflowService
         var modules = _privateGalleryService.BuildDependencies(
             request.ModuleNames,
             request.RequiredVersions,
+            request.MinimumVersions,
+            request.MinimumVersionInclusivity,
+            request.MaximumVersions,
+            request.MaximumVersionInclusivity,
             request.InstallScope,
             request.InstallScopes);
         var repositoryName = request.RepositoryName;

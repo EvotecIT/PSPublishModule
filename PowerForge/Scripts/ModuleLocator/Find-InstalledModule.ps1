@@ -2,7 +2,8 @@
   [string]$Name,
   [string]$RequiredVersion,
   [string]$MinimumVersion,
-  [string]$MaximumVersion
+  [string]$MaximumVersion,
+  [string]$InstallScope
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -15,6 +16,40 @@ try {
   $mods = Get-Module -ListAvailable -Name $Name -ErrorAction SilentlyContinue
   if ($mods) {
     $filtered = $mods
+
+    if (-not [string]::IsNullOrWhiteSpace($InstallScope)) {
+      $scopeRoots = @()
+      if ($InstallScope -eq 'CurrentUser') {
+        $documents = [Environment]::GetFolderPath('MyDocuments')
+        if ($documents) {
+          $scopeRoots += (Join-Path $documents 'PowerShell/Modules')
+          $scopeRoots += (Join-Path $documents 'WindowsPowerShell/Modules')
+        }
+        if ($HOME) {
+          $scopeRoots += (Join-Path $HOME '.local/share/powershell/Modules')
+        }
+      } elseif ($InstallScope -eq 'AllUsers') {
+        $programFiles = [Environment]::GetFolderPath('ProgramFiles')
+        if ($programFiles) {
+          $scopeRoots += (Join-Path $programFiles 'PowerShell/Modules')
+          $scopeRoots += (Join-Path $programFiles 'WindowsPowerShell/Modules')
+        }
+      }
+
+      $normalizedRoots = @($scopeRoots | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object {
+        try { [System.IO.Path]::GetFullPath($_).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) } catch { $null }
+      } | Where-Object { $_ })
+      if ($normalizedRoots.Count -gt 0) {
+        $filtered = $filtered | Where-Object {
+          if (-not $_.ModuleBase) { return $false }
+          $moduleBase = [System.IO.Path]::GetFullPath($_.ModuleBase).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+          foreach ($root in $normalizedRoots) {
+            if ($moduleBase.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+          }
+          return $false
+        }
+      }
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) {
       $req = [version]$RequiredVersion
@@ -42,4 +77,3 @@ try {
   Write-Output ('PFMODLOC::ERROR::' + (Enc $msg))
   exit 1
 }
-
