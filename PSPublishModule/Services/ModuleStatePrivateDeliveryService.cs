@@ -24,7 +24,7 @@ internal sealed class ModuleStatePrivateDeliveryService
 
         var actionable = applyResult.Plan.Actions
             .Where(static action => action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update)
-            .GroupBy(action => new DeliveryGroupKey(action.Kind, ResolveActionRepository(action, options)), DeliveryGroupKeyComparer.Instance)
+            .GroupBy(action => new DeliveryGroupKey(action.Kind, ResolveActionRepository(action, options), ResolveActionForce(action, options)), DeliveryGroupKeyComparer.Instance)
             .OrderBy(static group => group.Key.Kind == ModuleStatePlanActionKind.Update ? 0 : 1)
             .ToArray();
 
@@ -38,7 +38,7 @@ internal sealed class ModuleStatePrivateDeliveryService
         foreach (var group in actionable)
         {
             var groupActions = group.ToArray();
-            var request = CreateRequest(group.Key.Kind, group.Key.Repository, groupActions, options);
+            var request = CreateRequest(group.Key.Kind, group.Key.Repository, group.Key.Force, groupActions, options);
             var workflowResult = service.Execute(request, (target, action) => _cmdlet.ShouldProcess(target, action));
             results.Add(new ModuleStateDeliveryExecutionResult
             {
@@ -64,6 +64,7 @@ internal sealed class ModuleStatePrivateDeliveryService
     private static PrivateModuleWorkflowRequest CreateRequest(
         ModuleStatePlanActionKind actionKind,
         string? repository,
+        bool force,
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStatePrivateDeliveryOptions options)
     {
@@ -85,7 +86,7 @@ internal sealed class ModuleStatePrivateDeliveryService
             RepositoryName = repository ?? string.Empty,
             InstallPrerequisites = options.InstallPrerequisites,
             Prerelease = options.Prerelease,
-            Force = options.Force && actionKind == ModuleStatePlanActionKind.Install,
+            Force = force,
             CredentialUserName = options.CredentialUserName,
             CredentialSecret = options.CredentialSecret,
             CredentialSecretFilePath = options.CredentialSecretFilePath,
@@ -126,6 +127,9 @@ internal sealed class ModuleStatePrivateDeliveryService
 
         return action.TargetRepository;
     }
+
+    private static bool ResolveActionForce(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
+        => action.Force || (options.Force && action.Kind == ModuleStatePlanActionKind.Install);
 
     private static Dictionary<string, string> CreateVersionDictionary(
         IEnumerable<ModuleStatePlanAction> actions,
@@ -242,15 +246,18 @@ internal readonly struct ModuleStateVersionConstraint
 
 internal readonly struct DeliveryGroupKey
 {
-    internal DeliveryGroupKey(ModuleStatePlanActionKind kind, string? repository)
+    internal DeliveryGroupKey(ModuleStatePlanActionKind kind, string? repository, bool force)
     {
         Kind = kind;
         Repository = string.IsNullOrWhiteSpace(repository) ? null : repository!.Trim();
+        Force = force;
     }
 
     internal ModuleStatePlanActionKind Kind { get; }
 
     internal string? Repository { get; }
+
+    internal bool Force { get; }
 }
 
 internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroupKey>
@@ -259,13 +266,15 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
 
     public bool Equals(DeliveryGroupKey x, DeliveryGroupKey y)
         => x.Kind == y.Kind &&
+           x.Force == y.Force &&
            string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase);
 
     public int GetHashCode(DeliveryGroupKey obj)
     {
         unchecked
         {
-            return ((int)obj.Kind * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Repository ?? string.Empty);
+            var hash = ((int)obj.Kind * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Repository ?? string.Empty);
+            return (hash * 397) ^ obj.Force.GetHashCode();
         }
     }
 }

@@ -73,6 +73,7 @@ public sealed class ModuleStateRepairPlannerTests
         Assert.Equal("1.2.0", action.InstalledVersion);
         Assert.Equal("=1.2.0", action.VersionPolicy);
         Assert.Equal("CompanyModules", action.TargetRepository);
+        Assert.True(action.Force);
         Assert.True(action.IsRepair);
     }
 

@@ -63,6 +63,7 @@ internal sealed class ModuleStateApplyService
                 command.ModuleName,
                 command.VersionPolicy,
                 command.IsRepair,
+                command.Force,
                 command.CommandName,
                 command.Arguments,
                 command.CommandText
@@ -86,7 +87,7 @@ internal sealed class ModuleStateApplyService
             .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 static group => group.Key,
-                static group => SelectObservedModule(group),
+                static group => group.ToArray(),
                 StringComparer.OrdinalIgnoreCase);
         var modules = result.Plan.Actions
             .Where(static action => action.Kind is ModuleStatePlanActionKind.NoAction or ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update)
@@ -200,7 +201,7 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-InstallPrerequisites");
         if (deliveryOptions.Prerelease)
             arguments.Add("-Prerelease");
-        if (deliveryOptions.Force && action.Kind == ModuleStatePlanActionKind.Install)
+        if ((deliveryOptions.Force || action.Force) && action.Kind == ModuleStatePlanActionKind.Install)
             arguments.Add("-Force");
 
         return new ModuleStateDeliveryCommand(
@@ -208,6 +209,7 @@ internal sealed class ModuleStateApplyService
             action.ModuleName,
             action.VersionPolicy,
             action.IsRepair,
+            action.Force,
             commandName,
             arguments.ToArray(),
             commandName + " " + string.Join(" ", FormatArguments(arguments)));
@@ -228,12 +230,15 @@ internal sealed class ModuleStateApplyService
     private static ModuleStateMaintenanceReceiptModule? CreateMaintenanceReceiptModule(
         ModuleStatePlanAction action,
         string? sourceRepository,
-        IReadOnlyDictionary<string, ModuleStateInstalledModule> observedByName)
+        IReadOnlyDictionary<string, ModuleStateInstalledModule[]> observedByName)
     {
         var version = GetExactVersionPolicyValue(action.VersionPolicy);
-        observedByName.TryGetValue(action.ModuleName, out var observedModule);
+        var observedModules = observedByName.TryGetValue(action.ModuleName, out var modules)
+            ? modules
+            : Array.Empty<ModuleStateInstalledModule>();
         if (string.IsNullOrWhiteSpace(version) && action.Kind == ModuleStatePlanActionKind.NoAction)
             version = action.InstalledVersion;
+        var observedModule = SelectObservedModule(action, sourceRepository, observedModules, version);
         if (string.IsNullOrWhiteSpace(version) && observedModule is not null)
             version = observedModule.Version;
 
@@ -251,10 +256,37 @@ internal sealed class ModuleStateApplyService
         => command.Arguments.Contains("-ProfileName", StringComparer.OrdinalIgnoreCase) ||
            command.Arguments.Contains("-Repository", StringComparer.OrdinalIgnoreCase);
 
-    private static ModuleStateInstalledModule SelectObservedModule(IEnumerable<ModuleStateInstalledModule> modules)
-        => modules
-            .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-            .First();
+    private static ModuleStateInstalledModule? SelectObservedModule(
+        ModuleStatePlanAction action,
+        string? sourceRepository,
+        IEnumerable<ModuleStateInstalledModule> modules,
+        string? version)
+    {
+        var candidates = modules;
+        if (!string.IsNullOrWhiteSpace(version))
+            candidates = candidates.Where(module => VersionsEqual(module.Version, version!));
+        if (!string.IsNullOrWhiteSpace(action.TargetScope))
+            candidates = candidates.Where(module => string.Equals(module.Scope, action.TargetScope, StringComparison.OrdinalIgnoreCase));
+
+        var expectedRepository = action.TargetRepository ?? sourceRepository;
+        if (!string.IsNullOrWhiteSpace(expectedRepository))
+            candidates = candidates.Where(module => string.Equals(module.SourceRepository, expectedRepository, StringComparison.OrdinalIgnoreCase));
+
+        return candidates
+            .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var parsed) ? parsed : default)
+            .FirstOrDefault();
+    }
+
+    private static bool VersionsEqual(string installedVersion, string receiptVersion)
+    {
+        if (ModuleStateVersion.TryParse(installedVersion, out var installed) &&
+            ModuleStateVersion.TryParse(receiptVersion, out var expected))
+        {
+            return installed.CompareTo(expected) == 0;
+        }
+
+        return string.Equals(installedVersion, receiptVersion, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static IEnumerable<string> FormatArguments(IEnumerable<string> arguments)
     {

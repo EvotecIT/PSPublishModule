@@ -7,6 +7,7 @@ internal sealed class ModuleStateDeliveryCommand
         string moduleName,
         string versionPolicy,
         bool isRepair,
+        bool force,
         string commandName,
         string[] arguments,
         string commandText)
@@ -15,6 +16,7 @@ internal sealed class ModuleStateDeliveryCommand
         ModuleName = moduleName;
         VersionPolicy = versionPolicy;
         IsRepair = isRepair;
+        Force = force;
         CommandName = commandName;
         Arguments = arguments;
         CommandText = commandText;
@@ -27,6 +29,8 @@ internal sealed class ModuleStateDeliveryCommand
     internal string VersionPolicy { get; }
 
     internal bool IsRepair { get; }
+
+    internal bool Force { get; }
 
     internal string CommandName { get; }
 

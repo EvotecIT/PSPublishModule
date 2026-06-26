@@ -9,6 +9,7 @@ internal sealed class ModuleStatePlanAction
         string versionPolicy,
         string reason,
         bool isRepair = false,
+        bool force = false,
         string? targetScope = null,
         string? targetPath = null,
         string? targetRepository = null)
@@ -19,6 +20,7 @@ internal sealed class ModuleStatePlanAction
         VersionPolicy = versionPolicy;
         Reason = reason;
         IsRepair = isRepair;
+        Force = force;
         TargetScope = string.IsNullOrWhiteSpace(targetScope) ? null : targetScope!.Trim();
         TargetPath = string.IsNullOrWhiteSpace(targetPath) ? null : targetPath!.Trim();
         TargetRepository = string.IsNullOrWhiteSpace(targetRepository) ? null : targetRepository!.Trim();
@@ -35,6 +37,8 @@ internal sealed class ModuleStatePlanAction
     internal string Reason { get; }
 
     internal bool IsRepair { get; }
+
+    internal bool Force { get; }
 
     internal string? TargetScope { get; }
 
