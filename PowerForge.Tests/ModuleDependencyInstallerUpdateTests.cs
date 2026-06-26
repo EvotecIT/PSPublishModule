@@ -59,6 +59,7 @@ public sealed class ModuleDependencyInstallerUpdateTests
         var runner = new QueuePowerShellRunner(new[]
         {
             new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFMODLOC::FOUND::ModuleA", string.Empty, "pwsh.exe"),
             new PowerShellRunResult(0, "PFMOD::UPDATE::OK", string.Empty, "pwsh.exe"),
             new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.1.0")), string.Empty, "pwsh.exe")
         });
@@ -68,8 +69,9 @@ public sealed class ModuleDependencyInstallerUpdateTests
             new[] { new ModuleDependency("ModuleA", installScope: "AllUsers") },
             repository: "Company");
 
-        Assert.Equal(3, runner.Requests.Count);
-        Assert.Equal("AllUsers", runner.Requests[1].Arguments[5]);
+        Assert.Equal(4, runner.Requests.Count);
+        Assert.Equal("AllUsers", runner.Requests[1].Arguments[4]);
+        Assert.Equal("AllUsers", runner.Requests[2].Arguments[5]);
     }
 
     [Fact]
@@ -90,6 +92,31 @@ public sealed class ModuleDependencyInstallerUpdateTests
         Assert.Equal(3, runner.Requests.Count);
         Assert.Equal(string.Empty, runner.Requests[1].Arguments[5]);
         Assert.Contains("if (-not [string]::IsNullOrWhiteSpace($Scope))", runner.ScriptTexts[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EnsureUpdated_InstallsWhenRequestedScopeHasNoCopy()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFPSRG::INSTALL::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.1.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA", installScope: "AllUsers") },
+            repository: "Company");
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("PSResourceGet", result.Installer);
+        Assert.Equal(4, runner.Requests.Count);
+        Assert.Equal("AllUsers", runner.Requests[1].Arguments[4]);
+        Assert.Contains("Install-PSResource", runner.ScriptTexts[2], StringComparison.Ordinal);
+        Assert.Equal("AllUsers", runner.Requests[2].Arguments[3]);
     }
 
     [Fact]

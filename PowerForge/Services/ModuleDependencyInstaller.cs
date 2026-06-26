@@ -309,7 +309,9 @@ public sealed partial class ModuleDependencyInstaller
                 }
                 else
                 {
-                    var updateStatus = HasVersionConstraint(dep)
+                    var updateStatus = RequiresScopedInstall(dep) && !HasInstalledModuleSatisfyingDependency(dep)
+                        ? TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet, perModuleTimeout)
+                        : HasVersionConstraint(dep)
                         ? TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet, perModuleTimeout)
                         : TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: updateStatus, message: "Update requested"));
