@@ -290,6 +290,30 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_WithCleanup_NormalizesMaintenanceReceiptVersionBeforeMatching()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", path: @"C:\Modules\Company.Tools\1.0.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.2.0", scope: "CurrentUser", path: @"C:\Modules\Company.Tools\1.2.0")
+            }),
+            Array.Empty<ModuleStateDesiredModule>(),
+            maintenanceReceipts: new[]
+            {
+                new ModuleStateMaintenanceReceipt(
+                    "ModuleState",
+                    new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2") })
+            },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var cleanupAction = Assert.Single(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
+
+        Assert.Equal("1.0.0", cleanupAction.InstalledVersion);
+    }
+
+    [Fact]
     public void CreatePlan_WithCleanup_KeepsDesiredScopeVersion()
     {
         var request = new ModuleStatePlanRequest(

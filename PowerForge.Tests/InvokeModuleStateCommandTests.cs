@@ -128,6 +128,21 @@ public sealed class InvokeModuleStateCommandTests
     }
 
     [Fact]
+    public void PlanCommandHasSkippedExecutionResult_DetectsUnperformedDelivery()
+    {
+        var executionResults = new[]
+        {
+            new ModuleStateDeliveryExecutionResult
+            {
+                Operation = "Install",
+                OperationPerformed = false
+            }
+        };
+
+        Assert.True(InvokePlanCommandHasSkippedExecutionResult(executionResults));
+    }
+
+    [Fact]
     public void ResolveDesiredState_UsesProfileRepositoryForConvenienceModules()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -307,6 +322,16 @@ public sealed class InvokeModuleStateCommandTests
     private static bool InvokeHasSkippedExecutionResult(ModuleStateDeliveryExecutionResult[] executionResults)
     {
         var method = typeof(InvokeModuleStateCommand).GetMethod(
+            "HasSkippedExecutionResult",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        return Assert.IsType<bool>(method!.Invoke(null, new object[] { executionResults }));
+    }
+
+    private static bool InvokePlanCommandHasSkippedExecutionResult(ModuleStateDeliveryExecutionResult[] executionResults)
+    {
+        var method = typeof(InvokeModuleStatePlanCommand).GetMethod(
             "HasSkippedExecutionResult",
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);

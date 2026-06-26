@@ -339,6 +339,8 @@ public sealed class InvokeModuleStatePlanCommand : PSCmdlet
             {
                 if (HasFailedExecutionResult(executionResults))
                     throw new InvalidOperationException("ModuleState maintenance receipt cannot be written because one or more private-module delivery operations failed.");
+                if (HasSkippedExecutionResult(executionResults))
+                    throw new InvalidOperationException("ModuleState maintenance receipt cannot be written because one or more private-module delivery operations were skipped.");
 
                 var observedModules = ModuleStateMaintenanceEvidenceMapper.ToObservedModules(
                     executionResults,
@@ -452,4 +454,7 @@ public sealed class InvokeModuleStatePlanCommand : PSCmdlet
         => executionResults.Any(static result =>
             (result.DependencyResults ?? Array.Empty<ModuleStateDependencyResult>())
             .Any(static dependency => string.Equals(dependency.Status, "Failed", StringComparison.OrdinalIgnoreCase)));
+
+    private static bool HasSkippedExecutionResult(ModuleStateDeliveryExecutionResult[] executionResults)
+        => executionResults.Any(static result => !result.OperationPerformed);
 }

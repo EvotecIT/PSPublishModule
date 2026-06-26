@@ -172,6 +172,25 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void CreateMaintenanceReceipt_TreatsShorthandExactPolicyAsKnownVersion()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, "1.2", "missing")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+        var service = new ModuleStateApplyService();
+        var result = service.Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
+
+        var receipt = service.CreateMaintenanceReceipt(result, sourceRepository: "Company");
+
+        var module = Assert.Single(receipt.Modules);
+        Assert.Equal("Company.Tools", module.Name);
+        Assert.Equal("1.2.0", module.Version);
+    }
+
+    [Fact]
     public void CreateMaintenanceReceipt_UsesObservedVersionForRangeAction()
     {
         var plan = new ModuleStatePlan(

@@ -421,14 +421,21 @@ public sealed partial class ModuleDependencyInstaller
     {
         if (preferPowerShellGet)
         {
-            try
+            if (!RequiresPSResourceGetVersionRange(dep))
             {
-                InstallWithPowerShellGet(dep, repository, credential, timeout);
-                return "PowerShellGet";
+                try
+                {
+                    InstallWithPowerShellGet(dep, repository, credential, prerelease, timeout);
+                    return "PowerShellGet";
+                }
+                catch (PowerShellToolNotAvailableException)
+                {
+                    _logger.Warn($"PowerShellGet not available; trying PSResourceGet Install-PSResource for '{dep.Name}'.");
+                }
             }
-            catch (PowerShellToolNotAvailableException)
+            else
             {
-                _logger.Warn($"PowerShellGet not available; trying PSResourceGet Install-PSResource for '{dep.Name}'.");
+                _logger.Warn($"PowerShellGet Install-Module cannot preserve the requested version range for '{dep.Name}'; trying PSResourceGet Install-PSResource.");
             }
         }
 
@@ -456,7 +463,7 @@ public sealed partial class ModuleDependencyInstaller
             _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Install-Module for '{dep.Name}'.");
             try
             {
-                InstallWithPowerShellGet(dep, repository, credential, timeout);
+                InstallWithPowerShellGet(dep, repository, credential, prerelease, timeout);
                 return "PowerShellGet";
             }
             catch (PowerShellToolNotAvailableException) when (CanDirectBootstrapPSResourceGet(dep, repository, credential))
@@ -517,13 +524,13 @@ public sealed partial class ModuleDependencyInstaller
     private static string ResolveInstallScope(ModuleDependency dep)
         => string.IsNullOrWhiteSpace(dep.InstallScope) ? "CurrentUser" : dep.InstallScope!;
 
-    private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, TimeSpan timeout)
+    private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
     {
         if (RequiresPSResourceGetVersionRange(dep))
             throw new InvalidOperationException($"PowerShellGet Install-Module cannot preserve the requested version range for '{dep.Name}'. Use PSResourceGet for range-constrained delivery.");
 
         var script = BuildInstallModuleScript();
-        var args = new List<string>(8)
+        var args = new List<string>(9)
         {
             dep.Name,
             dep.RequiredVersion ?? string.Empty,
@@ -532,7 +539,8 @@ public sealed partial class ModuleDependencyInstaller
             repository ?? string.Empty,
             ResolveInstallScope(dep),
             credential?.UserName ?? string.Empty,
-            credential?.Secret ?? string.Empty
+            credential?.Secret ?? string.Empty,
+            prerelease ? "1" : "0"
         };
         var result = RunScript(script, args, timeout);
         if (result.ExitCode != 0)
@@ -583,7 +591,7 @@ public sealed partial class ModuleDependencyInstaller
             if (CompareVersionStrings(latestRepositoryVersion, installedVersion) <= 0)
                 return null;
 
-            InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion, installScope: dep.InstallScope), scopedRepository, credential, timeout);
+            InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion, installScope: dep.InstallScope), scopedRepository, credential, prerelease, timeout);
             return "PowerShellGet";
         }
 
