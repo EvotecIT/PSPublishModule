@@ -64,6 +64,36 @@ public sealed class ModuleDevelopmentBootstrapperConfigurationTests
     }
 
     [Fact]
+    public void Legacy_adapter_maps_net_prefixed_development_binary_options_from_steps_build_libraries()
+    {
+        var legacy = new Hashtable
+        {
+            ["Steps"] = new Hashtable
+            {
+                ["BuildLibraries"] = new Hashtable
+                {
+                    ["NETDevelopmentBinaries"] = true,
+                    ["NETDevelopmentBinariesMode"] = "Auto",
+                    ["NETDevelopmentBinariesPath"] = "Sources/Demo/bin",
+                    ["NETDevelopmentBinariesEnvironmentVariable"] = "DEMO_DEV",
+                    ["NETDevelopmentConfigurationEnvironmentVariable"] = "DEMO_CONFIGURATION",
+                    ["NETDevelopmentSourceBootstrapperMode"] = "ReplaceSingleFile"
+                }
+            }
+        };
+
+        var libraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(
+            Assert.Single(LegacySegmentAdapter.CollectFromLegacyConfiguration(legacy)));
+
+        Assert.True(libraries.BuildLibraries.DevelopmentBinaries);
+        Assert.Equal(ModuleDevelopmentBinaryMode.Auto, libraries.BuildLibraries.DevelopmentBinariesMode);
+        Assert.Equal("Sources/Demo/bin", libraries.BuildLibraries.DevelopmentBinariesPath);
+        Assert.Equal("DEMO_DEV", libraries.BuildLibraries.DevelopmentBinariesEnvironmentVariable);
+        Assert.Equal("DEMO_CONFIGURATION", libraries.BuildLibraries.DevelopmentConfigurationEnvironmentVariable);
+        Assert.Equal(ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile, libraries.BuildLibraries.DevelopmentSourceBootstrapperMode);
+    }
+
+    [Fact]
     public void Legacy_adapter_maps_development_binary_options_from_segment_dictionary()
     {
         var settings = ScriptBlock.Create("""

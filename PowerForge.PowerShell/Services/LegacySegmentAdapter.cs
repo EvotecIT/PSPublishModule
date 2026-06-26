@@ -131,14 +131,12 @@ public static class LegacySegmentAdapter
                             : HasKey(buildLibraries, "NETAssemblyLoadContext")
                                 ? GetBool(buildLibraries, "NETAssemblyLoadContext")
                                 : null,
-                        DevelopmentBinaries = HasKey(buildLibraries, "DevelopmentBinaries")
-                            ? GetBool(buildLibraries, "DevelopmentBinaries")
-                            : null,
-                        DevelopmentBinariesMode = TryParseDevelopmentBinaryMode(GetString(buildLibraries, "DevelopmentBinariesMode")),
-                        DevelopmentBinariesPath = GetString(buildLibraries, "DevelopmentBinariesPath"),
-                        DevelopmentBinariesEnvironmentVariable = GetString(buildLibraries, "DevelopmentBinariesEnvironmentVariable"),
-                        DevelopmentConfigurationEnvironmentVariable = GetString(buildLibraries, "DevelopmentConfigurationEnvironmentVariable"),
-                        DevelopmentSourceBootstrapperMode = TryParseDevelopmentSourceBootstrapperMode(GetString(buildLibraries, "DevelopmentSourceBootstrapperMode")),
+                        DevelopmentBinaries = GetNullableBool(buildLibraries, "DevelopmentBinaries", "NETDevelopmentBinaries"),
+                        DevelopmentBinariesMode = TryParseDevelopmentBinaryMode(GetString(buildLibraries, "DevelopmentBinariesMode", "NETDevelopmentBinariesMode")),
+                        DevelopmentBinariesPath = GetString(buildLibraries, "DevelopmentBinariesPath", "NETDevelopmentBinariesPath"),
+                        DevelopmentBinariesEnvironmentVariable = GetString(buildLibraries, "DevelopmentBinariesEnvironmentVariable", "NETDevelopmentBinariesEnvironmentVariable"),
+                        DevelopmentConfigurationEnvironmentVariable = GetString(buildLibraries, "DevelopmentConfigurationEnvironmentVariable", "NETDevelopmentConfigurationEnvironmentVariable"),
+                        DevelopmentSourceBootstrapperMode = TryParseDevelopmentSourceBootstrapperMode(GetString(buildLibraries, "DevelopmentSourceBootstrapperMode", "NETDevelopmentSourceBootstrapperMode")),
                         AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "AssemblyTypeAcceleratorMode"))
                             ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "NETAssemblyTypeAcceleratorMode")),
                         AssemblyTypeAccelerators = GetStringArray(buildLibraries, "AssemblyTypeAccelerators")
@@ -222,14 +220,12 @@ public static class LegacySegmentAdapter
                         : HasKey(conf, "NETAssemblyLoadContext")
                             ? GetBool(conf, "NETAssemblyLoadContext")
                             : null,
-                    DevelopmentBinaries = HasKey(conf, "DevelopmentBinaries")
-                        ? GetBool(conf, "DevelopmentBinaries")
-                        : null,
-                    DevelopmentBinariesMode = TryParseDevelopmentBinaryMode(GetString(conf, "DevelopmentBinariesMode")),
-                    DevelopmentBinariesPath = GetString(conf, "DevelopmentBinariesPath"),
-                    DevelopmentBinariesEnvironmentVariable = GetString(conf, "DevelopmentBinariesEnvironmentVariable"),
-                    DevelopmentConfigurationEnvironmentVariable = GetString(conf, "DevelopmentConfigurationEnvironmentVariable"),
-                    DevelopmentSourceBootstrapperMode = TryParseDevelopmentSourceBootstrapperMode(GetString(conf, "DevelopmentSourceBootstrapperMode")),
+                    DevelopmentBinaries = GetNullableBool(conf, "DevelopmentBinaries", "NETDevelopmentBinaries"),
+                    DevelopmentBinariesMode = TryParseDevelopmentBinaryMode(GetString(conf, "DevelopmentBinariesMode", "NETDevelopmentBinariesMode")),
+                    DevelopmentBinariesPath = GetString(conf, "DevelopmentBinariesPath", "NETDevelopmentBinariesPath"),
+                    DevelopmentBinariesEnvironmentVariable = GetString(conf, "DevelopmentBinariesEnvironmentVariable", "NETDevelopmentBinariesEnvironmentVariable"),
+                    DevelopmentConfigurationEnvironmentVariable = GetString(conf, "DevelopmentConfigurationEnvironmentVariable", "NETDevelopmentConfigurationEnvironmentVariable"),
+                    DevelopmentSourceBootstrapperMode = TryParseDevelopmentSourceBootstrapperMode(GetString(conf, "DevelopmentSourceBootstrapperMode", "NETDevelopmentSourceBootstrapperMode")),
                     AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "AssemblyTypeAcceleratorMode"))
                         ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "NETAssemblyTypeAcceleratorMode")),
                     AssemblyTypeAccelerators = GetStringArray(conf, "AssemblyTypeAccelerators")
@@ -366,6 +362,16 @@ public static class LegacySegmentAdapter
         var v = GetValue(dict, key);
         if (v is PSObject pso) v = pso.BaseObject;
         return v?.ToString();
+    }
+
+    private static string? GetString(IDictionary dict, string key, string alias)
+        => GetString(dict, key) ?? GetString(dict, alias);
+
+    private static bool? GetNullableBool(IDictionary dict, string key, string alias)
+    {
+        if (HasKey(dict, key)) return GetBool(dict, key);
+        if (HasKey(dict, alias)) return GetBool(dict, alias);
+        return null;
     }
 
     private static bool GetBool(IDictionary dict, string key)
