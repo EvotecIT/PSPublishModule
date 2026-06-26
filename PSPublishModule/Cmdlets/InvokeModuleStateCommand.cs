@@ -403,12 +403,9 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
     {
         var desiredRepository = ResolveRepositoryName();
         var modules = new ArrayList();
-        foreach (var selected in (inventory.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())
-            .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(group => SelectInventoryModule(group, Scope))
-            .Where(static module => module is not null)
-            .Cast<ModuleStateInstalledModuleResult>()
-            .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase))
+        foreach (var selected in SelectInstalledBaselineModules(inventory)
+            .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static module => module.Scope, StringComparer.OrdinalIgnoreCase))
         {
             var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
             {
@@ -465,6 +462,25 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             ?? candidates
                 .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
                 .FirstOrDefault();
+    }
+
+    private IEnumerable<ModuleStateInstalledModuleResult> SelectInstalledBaselineModules(ModuleStateInventoryResult inventory)
+    {
+        var modules = inventory.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>();
+        if (!string.IsNullOrWhiteSpace(Scope))
+        {
+            return modules
+                .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(group => SelectInventoryModule(group, Scope))
+                .Where(static module => module is not null)
+                .Cast<ModuleStateInstalledModuleResult>();
+        }
+
+        return modules
+            .GroupBy(static module => string.Join("|", module.Name, module.Scope ?? string.Empty), StringComparer.OrdinalIgnoreCase)
+            .Select(group => SelectInventoryModule(group, scope: null))
+            .Where(static module => module is not null)
+            .Cast<ModuleStateInstalledModuleResult>();
     }
 
     private ModuleStateApplyResult PrepareApply(ModuleStatePlanResult plan)
@@ -527,6 +543,8 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
         {
             if (HasFailedExecutionResult(executionResults))
                 throw new InvalidOperationException("ModuleState maintenance receipt cannot be written because one or more private-module delivery operations failed.");
+            if (HasSkippedExecutionResult(executionResults))
+                throw new InvalidOperationException("ModuleState maintenance receipt cannot be written because one or more private-module delivery operations were skipped.");
 
             var observedModules = ModuleStateMaintenanceEvidenceMapper.ToObservedModules(
                 executionResults,
@@ -619,4 +637,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
         => executionResults.Any(static result =>
             (result.DependencyResults ?? Array.Empty<ModuleStateDependencyResult>())
             .Any(static dependency => string.Equals(dependency.Status, "Failed", StringComparison.OrdinalIgnoreCase)));
+
+    private static bool HasSkippedExecutionResult(ModuleStateDeliveryExecutionResult[] executionResults)
+        => executionResults.Any(static result => !result.OperationPerformed);
 }

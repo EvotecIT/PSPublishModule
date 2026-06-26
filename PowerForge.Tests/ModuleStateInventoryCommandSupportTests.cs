@@ -26,6 +26,18 @@ public sealed class ModuleStateInventoryCommandSupportTests
     }
 
     [Fact]
+    public void InferScope_DoesNotTreatArbitraryProgramFilesPathsAsAllUsers()
+    {
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (string.IsNullOrWhiteSpace(programFiles))
+            return;
+
+        var scope = InvokeInferScopeNullable(Path.Combine(programFiles, "Company", "StagingModules", "Company.Tools"));
+
+        Assert.Null(scope);
+    }
+
+    [Fact]
     public void CreateInventoryResultFromFile_MarksMatchingLoadedModule()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

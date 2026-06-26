@@ -69,18 +69,19 @@ internal sealed class ModuleStateRepairPlanner
                 var installedModules = installedFamilyModules
                     .Where(module => string.Equals(module.Name, moduleName, StringComparison.OrdinalIgnoreCase))
                     .ToArray();
+                var selectedModule = SelectInstalledModule(installedModules);
 
                 if (installedModules.Length == 0 ||
-                    installedModules.Any(module => VersionsEqual(module.Version, targetModule.Version)))
+                    selectedModule is null ||
+                    VersionsEqual(selectedModule.Version, targetModule.Version))
                 {
                     continue;
                 }
 
-                var selectedModule = SelectInstalledModule(installedModules);
                 yield return new ModuleStatePlanAction(
                     ModuleStatePlanActionKind.Update,
                     moduleName,
-                    selectedModule?.Version,
+                    selectedModule.Version,
                     "=" + ModuleStateVersion.NormalizeOrOriginal(targetModule.Version),
                     $"Family repair: align '{policy.Name}' modules to the highest installed family version.",
                     isRepair: true);
@@ -168,8 +169,12 @@ internal sealed class ModuleStateRepairPlanner
 
     private static ModuleStateInstalledModule? SelectInstalledModule(IEnumerable<ModuleStateInstalledModule> installedModules)
         => installedModules
+            .Where(static module => module.IsEffectiveImportCandidate)
             .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-            .FirstOrDefault();
+            .FirstOrDefault()
+            ?? installedModules
+                .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+                .FirstOrDefault();
 
     private static bool VersionsEqual(string installedVersion, string receiptVersion)
     {

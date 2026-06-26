@@ -113,6 +113,21 @@ public sealed class InvokeModuleStateCommandTests
     }
 
     [Fact]
+    public void HasSkippedExecutionResult_DetectsUnperformedDelivery()
+    {
+        var executionResults = new[]
+        {
+            new ModuleStateDeliveryExecutionResult
+            {
+                Operation = "Install",
+                OperationPerformed = false
+            }
+        };
+
+        Assert.True(InvokeHasSkippedExecutionResult(executionResults));
+    }
+
+    [Fact]
     public void ResolveDesiredState_UsesProfileRepositoryForConvenienceModules()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -209,6 +224,40 @@ public sealed class InvokeModuleStateCommandTests
         }
     }
 
+    [Fact]
+    public void CreateDesiredStateForInstalledModules_PreservesScopedCopiesWhenScopeIsNotSpecified()
+    {
+        var command = new InvokeModuleStateCommand();
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Test",
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.2.0",
+                    Scope = "CurrentUser",
+                    IsEffectiveImportCandidate = true
+                },
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.1.0",
+                    Scope = "AllUsers",
+                    IsEffectiveImportCandidate = true
+                }
+            }
+        };
+
+        var desired = Assert.IsType<Hashtable>(InvokeCreateDesiredStateForInstalledModules(command, inventory));
+        var modules = Assert.IsAssignableFrom<IEnumerable>(desired["Modules"]).Cast<Hashtable>().ToArray();
+
+        Assert.Equal(2, modules.Length);
+        Assert.Contains(modules, static module => (string)module["Name"]! == "Company.Tools" && (string)module["Scope"]! == "CurrentUser");
+        Assert.Contains(modules, static module => (string)module["Name"]! == "Company.Tools" && (string)module["Scope"]! == "AllUsers");
+    }
+
     private static object? InvokeResolveDesiredState(
         InvokeModuleStateCommand command,
         ModuleStateInventoryResult inventory)
@@ -249,6 +298,16 @@ public sealed class InvokeModuleStateCommandTests
     {
         var method = typeof(InvokeModuleStateCommand).GetMethod(
             "HasFailedExecutionResult",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        return Assert.IsType<bool>(method!.Invoke(null, new object[] { executionResults }));
+    }
+
+    private static bool InvokeHasSkippedExecutionResult(ModuleStateDeliveryExecutionResult[] executionResults)
+    {
+        var method = typeof(InvokeModuleStateCommand).GetMethod(
+            "HasSkippedExecutionResult",
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
