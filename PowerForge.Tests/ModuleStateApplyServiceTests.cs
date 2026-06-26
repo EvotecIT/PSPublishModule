@@ -221,12 +221,12 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
-    public void CreateMaintenanceReceipt_UsesScopeLessExecutionEvidenceForTargetScope()
+    public void CreateMaintenanceReceipt_UsesScopeLessExecutionEvidenceForExactTargetScope()
     {
         var plan = new ModuleStatePlan(
             new[]
             {
-                new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Tools", "1.2.0", ">=1.2.0", "update", targetScope: "AllUsers")
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Tools", "1.2.0", "=1.4.0", "update", targetScope: "AllUsers")
             },
             Array.Empty<ModuleStateConflictFinding>());
         var service = new ModuleStateApplyService();
@@ -241,6 +241,26 @@ public sealed class ModuleStateApplyServiceTests
         Assert.Equal("Company.Tools", module.Name);
         Assert.Equal("1.4.0", module.Version);
         Assert.Equal("AllUsers", module.Scope);
+    }
+
+    [Fact]
+    public void CreateMaintenanceReceipt_RequiresScopedEvidenceForScopedRangeAction()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Tools", "1.2.0", ">=1.2.0", "update", targetScope: "AllUsers")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+        var service = new ModuleStateApplyService();
+        var result = service.Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
+
+        var receipt = service.CreateMaintenanceReceipt(
+            result,
+            sourceRepository: "Company",
+            observedModules: new[] { new ModuleStateInstalledModule("Company.Tools", "3.0.0", sourceRepository: "Company") });
+
+        Assert.Empty(receipt.Modules);
     }
 
     [Fact]

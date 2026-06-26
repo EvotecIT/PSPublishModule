@@ -274,9 +274,13 @@ internal sealed class ModuleStateApplyService
         if (!string.IsNullOrWhiteSpace(version))
             candidates = candidates.Where(module => VersionsEqual(module.Version, version!));
         if (!string.IsNullOrWhiteSpace(action.TargetScope))
-            candidates = candidates.Where(module =>
-                string.IsNullOrWhiteSpace(module.Scope) ||
-                string.Equals(module.Scope, action.TargetScope, StringComparison.OrdinalIgnoreCase));
+        {
+            candidates = string.IsNullOrWhiteSpace(version)
+                ? candidates.Where(module => string.Equals(module.Scope, action.TargetScope, StringComparison.OrdinalIgnoreCase))
+                : candidates.Where(module =>
+                    string.IsNullOrWhiteSpace(module.Scope) ||
+                    string.Equals(module.Scope, action.TargetScope, StringComparison.OrdinalIgnoreCase));
+        }
 
         var expectedRepository = action.TargetRepository ?? sourceRepository;
         if (!string.IsNullOrWhiteSpace(expectedRepository))
