@@ -94,7 +94,7 @@ internal sealed class ModuleStateApplyService
             .Select(action => CreateMaintenanceReceiptModule(action, sourceRepository, observedByName))
             .Where(static module => module is not null)
             .Cast<ModuleStateMaintenanceReceiptModule>()
-            .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(static module => string.Join("|", module.Name, module.Scope ?? string.Empty), StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();

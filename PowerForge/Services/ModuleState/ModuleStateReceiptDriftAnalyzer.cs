@@ -108,7 +108,11 @@ internal sealed class ModuleStateReceiptDriftAnalyzer
         if (versionMatches.Length == 0)
             return;
 
-        if (versionMatches.Any(module => string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)))
+        var samePlacementMatches = versionMatches
+            .Where(module => string.IsNullOrWhiteSpace(receiptModule.SourceRepository) ||
+                             string.Equals(module.SourceRepository, receiptModule.SourceRepository, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (samePlacementMatches.Any(module => string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)))
             return;
 
         findings.Add(CreateFinding(

@@ -57,6 +57,16 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.True(request.Force);
     }
 
+    [Fact]
+    public void DeliveryGroupKey_DistinguishesSameModuleAcrossScopes()
+    {
+        var comparer = DeliveryGroupKeyComparer.Instance;
+        var currentUser = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, "Company.Tools", "CurrentUser");
+        var allUsers = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, "Company.Tools", "AllUsers");
+
+        Assert.False(comparer.Equals(currentUser, allUsers));
+    }
+
     private static PrivateModuleWorkflowRequest InvokeCreateRequest(IReadOnlyList<ModuleStatePlanAction> actions)
     {
         var method = typeof(ModuleStatePrivateDeliveryService).GetMethod(

@@ -76,7 +76,7 @@ internal readonly struct ModuleStateVersion : IComparable<ModuleStateVersion>, I
         if (!IsPrerelease && other.IsPrerelease)
             return 1;
 
-        return string.Compare(Prerelease, other.Prerelease, StringComparison.OrdinalIgnoreCase);
+        return ComparePrerelease(Prerelease, other.Prerelease);
     }
 
     public bool Equals(ModuleStateVersion other) => CompareTo(other) == 0;
@@ -97,6 +97,88 @@ internal readonly struct ModuleStateVersion : IComparable<ModuleStateVersion>, I
 
     internal static string NormalizeOrOriginal(string version)
         => TryParse(version, out var parsed) ? parsed.Normalized : version;
+
+    private static int ComparePrerelease(string? left, string? right)
+    {
+        var leftIdentifiers = SplitPrerelease(left);
+        var rightIdentifiers = SplitPrerelease(right);
+        var count = Math.Min(leftIdentifiers.Length, rightIdentifiers.Length);
+        for (var i = 0; i < count; i++)
+        {
+            var leftPart = leftIdentifiers[i];
+            var rightPart = rightIdentifiers[i];
+            var leftIsNumeric = int.TryParse(leftPart, out var leftNumeric);
+            var rightIsNumeric = int.TryParse(rightPart, out var rightNumeric);
+            if (leftIsNumeric && rightIsNumeric)
+            {
+                var numericComparison = leftNumeric.CompareTo(rightNumeric);
+                if (numericComparison != 0)
+                    return numericComparison;
+
+                continue;
+            }
+
+            if (leftIsNumeric != rightIsNumeric)
+                return leftIsNumeric ? -1 : 1;
+
+            var comparison = CompareMixedIdentifier(leftPart, rightPart);
+            if (comparison != 0)
+                return comparison;
+        }
+
+        return leftIdentifiers.Length.CompareTo(rightIdentifiers.Length);
+    }
+
+    private static string[] SplitPrerelease(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? Array.Empty<string>()
+            : value!.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+
+    private static int CompareMixedIdentifier(string left, string right)
+    {
+        var leftIndex = 0;
+        var rightIndex = 0;
+        while (leftIndex < left.Length && rightIndex < right.Length)
+        {
+            var leftDigits = char.IsDigit(left[leftIndex]);
+            var rightDigits = char.IsDigit(right[rightIndex]);
+            if (leftDigits != rightDigits)
+                return leftDigits ? -1 : 1;
+
+            var leftStart = leftIndex;
+            while (leftIndex < left.Length && char.IsDigit(left[leftIndex]) == leftDigits)
+                leftIndex++;
+
+            var rightStart = rightIndex;
+            while (rightIndex < right.Length && char.IsDigit(right[rightIndex]) == rightDigits)
+                rightIndex++;
+
+            var leftPart = left.Substring(leftStart, leftIndex - leftStart);
+            var rightPart = right.Substring(rightStart, rightIndex - rightStart);
+            var comparison = leftDigits
+                ? CompareNumericStrings(leftPart, rightPart)
+                : string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
+            if (comparison != 0)
+                return comparison;
+        }
+
+        return left.Length.CompareTo(right.Length);
+    }
+
+    private static int CompareNumericStrings(string left, string right)
+    {
+        var trimmedLeft = left.TrimStart('0');
+        var trimmedRight = right.TrimStart('0');
+        if (trimmedLeft.Length == 0)
+            trimmedLeft = "0";
+        if (trimmedRight.Length == 0)
+            trimmedRight = "0";
+
+        var comparison = trimmedLeft.Length.CompareTo(trimmedRight.Length);
+        return comparison != 0
+            ? comparison
+            : string.Compare(trimmedLeft, trimmedRight, StringComparison.Ordinal);
+    }
 
     private int[] Segments => _segments ?? EmptySegments;
 
