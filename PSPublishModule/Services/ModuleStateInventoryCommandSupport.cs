@@ -81,8 +81,13 @@ internal static class ModuleStateInventoryCommandSupport
     private static string? InferScope(string path)
     {
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        if (!string.IsNullOrWhiteSpace(programFiles) && IsPathUnder(path, programFiles))
+        if (!string.IsNullOrWhiteSpace(programFiles) &&
+            (IsPathUnder(path, Path.Combine(programFiles, "PowerShell", "Modules")) ||
+             IsPathUnder(path, Path.Combine(programFiles, "WindowsPowerShell", "Modules"))))
+        {
             return "AllUsers";
+        }
+
         if (IsPathUnder(path, "/usr/local/share/powershell/Modules") ||
             IsPathUnder(path, "/opt/microsoft/powershell/7/Modules") ||
             IsPathUnder(path, "/usr/share/powershell/Modules"))

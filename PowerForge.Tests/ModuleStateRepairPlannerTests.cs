@@ -187,6 +187,35 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
+    public void CreateRepairActions_RepairsFamilyMismatchWhenTargetVersionExistsOnlyInNonEffectiveCopy()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "1.0.0", isEffectiveImportCandidate: true),
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.0.0"),
+            new ModuleStateInstalledModule("Microsoft.Graph.Users", "2.0.0", isEffectiveImportCandidate: true)
+        });
+        var familyPolicies = new[]
+        {
+            new ModuleStateFamilyPolicy(
+                "MicrosoftGraph",
+                new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Users" })
+        };
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            Array.Empty<ModuleStateMaintenanceReceipt>(),
+            Array.Empty<ModuleStatePlanAction>(),
+            familyPolicies));
+
+        Assert.Equal(ModuleStatePlanActionKind.Update, action.Kind);
+        Assert.Equal("Microsoft.Graph.Authentication", action.ModuleName);
+        Assert.Equal("1.0.0", action.InstalledVersion);
+        Assert.Equal("=2.0.0", action.VersionPolicy);
+        Assert.True(action.IsRepair);
+    }
+
+    [Fact]
     public void CreateRepairActions_DoesNotInstallMissingFamilyPresetModules()
     {
         var inventory = new ModuleStateInventory(new[]
