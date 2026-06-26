@@ -6,7 +6,8 @@
   [string]$Repository,
   [string]$Scope,
   [string]$CredentialUser,
-  [string]$CredentialSecret
+  [string]$CredentialSecret,
+  [string]$PrereleaseFlag
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -37,6 +38,12 @@ try {
   if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
   elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }
   if (-not [string]::IsNullOrWhiteSpace($MaximumVersion)) { $params.MaximumVersion = $MaximumVersion }
+  if ($PrereleaseFlag -eq '1') {
+    $installModuleCommand = Get-Command -Name Install-Module -ErrorAction Stop
+    if ($installModuleCommand.Parameters.ContainsKey('AllowPrerelease')) {
+      $params.AllowPrerelease = $true
+    }
+  }
   if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
     $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
     $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)

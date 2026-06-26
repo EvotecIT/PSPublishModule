@@ -81,12 +81,13 @@ internal sealed class ModuleStateCleanupPlanner
         {
             if (!string.Equals(receiptModule.Name, moduleName, StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (installedModules.Any(module =>
-                string.Equals(module.Version, receiptModule.Version, StringComparison.OrdinalIgnoreCase) &&
-                (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
-                 string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase))))
+
+            foreach (var installedModule in installedModules.Where(module =>
+                         VersionsEquivalent(module.Version, receiptModule.Version) &&
+                         (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
+                          string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase))))
             {
-                keepVersions.Add(receiptModule.Version);
+                keepVersions.Add(installedModule.Version);
             }
         }
 
@@ -115,6 +116,17 @@ internal sealed class ModuleStateCleanupPlanner
         }
 
         return keepVersions;
+    }
+
+    private static bool VersionsEquivalent(string installedVersion, string receiptVersion)
+    {
+        if (ModuleStateVersion.TryParse(installedVersion, out var installed) &&
+            ModuleStateVersion.TryParse(receiptVersion, out var receipt))
+        {
+            return installed.Equals(receipt);
+        }
+
+        return string.Equals(installedVersion, receiptVersion, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ModuleStateConflictFinding CreateLoadedCleanupFinding(ModuleStateInstalledModule installedModule)

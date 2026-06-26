@@ -229,6 +229,8 @@ internal sealed class ModuleStateApplyService
         var trimmed = versionPolicy!.Trim();
         if (trimmed.StartsWith("=", StringComparison.Ordinal))
             return trimmed.Substring(1).Trim();
+        if (ModuleStateVersion.TryParse(trimmed, out var exactVersion))
+            return exactVersion.Normalized;
 
         return null;
     }
