@@ -47,6 +47,11 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? RequiredVersion { get; set; }
 
+    /// <summary>Version policy to make available, for example <c>&gt;=1.2.0 &lt;2.0.0</c>.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? VersionPolicy { get; set; }
+
     /// <summary>PowerShell module installation scope used when an update needs to install a version.</summary>
     [Parameter]
     [ValidateSet("CurrentUser", "AllUsers")]
@@ -222,7 +227,11 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
             {
                 Operation = PrivateModuleWorkflowOperation.Update,
                 ModuleNames = Name,
-                RequiredVersions = BuildRequiredVersions(Name, RequiredVersion),
+                RequiredVersions = PrivateModuleVersionPolicySupport.BuildRequiredVersions(Name, RequiredVersion, VersionPolicy),
+                MinimumVersions = PrivateModuleVersionPolicySupport.BuildMinimumVersions(Name, VersionPolicy),
+                MinimumVersionInclusivity = PrivateModuleVersionPolicySupport.BuildMinimumVersionInclusivity(Name, VersionPolicy),
+                MaximumVersions = PrivateModuleVersionPolicySupport.BuildMaximumVersions(Name, VersionPolicy),
+                MaximumVersionInclusivity = PrivateModuleVersionPolicySupport.BuildMaximumVersionInclusivity(Name, VersionPolicy),
                 InstallScope = Scope,
                 UseAzureArtifacts = useAzureArtifacts,
                 UseMicrosoftArtifactRegistry = useMicrosoftArtifactRegistry,
@@ -257,15 +266,4 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
         WriteObject(result.DependencyResults, enumerateCollection: true);
     }
 
-    private static IReadOnlyDictionary<string, string> BuildRequiredVersions(IEnumerable<string> names, string? requiredVersion)
-    {
-        if (string.IsNullOrWhiteSpace(requiredVersion))
-            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        return (names ?? Array.Empty<string>())
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .Select(static name => name.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(static name => name, _ => requiredVersion!.Trim(), StringComparer.OrdinalIgnoreCase);
-    }
 }

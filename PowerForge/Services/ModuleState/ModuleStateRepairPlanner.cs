@@ -17,7 +17,7 @@ internal sealed class ModuleStateRepairPlanner
 
         var actionsByModule = (existingActions ?? Array.Empty<ModuleStatePlanAction>())
             .Where(static action => action is not null)
-            .GroupBy(static action => action.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(static action => CreateActionKey(action), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
 
         foreach (var receipt in receipts ?? Array.Empty<ModuleStateMaintenanceReceipt>())
@@ -26,19 +26,23 @@ internal sealed class ModuleStateRepairPlanner
             {
                 var repairAction = CreateRepairAction(inventory, receiptModule);
                 if (repairAction is not null)
-                    actionsByModule[repairAction.ModuleName] = repairAction;
+                    actionsByModule[CreateActionKey(repairAction)] = repairAction;
             }
         }
 
         foreach (var repairAction in CreateFamilyRepairActions(inventory, familyPolicies))
         {
-            actionsByModule[repairAction.ModuleName] = repairAction;
+            actionsByModule[CreateActionKey(repairAction)] = repairAction;
         }
 
         return actionsByModule.Values
             .OrderBy(static action => action.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static action => action.TargetScope, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
+
+    private static string CreateActionKey(ModuleStatePlanAction action)
+        => string.Join("|", action.ModuleName, action.TargetScope ?? string.Empty);
 
     private static IEnumerable<ModuleStatePlanAction> CreateFamilyRepairActions(
         ModuleStateInventory inventory,

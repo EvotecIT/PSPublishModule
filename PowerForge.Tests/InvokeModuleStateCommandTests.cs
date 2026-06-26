@@ -90,6 +90,27 @@ public sealed class InvokeModuleStateCommandTests
         Assert.Contains("Latest requested", action.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void HasFailedExecutionResult_DetectsFailedDependency()
+    {
+        var executionResults = new[]
+        {
+            new ModuleStateDeliveryExecutionResult
+            {
+                DependencyResults = new[]
+                {
+                    new ModuleStateDependencyResult
+                    {
+                        Name = "Company.Tools",
+                        Status = "Failed"
+                    }
+                }
+            }
+        };
+
+        Assert.True(InvokeHasFailedExecutionResult(executionResults));
+    }
+
     private static object? InvokeResolveDesiredState(
         InvokeModuleStateCommand command,
         ModuleStateInventoryResult inventory)
@@ -112,5 +133,15 @@ public sealed class InvokeModuleStateCommandTests
         Assert.NotNull(method);
 
         method!.Invoke(command, new object[] { plan });
+    }
+
+    private static bool InvokeHasFailedExecutionResult(ModuleStateDeliveryExecutionResult[] executionResults)
+    {
+        var method = typeof(InvokeModuleStateCommand).GetMethod(
+            "HasFailedExecutionResult",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        return Assert.IsType<bool>(method!.Invoke(null, new object[] { executionResults }));
     }
 }

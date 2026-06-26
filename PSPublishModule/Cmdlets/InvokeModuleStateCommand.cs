@@ -301,9 +301,9 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             };
 
             if (!string.IsNullOrWhiteSpace(InventoryOutputPath))
-                WriteJsonArtifact(inventory, InventoryOutputPath!);
+                WriteJsonArtifactIfRequested(inventory, InventoryOutputPath!, "Write ModuleState inventory artifact");
             if (!string.IsNullOrWhiteSpace(PlanOutputPath))
-                WriteJsonArtifact(plan, PlanOutputPath!);
+                WriteJsonArtifactIfRequested(plan, PlanOutputPath!, "Write ModuleState plan artifact");
 
             if (ShowSummary.IsPresent)
             {
@@ -523,6 +523,9 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
         if (maintenanceReceiptOutputPath is not null &&
             ShouldProcess(maintenanceReceiptOutputPath, "Write ModuleState maintenance receipt"))
         {
+            if (HasFailedExecutionResult(executionResults))
+                throw new InvalidOperationException("ModuleState maintenance receipt cannot be written because one or more private-module delivery operations failed.");
+
             var observedModules = ModuleStateMaintenanceEvidenceMapper.ToObservedModules(
                 executionResults,
                 postApplyInventory,
@@ -599,4 +602,16 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
 
         File.WriteAllText(resolved, JsonSerializer.Serialize(result, JsonOptions));
     }
+
+    private void WriteJsonArtifactIfRequested<T>(T result, string path, string action)
+    {
+        var resolved = SessionState.Path.GetUnresolvedProviderPathFromPSPath(path);
+        if (ShouldProcess(resolved, action))
+            WriteJsonArtifact(result, resolved);
+    }
+
+    private static bool HasFailedExecutionResult(ModuleStateDeliveryExecutionResult[] executionResults)
+        => executionResults.Any(static result =>
+            (result.DependencyResults ?? Array.Empty<ModuleStateDependencyResult>())
+            .Any(static dependency => string.Equals(dependency.Status, "Failed", StringComparison.OrdinalIgnoreCase)));
 }

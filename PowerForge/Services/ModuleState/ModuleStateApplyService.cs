@@ -174,6 +174,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-RequiredVersion");
             arguments.Add(requiredVersion!);
         }
+        else if (!string.IsNullOrWhiteSpace(action.VersionPolicy) &&
+                 !string.Equals(action.VersionPolicy, "*", StringComparison.Ordinal))
+        {
+            arguments.Add("-VersionPolicy");
+            arguments.Add(action.VersionPolicy);
+        }
 
         if (!string.IsNullOrWhiteSpace(action.TargetScope))
         {

@@ -106,6 +106,31 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
+    public void CreateRepairActions_PreservesSameModuleRepairsAcrossScopes()
+    {
+        var inventory = new ModuleStateInventory(Array.Empty<ModuleStateInstalledModule>());
+        var receipts = new[]
+        {
+            new ModuleStateMaintenanceReceipt(
+                null,
+                new[]
+                {
+                    new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2.0", sourceRepository: "CompanyModules", scope: "CurrentUser"),
+                    new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2.0", sourceRepository: "CompanyModules", scope: "AllUsers")
+                })
+        };
+
+        var actions = new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            receipts,
+            Array.Empty<ModuleStatePlanAction>());
+
+        Assert.Equal(2, actions.Length);
+        Assert.Contains(actions, static action => action.TargetScope == "CurrentUser");
+        Assert.Contains(actions, static action => action.TargetScope == "AllUsers");
+    }
+
+    [Fact]
     public void CreateRepairActions_PlansExactUpdateForSameVersionFamilyMismatch()
     {
         var inventory = new ModuleStateInventory(new[]

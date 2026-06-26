@@ -713,19 +713,16 @@ public sealed partial class ModuleDependencyInstaller
         if (string.IsNullOrWhiteSpace(dep.MinimumVersion) && string.IsNullOrWhiteSpace(dep.MaximumVersion))
             return true;
 
-        if (!TryParseVersion(version, out var parsed))
-            return false;
-
-        if (!string.IsNullOrWhiteSpace(dep.MinimumVersion) && TryParseVersion(dep.MinimumVersion, out var minimum))
+        if (!string.IsNullOrWhiteSpace(dep.MinimumVersion))
         {
-            var comparison = parsed.CompareTo(minimum);
+            var comparison = CompareVersionStrings(version, dep.MinimumVersion);
             if (comparison < 0 || (comparison == 0 && !dep.MinimumVersionInclusive))
                 return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(dep.MaximumVersion) && TryParseVersion(dep.MaximumVersion, out var maximum))
+        if (!string.IsNullOrWhiteSpace(dep.MaximumVersion))
         {
-            var comparison = parsed.CompareTo(maximum);
+            var comparison = CompareVersionStrings(version, dep.MaximumVersion);
             if (comparison > 0 || (comparison == 0 && !dep.MaximumVersionInclusive))
                 return false;
         }
