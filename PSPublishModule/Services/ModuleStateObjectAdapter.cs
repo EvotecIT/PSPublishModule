@@ -83,6 +83,8 @@ internal static class ModuleStateObjectAdapter
         value = Unwrap(value);
         if (value is string)
             return new[] { value };
+        if (value is IDictionary)
+            return new[] { value };
         if (value is IEnumerable enumerable)
             return enumerable.Cast<object>().Select(Unwrap).Where(static item => item is not null);
 

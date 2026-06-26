@@ -90,9 +90,20 @@ internal static class ModuleStateInventoryCommandSupport
             return "AllUsers";
         }
 
-        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrWhiteSpace(userProfile) && IsPathUnder(path, userProfile))
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        if (!string.IsNullOrWhiteSpace(documents) &&
+            (IsPathUnder(path, Path.Combine(documents, "PowerShell", "Modules")) ||
+             IsPathUnder(path, Path.Combine(documents, "WindowsPowerShell", "Modules"))))
+        {
             return "CurrentUser";
+        }
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(userProfile) &&
+            IsPathUnder(path, Path.Combine(userProfile, ".local", "share", "powershell", "Modules")))
+        {
+            return "CurrentUser";
+        }
 
         return null;
     }

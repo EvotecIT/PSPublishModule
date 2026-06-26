@@ -14,6 +14,18 @@ public sealed class ModuleStateInventoryCommandSupportTests
     }
 
     [Fact]
+    public void InferScope_DoesNotTreatArbitraryProfilePathsAsCurrentUser()
+    {
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(profile))
+            return;
+
+        var scope = InvokeInferScopeNullable(Path.Combine(profile, "src", "Modules", "Company.Tools"));
+
+        Assert.Null(scope);
+    }
+
+    [Fact]
     public void CreateInventoryResultFromFile_MarksMatchingLoadedModule()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -76,11 +88,17 @@ public sealed class ModuleStateInventoryCommandSupportTests
 
     private static string? InvokeInferScope(string path)
     {
+        var result = InvokeInferScopeNullable(path);
+        return Assert.IsType<string>(result);
+    }
+
+    private static string? InvokeInferScopeNullable(string path)
+    {
         var method = typeof(ModuleStateInventoryCommandSupport).GetMethod(
             "InferScope",
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        return Assert.IsType<string>(method!.Invoke(null, new object[] { path }));
+        return method!.Invoke(null, new object[] { path }) as string;
     }
 }

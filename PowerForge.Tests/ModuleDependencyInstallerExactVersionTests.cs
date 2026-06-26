@@ -138,25 +138,25 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         var runner = new StubPowerShellRunner(
             latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Preview.Module"] = "2.0.0",
+                ["Probe.Module"] = "2.0.0",
                 ["Stable.Module"] = "1.0.0"
             },
             installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase),
             failingExactVersions: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Preview.Module"] = "1.0.0-preview"
+                ["Probe.Module"] = "1.1.0"
             });
         var installer = new ModuleDependencyInstaller(runner, new NullLogger());
 
         var results = installer.EnsureInstalled(new[]
         {
-            new ModuleDependency("Preview.Module", requiredVersion: "1.0.0-preview"),
+            new ModuleDependency("Probe.Module", requiredVersion: "1.1.0"),
             new ModuleDependency("Stable.Module", requiredVersion: "1.0.0")
         });
 
         Assert.Equal(2, results.Count);
 
-        var failed = Assert.Single(results, r => string.Equals(r.Name, "Preview.Module", StringComparison.OrdinalIgnoreCase));
+        var failed = Assert.Single(results, r => string.Equals(r.Name, "Probe.Module", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(ModuleDependencyInstallStatus.Failed, failed.Status);
         Assert.Contains("Get-Module -ListAvailable failed", failed.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 

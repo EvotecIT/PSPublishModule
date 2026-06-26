@@ -100,6 +100,7 @@ public sealed partial class ModuleDependencyInstaller
                     currentDecision.NeedsInstall &&
                     !string.IsNullOrWhiteSpace(installedBefore) &&
                     exactRequiredVersion is not null &&
+                    CanUseExactVersionProbe(exactRequiredVersion) &&
                     HasInstalledRequiredVersion(dep.Name, exactRequiredVersion, dep.InstallScope))
                 {
                     var exactMessage = string.IsNullOrWhiteSpace(installedBefore) || string.Equals(installedBefore, exactRequiredVersion, StringComparison.OrdinalIgnoreCase)
@@ -169,11 +170,12 @@ public sealed partial class ModuleDependencyInstaller
         if (!decision.NeedsInstall)
             return RequiresScopedInstall(dependency) && !HasInstalledModuleSatisfyingDependency(dependency);
 
-        var requiredVersion = dependency.RequiredVersion;
+        var requiredVersion = dependency.RequiredVersion?.Trim();
         if (!force &&
             !string.IsNullOrWhiteSpace(installedBefore) &&
             !string.IsNullOrWhiteSpace(requiredVersion) &&
-            HasInstalledRequiredVersion(dependency.Name, requiredVersion!.Trim(), dependency.InstallScope))
+            CanUseExactVersionProbe(requiredVersion!) &&
+            HasInstalledRequiredVersion(dependency.Name, requiredVersion!, dependency.InstallScope))
         {
             return false;
         }
@@ -286,7 +288,8 @@ public sealed partial class ModuleDependencyInstaller
                 else if (!string.IsNullOrWhiteSpace(dep.RequiredVersion))
                 {
                     var exactRequiredVersion = dep.RequiredVersion!.Trim();
-                    if (HasInstalledRequiredVersion(dep.Name, exactRequiredVersion, dep.InstallScope))
+                    if (CanUseExactVersionProbe(exactRequiredVersion) &&
+                        HasInstalledRequiredVersion(dep.Name, exactRequiredVersion, dep.InstallScope))
                     {
                         var exactMessage = VersionsEquivalent(installedBefore, exactRequiredVersion)
                             ? $"Exact required version {exactRequiredVersion} already installed"
@@ -552,7 +555,7 @@ public sealed partial class ModuleDependencyInstaller
             prerelease ? "1" : "0",
             credential?.UserName ?? string.Empty,
             credential?.Secret ?? string.Empty,
-            ResolveInstallScope(dep)
+            dep.InstallScope ?? string.Empty
         };
         var result = RunScript(script, args, timeout);
         if (result.ExitCode != 0)
@@ -702,6 +705,9 @@ public sealed partial class ModuleDependencyInstaller
 
     private static bool RequiresScopedInstall(ModuleDependency dep)
         => !string.IsNullOrWhiteSpace(dep.InstallScope);
+
+    private static bool CanUseExactVersionProbe(string requiredVersion)
+        => !(ModuleStateVersion.TryParse(requiredVersion, out var version) && version.IsPrerelease);
 
     private static bool RequiresPSResourceGetVersionRange(ModuleDependency dep)
         => string.IsNullOrWhiteSpace(dep.RequiredVersion) &&

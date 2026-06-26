@@ -43,7 +43,7 @@ internal sealed class ModuleStateInventoryService
 
         var effectiveModules = new HashSet<ModuleStateInstalledModule>(
             modules
-                .GroupBy(static module => module.Module.Name, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(static module => string.Join("|", module.Module.Name, module.Module.PowerShellEdition ?? string.Empty), StringComparer.OrdinalIgnoreCase)
                 .Select(static group => group
                     .OrderBy(static module => module.ModulePathIndex)
                     .ThenByDescending(static module => ModuleStateVersion.TryParse(module.Module.Version, out var version) ? version : default)
@@ -76,15 +76,23 @@ internal sealed class ModuleStateInventoryService
         {
             yield return CreateModule(moduleDirectory.Name, directManifest, modulePath, moduleDirectory.Name);
         }
+        else if (FindScriptModule(moduleDirectory, moduleDirectory.Name) is { } directScriptModule)
+        {
+            yield return CreateScriptModule(moduleDirectory.Name, directScriptModule, modulePath, "0.0");
+        }
 
         foreach (var versionDirectory in EnumerateDirectoriesSafe(moduleDirectory.FullName)
                      .Where(static directory => ModuleStateVersion.TryParse(directory.Name, out _)))
         {
             var versionManifest = FindManifest(versionDirectory, moduleDirectory.Name);
-            if (versionManifest is null)
+            if (versionManifest is not null)
+            {
+                yield return CreateModule(moduleDirectory.Name, versionManifest, modulePath, versionDirectory.Name);
                 continue;
+            }
 
-            yield return CreateModule(moduleDirectory.Name, versionManifest, modulePath, versionDirectory.Name);
+            if (FindScriptModule(versionDirectory, moduleDirectory.Name) is { } versionScriptModule)
+                yield return CreateScriptModule(moduleDirectory.Name, versionScriptModule, modulePath, versionDirectory.Name);
         }
     }
 
@@ -105,6 +113,19 @@ internal sealed class ModuleStateInventoryService
             TryReadSourceRepository(manifestText, manifest.Directory));
     }
 
+    private static ModuleStateInstalledModule CreateScriptModule(
+        string moduleName,
+        FileInfo scriptModule,
+        ModuleStateModulePath modulePath,
+        string fallbackVersion)
+        => new(
+            moduleName,
+            fallbackVersion,
+            modulePath.PowerShellEdition,
+            modulePath.Scope,
+            scriptModule.DirectoryName ?? scriptModule.FullName,
+            TryReadSourceRepository(manifestText: null, scriptModule.Directory));
+
     private static FileInfo? FindManifest(DirectoryInfo directory, string moduleName)
     {
         var preferred = Path.Combine(directory.FullName, moduleName + ".psd1");
@@ -114,6 +135,24 @@ internal sealed class ModuleStateInventoryService
         try
         {
             return directory.EnumerateFiles("*.psd1", SearchOption.TopDirectoryOnly)
+                .OrderBy(static file => file.Name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static FileInfo? FindScriptModule(DirectoryInfo directory, string moduleName)
+    {
+        var preferred = Path.Combine(directory.FullName, moduleName + ".psm1");
+        if (File.Exists(preferred))
+            return new FileInfo(preferred);
+
+        try
+        {
+            return directory.EnumerateFiles("*.psm1", SearchOption.TopDirectoryOnly)
                 .OrderBy(static file => file.Name, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
         }

@@ -55,7 +55,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     /// <summary>PowerShell module installation scope used when an update needs to install a version.</summary>
     [Parameter]
     [ValidateSet("CurrentUser", "AllUsers")]
-    public string Scope { get; set; } = "CurrentUser";
+    public string? Scope { get; set; }
 
     /// <summary>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetRepository)]
