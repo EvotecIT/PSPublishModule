@@ -189,6 +189,7 @@ internal sealed class BuildConfigurationFactory
         if (request.NETDevelopmentBinariesPathSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentBinariesPath = request.NETDevelopmentBinariesPath is null ? null : PathValueResolver.NormalizeSeparators(request.NETDevelopmentBinariesPath); }
         if (request.NETDevelopmentBinariesEnvironmentVariableSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentBinariesEnvironmentVariable = request.NETDevelopmentBinariesEnvironmentVariable; }
         if (request.NETDevelopmentConfigurationEnvironmentVariableSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentConfigurationEnvironmentVariable = request.NETDevelopmentConfigurationEnvironmentVariable; }
+        if (request.NETDevelopmentBinariesReplaceSingleFileSourceSpecified) { EnsureBuildLibraries(); buildLibraries!.DevelopmentBinariesReplaceSingleFileSource = request.NETDevelopmentBinariesReplaceSingleFileSource; }
         if (request.NETAssemblyTypeAcceleratorModeSpecified) { EnsureBuildLibraries(); buildLibraries!.AssemblyTypeAcceleratorMode = request.NETAssemblyTypeAcceleratorMode; }
         if (request.NETAssemblyTypeAcceleratorsSpecified) { EnsureBuildLibraries(); buildLibraries!.AssemblyTypeAccelerators = request.NETAssemblyTypeAccelerators; }
         if (request.NETAssemblyTypeAcceleratorAssembliesSpecified) { EnsureBuildLibraries(); buildLibraries!.AssemblyTypeAcceleratorAssemblies = request.NETAssemblyTypeAcceleratorAssemblies; }

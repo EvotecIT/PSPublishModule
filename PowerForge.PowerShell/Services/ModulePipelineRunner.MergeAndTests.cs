@@ -395,7 +395,7 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
-        if (sourceIsSingleFileModule)
+        if (sourceIsSingleFileModule && !plan.BuildSpec.DevelopmentBinariesReplaceSingleFileSource)
         {
             _logger.Info($"Skipped source development bootstrapper for '{plan.ModuleName}' because the source module is a single-file PSM1 without script folders.");
             return;

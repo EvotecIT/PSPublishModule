@@ -138,6 +138,9 @@ public static class LegacySegmentAdapter
                         DevelopmentBinariesPath = GetString(buildLibraries, "DevelopmentBinariesPath"),
                         DevelopmentBinariesEnvironmentVariable = GetString(buildLibraries, "DevelopmentBinariesEnvironmentVariable"),
                         DevelopmentConfigurationEnvironmentVariable = GetString(buildLibraries, "DevelopmentConfigurationEnvironmentVariable"),
+                        DevelopmentBinariesReplaceSingleFileSource = HasKey(buildLibraries, "DevelopmentBinariesReplaceSingleFileSource")
+                            ? GetBool(buildLibraries, "DevelopmentBinariesReplaceSingleFileSource")
+                            : null,
                         AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "AssemblyTypeAcceleratorMode"))
                             ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "NETAssemblyTypeAcceleratorMode")),
                         AssemblyTypeAccelerators = GetStringArray(buildLibraries, "AssemblyTypeAccelerators")
@@ -228,6 +231,9 @@ public static class LegacySegmentAdapter
                     DevelopmentBinariesPath = GetString(conf, "DevelopmentBinariesPath"),
                     DevelopmentBinariesEnvironmentVariable = GetString(conf, "DevelopmentBinariesEnvironmentVariable"),
                     DevelopmentConfigurationEnvironmentVariable = GetString(conf, "DevelopmentConfigurationEnvironmentVariable"),
+                    DevelopmentBinariesReplaceSingleFileSource = HasKey(conf, "DevelopmentBinariesReplaceSingleFileSource")
+                        ? GetBool(conf, "DevelopmentBinariesReplaceSingleFileSource")
+                        : null,
                     AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "AssemblyTypeAcceleratorMode"))
                         ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "NETAssemblyTypeAcceleratorMode")),
                     AssemblyTypeAccelerators = GetStringArray(conf, "AssemblyTypeAccelerators")

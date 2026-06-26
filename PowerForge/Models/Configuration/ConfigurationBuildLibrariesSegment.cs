@@ -85,6 +85,9 @@ public sealed class BuildLibrariesConfiguration
     /// <summary>Optional environment variable that chooses the development build configuration.</summary>
     public string? DevelopmentConfigurationEnvironmentVariable { get; set; }
 
+    /// <summary>Allow generated development-bootstrapper code to replace a hand-authored single-file source PSM1.</summary>
+    public bool? DevelopmentBinariesReplaceSingleFileSource { get; set; }
+
     /// <summary>Controls optional PowerShell type accelerator exposure for assemblies loaded in the module AssemblyLoadContext.</summary>
     public AssemblyTypeAcceleratorExportMode? AssemblyTypeAcceleratorMode { get; set; }
 
