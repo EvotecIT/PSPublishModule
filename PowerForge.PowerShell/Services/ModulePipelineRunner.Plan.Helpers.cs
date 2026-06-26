@@ -16,7 +16,9 @@ public sealed partial class ModulePipelineRunner
         bool useAssemblyLoadContextRequested,
         bool typeAcceleratorsRequireAlc,
         string? resolveBinaryConflictsProjectName,
-        bool binaryModuleDocumentationRequested)
+        bool binaryModuleDocumentationRequested,
+        ModuleDevelopmentBinaryMode developmentBinariesMode,
+        string? developmentBinariesPath)
     {
         var reasons = new List<string>();
         var hasFrameworks = HasAnyConfiguredValues(dotnetFrameworksFromSegments)
@@ -27,6 +29,9 @@ public sealed partial class ModulePipelineRunner
             doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively;
         var effectiveHandleRuntimes =
             handleRuntimesFromSegments ?? spec.Build.HandleRuntimes;
+        var developmentBinariesNeedProject =
+            developmentBinariesMode != ModuleDevelopmentBinaryMode.Off &&
+            string.IsNullOrWhiteSpace(developmentBinariesPath);
         var hasExplicitBinaryIntentBeyondFramework =
             syncNETProjectVersion
             || hasBinaryModules
@@ -37,7 +42,8 @@ public sealed partial class ModulePipelineRunner
             || effectiveHandleRuntimes
             || useAssemblyLoadContextRequested
             || typeAcceleratorsRequireAlc
-            || binaryModuleDocumentationRequested;
+            || binaryModuleDocumentationRequested
+            || developmentBinariesNeedProject;
 
         if (syncNETProjectVersion)
             reasons.Add("SyncNETProjectVersion");
@@ -68,6 +74,9 @@ public sealed partial class ModulePipelineRunner
 
         if (binaryModuleDocumentationRequested)
             reasons.Add("NETBinaryModuleDocumentation");
+
+        if (developmentBinariesNeedProject)
+            reasons.Add("NETDevelopmentBinaries");
 
         return reasons
             .Distinct(StringComparer.OrdinalIgnoreCase)

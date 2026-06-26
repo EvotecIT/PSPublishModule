@@ -522,7 +522,7 @@ public sealed partial class ModulePipelineRunner
            content.Contains("# " + moduleName + " bootstrapper", StringComparison.Ordinal);
 
     private static bool IsSourceSingleFileModule(ModulePipelinePlan plan)
-        => ModuleMergeComposer.ResolveScriptFiles(plan.BuildSpec.SourcePath, plan.Information).Length == 0;
+        => ModuleMergeComposer.ResolveScriptFiles(plan.BuildSpec.SourcePath, null).Length == 0;
 
     private static string? ResolveDevelopmentBinaryRoot(ModuleBuildSpec spec)
     {

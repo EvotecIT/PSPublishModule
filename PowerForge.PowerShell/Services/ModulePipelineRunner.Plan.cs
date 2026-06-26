@@ -607,6 +607,7 @@ public sealed partial class ModulePipelineRunner
             developmentBinariesEnabledFromSegments,
             developmentBinariesModeFromSegments,
             spec.Build.DevelopmentBinariesMode);
+        var developmentBinariesPath = developmentBinariesPathFromSegments ?? spec.Build.DevelopmentBinariesPath;
 
         ApplyGateModeToPlanInputs(
             gateMode,
@@ -625,7 +626,9 @@ public sealed partial class ModulePipelineRunner
                 requestedUseAssemblyLoadContext,
                 typeAcceleratorsRequireAlc,
                 resolveBinaryConflictsProjectName,
-                binaryModuleDocumentationRequested == true);
+                binaryModuleDocumentationRequested == true,
+                developmentBinariesMode,
+                developmentBinariesPath);
 
         var buildSpec = new ModuleBuildSpec
         {
@@ -650,7 +653,7 @@ public sealed partial class ModulePipelineRunner
             HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
             UseAssemblyLoadContext = effectiveUseAssemblyLoadContext,
             DevelopmentBinariesMode = developmentBinariesMode,
-            DevelopmentBinariesPath = developmentBinariesPathFromSegments ?? spec.Build.DevelopmentBinariesPath,
+            DevelopmentBinariesPath = developmentBinariesPath,
             DevelopmentBinariesEnvironmentVariable = developmentBinariesEnvironmentVariableFromSegments ?? spec.Build.DevelopmentBinariesEnvironmentVariable,
             DevelopmentConfigurationEnvironmentVariable = developmentConfigurationEnvironmentVariableFromSegments ?? spec.Build.DevelopmentConfigurationEnvironmentVariable,
             DevelopmentSourceBootstrapperMode = developmentSourceBootstrapperModeFromSegments ?? spec.Build.DevelopmentSourceBootstrapperMode,
