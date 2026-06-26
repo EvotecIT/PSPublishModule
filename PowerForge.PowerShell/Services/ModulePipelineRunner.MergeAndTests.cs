@@ -389,17 +389,18 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan)
     {
         var sourceIsSingleFileModule = IsSourceSingleFileModule(plan);
+        var sourceCanUseGeneratedBootstrapper = SourceCanUseGeneratedBootstrapper(plan);
 
         if (plan.BuildSpec.DevelopmentBinariesMode == ModuleDevelopmentBinaryMode.Off)
         {
-            TryClearSourceDevelopmentBootstrapper(buildResult, plan, sourceIsSingleFileModule);
+            TryClearSourceDevelopmentBootstrapper(buildResult, plan, sourceIsSingleFileModule, sourceCanUseGeneratedBootstrapper);
             return;
         }
 
-        if (sourceIsSingleFileModule &&
+        if (!sourceCanUseGeneratedBootstrapper &&
             plan.BuildSpec.DevelopmentSourceBootstrapperMode != ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile)
         {
-            _logger.Info($"Skipped source development bootstrapper for '{plan.ModuleName}' because the source module is a single-file PSM1 without script folders.");
+            _logger.Info($"Skipped source development bootstrapper for '{plan.ModuleName}' because the source module PSM1 cannot be regenerated without dropping local script imports.");
             return;
         }
 
@@ -461,7 +462,8 @@ public sealed partial class ModulePipelineRunner
     private void TryClearSourceDevelopmentBootstrapper(
         ModuleBuildResult buildResult,
         ModulePipelinePlan plan,
-        bool sourceIsSingleFileModule)
+        bool sourceIsSingleFileModule,
+        bool sourceCanUseGeneratedBootstrapper)
     {
         try
         {
@@ -473,6 +475,12 @@ public sealed partial class ModulePipelineRunner
             {
                 File.Delete(sourcePsm1Path);
                 _logger.Info($"Removed generated source development bootstrapper because DevelopmentBinariesMode is Off: {sourcePsm1Path}");
+                return;
+            }
+
+            if (!sourceCanUseGeneratedBootstrapper)
+            {
+                _logger.Warn($"Skipped clearing source development bootstrapper for '{plan.ModuleName}' because the source module PSM1 cannot be regenerated without dropping local script imports.");
                 return;
             }
 
@@ -523,6 +531,38 @@ public sealed partial class ModulePipelineRunner
 
     private static bool IsSourceSingleFileModule(ModulePipelinePlan plan)
         => ModuleMergeComposer.ResolveScriptFiles(plan.BuildSpec.SourcePath, null).Length == 0;
+
+    private static bool SourceCanUseGeneratedBootstrapper(ModulePipelinePlan plan)
+        => !IsSourceSingleFileModule(plan) && !HasCustomIncludeScriptFiles(plan.BuildSpec.SourcePath, plan.Information);
+
+    private static bool HasCustomIncludeScriptFiles(string sourcePath, InformationConfiguration? information)
+    {
+        if (information?.IncludePS1 is not { Length: > 0 })
+            return false;
+
+        var standardFolders = new HashSet<string>(new[] { "Classes", "Enums", "Private", "Public" }, StringComparer.OrdinalIgnoreCase);
+        foreach (var include in information.IncludePS1)
+        {
+            if (string.IsNullOrWhiteSpace(include) || standardFolders.Contains(include))
+                continue;
+
+            var includePath = Path.Combine(sourcePath, include);
+            if (!Directory.Exists(includePath))
+                continue;
+
+            try
+            {
+                if (Directory.EnumerateFiles(includePath, "*.ps1", SearchOption.AllDirectories).Any())
+                    return true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static string? ResolveDevelopmentBinaryRoot(ModuleBuildSpec spec)
     {

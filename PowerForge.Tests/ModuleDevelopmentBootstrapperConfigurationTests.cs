@@ -17,11 +17,17 @@ public sealed class ModuleDevelopmentBootstrapperConfigurationTests
             .GetProperty("properties");
 
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentBinaries", out _));
+        Assert.True(buildLibrariesProperties.TryGetProperty("NETDevelopmentBinaries", out _));
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentBinariesMode", out _));
+        Assert.True(buildLibrariesProperties.TryGetProperty("NETDevelopmentBinariesMode", out _));
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentBinariesPath", out _));
+        Assert.True(buildLibrariesProperties.TryGetProperty("NETDevelopmentBinariesPath", out _));
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentBinariesEnvironmentVariable", out _));
+        Assert.True(buildLibrariesProperties.TryGetProperty("NETDevelopmentBinariesEnvironmentVariable", out _));
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentConfigurationEnvironmentVariable", out _));
+        Assert.True(buildLibrariesProperties.TryGetProperty("NETDevelopmentConfigurationEnvironmentVariable", out _));
         Assert.True(buildLibrariesProperties.TryGetProperty("DevelopmentSourceBootstrapperMode", out _));
+        Assert.True(buildLibrariesProperties.TryGetProperty("NETDevelopmentSourceBootstrapperMode", out _));
 
         using var buildSpecSchema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.buildspec.schema.json")));
         var buildSpecProperties = buildSpecSchema.RootElement.GetProperty("properties");

@@ -31,6 +31,7 @@ internal static partial class ModuleBootstrapperGenerator
                 ["DevelopmentDesktopFrameworks"] = desktopFrameworks,
                 ["UseAssemblyLoadContext"] = useAlcLiteral,
                 ["LibraryFileName"] = EscapePsSingleQuoted(libraryName + ".dll"),
+                ["LibraryTypeName"] = EscapePsSingleQuoted(libraryName + ".Initialize"),
                 ["RuntimeHandlerBlock"] = handleRuntimes
                     ? IndentPowerShell(BuildDevelopmentRuntimeHandlerBlock().TrimEnd(), 12)
                     : string.Empty,
@@ -248,7 +249,7 @@ namespace {identity.Namespace}
 
         private readonly string _assemblyDirectory;
         private readonly string _moduleAssemblyPath;
-        private readonly AssemblyDependencyResolver _resolver;
+        private readonly AssemblyDependencyResolver? _resolver;
         private Assembly _moduleAssembly;
 
         private ModuleAssemblyLoadContext(string moduleAssemblyPath, string contextName)
@@ -256,7 +257,7 @@ namespace {identity.Namespace}
         {{
             _moduleAssemblyPath = Path.GetFullPath(moduleAssemblyPath);
             _assemblyDirectory = Path.GetDirectoryName(_moduleAssemblyPath) ?? string.Empty;
-            _resolver = new AssemblyDependencyResolver(_moduleAssemblyPath);
+            _resolver = TryCreateResolver(_moduleAssemblyPath);
         }}
 
         public static Assembly LoadModule(string moduleAssemblyPath, string contextName)
@@ -290,7 +291,7 @@ namespace {identity.Namespace}
             if (AssemblyName.ReferenceMatchesDefinition(loaderAssembly, assemblyName))
                 return typeof(ModuleAssemblyLoadContext).Assembly;
 
-            var resolvedPath = _resolver.ResolveAssemblyToPath(assemblyName);
+            var resolvedPath = _resolver?.ResolveAssemblyToPath(assemblyName);
             if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
                 return LoadFromAssemblyPath(resolvedPath);
 
@@ -300,11 +301,23 @@ namespace {identity.Namespace}
 
         protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
         {{
-            var resolvedPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+            var resolvedPath = _resolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
             if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
                 return LoadUnmanagedDllFromPath(resolvedPath);
 
             return IntPtr.Zero;
+        }}
+
+        private static AssemblyDependencyResolver? TryCreateResolver(string assemblyPath)
+        {{
+            try
+            {{
+                return new AssemblyDependencyResolver(assemblyPath);
+            }}
+            catch (InvalidOperationException)
+            {{
+                return null;
+            }}
         }}
 
         private Assembly LoadMainModule()

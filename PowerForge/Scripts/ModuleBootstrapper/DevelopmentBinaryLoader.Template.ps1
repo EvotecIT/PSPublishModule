@@ -44,7 +44,12 @@ if ($PowerForgeDevelopmentEnabled) {
             if ($PSEdition -eq 'Core' -and $PowerForgeDevelopmentUseAssemblyLoadContext) {
 {{AssemblyLoadContextImportBlock}}
             } else {
-                & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop
+                $PowerForgeDevelopmentLoadedType = '{{LibraryTypeName}}' -as [type]
+                if ($PowerForgeDevelopmentLoadedType -and $PowerForgeDevelopmentLoadedType.Assembly) {
+                    & $ImportModule -Assembly $PowerForgeDevelopmentLoadedType.Assembly -Force -ErrorAction Stop
+                } else {
+                    & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop
+                }
             }
             $PowerForgeDevelopmentBinaryLoaded = $true
         } catch {
