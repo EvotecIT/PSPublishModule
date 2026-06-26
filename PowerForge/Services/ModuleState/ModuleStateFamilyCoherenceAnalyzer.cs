@@ -21,6 +21,10 @@ internal sealed class ModuleStateFamilyCoherenceAnalyzer
 
             var installedFamilyModules = inventory.InstalledModules
                 .Where(module => policy.Modules.Contains(module.Name, StringComparer.OrdinalIgnoreCase))
+                .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(static group => SelectInstalledModule(group))
+                .Where(static module => module is not null)
+                .Cast<ModuleStateInstalledModule>()
                 .ToArray();
 
             if (installedFamilyModules.Length <= 1)
@@ -46,4 +50,13 @@ internal sealed class ModuleStateFamilyCoherenceAnalyzer
 
         return findings.ToArray();
     }
+
+    private static ModuleStateInstalledModule? SelectInstalledModule(IEnumerable<ModuleStateInstalledModule> installedModules)
+        => installedModules
+            .Where(static module => module.IsEffectiveImportCandidate)
+            .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+            .FirstOrDefault()
+            ?? installedModules
+                .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+                .FirstOrDefault();
 }

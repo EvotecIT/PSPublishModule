@@ -46,6 +46,29 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_PlansForcedInstallWhenSatisfiedVersionUsesDisallowedSource()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.3.0", sourceRepository: "PublicGallery")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", new[] { "CompanyModules" }) });
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var action = Assert.Single(plan.Actions);
+        var finding = Assert.Single(plan.Findings);
+
+        Assert.Equal(ModuleStatePlanActionKind.Install, action.Kind);
+        Assert.Equal("1.3.0", action.InstalledVersion);
+        Assert.True(action.Force);
+        Assert.Equal("CompanyModules", action.TargetRepository);
+        Assert.False(plan.HasErrors);
+        Assert.Equal("ModuleState.SourcePreferenceMismatch", finding.Code);
+        Assert.Equal(ModuleStateConflictSeverity.Warning, finding.Severity);
+    }
+
+    [Fact]
     public void CreatePlan_UsesHighestInstalledVersionForDecision()
     {
         var request = new ModuleStatePlanRequest(
@@ -150,10 +173,17 @@ public sealed class ModuleStatePlannerTests
 
         var plan = new ModuleStatePlanner().CreatePlan(request);
 
-        Assert.Equal(ModuleStatePlanActionKind.NoAction, Assert.Single(plan.Actions).Kind);
+        var action = Assert.Single(plan.Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Install, action.Kind);
+        Assert.True(action.Force);
+        Assert.Equal("CompanyModules", action.TargetRepository);
         Assert.True(plan.HasErrors);
         Assert.Contains(plan.Findings, static finding => finding.Code == "ModuleState.SourcePreferenceMismatch");
         Assert.Contains(plan.Findings, static finding => finding.Code == "ModuleState.LoadedVersionMismatch");
+        Assert.Contains(plan.Findings, static finding =>
+            finding.Code == "ModuleState.SourcePreferenceMismatch" &&
+            finding.Severity == ModuleStateConflictSeverity.Warning);
     }
 
     [Fact]
@@ -202,8 +232,10 @@ public sealed class ModuleStatePlannerTests
         Assert.Equal(ModuleStatePlanActionKind.Update, action.Kind);
         Assert.Equal("=1.2.0", action.VersionPolicy);
         Assert.True(action.IsRepair);
-        Assert.True(plan.HasErrors);
-        Assert.Equal("ModuleState.ReceiptVersionDrift", Assert.Single(plan.Findings).Code);
+        Assert.False(plan.HasErrors);
+        var finding = Assert.Single(plan.Findings);
+        Assert.Equal("ModuleState.ReceiptVersionDrift", finding.Code);
+        Assert.Equal(ModuleStateConflictSeverity.Warning, finding.Severity);
     }
 
     [Fact]
@@ -229,8 +261,10 @@ public sealed class ModuleStatePlannerTests
         Assert.Equal("Microsoft.Graph.Authentication", action.ModuleName);
         Assert.Equal("=2.38.0", action.VersionPolicy);
         Assert.True(action.IsRepair);
-        Assert.True(plan.HasErrors);
-        Assert.Equal("ModuleState.FamilyVersionMismatch", Assert.Single(plan.Findings).Code);
+        Assert.False(plan.HasErrors);
+        var finding = Assert.Single(plan.Findings);
+        Assert.Equal("ModuleState.FamilyVersionMismatch", finding.Code);
+        Assert.Equal(ModuleStateConflictSeverity.Warning, finding.Severity);
     }
 
     [Fact]

@@ -45,6 +45,25 @@ public sealed class ModuleStateFamilyCoherenceAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_IgnoresStaleSideBySideVersionsWhenEffectiveFamilyMatches()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.36.0", isEffectiveImportCandidate: false),
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.38.0", isEffectiveImportCandidate: true),
+            new ModuleStateInstalledModule("Microsoft.Graph.Groups", "2.38.0", isEffectiveImportCandidate: true),
+            new ModuleStateInstalledModule("Microsoft.Graph.Users", "2.38.0", isEffectiveImportCandidate: true)
+        });
+        var policy = new ModuleStateFamilyPolicy(
+            "Graph",
+            new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Groups", "Microsoft.Graph.Users" });
+
+        var findings = new ModuleStateFamilyCoherenceAnalyzer().Analyze(inventory, new[] { policy });
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
     public void Analyze_IgnoresModulesOutsideFamilyPolicy()
     {
         var inventory = new ModuleStateInventory(new[]

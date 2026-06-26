@@ -37,6 +37,7 @@ internal sealed class ModuleStatePlanner
             var installedModules = SelectInstalledModules(request.Inventory, desiredModule.Name);
             var installedModule = SelectInstalledModule(installedModules, desiredModule.Scope);
             var versionPolicy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
+            var targetRepository = ResolveTargetRepository(desiredModule);
             if (installedModule is null)
             {
                 actions.Add(new ModuleStatePlanAction(
@@ -48,7 +49,7 @@ internal sealed class ModuleStatePlanner
                         ? "Module is not installed."
                         : "Module is not installed in desired scope.",
                     targetScope: desiredModule.Scope,
-                    targetRepository: ResolveTargetRepository(desiredModule)));
+                    targetRepository: targetRepository));
                 continue;
             }
 
@@ -61,7 +62,21 @@ internal sealed class ModuleStatePlanner
                     desiredModule.VersionPolicy,
                     "Installed module version does not satisfy desired policy.",
                     targetScope: desiredModule.Scope,
-                    targetRepository: ResolveTargetRepository(desiredModule)));
+                    targetRepository: targetRepository));
+                continue;
+            }
+
+            if (NeedsSourceDelivery(installedModule, desiredModule, targetRepository))
+            {
+                actions.Add(new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Install,
+                    desiredModule.Name,
+                    installedModule.Version,
+                    desiredModule.VersionPolicy,
+                    "Installed module version satisfies desired policy but source repository does not match desired state.",
+                    force: true,
+                    targetScope: desiredModule.Scope,
+                    targetRepository: targetRepository));
                 continue;
             }
 
@@ -72,13 +87,14 @@ internal sealed class ModuleStatePlanner
                 desiredModule.VersionPolicy,
                 "Installed module version satisfies desired policy.",
                 targetScope: desiredModule.Scope,
-                targetRepository: ResolveTargetRepository(desiredModule)));
+                targetRepository: targetRepository));
         }
 
         var plannedActions = request.Repair
             ? _repairPlanner.CreateRepairActions(request.Inventory, request.MaintenanceReceipts, actions, request.FamilyPolicies)
             : actions.ToArray();
         var cleanupPlan = _cleanupPlanner.CreateCleanupPlan(request);
+        var finalActions = plannedActions.Concat(cleanupPlan.Actions).ToArray();
 
         var findings = _familyAnalyzer
             .Analyze(request.Inventory, request.FamilyPolicies)
@@ -86,7 +102,7 @@ internal sealed class ModuleStatePlanner
             .Concat(_receiptAnalyzer.Analyze(request.Inventory, request.MaintenanceReceipts))
             .Concat(cleanupPlan.Findings)
             .ToArray();
-        return new ModuleStatePlan(plannedActions.Concat(cleanupPlan.Actions).ToArray(), findings);
+        return new ModuleStatePlan(finalActions, DowngradeActionCoveredFindings(findings, finalActions));
     }
 
     private static ModuleStateInstalledModule[] SelectInstalledModules(ModuleStateInventory inventory, string moduleName)
@@ -114,4 +130,55 @@ internal sealed class ModuleStatePlanner
         => desiredModule.AllowedSources.Length == 1
             ? desiredModule.AllowedSources[0]
             : null;
+
+    private static bool NeedsSourceDelivery(
+        ModuleStateInstalledModule installedModule,
+        ModuleStateDesiredModule desiredModule,
+        string? targetRepository)
+        => !string.IsNullOrWhiteSpace(targetRepository) &&
+           !string.IsNullOrWhiteSpace(installedModule.SourceRepository) &&
+           !desiredModule.AllowedSources.Contains(installedModule.SourceRepository, StringComparer.OrdinalIgnoreCase);
+
+    private static ModuleStateConflictFinding[] DowngradeActionCoveredFindings(
+        ModuleStateConflictFinding[] findings,
+        ModuleStatePlanAction[] actions)
+    {
+        if (findings.Length == 0 || actions.Length == 0)
+            return findings;
+
+        return findings
+            .Select(finding => IsCoveredByAction(finding, actions)
+                ? new ModuleStateConflictFinding(
+                    ModuleStateConflictSeverity.Warning,
+                    finding.Code,
+                    finding.Message,
+                    finding.FamilyName,
+                    finding.ModuleNames,
+                    finding.Versions)
+                : finding)
+            .ToArray();
+    }
+
+    private static bool IsCoveredByAction(ModuleStateConflictFinding finding, ModuleStatePlanAction[] actions)
+    {
+        if (string.Equals(finding.Code, "ModuleState.SourcePreferenceMismatch", StringComparison.OrdinalIgnoreCase))
+            return HasDeliveryActionForAnyModule(actions, finding.ModuleNames, requireRepair: false);
+
+        if (string.Equals(finding.Code, "ModuleState.FamilyVersionMismatch", StringComparison.OrdinalIgnoreCase))
+            return HasDeliveryActionForAnyModule(actions, finding.ModuleNames, requireRepair: true);
+
+        if (finding.Code.StartsWith("ModuleState.Receipt", StringComparison.OrdinalIgnoreCase))
+            return HasDeliveryActionForAnyModule(actions, finding.ModuleNames, requireRepair: true);
+
+        return false;
+    }
+
+    private static bool HasDeliveryActionForAnyModule(
+        ModuleStatePlanAction[] actions,
+        string[] moduleNames,
+        bool requireRepair)
+        => actions.Any(action =>
+            action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update &&
+            (!requireRepair || action.IsRepair) &&
+            moduleNames.Contains(action.ModuleName, StringComparer.OrdinalIgnoreCase));
 }
