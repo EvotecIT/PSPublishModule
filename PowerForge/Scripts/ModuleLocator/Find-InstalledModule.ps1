@@ -3,7 +3,9 @@
   [string]$RequiredVersion,
   [string]$MinimumVersion,
   [string]$MaximumVersion,
-  [string]$InstallScope
+  [string]$InstallScope,
+  [string]$MinimumVersionInclusive = '1',
+  [string]$MaximumVersionInclusive = '1'
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -61,11 +63,19 @@ try {
     } else {
       if (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) {
         $min = [version]$MinimumVersion
-        $filtered = $filtered | Where-Object { $_.Version -ge $min }
+        if ($MinimumVersionInclusive -eq '0') {
+          $filtered = $filtered | Where-Object { $_.Version -gt $min }
+        } else {
+          $filtered = $filtered | Where-Object { $_.Version -ge $min }
+        }
       }
       if (-not [string]::IsNullOrWhiteSpace($MaximumVersion)) {
         $max = [version]$MaximumVersion
-        $filtered = $filtered | Where-Object { $_.Version -le $max }
+        if ($MaximumVersionInclusive -eq '0') {
+          $filtered = $filtered | Where-Object { $_.Version -lt $max }
+        } else {
+          $filtered = $filtered | Where-Object { $_.Version -le $max }
+        }
       }
     }
 

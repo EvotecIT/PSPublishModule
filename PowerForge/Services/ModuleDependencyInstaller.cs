@@ -195,7 +195,9 @@ public sealed partial class ModuleDependencyInstaller
             // Keep blank placeholders here so the exact-version probe stays aligned with that signature.
             string.Empty,
             string.Empty,
-            installScope ?? string.Empty
+            installScope ?? string.Empty,
+            "1",
+            "1"
         };
 
         var result = RunScript(script, args, ExactVersionProbeTimeout);
@@ -211,13 +213,15 @@ public sealed partial class ModuleDependencyInstaller
     private bool HasInstalledModuleSatisfyingDependency(ModuleDependency dependency)
     {
         var script = BuildFindInstalledModuleScript();
-        var args = new List<string>(5)
+        var args = new List<string>(7)
         {
             dependency.Name,
             dependency.RequiredVersion ?? string.Empty,
             dependency.MinimumVersion ?? string.Empty,
             dependency.MaximumVersion ?? string.Empty,
-            dependency.InstallScope ?? string.Empty
+            dependency.InstallScope ?? string.Empty,
+            dependency.MinimumVersionInclusive ? "1" : "0",
+            dependency.MaximumVersionInclusive ? "1" : "0"
         };
 
         var result = RunScript(script, args, ExactVersionProbeTimeout);
