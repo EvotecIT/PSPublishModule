@@ -99,6 +99,24 @@ public sealed class ModuleStateJsonServiceTests
     }
 
     [Fact]
+    public void ReadDesiredState_PreservesVersionAliases()
+    {
+        var desiredState = new ModuleStateJsonService().ReadDesiredState("""
+{
+  "modules": [
+    { "name": "Company.Tools", "version": "=1.2.0", "repository": "CompanyModules" },
+    { "name": "Company.Runtime", "requiredVersion": "2.0.0" }
+  ]
+}
+""");
+
+        Assert.Equal(2, desiredState.Modules.Length);
+        Assert.Equal("=1.2.0", desiredState.Modules[0].VersionPolicy);
+        Assert.Equal("CompanyModules", Assert.Single(desiredState.Modules[0].AllowedSources));
+        Assert.Equal("2.0.0", desiredState.Modules[1].VersionPolicy);
+    }
+
+    [Fact]
     public void ReadMaintenanceReceipt_LoadsMaintainedModulesFromJson()
     {
         var receipt = new ModuleStateJsonService().ReadMaintenanceReceipt("""

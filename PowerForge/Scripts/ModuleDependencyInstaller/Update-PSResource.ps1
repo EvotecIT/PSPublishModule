@@ -3,7 +3,8 @@ param(
   [string]$Repository,
   [string]$PrereleaseFlag,
   [string]$CredentialUser,
-  [string]$CredentialSecret
+  [string]$CredentialSecret,
+  [string]$Scope
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -26,12 +27,12 @@ try {
     Name = $Name
     Force = $true
     ErrorAction = 'Stop'
-    Scope = 'CurrentUser'
     TrustRepository = $true
     SkipDependencyCheck = $false
     AcceptLicense = $true
     Quiet = $true
   }
+  if ([string]::IsNullOrWhiteSpace($Scope)) { $params.Scope = 'CurrentUser' } else { $params.Scope = $Scope }
   if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
   if ($PrereleaseFlag -eq '1') { $params.Prerelease = $true }
   if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {

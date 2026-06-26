@@ -288,6 +288,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
                 Repair.IsPresent,
                 ParseCleanupMode(Cleanup),
                 Family);
+            ApplyLatestUpdateIntent(plan);
             var test = ModuleStateTestResult.FromPlan(plan);
             var applyResult = PrepareApply(plan);
 
@@ -377,9 +378,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
         foreach (var name in ModuleName)
         {
             var selected = SelectInventoryModule(inventory, name, Scope);
-            var policy = Latest.IsPresent
-                ? selected is null ? "*" : ">" + selected.Version
-                : explicitPolicy;
+            var policy = Latest.IsPresent ? "*" : explicitPolicy;
             var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
             {
                 ["Name"] = name,
@@ -412,7 +411,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
             {
                 ["Name"] = selected.Name,
-                ["VersionPolicy"] = Latest.IsPresent ? ">" + selected.Version : "*"
+                ["VersionPolicy"] = "*"
             };
             if (!string.IsNullOrWhiteSpace(Repository))
                 module["Repository"] = Repository!;
@@ -564,9 +563,32 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             : ModuleStateCleanupMode.None;
 
     private string? ResolveMaintenanceReceiptSourceRepository()
-        => string.IsNullOrWhiteSpace(Repository)
+    {
+        if (!string.IsNullOrWhiteSpace(Repository))
+            return Repository;
+        if (string.IsNullOrWhiteSpace(ProfileName))
+            return null;
+
+        var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName!);
+        return string.IsNullOrWhiteSpace(profile.RepositoryName)
             ? ProfileName
-            : Repository;
+            : profile.RepositoryName;
+    }
+
+    private void ApplyLatestUpdateIntent(ModuleStatePlanResult plan)
+    {
+        if (!Latest.IsPresent || plan.Actions is null)
+            return;
+
+        foreach (var action in plan.Actions)
+        {
+            if (!string.Equals(action.Kind, ModuleStatePlanActionKind.NoAction.ToString(), StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            action.Kind = ModuleStatePlanActionKind.Update.ToString();
+            action.Reason = "Latest requested; update delivery will keep the module unchanged when the repository has no newer version.";
+        }
+    }
 
     private void WriteJsonArtifact<T>(T result, string path)
     {

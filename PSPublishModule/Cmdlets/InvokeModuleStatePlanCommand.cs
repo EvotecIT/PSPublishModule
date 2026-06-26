@@ -424,9 +424,17 @@ public sealed class InvokeModuleStatePlanCommand : PSCmdlet
     }
 
     private string? ResolveMaintenanceReceiptSourceRepository()
-        => string.IsNullOrWhiteSpace(Repository)
+    {
+        if (!string.IsNullOrWhiteSpace(Repository))
+            return Repository;
+        if (string.IsNullOrWhiteSpace(ProfileName))
+            return null;
+
+        var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName!);
+        return string.IsNullOrWhiteSpace(profile.RepositoryName)
             ? ProfileName
-            : Repository;
+            : profile.RepositoryName;
+    }
 
     private static void WriteReceipt(ModuleStateApplyResult result, string path)
     {

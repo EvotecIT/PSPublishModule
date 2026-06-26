@@ -76,6 +76,29 @@ public sealed class ModuleStateObjectAdapterTests
     }
 
     [Fact]
+    public void ToDesiredState_AcceptsFamilyOnlyHashtable()
+    {
+        var desired = new Hashtable
+        {
+            ["Families"] = new object[]
+            {
+                new Hashtable
+                {
+                    ["Name"] = "Graph",
+                    ["Modules"] = new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Users" }
+                }
+            }
+        };
+
+        var state = ModuleStateObjectAdapter.ToDesiredState(desired);
+
+        Assert.Empty(state.Modules);
+        var family = Assert.Single(state.FamilyPolicies);
+        Assert.Equal("Graph", family.Name);
+        Assert.Equal(new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Users" }, family.Modules);
+    }
+
+    [Fact]
     public void ToDesiredState_AcceptsPSCustomObject()
     {
         var desired = new PSObject();

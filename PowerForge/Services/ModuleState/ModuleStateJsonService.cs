@@ -72,8 +72,8 @@ internal sealed class ModuleStateJsonService
         {
             modules.Add(new ModuleStateDesiredModule(
                 module.Name ?? string.Empty,
-                module.VersionPolicy,
-                module.AllowedSources ?? module.Repositories,
+                module.VersionPolicy ?? module.Version ?? module.RequiredVersion,
+                module.AllowedSources ?? module.Repositories ?? ToArray(module.Repository),
                 module.Scope));
         }
 
@@ -146,12 +146,21 @@ internal sealed class ModuleStateJsonService
 
         public string? VersionPolicy { get; set; }
 
+        public string? Version { get; set; }
+
+        public string? RequiredVersion { get; set; }
+
         public string[]? AllowedSources { get; set; }
 
         public string[]? Repositories { get; set; }
 
+        public string? Repository { get; set; }
+
         public string? Scope { get; set; }
     }
+
+    private static string[]? ToArray(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : new[] { value!.Trim() };
 
     private sealed class FamilyPolicyDto
     {

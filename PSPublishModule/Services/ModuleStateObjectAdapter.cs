@@ -17,7 +17,11 @@ internal static class ModuleStateObjectAdapter
 
         var value = Unwrap(input);
         var explicitModulesValue = GetPropertyValue(value, "Modules");
-        var modulesValue = explicitModulesValue ?? (IsSingleDesiredModule(value) ? new[] { value } : value);
+        var modulesValue = explicitModulesValue ?? (IsSingleDesiredModule(value)
+            ? new[] { value }
+            : IsFamilyOnlyContainer(value)
+                ? Array.Empty<object>()
+                : value);
         var modules = ToEnumerable(modulesValue)
             .Select(ToDesiredModule)
             .ToArray();
@@ -69,6 +73,10 @@ internal static class ModuleStateObjectAdapter
 
     private static bool IsSingleDesiredModule(object value)
         => GetPropertyValue(value, "Name") is not null;
+
+    private static bool IsFamilyOnlyContainer(object value)
+        => GetPropertyValue(value, "FamilyPolicies") is not null ||
+           GetPropertyValue(value, "Families") is not null;
 
     private static IEnumerable<object> ToEnumerable(object value)
     {

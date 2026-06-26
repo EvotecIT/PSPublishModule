@@ -54,6 +54,25 @@ public sealed class ModuleDependencyInstallerUpdateTests
     }
 
     [Fact]
+    public void EnsureUpdated_PassesScopeToPSResourceGetUpdate()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFMOD::UPDATE::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.1.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA", installScope: "AllUsers") },
+            repository: "Company");
+
+        Assert.Equal(3, runner.Requests.Count);
+        Assert.Equal("AllUsers", runner.Requests[1].Arguments[5]);
+    }
+
+    [Fact]
     public void EnsureUpdated_UsesRepositoryScopedPowerShellGetFallback_WhenRequested()
     {
         var runner = new QueuePowerShellRunner(new[]
