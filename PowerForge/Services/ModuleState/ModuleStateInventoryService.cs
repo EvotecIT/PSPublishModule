@@ -11,6 +11,9 @@ internal sealed class ModuleStateInventoryService
     private static readonly Regex ModuleVersionPattern = new(
         @"(?im)^\s*ModuleVersion\s*=\s*['""]?(?<version>[0-9]+(?:\.[0-9]+){0,3}(?:-[A-Za-z0-9.-]+)?)['""]?",
         RegexOptions.Compiled);
+    private static readonly Regex SourceRepositoryPattern = new(
+        @"(?im)^\s*(?:SourceRepository|Repository)\s*=\s*['""](?<repository>[^'""]+)['""]",
+        RegexOptions.Compiled);
 
     internal ModuleStateInventory Collect(ModuleStateInventoryRequest request)
     {
@@ -90,13 +93,15 @@ internal sealed class ModuleStateInventoryService
         ModuleStateModulePath modulePath,
         string fallbackVersion)
     {
-        var version = TryReadManifestVersion(manifest.FullName) ?? fallbackVersion;
+        var manifestText = TryReadManifestText(manifest.FullName);
+        var version = TryReadManifestVersion(manifestText) ?? fallbackVersion;
         return new ModuleStateInstalledModule(
             moduleName,
             version,
             modulePath.PowerShellEdition,
             modulePath.Scope,
-            manifest.DirectoryName ?? manifest.FullName);
+            manifest.DirectoryName ?? manifest.FullName,
+            TryReadManifestSourceRepository(manifestText));
     }
 
     private static FileInfo? FindManifest(DirectoryInfo directory, string moduleName)
@@ -117,18 +122,34 @@ internal sealed class ModuleStateInventoryService
         }
     }
 
-    private static string? TryReadManifestVersion(string manifestPath)
+    private static string? TryReadManifestText(string manifestPath)
     {
         try
         {
-            var content = File.ReadAllText(manifestPath);
-            var match = ModuleVersionPattern.Match(content);
-            return match.Success ? match.Groups["version"].Value : null;
+            return File.ReadAllText(manifestPath);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static string? TryReadManifestVersion(string? manifestText)
+    {
+        if (string.IsNullOrWhiteSpace(manifestText))
+            return null;
+
+        var match = ModuleVersionPattern.Match(manifestText!);
+        return match.Success ? match.Groups["version"].Value : null;
+    }
+
+    private static string? TryReadManifestSourceRepository(string? manifestText)
+    {
+        if (string.IsNullOrWhiteSpace(manifestText))
+            return null;
+
+        var match = SourceRepositoryPattern.Match(manifestText!);
+        return match.Success ? match.Groups["repository"].Value.Trim() : null;
     }
 
     private static IEnumerable<DirectoryInfo> EnumerateDirectoriesSafe(string path)

@@ -355,6 +355,14 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
         if (string.Equals(ParameterSetName, ParameterSetInstalled, StringComparison.OrdinalIgnoreCase))
             return CreateDesiredStateForInstalledModules(inventory);
 
+        if (Latest.IsPresent &&
+            (!string.IsNullOrWhiteSpace(RequiredVersion) ||
+             !string.IsNullOrWhiteSpace(MinimumVersion) ||
+             !string.IsNullOrWhiteSpace(VersionPolicy)))
+        {
+            throw new InvalidOperationException("Latest cannot be combined with RequiredVersion, MinimumVersion, or VersionPolicy.");
+        }
+
         if (!string.IsNullOrWhiteSpace(RequiredVersion) &&
             (!string.IsNullOrWhiteSpace(MinimumVersion) || !string.IsNullOrWhiteSpace(VersionPolicy)))
         {

@@ -81,14 +81,39 @@ public sealed class ModuleStateInventoryServiceTests
         Assert.Empty(inventory.InstalledModules);
     }
 
-    private static void WriteManifest(string directoryPath, string moduleName, string version)
+    [Fact]
+    public void Collect_ReadsRepositoryMetadataFromManifest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteManifest(Path.Combine(root.FullName, "Company.Tools", "1.2.3"), "Company.Tools", "1.2.3", "CompanyModules");
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            var module = Assert.Single(inventory.InstalledModules);
+            Assert.Equal("CompanyModules", module.SourceRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static void WriteManifest(string directoryPath, string moduleName, string version, string? repository = null)
     {
         Directory.CreateDirectory(directoryPath);
+        var repositoryLine = string.IsNullOrWhiteSpace(repository)
+            ? string.Empty
+            : $"    Repository = '{repository}'{Environment.NewLine}";
         File.WriteAllText(Path.Combine(directoryPath, moduleName + ".psd1"), $$"""
 @{
     RootModule = '{{moduleName}}.psm1'
     ModuleVersion = '{{version}}'
-}
+{{repositoryLine}}}
 """);
     }
 }

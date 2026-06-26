@@ -40,4 +40,13 @@ public sealed class ModuleStateVersionPolicyTests
         Assert.True(prereleaseAllowed.IsSatisfiedBy("2.39.0-preview1"));
         Assert.False(prereleaseAllowed.IsSatisfiedBy("2.38.0-alpha"));
     }
+
+    [Fact]
+    public void IsSatisfiedBy_AllowsExactPrereleasePolicyToMatchItself()
+    {
+        var policy = ModuleStateVersionPolicy.Parse("=1.2.0-preview1");
+
+        Assert.True(policy.IsSatisfiedBy("1.2.0-preview1"));
+        Assert.False(policy.IsSatisfiedBy("1.2.0-preview2"));
+    }
 }

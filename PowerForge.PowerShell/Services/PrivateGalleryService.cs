@@ -37,6 +37,10 @@ internal sealed class PrivateGalleryService
     public IReadOnlyList<ModuleDependency> BuildDependencies(
         IEnumerable<string> names,
         IReadOnlyDictionary<string, string>? requiredVersions = null,
+        IReadOnlyDictionary<string, string>? minimumVersions = null,
+        IReadOnlyDictionary<string, bool>? minimumVersionInclusivity = null,
+        IReadOnlyDictionary<string, string>? maximumVersions = null,
+        IReadOnlyDictionary<string, bool>? maximumVersionInclusivity = null,
         string? installScope = null,
         IReadOnlyDictionary<string, string>? installScopes = null)
     {
@@ -49,9 +53,21 @@ internal sealed class PrivateGalleryService
                 requiredVersion: requiredVersions is not null && requiredVersions.TryGetValue(name, out var requiredVersion)
                     ? requiredVersion
                     : null,
+                minimumVersion: minimumVersions is not null && minimumVersions.TryGetValue(name, out var minimumVersion)
+                    ? minimumVersion
+                    : null,
+                maximumVersion: maximumVersions is not null && maximumVersions.TryGetValue(name, out var maximumVersion)
+                    ? maximumVersion
+                    : null,
                 installScope: installScopes is not null && installScopes.TryGetValue(name, out var moduleScope)
                     ? moduleScope
-                    : installScope))
+                    : installScope,
+                minimumVersionInclusive: minimumVersionInclusivity is null ||
+                                         !minimumVersionInclusivity.TryGetValue(name, out var minimumInclusive) ||
+                                         minimumInclusive,
+                maximumVersionInclusive: maximumVersionInclusivity is null ||
+                                         !maximumVersionInclusivity.TryGetValue(name, out var maximumInclusive) ||
+                                         maximumInclusive))
             .ToArray();
 
         if (dependencies.Length == 0)
