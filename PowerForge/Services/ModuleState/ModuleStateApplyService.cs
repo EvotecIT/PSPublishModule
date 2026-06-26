@@ -256,7 +256,7 @@ internal sealed class ModuleStateApplyService
         return new ModuleStateMaintenanceReceiptModule(
             action.ModuleName,
             version!,
-            observedModule?.SourceRepository ?? action.TargetRepository ?? sourceRepository,
+            observedModule?.SourceRepository,
             observedModule?.Scope ?? action.TargetScope);
     }
 

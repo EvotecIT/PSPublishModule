@@ -61,6 +61,7 @@ public sealed class ModuleStateApplyResultMapperTests
         {
             new ModuleStateDeliveryExecutionResult
             {
+                RepositoryName = "ExecutionRepo",
                 DependencyResults = new[]
                 {
                     new ModuleStateDependencyResult
@@ -86,7 +87,7 @@ public sealed class ModuleStateApplyResultMapperTests
 
         var modules = ModuleStateMaintenanceEvidenceMapper.ToObservedModules(execution, postInventory, "Company");
 
-        Assert.Contains(modules, static module => module.Name == "Company.Tools" && module.Version == "1.4.0" && module.SourceRepository == "Company");
+        Assert.Contains(modules, static module => module.Name == "Company.Tools" && module.Version == "1.4.0" && module.SourceRepository == "ExecutionRepo");
         Assert.Contains(modules, static module => module.Name == "Company.Other" && module.Version == "2.0.0" && module.Scope == "CurrentUser");
     }
 }

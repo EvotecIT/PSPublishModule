@@ -74,6 +74,8 @@ internal sealed class ModuleStatePrivateDeliveryService
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStatePrivateDeliveryOptions options)
     {
+        ValidateNoConflictingDuplicateActions(actions);
+
         var request = new PrivateModuleWorkflowRequest
         {
             Operation = actionKind == ModuleStatePlanActionKind.Update
@@ -122,6 +124,23 @@ internal sealed class ModuleStatePrivateDeliveryService
         }
 
         return request;
+    }
+
+    private static void ValidateNoConflictingDuplicateActions(IReadOnlyList<ModuleStatePlanAction> actions)
+    {
+        foreach (var group in actions
+                     .GroupBy(static action => string.Join("|", action.ModuleName, action.TargetScope ?? string.Empty), StringComparer.OrdinalIgnoreCase))
+        {
+            var policies = group
+                .Select(static action => action.VersionPolicy ?? string.Empty)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (policies.Length > 1)
+            {
+                throw new InvalidOperationException(
+                    $"ModuleState delivery contains conflicting version policies for module '{group.First().ModuleName}' in scope '{group.First().TargetScope ?? "<default>"}'.");
+            }
+        }
     }
 
     private static string? ResolveActionRepository(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)

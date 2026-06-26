@@ -159,6 +159,33 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
+    public void CreateRepairActions_PreservesConflictingReceiptVersionsForSameScope()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser")
+        });
+        var receipts = new[]
+        {
+            new ModuleStateMaintenanceReceipt(
+                "First",
+                new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.1.0", scope: "CurrentUser") }),
+            new ModuleStateMaintenanceReceipt(
+                "Second",
+                new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2.0", scope: "CurrentUser") })
+        };
+
+        var actions = new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            receipts,
+            Array.Empty<ModuleStatePlanAction>());
+
+        Assert.Equal(2, actions.Length);
+        Assert.Contains(actions, static action => action.VersionPolicy == "=1.1.0");
+        Assert.Contains(actions, static action => action.VersionPolicy == "=1.2.0");
+    }
+
+    [Fact]
     public void CreateRepairActions_PlansExactUpdateForSameVersionFamilyMismatch()
     {
         var inventory = new ModuleStateInventory(new[]

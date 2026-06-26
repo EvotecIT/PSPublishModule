@@ -168,7 +168,7 @@ public sealed class ModuleStateApplyServiceTests
         Assert.Contains(receipt.Modules, static module => module.Name == "Company.Tools" && module.Version == "1.3.0");
         Assert.Contains(receipt.Modules, static module => module.Name == "Company.Exact" && module.Version == "1.2.0");
         Assert.DoesNotContain(receipt.Modules, static module => module.Name == "Company.Unknown");
-        Assert.All(receipt.Modules, static module => Assert.Equal("Company", module.SourceRepository));
+        Assert.All(receipt.Modules, static module => Assert.Null(module.SourceRepository));
     }
 
     [Fact]
@@ -264,6 +264,25 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void CreateMaintenanceReceipt_DoesNotInventDesiredSourceWithoutObservedEvidence()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.NoAction, "Company.Tools", "1.2.0", ">=1.2.0", "satisfied", targetRepository: "Company")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+        var service = new ModuleStateApplyService();
+        var result = service.Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
+
+        var receipt = service.CreateMaintenanceReceipt(result, sourceRepository: "Company");
+
+        var module = Assert.Single(receipt.Modules);
+        Assert.Equal("Company.Tools", module.Name);
+        Assert.Null(module.SourceRepository);
+    }
+
+    [Fact]
     public void CreateMaintenanceReceipt_DoesNotUseObservedModuleFromWrongScope()
     {
         var plan = new ModuleStatePlan(
@@ -323,7 +342,7 @@ public sealed class ModuleStateApplyServiceTests
             var module = Assert.Single(receipt.Modules);
             Assert.Equal("Company.Tools", module.Name);
             Assert.Equal("1.3.0", module.Version);
-            Assert.Equal("Company", module.SourceRepository);
+            Assert.Null(module.SourceRepository);
         }
         finally
         {

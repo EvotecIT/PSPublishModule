@@ -58,6 +58,19 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void CreateRequest_RejectsConflictingDuplicateModulePolicies()
+    {
+        var exception = Assert.Throws<TargetInvocationException>(() => InvokeCreateRequest(new[]
+        {
+            new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, "=1.1.0", "repair", targetScope: "CurrentUser"),
+            new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, "=1.2.0", "repair", targetScope: "CurrentUser")
+        }));
+
+        Assert.IsType<InvalidOperationException>(exception.InnerException);
+        Assert.Contains("conflicting version policies", exception.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DeliveryGroupKey_DistinguishesSameModuleAcrossScopes()
     {
         var comparer = DeliveryGroupKeyComparer.Instance;
