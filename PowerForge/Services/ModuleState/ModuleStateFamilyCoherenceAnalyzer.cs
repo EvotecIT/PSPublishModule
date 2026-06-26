@@ -20,7 +20,7 @@ internal sealed class ModuleStateFamilyCoherenceAnalyzer
                 continue;
 
             var installedFamilyModules = inventory.InstalledModules
-                .Where(module => policy.Modules.Contains(module.Name, StringComparer.OrdinalIgnoreCase))
+                .Where(module => policy.Matches(module.Name))
                 .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(static group => SelectInstalledModule(group))
                 .Where(static module => module is not null)

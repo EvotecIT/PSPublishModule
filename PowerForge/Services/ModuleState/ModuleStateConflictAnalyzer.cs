@@ -98,10 +98,10 @@ internal sealed class ModuleStateConflictAnalyzer
         if (desiredModule.AllowedSources.Length == 0)
             return;
 
-        var selectedModule = SelectInstalledModule(installedModules, desiredModule.Scope);
+        var selectedModule = SelectInstalledModule(
+            installedModules.Where(module => policy.IsSatisfiedBy(module.Version)),
+            desiredModule.Scope);
         if (selectedModule is null)
-            return;
-        if (!policy.IsSatisfiedBy(selectedModule.Version))
             return;
 
         if (string.IsNullOrWhiteSpace(selectedModule.SourceRepository))
@@ -196,11 +196,9 @@ internal sealed class ModuleStateConflictAnalyzer
             .ToArray();
 
         return candidates
-            .Where(static module => module.IsEffectiveImportCandidate)
-            .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-            .FirstOrDefault()
-            ?? candidates
-                .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-                .FirstOrDefault();
+            .OrderByDescending(static module => module.IsLoaded)
+            .ThenByDescending(static module => module.IsEffectiveImportCandidate)
+            .ThenByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+            .FirstOrDefault();
     }
 }

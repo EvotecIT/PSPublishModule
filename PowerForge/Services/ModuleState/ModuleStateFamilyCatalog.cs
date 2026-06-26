@@ -10,24 +10,12 @@ internal sealed class ModuleStateFamilyCatalog
     {
         ["MicrosoftGraph"] = new ModuleStateFamilyPolicy(
             "MicrosoftGraph",
-            new[]
-            {
-                "Microsoft.Graph.Authentication",
-                "Microsoft.Graph.Users",
-                "Microsoft.Graph.Groups",
-                "Microsoft.Graph.Sites",
-                "Microsoft.Graph.Mail"
-            }),
+            new[] { "Microsoft.Graph" },
+            modulePrefixes: new[] { "Microsoft.Graph." }),
         ["Graph"] = new ModuleStateFamilyPolicy(
             "MicrosoftGraph",
-            new[]
-            {
-                "Microsoft.Graph.Authentication",
-                "Microsoft.Graph.Users",
-                "Microsoft.Graph.Groups",
-                "Microsoft.Graph.Sites",
-                "Microsoft.Graph.Mail"
-            }),
+            new[] { "Microsoft.Graph" },
+            modulePrefixes: new[] { "Microsoft.Graph." }),
         ["Az"] = new ModuleStateFamilyPolicy(
             "Az",
             new[]

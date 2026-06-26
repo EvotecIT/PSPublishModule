@@ -95,7 +95,13 @@ internal sealed class ModuleStateInventoryService
             }
 
             if (FindScriptModule(versionDirectory, moduleDirectory.Name) is { } versionScriptModule)
+            {
                 yield return CreateScriptModule(moduleDirectory.Name, versionScriptModule, modulePath, versionDirectory.Name);
+                continue;
+            }
+
+            if (FindBinaryModule(versionDirectory, moduleDirectory.Name) is { } versionBinaryModule)
+                yield return CreateBinaryModule(moduleDirectory.Name, versionBinaryModule, modulePath, versionDirectory.Name);
         }
     }
 
@@ -129,6 +135,19 @@ internal sealed class ModuleStateInventoryService
             scriptModule.DirectoryName ?? scriptModule.FullName,
             TryReadSourceRepository(manifestText: null, scriptModule.Directory));
 
+    private static ModuleStateInstalledModule CreateBinaryModule(
+        string moduleName,
+        FileInfo binaryModule,
+        ModuleStateModulePath modulePath,
+        string fallbackVersion)
+        => new(
+            moduleName,
+            fallbackVersion,
+            modulePath.PowerShellEdition,
+            modulePath.Scope,
+            binaryModule.DirectoryName ?? binaryModule.FullName,
+            TryReadSourceRepository(manifestText: null, binaryModule.Directory));
+
     private static FileInfo? FindManifest(DirectoryInfo directory, string moduleName)
     {
         var preferred = Path.Combine(directory.FullName, moduleName + ".psd1");
@@ -138,6 +157,24 @@ internal sealed class ModuleStateInventoryService
         try
         {
             return directory.EnumerateFiles("*.psd1", SearchOption.TopDirectoryOnly)
+                .OrderBy(static file => file.Name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static FileInfo? FindBinaryModule(DirectoryInfo directory, string moduleName)
+    {
+        var preferred = Path.Combine(directory.FullName, moduleName + ".dll");
+        if (File.Exists(preferred))
+            return new FileInfo(preferred);
+
+        try
+        {
+            return directory.EnumerateFiles("*.dll", SearchOption.TopDirectoryOnly)
                 .OrderBy(static file => file.Name, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
         }

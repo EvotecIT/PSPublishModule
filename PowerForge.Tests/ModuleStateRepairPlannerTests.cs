@@ -265,4 +265,27 @@ public sealed class ModuleStateRepairPlannerTests
 
         Assert.Empty(actions);
     }
+
+    [Fact]
+    public void CreateRepairActions_RepairsInstalledGraphPrefixFamilyModules()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.36.0"),
+            new ModuleStateInstalledModule("Microsoft.Graph.Applications", "2.38.0")
+        });
+        var familyPolicies = new ModuleStateFamilyCatalog().Resolve(new[] { "Graph" });
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            Array.Empty<ModuleStateMaintenanceReceipt>(),
+            Array.Empty<ModuleStatePlanAction>(),
+            familyPolicies));
+
+        Assert.Equal(ModuleStatePlanActionKind.Update, action.Kind);
+        Assert.Equal("Microsoft.Graph.Authentication", action.ModuleName);
+        Assert.Equal("2.36.0", action.InstalledVersion);
+        Assert.Equal("=2.38.0", action.VersionPolicy);
+        Assert.True(action.IsRepair);
+    }
 }
