@@ -1,4 +1,4 @@
----
+﻿---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
@@ -488,6 +488,70 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -NETBinaryModule
+Binary module names (DLL file names) to import in the module.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETBinaryModuleCmdletScanDisabled
+Disable cmdlet scanning for the binary module.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETBinaryModuleDocumentation
+Enable binary module documentation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: NETDocumentation, NETBinaryModuleDocumenation
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETConfiguration
+Build configuration for .NET projects (Release or Debug).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Release, Debug
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -NETDevelopmentBinaries
 Generate checked-in source bootstrapper logic for local development binary outputs.
 
@@ -576,70 +640,6 @@ Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -NETBinaryModule
-Binary module names (DLL file names) to import in the module.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -NETBinaryModuleCmdletScanDisabled
-Disable cmdlet scanning for the binary module.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -NETBinaryModuleDocumentation
-Enable binary module documentation.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: NETDocumentation, NETBinaryModuleDocumenation
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -NETConfiguration
-Build configuration for .NET projects (Release or Debug).
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: Release, Debug
 
 Required: False
 Position: named
