@@ -24,4 +24,14 @@ public sealed class ManagedModuleBenchmarkRequest
     /// Enables disposable-host native install and update benchmarks for compatibility engines.
     /// </summary>
     public bool EnableNativeInstallUpdateBenchmarks { get; set; }
+
+    /// <summary>
+    /// Maximum allowed ratio between managed median elapsed time and the fastest successful compatibility median.
+    /// </summary>
+    public double MaximumManagedSlowdownRatio { get; set; } = 3.0;
+
+    /// <summary>
+    /// Absolute tolerance, in milliseconds, allowed above the fastest successful compatibility median.
+    /// </summary>
+    public int MaximumManagedSlowdownMilliseconds { get; set; } = 5000;
 }

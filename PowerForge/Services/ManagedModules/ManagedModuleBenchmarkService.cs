@@ -123,7 +123,10 @@ public sealed partial class ManagedModuleBenchmarkService
             StartedAtUtc = started,
             CompletedAtUtc = DateTimeOffset.UtcNow,
             Runs = runs,
-            TransitionGates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(runs)
+            TransitionGates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(
+                runs,
+                request.MaximumManagedSlowdownRatio,
+                request.MaximumManagedSlowdownMilliseconds)
         };
     }
 
@@ -836,6 +839,10 @@ public sealed partial class ManagedModuleBenchmarkService
             throw new ArgumentException("At least one benchmark scenario is required.", nameof(request));
         if (request.Engines is null || request.Engines.Count == 0)
             throw new ArgumentException("At least one benchmark engine is required.", nameof(request));
+        if (request.MaximumManagedSlowdownRatio <= 0)
+            throw new ArgumentException("Maximum managed slowdown ratio must be greater than zero.", nameof(request));
+        if (request.MaximumManagedSlowdownMilliseconds < 0)
+            throw new ArgumentException("Maximum managed slowdown milliseconds must be zero or greater.", nameof(request));
 
         foreach (var scenario in request.Scenarios)
             ValidateScenario(scenario);

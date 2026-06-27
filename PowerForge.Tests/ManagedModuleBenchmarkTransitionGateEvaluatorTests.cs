@@ -25,10 +25,54 @@ public sealed class ManagedModuleBenchmarkTransitionGateEvaluatorTests
                                                 reason.Contains("Administrator rights", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Evaluate_BlocksWhenManagedMedianExceedsPerformancePolicy()
+    {
+        var gates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(
+            new[]
+            {
+                CreateRun(ManagedModuleBenchmarkEngine.Managed, succeeded: true, elapsed: TimeSpan.FromSeconds(12)),
+                CreateRun(ManagedModuleBenchmarkEngine.PSResourceGet, succeeded: true, elapsed: TimeSpan.FromSeconds(1)),
+                CreateRun(ManagedModuleBenchmarkEngine.PowerShellGet, succeeded: true, elapsed: TimeSpan.FromSeconds(2))
+            },
+            maximumManagedSlowdownRatio: 2,
+            maximumManagedSlowdownMilliseconds: 500);
+
+        var gate = Assert.Single(gates);
+        Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Incomplete, gate.Status);
+        Assert.False(gate.ReadyForDefaultManagedTransport);
+        Assert.False(gate.PerformanceWithinPolicy);
+        Assert.Equal(12000, gate.ManagedMedianMilliseconds);
+        Assert.Equal(1000, gate.CompatibilityMedianMilliseconds);
+        Assert.Equal(2000, gate.AllowedManagedMilliseconds);
+        Assert.Contains(gate.Reasons, reason => reason.Contains("Managed median elapsed", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Evaluate_AllowsManagedMedianWithinAbsoluteTolerance()
+    {
+        var gates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(
+            new[]
+            {
+                CreateRun(ManagedModuleBenchmarkEngine.Managed, succeeded: true, elapsed: TimeSpan.FromMilliseconds(1400)),
+                CreateRun(ManagedModuleBenchmarkEngine.PSResourceGet, succeeded: true, elapsed: TimeSpan.FromSeconds(1)),
+                CreateRun(ManagedModuleBenchmarkEngine.PowerShellGet, succeeded: true, elapsed: TimeSpan.FromMilliseconds(1100))
+            },
+            maximumManagedSlowdownRatio: 1.1,
+            maximumManagedSlowdownMilliseconds: 500);
+
+        var gate = Assert.Single(gates);
+        Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Ready, gate.Status);
+        Assert.True(gate.ReadyForDefaultManagedTransport);
+        Assert.True(gate.PerformanceWithinPolicy);
+        Assert.Contains(gate.Reasons, reason => reason.Contains("passed", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static ManagedModuleBenchmarkRunResult CreateRun(
         ManagedModuleBenchmarkEngine engine,
         bool succeeded,
-        string? error = null)
+        string? error = null,
+        TimeSpan? elapsed = null)
         => new()
         {
             ScenarioId = "install-transition",
@@ -41,6 +85,7 @@ public sealed class ManagedModuleBenchmarkTransitionGateEvaluatorTests
             Version = succeeded ? "1.0.0" : null,
             ValidatedVersion = succeeded ? "1.0.0" : null,
             VersionValidationSucceeded = succeeded ? true : null,
+            Elapsed = elapsed ?? TimeSpan.FromMilliseconds(100),
             ErrorMessage = error
         };
 }

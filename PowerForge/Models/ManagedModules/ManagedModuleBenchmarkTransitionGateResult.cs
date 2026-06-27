@@ -66,6 +66,36 @@ public sealed class ManagedModuleBenchmarkTransitionGateResult
     public IReadOnlyList<string> CoveredCompatibilityEngines { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Managed median elapsed milliseconds used for performance readiness, when comparable evidence exists.
+    /// </summary>
+    public double? ManagedMedianMilliseconds { get; set; }
+
+    /// <summary>
+    /// Fastest successful compatibility median elapsed milliseconds used for performance readiness.
+    /// </summary>
+    public double? CompatibilityMedianMilliseconds { get; set; }
+
+    /// <summary>
+    /// Maximum managed median elapsed milliseconds allowed by the active performance policy.
+    /// </summary>
+    public double? AllowedManagedMilliseconds { get; set; }
+
+    /// <summary>
+    /// True when managed elapsed evidence is within the active performance policy.
+    /// </summary>
+    public bool? PerformanceWithinPolicy { get; set; }
+
+    /// <summary>
+    /// Active maximum managed slowdown ratio, when performance readiness is evaluated.
+    /// </summary>
+    public double? MaximumManagedSlowdownRatio { get; set; }
+
+    /// <summary>
+    /// Active absolute managed slowdown tolerance in milliseconds, when performance readiness is evaluated.
+    /// </summary>
+    public int? MaximumManagedSlowdownMilliseconds { get; set; }
+
+    /// <summary>
     /// Human-readable reasons explaining why the gate is not ready or why it passed.
     /// </summary>
     public IReadOnlyList<string> Reasons { get; set; } = Array.Empty<string>();
