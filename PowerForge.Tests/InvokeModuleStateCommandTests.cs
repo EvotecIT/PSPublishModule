@@ -373,6 +373,57 @@ public sealed class InvokeModuleStateCommandTests
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
     }
 
+    [Fact]
+    public void InvokeModuleStatePlan_ManagedTransport_RepairsSourceMismatch()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        WriteManagedReceipt(installedPath, "OtherRepository", "C:\\OtherFeed");
+        var plan = new ModuleStatePlanResult
+        {
+            Actions = new[]
+            {
+                new ModuleStatePlanActionResult
+                {
+                    Kind = "Update",
+                    ModuleName = "Company.Tools",
+                    InstalledVersion = "1.0.0",
+                    VersionPolicy = "=1.0.0",
+                    Reason = "source repair",
+                    IsRepair = true
+                }
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Invoke-ModuleStatePlan")
+            .AddParameter("Plan", plan)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Execute");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<PSPublishModule.ModuleStateApplyResult>(Assert.Single(results).BaseObject);
+        var execution = Assert.Single(result.ExecutionResults);
+        Assert.Equal("Update", execution.Operation);
+        Assert.True(execution.OperationPerformed);
+        var dependency = Assert.Single(execution.DependencyResults);
+        Assert.Equal("ManagedModule", dependency.Installer);
+        Assert.Equal("SourceRepaired", dependency.Status);
+        Assert.Equal("1.0.0", dependency.InstalledVersion);
+        Assert.Equal("1.0.0", dependency.ResolvedVersion);
+    }
+
     private static object? InvokeResolveDesiredState(
         InvokeModuleStateCommand command,
         ModuleStateInventoryResult inventory)
@@ -456,6 +507,15 @@ public sealed class InvokeModuleStateCommandTests
         {
             ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static void WriteManagedReceipt(string modulePath, string repositoryName, string repositorySource)
+    {
+        var receiptDirectory = Path.Combine(modulePath, ".powerforge");
+        Directory.CreateDirectory(receiptDirectory);
+        File.WriteAllText(
+            Path.Combine(receiptDirectory, "managed-module-receipt.json"),
+            "{\"RepositoryName\":\"" + repositoryName + "\",\"RepositorySource\":\"" + repositorySource.Replace("\\", "\\\\", StringComparison.Ordinal) + "\"}");
+    }
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {
