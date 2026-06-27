@@ -318,7 +318,8 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Publish` command-surface contract tests published a binary-root module package and verified the `.dll` payload was preserved in the generated `.nupkg`.
 - [x] 2026-06-27: Managed repair/conflict contract tests cover source repair, scoped missing-copy repair, and command-surface loaded-module update blocking without relying on PowerShellGet, PSResourceGet, or external executables.
 - [x] 2026-06-27: Managed path audit found external PowerShell runner usage only in explicit compatibility benchmark engines and import-validation hosts; managed install, save, update, publish, and ModuleState managed delivery stay in C# services.
-- [ ] Public-feed, private-feed install/save, and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: Managed benchmark service tests installed and saved a module from a private NuGet v3-style feed with Basic credentials, validating metadata, package download, extraction, request counts, and final manifest version.
+- [ ] Public-feed and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 
@@ -327,8 +328,8 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [ ] Large public module with many dependencies.
 - [ ] Related module family with mixed versions.
 - [ ] Large cloud administration module family.
-- [ ] Private repository install with credentials.
-- [ ] Private repository save for offline use.
+- [x] Private repository install with credentials.
+- [x] Private repository save for offline use.
 - [x] Publish a simple module.
 - [x] Publish a binary module.
 - [x] Publish a module with dependencies.
