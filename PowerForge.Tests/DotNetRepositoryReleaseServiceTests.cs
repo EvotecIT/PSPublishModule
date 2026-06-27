@@ -224,14 +224,89 @@ public sealed class DotNetRepositoryReleaseServiceTests
             var packProject = Assert.Single(document.Descendants("PackProject"));
             Assert.Equal(Path.GetFullPath(csprojPath), packProject.Attribute("Include")?.Value);
 
-            var msbuild = Assert.Single(document.Descendants("MSBuild"));
-            Assert.Equal("@(PackProject)", msbuild.Attribute("Projects")?.Value);
-            Assert.Equal("Restore;Pack", msbuild.Attribute("Targets")?.Value);
-            Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value);
-            Assert.Equal("true", msbuild.Attribute("StopOnFirstFailure")?.Value);
+            var msbuildTasks = document.Descendants("MSBuild").ToArray();
+            Assert.Equal(3, msbuildTasks.Length);
+            Assert.All(msbuildTasks, msbuild =>
+            {
+                Assert.Equal("@(PackProject)", msbuild.Attribute("Projects")?.Value);
+                Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value);
+                Assert.Equal("true", msbuild.Attribute("StopOnFirstFailure")?.Value);
+            });
+            Assert.Equal("Restore", msbuildTasks[0].Attribute("Targets")?.Value);
+            Assert.Equal("Build", msbuildTasks[1].Attribute("Targets")?.Value);
+            Assert.Equal("Pack", msbuildTasks[2].Attribute("Targets")?.Value);
+            Assert.Equal("Configuration=Release", msbuildTasks[0].Attribute("Properties")?.Value);
+            Assert.Equal("Configuration=Release", msbuildTasks[1].Attribute("Properties")?.Value);
             Assert.Equal(
-                $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D").Replace("$", "%24").Replace("@", "%40")}",
-                msbuild.Attribute("Properties")?.Value);
+                $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D").Replace("$", "%24").Replace("@", "%40")};NoBuild=true;BuildProjectReferences=false",
+                msbuildTasks[2].Attribute("Properties")?.Value);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_MsBuildBatchPack_PacksProjectReferenceGraphOnce()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var sharedDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Shared"));
+            File.WriteAllText(Path.Combine(sharedDir.FullName, "Shared.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Shared</PackageId>",
+                "    <VersionPrefix>1.0.0</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(sharedDir.FullName, "Greeter.cs"), "namespace Sample.Shared; public static class Greeter { public static string Hello() => \"hello\"; }");
+
+            var consumerDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Consumer"));
+            File.WriteAllText(Path.Combine(consumerDir.FullName, "Consumer.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Consumer</PackageId>",
+                "    <VersionPrefix>1.0.0</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "  <ItemGroup>",
+                "    <ProjectReference Include=\"..\\Shared\\Shared.csproj\" />",
+                "  </ItemGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(consumerDir.FullName, "Consumer.cs"), "namespace Sample.Consumer; public static class Consumer { public static string Hello() => Sample.Shared.Greeter.Hello(); }");
+
+            var outputPath = Path.Combine(root.FullName, "packages");
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = outputPath,
+                Pack = true,
+                PackStrategy = DotNetRepositoryPackStrategy.MSBuild,
+                Publish = false,
+                UpdateVersions = false,
+                CreateReleaseZip = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(File.Exists(Path.Combine(outputPath, "Sample.Shared.1.0.0.nupkg")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "Sample.Consumer.1.0.0.nupkg")));
+            Assert.All(result.Projects.Where(project => project.IsPackable), project =>
+            {
+                Assert.Single(project.Packages);
+                Assert.True(string.IsNullOrWhiteSpace(project.ErrorMessage), project.ErrorMessage);
+            });
         }
         finally
         {

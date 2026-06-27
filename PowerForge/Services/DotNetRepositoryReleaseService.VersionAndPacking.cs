@@ -161,7 +161,12 @@ public sealed partial class DotNetRepositoryReleaseService
         string outputPath)
     {
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
-        var properties = $"Configuration={EscapeMsBuildPropertyValue(configuration)};PackageOutputPath={EscapeMsBuildPropertyValue(outputPath)}";
+        var buildProperties = $"Configuration={EscapeMsBuildPropertyValue(configuration)}";
+        var packProperties = string.Join(";",
+            buildProperties,
+            $"PackageOutputPath={EscapeMsBuildPropertyValue(outputPath)}",
+            "NoBuild=true",
+            "BuildProjectReferences=false");
 
         // Keep this a classic MSBuild project: it only fans out to concrete SDK projects
         // and does not require Microsoft.Build.Traversal to be installed.
@@ -174,11 +179,24 @@ public sealed partial class DotNetRepositoryReleaseService
                     new XAttribute("Name", "PackSelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
-                        // Restore is intentional so project references and package assets resolve inside the batch.
-                        new XAttribute("Targets", "Restore;Pack"),
+                        // Restore and build all selected projects first, then pack without walking project
+                        // references. Otherwise packable project references can be packed twice in parallel.
+                        new XAttribute("Targets", "Restore"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),
-                        new XAttribute("Properties", properties)))));
+                        new XAttribute("Properties", buildProperties)),
+                    new XElement("MSBuild",
+                        new XAttribute("Projects", "@(PackProject)"),
+                        new XAttribute("Targets", "Build"),
+                        new XAttribute("BuildInParallel", "true"),
+                        new XAttribute("StopOnFirstFailure", "true"),
+                        new XAttribute("Properties", buildProperties)),
+                    new XElement("MSBuild",
+                        new XAttribute("Projects", "@(PackProject)"),
+                        new XAttribute("Targets", "Pack"),
+                        new XAttribute("BuildInParallel", "true"),
+                        new XAttribute("StopOnFirstFailure", "true"),
+                        new XAttribute("Properties", packProperties)))));
 
         document.Save(traversalPath);
     }
