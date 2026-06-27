@@ -141,7 +141,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Save resolved packages and dependency closure to a target path.
 - [x] Preserve package structure expected by PowerShell module import conventions.
 - [x] Support warm cache reuse.
-- [ ] Support offline bundle output metadata.
+- [x] Support offline bundle output metadata.
 - [x] Support `-SkipDependencyCheck`.
 - [x] Support `-AcceptLicense`.
 - [x] Emit typed save result objects.
