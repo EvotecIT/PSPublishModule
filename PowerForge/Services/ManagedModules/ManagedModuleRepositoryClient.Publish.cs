@@ -64,8 +64,9 @@ public sealed partial class ManagedModuleRepositoryClient
             return repository.Source;
         }
 
-        using var request = CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json");
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
+            cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
 
@@ -103,11 +104,15 @@ public sealed partial class ManagedModuleRepositoryClient
             throw new FileNotFoundException($"Package file was not found: {package}", package);
 
         var publishAddress = await ResolvePackagePublishAddressAsync(repository, credential, cancellationToken).ConfigureAwait(false);
-        using var request = CreateRequest(HttpMethod.Put, new Uri(publishAddress), credential, "application/json");
-        using var stream = File.OpenRead(package);
-        request.Content = new StreamContent(stream);
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendWithPolicyAsync(
+            () =>
+            {
+                var request = CreateRequest(HttpMethod.Put, new Uri(publishAddress), credential, "application/json");
+                request.Content = new StreamContent(File.OpenRead(package));
+                request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                return request;
+            },
+            cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
         {
             return new ManagedModulePackagePublishResult

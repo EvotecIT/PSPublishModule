@@ -14,6 +14,7 @@ public sealed partial class ManagedModuleRepositoryClient
     private readonly ILogger _logger;
     private readonly HttpClient _httpClient;
     private readonly ManagedModulePackageReader _packageReader;
+    private readonly ManagedModuleRepositoryClientOptions _options;
     private readonly Dictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _packagePublishAddressCache = new(StringComparer.OrdinalIgnoreCase);
@@ -24,11 +25,17 @@ public sealed partial class ManagedModuleRepositoryClient
     /// <param name="logger">Logger used for diagnostic output.</param>
     /// <param name="httpClient">Optional HTTP client for tests or custom hosting.</param>
     /// <param name="packageReader">Optional package reader.</param>
-    public ManagedModuleRepositoryClient(ILogger logger, HttpClient? httpClient = null, ManagedModulePackageReader? packageReader = null)
+    /// <param name="options">Optional repository HTTP policy options.</param>
+    public ManagedModuleRepositoryClient(
+        ILogger logger,
+        HttpClient? httpClient = null,
+        ManagedModulePackageReader? packageReader = null,
+        ManagedModuleRepositoryClientOptions? options = null)
     {
         _logger = logger ?? new NullLogger();
         _httpClient = httpClient ?? new HttpClient();
         _packageReader = packageReader ?? new ManagedModulePackageReader();
+        _options = options ?? new ManagedModuleRepositoryClientOptions();
     }
 
     /// <summary>
@@ -191,8 +198,9 @@ public sealed partial class ManagedModuleRepositoryClient
         var packageBase = await ResolvePackageBaseAddressAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var lowerId = packageId.Trim().ToLowerInvariant();
         var indexUri = new Uri(new Uri(EnsureTrailingSlash(packageBase)), $"{Uri.EscapeDataString(lowerId)}/index.json");
-        using var request = CreateRequest(HttpMethod.Get, indexUri, credential, "application/json");
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, indexUri, credential, "application/json"),
+            cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Managed module version query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for {packageId} from {repository.Name}.");
 
@@ -297,8 +305,9 @@ public sealed partial class ManagedModuleRepositoryClient
         var uri = new Uri(
             new Uri(EnsureTrailingSlash(searchService)),
             $"?q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}");
-        using var request = CreateRequest(HttpMethod.Get, uri, credential, "application/json");
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
+            cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Managed module search failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{query}' from {repository.Name}.");
 
@@ -329,8 +338,9 @@ public sealed partial class ManagedModuleRepositoryClient
         var packageBase = await ResolvePackageBaseAddressAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var packageUri = BuildPackageUri(packageBase, packageId, version);
         var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
-        using var request = CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream");
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
+            cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Managed module package download failed ({(int)response.StatusCode} {response.ReasonPhrase}) for {packageId} {version}.");
 
@@ -402,8 +412,9 @@ public sealed partial class ManagedModuleRepositoryClient
             return flat;
         }
 
-        using var request = CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json");
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
+            cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
 
@@ -446,8 +457,9 @@ public sealed partial class ManagedModuleRepositoryClient
             return flat;
         }
 
-        using var request = CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json");
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
+            cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
 
