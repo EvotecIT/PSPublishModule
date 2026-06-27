@@ -96,6 +96,14 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - Author matching is case-insensitive and supports comma, semicolon, or pipe separated nuspec author values.
 - Package author policy applies to dependency packages by default; typed policy can opt dependencies out while still preserving repository-trust enforcement.
 
+## Current Managed Publish Integration Contract
+
+- `PublishTool.ManagedModule` routes existing `ModulePublisher` repository publishing through the managed C# package/publish service.
+- The managed publisher uses repository URI/source configuration directly and does not require PowerShell repository registration.
+- Hosted build dependency preflight does not install PowerShellGet or PSResourceGet when repository publishing explicitly uses `PublishTool.ManagedModule`.
+- Managed publishing rejects external runtime credential providers; callers must provide an API key or static repository credential until managed provider support exists.
+- Required-module mirroring remains on the compatibility path until managed save/publish mirroring is implemented.
+
 ## Phase 2: Managed Repository Client
 
 - [x] Implement NuGet v3 service index discovery in C#.
@@ -227,7 +235,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement duplicate detection.
 - [x] Implement `-SkipDependenciesCheck`.
 - [x] Implement `-SkipModuleManifestValidate`.
-- [ ] Integrate with existing `ModulePublisher`.
+- [x] Integrate with existing `ModulePublisher`.
 - [ ] Integrate with required-module mirroring.
 - [x] Emit typed publish result objects.
 - [x] Add Spectre.Console summary output.

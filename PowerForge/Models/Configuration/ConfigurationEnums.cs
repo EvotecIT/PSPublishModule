@@ -23,7 +23,9 @@ public enum PublishTool
     /// <summary>Use Microsoft.PowerShell.PSResourceGet.</summary>
     PSResourceGet,
     /// <summary>Use PowerShellGet (Publish-Module/Register-PSRepository).</summary>
-    PowerShellGet
+    PowerShellGet,
+    /// <summary>Use the managed C# module publish engine.</summary>
+    ManagedModule
 }
 
 /// <summary>
