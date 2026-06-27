@@ -124,6 +124,14 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [Alias("SkipDependenciesCheck")]
     public SwitchParameter SkipDependencyCheck { get; set; }
 
+    /// <summary>Loaded module evidence used to block risky in-session updates.</summary>
+    [Parameter]
+    public ManagedModuleLoadedModule[] LoadedModule { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
+
+    /// <summary>Allow updating even when matching loaded module evidence is supplied.</summary>
+    [Parameter]
+    public SwitchParameter AllowLoadedModuleUpdate { get; set; }
+
     /// <summary>Return an inspectable update plan without writing files.</summary>
     [Parameter]
     public SwitchParameter Plan { get; set; }
@@ -156,7 +164,9 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                 Force = Force.IsPresent,
                 AllowClobber = AllowClobber.IsPresent,
                 AcceptLicense = AcceptLicense.IsPresent,
-                SkipDependencyCheck = SkipDependencyCheck.IsPresent
+                SkipDependencyCheck = SkipDependencyCheck.IsPresent,
+                LoadedModules = LoadedModule,
+                AllowLoadedModuleUpdate = AllowLoadedModuleUpdate.IsPresent
             };
 
             if (Plan.IsPresent)

@@ -69,6 +69,8 @@ public sealed class ManagedModuleUpdateService
             };
         }
 
+        ThrowIfLoadedModuleBlocksUpdate(request);
+
         var install = await _installService.InstallAsync(
             new ManagedModuleInstallRequest
             {
@@ -154,6 +156,20 @@ public sealed class ManagedModuleUpdateService
         };
     }
 
+    private static void ThrowIfLoadedModuleBlocksUpdate(ManagedModuleUpdateRequest request)
+    {
+        if (request.AllowLoadedModuleUpdate)
+            return;
+
+        var loaded = SelectLoadedModules(request).ToArray();
+        if (loaded.Length == 0)
+            return;
+
+        var details = string.Join(", ", loaded.Select(FormatLoadedModule));
+        throw new InvalidOperationException(
+            $"Module '{request.Name}' is already loaded and cannot be safely updated by the managed engine: {details}. Close the PowerShell session, unload the module, or set AllowLoadedModuleUpdate when you accept the risk.");
+    }
+
     private async Task<string> ResolveSelectedVersionAsync(ManagedModuleUpdateRequest request, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(request.Version))
@@ -204,6 +220,23 @@ public sealed class ManagedModuleUpdateService
 
         return ManagedModuleUpdatePlanAction.Update;
     }
+
+    private static IEnumerable<ManagedModuleLoadedModule> SelectLoadedModules(ManagedModuleUpdateRequest request)
+        => (request.LoadedModules ?? Array.Empty<ManagedModuleLoadedModule>())
+            .Where(module => module is not null &&
+                             module.Name.Equals(request.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private static string FormatLoadedModule(ManagedModuleLoadedModule module)
+    {
+        var version = string.IsNullOrWhiteSpace(module.Version) ? "unknown version" : module.Version!.Trim();
+        var path = FirstNonEmpty(module.ModuleBase, module.Path);
+        return string.IsNullOrWhiteSpace(path)
+            ? $"{module.Name} {version}"
+            : $"{module.Name} {version} at {path}";
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
     private static void Validate(ManagedModuleUpdateRequest request)
     {

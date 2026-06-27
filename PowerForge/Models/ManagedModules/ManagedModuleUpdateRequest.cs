@@ -84,4 +84,14 @@ public sealed class ManagedModuleUpdateRequest
     /// Skip installing dependencies declared by the package.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }
+
+    /// <summary>
+    /// Loaded module evidence supplied by the host or inventory engine.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleLoadedModule> LoadedModules { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
+
+    /// <summary>
+    /// Allow update when the requested module is already loaded in the current session.
+    /// </summary>
+    public bool AllowLoadedModuleUpdate { get; set; }
 }
