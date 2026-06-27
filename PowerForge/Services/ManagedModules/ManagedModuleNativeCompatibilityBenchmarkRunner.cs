@@ -25,6 +25,7 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
         var repositoryName = ResolveRepositoryName(scenario);
         var nativeRunner = CreateRunner(engine, sandboxRoot);
         EnsureRepository(engine, scenario, repositoryName, nativeRunner);
+        RemoveCopiedInstalledModule(sandboxRoot, scenario.Name);
         RunInstall(
             CloneWithVersion(scenario, previous!),
             engine,
@@ -186,7 +187,7 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
     private static Dictionary<string, string?> BuildPSResourceGetEnvironment(string sandboxRoot)
     {
         var fakeHome = Path.Combine(sandboxRoot, "home");
-        var moduleRoot = Path.Combine(sandboxRoot, "modules");
+        var moduleRoot = ResolveCoreCurrentUserModuleRoot(fakeHome);
         CreateProfileDirectories(fakeHome, moduleRoot);
 
         return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
@@ -202,7 +203,7 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
     private static Dictionary<string, string?> BuildWindowsPowerShellEnvironment(string sandboxRoot)
     {
         var fakeHome = Path.Combine(sandboxRoot, "home");
-        var moduleRoot = Path.Combine(sandboxRoot, "modules");
+        var moduleRoot = Path.Combine(fakeHome, "Documents", "WindowsPowerShell", "Modules");
         CreateProfileDirectories(fakeHome, moduleRoot);
 
         var paths = new List<string> { moduleRoot };
@@ -308,6 +309,44 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
             .FirstOrDefault();
     }
 
+    private static void RemoveCopiedInstalledModule(string sandboxRoot, string moduleName)
+    {
+        if (!Directory.Exists(sandboxRoot))
+            return;
+
+        foreach (var manifest in new DirectoryInfo(sandboxRoot)
+                     .EnumerateFiles(moduleName + ".psd1", SearchOption.AllDirectories)
+                     .Where(file => file.FullName.IndexOf(Path.DirectorySeparatorChar + "source" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) < 0)
+                     .ToArray())
+        {
+            var versionDirectory = manifest.Directory;
+            if (versionDirectory is null)
+                continue;
+
+            var moduleDirectory = versionDirectory.Parent is not null &&
+                                  string.Equals(versionDirectory.Parent.Name, moduleName, StringComparison.OrdinalIgnoreCase)
+                ? versionDirectory.Parent.FullName
+                : versionDirectory.FullName;
+
+            if (!IsSameOrChildPath(moduleDirectory, sandboxRoot))
+                continue;
+
+            try { Directory.Delete(moduleDirectory, recursive: true); }
+            catch { }
+        }
+    }
+
+    private static bool IsSameOrChildPath(string candidate, string root)
+    {
+        var fullCandidate = Path.GetFullPath(candidate)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullRoot = Path.GetFullPath(root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(fullCandidate, fullRoot, StringComparison.OrdinalIgnoreCase) ||
+               fullCandidate.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               fullCandidate.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string? ReadManifestVersion(FileInfo manifest)
     {
         var version = ModuleManifestValueReader.ReadTopLevelString(manifest.FullName, "ModuleVersion");
@@ -341,7 +380,15 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
         Directory.CreateDirectory(moduleRoot);
         Directory.CreateDirectory(Path.Combine(fakeHome, "AppData", "Roaming"));
         Directory.CreateDirectory(Path.Combine(fakeHome, "AppData", "Local"));
+        Directory.CreateDirectory(Path.Combine(fakeHome, "Documents", "PowerShell", "Modules"));
+        Directory.CreateDirectory(Path.Combine(fakeHome, "Documents", "WindowsPowerShell", "Modules"));
+        Directory.CreateDirectory(Path.Combine(fakeHome, ".local", "share", "powershell", "Modules"));
     }
+
+    private static string ResolveCoreCurrentUserModuleRoot(string fakeHome)
+        => IsWindows()
+            ? Path.Combine(fakeHome, "Documents", "PowerShell", "Modules")
+            : Path.Combine(fakeHome, ".local", "share", "powershell", "Modules");
 
     private static void AddIfDirectory(List<string> paths, string path)
     {

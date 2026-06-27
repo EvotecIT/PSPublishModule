@@ -203,7 +203,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add tests for exact side-by-side install.
 - [x] Add tests for failed extraction rollback.
 - [x] Add tests for clobber detection.
-- [ ] Benchmark against `Install-Module` and `Install-PSResource`.
+- [x] Benchmark against `Install-Module` and `Install-PSResource`.
 - [x] Validate local-feed install smoke on Windows PowerShell 5.1.
 - [x] Validate local-feed install smoke on PowerShell 7+.
 
@@ -226,7 +226,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add tests for loaded-module conflict blocking.
 - [x] Add tests for family-aware update and blocked family alignment.
 - [x] Add tests for source repair and blocked source mismatch.
-- [ ] Benchmark against `Update-Module` and `Update-PSResource`.
+- [x] Benchmark against `Update-Module` and `Update-PSResource`.
 - [x] Validate local-feed update smoke on Windows PowerShell 5.1.
 - [x] Validate local-feed update smoke on PowerShell 7+.
 
@@ -344,6 +344,10 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Local-feed native install smoke validated `Company.Tools` 1.0.0 through managed, PSResourceGet, and PowerShellGet engines, with installed manifest version evidence for each engine.
 - [x] 2026-06-28: Local-feed native update smoke validated `Company.Tools` 1.0.0 to 1.1.0 through managed, PSResourceGet, and PowerShellGet engines, with updated manifest version evidence for each engine.
 - [x] 2026-06-28: PowerShellGet native local-feed baselines require a PowerShellGet-produced feed shape; PSResourceGet and the managed engine can consume the flat local `.nupkg` feed shape used by managed tests.
+- [x] 2026-06-28: PowerShell 7.6.3 ran `Measure-ManagedModule -Operation Install -Engine Managed,PSResourceGet,PowerShellGet -EnableNativeInstallUpdateBenchmark` for public `ThreadJob` 2.1.0; all three engines installed and validated version 2.1.0 in disposable roots, and the install transition gate was ready.
+- [x] 2026-06-28: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran public `PSWriteColor` install/update native comparisons through managed, PSResourceGet, and PowerShellGet engines; all runs validated the final manifest version and reported ready install/update transition gates.
+- [x] 2026-06-28: Native update preparation now removes copied managed seed folders before invoking PowerShellGet/PSResourceGet to install the previous version, so compatibility update baselines are seeded by the native tool instead of reusing managed receipt-less folders.
+- [x] 2026-06-28: Medium public `PSScriptAnalyzer` 1.25.0 install validated through managed and PSResourceGet native baselines, while PowerShellGet reported an administrator-scope failure in the disposable host; this keeps the broad compatibility-fallback retirement gate open for provider-specific limitations.
 
 ## Benchmark Scenarios
 
