@@ -65,6 +65,44 @@ public sealed class PrivateModuleWorkflowServiceTests
     }
 
     [Fact]
+    public void Execute_AutoTransportWithRegisteredRepositoryName_UsesCompatibilityExecutor()
+    {
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        PrivateModuleDependencyExecutionRequest? capturedRequest = null;
+        var expected = new[]
+        {
+            new ModuleDependencyInstallResult("ModuleA", null, "1.0.0", null, ModuleDependencyInstallStatus.Installed, "PSResourceGet", null)
+        };
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            request =>
+            {
+                capturedRequest = request;
+                return expected;
+            });
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "ModuleA" },
+                UseAzureArtifacts = false,
+                RepositoryName = "Company",
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto
+            },
+            (_, _) => true);
+
+        Assert.True(result.OperationPerformed);
+        Assert.Same(expected, result.DependencyResults);
+        Assert.NotNull(capturedRequest);
+        Assert.Equal("Company", capturedRequest!.RepositoryName);
+        Assert.Equal("PSResourceGet", result.DependencyResults[0].Installer);
+    }
+
+    [Fact]
     public void Execute_UpdateRepositoryMode_SkipsDependencyExecutionWhenShouldProcessDeclines()
     {
         var host = new FakePrivateGalleryHost();

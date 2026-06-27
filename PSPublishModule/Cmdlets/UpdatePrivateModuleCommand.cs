@@ -102,7 +102,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
 
     /// <summary>Delivery engine used for module update.</summary>
     [Parameter]
-    public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
+    public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.Auto;
 
     /// <summary>Exact target version. When omitted, the latest repository version is used.</summary>
     [Parameter]
@@ -312,9 +312,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
                 ManagedShellEdition = ShellEdition,
                 ManagedModuleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
                 ManagedPackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
-                ManagedRepositorySource = Transport == ModuleStateDeliveryTransport.ManagedModule && ParameterSetName == ParameterSetRepository
-                    ? PrivateModuleCommandSupport.ResolveManagedRepositorySource(this, Repository)
-                    : null,
+                ManagedRepositorySource = ResolveManagedRepositorySource(),
                 ManagedAllowClobber = AllowClobber,
                 ManagedAcceptLicense = AcceptLicense,
                 ManagedSkipDependencyCheck = SkipDependencyCheck,
@@ -327,5 +325,20 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
             return;
 
         WriteObject(result.DependencyResults, enumerateCollection: true);
+    }
+
+    private string? ResolveManagedRepositorySource()
+    {
+        if (ParameterSetName != ParameterSetRepository)
+            return null;
+        if (Transport == ModuleStateDeliveryTransport.ManagedModule)
+            return PrivateModuleCommandSupport.ResolveManagedRepositorySource(this, Repository);
+        if (Transport == ModuleStateDeliveryTransport.Auto &&
+            PrivateModuleCommandSupport.TryResolveManagedRepositorySource(this, Repository, out var source))
+        {
+            return source;
+        }
+
+        return null;
     }
 }
