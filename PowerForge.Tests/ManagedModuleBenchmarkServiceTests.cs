@@ -158,6 +158,89 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Contains("No versions of 'Company.Tools'", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task RunAsync_MeasuresCompatibilityEnginesWithInjectedRunner()
+    {
+        var calls = new List<ManagedModuleBenchmarkEngine>();
+        var service = new ManagedModuleBenchmarkService(
+            new NullLogger(),
+            compatibilityRunner: (scenario, engine) =>
+            {
+                calls.Add(engine);
+                return new ModuleDependencyInstallResult(
+                    scenario.Name,
+                    null,
+                    "1.0.0",
+                    scenario.Version,
+                    ModuleDependencyInstallStatus.Installed,
+                    engine.ToString(),
+                    null);
+            });
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet, ManagedModuleBenchmarkEngine.PowerShellGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "compat-install",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("Local", "https://example.test/index.json"),
+                    Name = "Company.Tools",
+                    Version = "1.0.0"
+                }
+            }
+        });
+
+        Assert.Equal(
+            new[] { ManagedModuleBenchmarkEngine.PSResourceGet, ManagedModuleBenchmarkEngine.PowerShellGet },
+            calls);
+        Assert.Collection(
+            result.Runs,
+            run =>
+            {
+                Assert.Equal("PSResourceGet", run.Engine);
+                Assert.True(run.Succeeded);
+                Assert.Equal("Installed", run.Status);
+            },
+            run =>
+            {
+                Assert.Equal("PowerShellGet", run.Engine);
+                Assert.True(run.Succeeded);
+                Assert.Equal("Installed", run.Status);
+            });
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsUnsupportedCompatibilitySaveAsFailure()
+    {
+        using var root = new TemporaryDirectory();
+        var service = new ManagedModuleBenchmarkService(new NullLogger());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            ContinueOnError = true,
+            Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "compat-save",
+                    Operation = ManagedModuleBenchmarkOperation.Save,
+                    Repository = new ManagedModuleRepository("Local", "https://example.test/index.json"),
+                    Name = "Company.Tools",
+                    ModuleRoot = root.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.False(run.Succeeded);
+        Assert.Equal("PSResourceGet", run.Engine);
+        Assert.Contains("support Install and Update", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {

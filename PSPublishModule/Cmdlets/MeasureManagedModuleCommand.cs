@@ -32,6 +32,11 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [Parameter]
     public ManagedModuleBenchmarkOperation Operation { get; set; } = ManagedModuleBenchmarkOperation.Install;
 
+    /// <summary>Delivery engines to measure for each scenario.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public ManagedModuleBenchmarkEngine[] Engine { get; set; } = new[] { ManagedModuleBenchmarkEngine.Managed };
+
     /// <summary>Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.</summary>
     [Parameter]
     [Alias("Source", "RepositoryUri")]
@@ -159,7 +164,7 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
 
         if (scenarios.Length == 0)
             return;
-        if (!ShouldProcess(string.Join(", ", scenarios.Select(static scenario => scenario.Name)), $"Measure managed module {Operation}"))
+        if (!ShouldProcess(string.Join(", ", scenarios.Select(static scenario => scenario.Name)), $"Measure module {Operation} with {string.Join(", ", Engine)}"))
             return;
 
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
@@ -167,6 +172,7 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             new ManagedModuleBenchmarkRequest
             {
                 Scenarios = scenarios,
+                Engines = Engine,
                 ContinueOnError = !StopOnError.IsPresent
             }).GetAwaiter().GetResult();
 

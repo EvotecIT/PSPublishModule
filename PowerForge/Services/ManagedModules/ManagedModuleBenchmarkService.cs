@@ -9,6 +9,7 @@ public sealed class ManagedModuleBenchmarkService
 {
     private readonly ManagedModuleInstallService _installService;
     private readonly ManagedModuleUpdateService _updateService;
+    private readonly Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? _compatibilityRunner;
 
     /// <summary>
     /// Creates a managed module benchmark service.
@@ -16,14 +17,17 @@ public sealed class ManagedModuleBenchmarkService
     /// <param name="logger">Logger used by managed module services.</param>
     /// <param name="installService">Optional install service override.</param>
     /// <param name="updateService">Optional update service override.</param>
+    /// <param name="compatibilityRunner">Optional compatibility benchmark runner override.</param>
     public ManagedModuleBenchmarkService(
         ILogger logger,
         ManagedModuleInstallService? installService = null,
-        ManagedModuleUpdateService? updateService = null)
+        ManagedModuleUpdateService? updateService = null,
+        Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? compatibilityRunner = null)
     {
         var safeLogger = logger ?? new NullLogger();
         _installService = installService ?? new ManagedModuleInstallService(safeLogger);
         _updateService = updateService ?? new ManagedModuleUpdateService(safeLogger);
+        _compatibilityRunner = compatibilityRunner;
     }
 
     /// <summary>
@@ -42,11 +46,14 @@ public sealed class ManagedModuleBenchmarkService
 
         foreach (var scenario in request.Scenarios)
         {
-            for (var iteration = 1; iteration <= Math.Max(1, scenario.Iterations); iteration++)
+            foreach (var engine in ResolveEngines(request))
             {
-                var run = await RunScenarioAsync(scenario, iteration, request.ContinueOnError, cancellationToken)
-                    .ConfigureAwait(false);
-                runs.Add(run);
+                for (var iteration = 1; iteration <= Math.Max(1, scenario.Iterations); iteration++)
+                {
+                    var run = await RunScenarioAsync(scenario, engine, iteration, request.ContinueOnError, cancellationToken)
+                        .ConfigureAwait(false);
+                    runs.Add(run);
+                }
             }
         }
 
@@ -60,6 +67,7 @@ public sealed class ManagedModuleBenchmarkService
 
     private async Task<ManagedModuleBenchmarkRunResult> RunScenarioAsync(
         ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
         int iteration,
         bool continueOnError,
         CancellationToken cancellationToken)
@@ -67,25 +75,9 @@ public sealed class ManagedModuleBenchmarkService
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var run = scenario.Operation switch
-            {
-                ManagedModuleBenchmarkOperation.Install => MapInstall(
-                    scenario,
-                    iteration,
-                    await _installService.InstallAsync(CreateInstallRequest(scenario, false), cancellationToken)
-                        .ConfigureAwait(false)),
-                ManagedModuleBenchmarkOperation.Save => MapInstall(
-                    scenario,
-                    iteration,
-                    await _installService.InstallAsync(CreateInstallRequest(scenario, true), cancellationToken)
-                        .ConfigureAwait(false)),
-                ManagedModuleBenchmarkOperation.Update => MapUpdate(
-                    scenario,
-                    iteration,
-                    await _updateService.UpdateAsync(CreateUpdateRequest(scenario), cancellationToken)
-                        .ConfigureAwait(false)),
-                _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario.Operation, "Unsupported benchmark operation.")
-            };
+            var run = engine == ManagedModuleBenchmarkEngine.Managed
+                ? await RunManagedScenarioAsync(scenario, iteration, cancellationToken).ConfigureAwait(false)
+                : RunCompatibilityScenario(scenario, engine, iteration);
 
             stopwatch.Stop();
             run.Elapsed = stopwatch.Elapsed;
@@ -94,8 +86,88 @@ public sealed class ManagedModuleBenchmarkService
         catch (Exception ex) when (continueOnError)
         {
             stopwatch.Stop();
-            return CreateFailedRun(scenario, iteration, stopwatch.Elapsed, ex);
+            return CreateFailedRun(scenario, engine, iteration, stopwatch.Elapsed, ex);
         }
+    }
+
+    private async Task<ManagedModuleBenchmarkRunResult> RunManagedScenarioAsync(
+        ManagedModuleBenchmarkScenario scenario,
+        int iteration,
+        CancellationToken cancellationToken)
+        => scenario.Operation switch
+        {
+            ManagedModuleBenchmarkOperation.Install => MapInstall(
+                scenario,
+                iteration,
+                await _installService.InstallAsync(CreateInstallRequest(scenario, false), cancellationToken)
+                    .ConfigureAwait(false)),
+            ManagedModuleBenchmarkOperation.Save => MapInstall(
+                scenario,
+                iteration,
+                await _installService.InstallAsync(CreateInstallRequest(scenario, true), cancellationToken)
+                    .ConfigureAwait(false)),
+            ManagedModuleBenchmarkOperation.Update => MapUpdate(
+                scenario,
+                iteration,
+                await _updateService.UpdateAsync(CreateUpdateRequest(scenario), cancellationToken)
+                    .ConfigureAwait(false)),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario.Operation, "Unsupported benchmark operation.")
+        };
+
+    private ManagedModuleBenchmarkRunResult RunCompatibilityScenario(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        int iteration)
+    {
+        if (scenario.Operation == ManagedModuleBenchmarkOperation.Save)
+            throw new InvalidOperationException("Compatibility benchmark engines support Install and Update operations. Use the managed engine for Save measurements.");
+        if (!string.IsNullOrWhiteSpace(scenario.VersionPolicy))
+            throw new InvalidOperationException("Compatibility benchmark engines support Version, MinimumVersion, and MaximumVersion. Use the managed engine for VersionPolicy measurements.");
+
+        var result = _compatibilityRunner is null
+            ? RunDefaultCompatibilityScenario(scenario, engine)
+            : _compatibilityRunner(scenario, engine);
+        return MapCompatibilityResult(scenario, engine, iteration, result);
+    }
+
+    private static ModuleDependencyInstallResult RunDefaultCompatibilityScenario(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine)
+    {
+        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), new NullLogger());
+        var dependency = new ModuleDependency(
+            scenario.Name,
+            scenario.Version,
+            scenario.MinimumVersion,
+            scenario.MaximumVersion);
+        var preferPowerShellGet = engine == ManagedModuleBenchmarkEngine.PowerShellGet;
+        var results = scenario.Operation == ManagedModuleBenchmarkOperation.Install
+            ? installer.EnsureInstalled(
+                new[] { dependency },
+                force: scenario.Force,
+                repository: scenario.Repository.Name,
+                credential: scenario.Credential,
+                prerelease: scenario.IncludePrerelease,
+                preferPowerShellGet: preferPowerShellGet,
+                timeoutPerModule: TimeSpan.FromMinutes(10))
+            : installer.EnsureUpdated(
+                new[] { dependency },
+                repository: scenario.Repository.Name,
+                credential: scenario.Credential,
+                prerelease: scenario.IncludePrerelease,
+                preferPowerShellGet: preferPowerShellGet,
+                timeoutPerModule: TimeSpan.FromMinutes(10));
+
+        return results.Count == 0
+            ? new ModuleDependencyInstallResult(
+                scenario.Name,
+                null,
+                null,
+                scenario.Version,
+                ModuleDependencyInstallStatus.Skipped,
+                engine.ToString(),
+                "Compatibility engine returned no result.")
+            : results[0];
     }
 
     private static ManagedModuleInstallRequest CreateInstallRequest(ManagedModuleBenchmarkScenario scenario, bool forceCustomRoot)
@@ -158,6 +230,7 @@ public sealed class ManagedModuleBenchmarkService
         {
             ScenarioId = ResolveScenarioId(scenario),
             Operation = scenario.Operation,
+            Engine = ManagedModuleBenchmarkEngine.Managed.ToString(),
             Iteration = iteration,
             Succeeded = true,
             Status = result.Status.ToString(),
@@ -180,6 +253,7 @@ public sealed class ManagedModuleBenchmarkService
         {
             ScenarioId = ResolveScenarioId(scenario),
             Operation = scenario.Operation,
+            Engine = ManagedModuleBenchmarkEngine.Managed.ToString(),
             Iteration = iteration,
             Succeeded = true,
             Status = result.Status.ToString(),
@@ -195,8 +269,33 @@ public sealed class ManagedModuleBenchmarkService
             FromCache = result.InstallResult?.Download?.FromCache ?? false
         };
 
+    private static ManagedModuleBenchmarkRunResult MapCompatibilityResult(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        int iteration,
+        ModuleDependencyInstallResult result)
+        => new()
+        {
+            ScenarioId = ResolveScenarioId(scenario),
+            Operation = scenario.Operation,
+            Engine = engine.ToString(),
+            Iteration = iteration,
+            Succeeded = result.Status != ModuleDependencyInstallStatus.Failed,
+            Status = result.Status.ToString(),
+            Version = result.ResolvedVersion,
+            PreviousVersion = result.InstalledVersion,
+            ModuleRoot = scenario.ModuleRoot,
+            PackageBytes = 0,
+            ExtractedBytes = 0,
+            FileCount = 0,
+            DependencyCount = 0,
+            FromCache = false,
+            ErrorMessage = result.Status == ModuleDependencyInstallStatus.Failed ? result.Message : null
+        };
+
     private static ManagedModuleBenchmarkRunResult CreateFailedRun(
         ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
         int iteration,
         TimeSpan elapsed,
         Exception exception)
@@ -204,6 +303,7 @@ public sealed class ManagedModuleBenchmarkService
         {
             ScenarioId = ResolveScenarioId(scenario),
             Operation = scenario.Operation,
+            Engine = engine.ToString(),
             Iteration = iteration,
             Succeeded = false,
             Status = "Failed",
@@ -217,6 +317,8 @@ public sealed class ManagedModuleBenchmarkService
             throw new ArgumentNullException(nameof(request));
         if (request.Scenarios is null || request.Scenarios.Count == 0)
             throw new ArgumentException("At least one benchmark scenario is required.", nameof(request));
+        if (request.Engines is null || request.Engines.Count == 0)
+            throw new ArgumentException("At least one benchmark engine is required.", nameof(request));
 
         foreach (var scenario in request.Scenarios)
             ValidateScenario(scenario);
@@ -241,6 +343,11 @@ public sealed class ManagedModuleBenchmarkService
         => string.IsNullOrWhiteSpace(scenario.Id)
             ? scenario.Operation + ":" + scenario.Name.Trim()
             : scenario.Id.Trim();
+
+    private static IReadOnlyList<ManagedModuleBenchmarkEngine> ResolveEngines(ManagedModuleBenchmarkRequest request)
+        => request.Engines
+            .Distinct()
+            .ToArray();
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
