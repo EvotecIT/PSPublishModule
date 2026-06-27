@@ -44,9 +44,11 @@ public sealed class ManagedModuleUpdateService
         var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
         var currentVersion = installedVersions.LastOrDefault();
-        var targetWouldWrite = currentVersion is null ||
-                               request.Force ||
-                               ManagedModuleVersionComparer.Instance.Compare(currentVersion, targetVersion) < 0;
+        var currentModulePath = currentVersion is null ? null : Path.Combine(moduleRoot, request.Name.Trim(), currentVersion);
+        var sourceEvaluation = EvaluateSourcePolicy(request, currentModulePath);
+        var action = ResolvePlanAction(currentVersion, targetVersion, request.Force, sourceEvaluation);
+        ThrowIfSourcePolicyBlocked(action, sourceEvaluation);
+        var targetWouldWrite = ActionWritesFiles(action);
         var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, cancellationToken).ConfigureAwait(false);
         ThrowIfFamilyPlanBlocked(familyActions);
 
@@ -68,6 +70,9 @@ public sealed class ManagedModuleUpdateService
                 ModuleRoot = moduleRoot,
                 ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), currentVersion!),
                 Elapsed = stopwatch.Elapsed,
+                SourcePolicySatisfied = sourceEvaluation.IsSatisfied,
+                SourcePolicyReason = sourceEvaluation.Reason,
+                InstalledReceipt = sourceEvaluation.Receipt,
                 FamilyResults = MapFamilyResults(familyActions)
             };
         }
@@ -89,9 +94,7 @@ public sealed class ManagedModuleUpdateService
             Name = request.Name.Trim(),
             TargetVersion = targetVersion,
             PreviousVersion = currentVersion,
-            Status = targetWouldWrite
-                ? currentVersion is null ? ManagedModuleUpdateStatus.InstalledMissing : ManagedModuleUpdateStatus.Updated
-                : ManagedModuleUpdateStatus.UpToDate,
+            Status = ResolveUpdateStatus(action),
             RepositoryName = request.Repository.Name,
             RepositorySource = request.Repository.Source,
             RequestedVersion = request.Version,
@@ -104,6 +107,9 @@ public sealed class ManagedModuleUpdateService
             InstallResult = install,
             Receipt = install?.Receipt,
             ReceiptPath = install?.ReceiptPath,
+            SourcePolicySatisfied = sourceEvaluation.IsSatisfied,
+            SourcePolicyReason = sourceEvaluation.Reason,
+            InstalledReceipt = sourceEvaluation.Receipt,
             FamilyResults = familyResults
         };
     }
@@ -124,9 +130,11 @@ public sealed class ManagedModuleUpdateService
         var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
         var currentVersion = installedVersions.LastOrDefault();
-        var action = ResolvePlanAction(currentVersion, targetVersion, request.Force);
+        var currentModulePath = currentVersion is null ? null : Path.Combine(moduleRoot, request.Name.Trim(), currentVersion);
+        var sourceEvaluation = EvaluateSourcePolicy(request, currentModulePath);
+        var action = ResolvePlanAction(currentVersion, targetVersion, request.Force, sourceEvaluation);
         var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, cancellationToken).ConfigureAwait(false);
-        var selectedPathVersion = action == ManagedModuleUpdatePlanAction.SkipUpToDate && currentVersion is not null
+        var selectedPathVersion = action is ManagedModuleUpdatePlanAction.SkipUpToDate or ManagedModuleUpdatePlanAction.SourceMismatchBlocked && currentVersion is not null
             ? currentVersion
             : targetVersion;
 
@@ -141,12 +149,15 @@ public sealed class ManagedModuleUpdateService
             RepositorySource = request.Repository.Source,
             ModuleRoot = moduleRoot,
             ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), selectedPathVersion),
-            WouldWriteFiles = action != ManagedModuleUpdatePlanAction.SkipUpToDate ||
+            WouldWriteFiles = ActionWritesFiles(action) ||
                               familyActions.Any(static familyAction => familyAction.WouldWriteFiles),
             RequestedVersion = request.Version,
             MinimumVersion = request.MinimumVersion,
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
+            SourcePolicySatisfied = sourceEvaluation.IsSatisfied,
+            SourcePolicyReason = sourceEvaluation.Reason,
+            InstalledReceipt = sourceEvaluation.Receipt,
             FamilyActions = familyActions
         };
     }
@@ -348,16 +359,89 @@ public sealed class ManagedModuleUpdateService
     private static ManagedModuleUpdatePlanAction ResolvePlanAction(
         string? currentVersion,
         string targetVersion,
-        bool force)
+        bool force,
+        SourcePolicyEvaluation sourceEvaluation)
     {
         if (currentVersion is null)
             return ManagedModuleUpdatePlanAction.InstallMissing;
 
         var comparison = ManagedModuleVersionComparer.Instance.Compare(currentVersion, targetVersion);
-        if (comparison >= 0)
-            return force ? ManagedModuleUpdatePlanAction.Reinstall : ManagedModuleUpdatePlanAction.SkipUpToDate;
+        if (comparison == 0)
+        {
+            if (force)
+                return ManagedModuleUpdatePlanAction.Reinstall;
+            return sourceEvaluation.IsSatisfied
+                ? ManagedModuleUpdatePlanAction.SkipUpToDate
+                : ManagedModuleUpdatePlanAction.RepairSource;
+        }
+        if (comparison > 0)
+            return sourceEvaluation.IsSatisfied
+                ? ManagedModuleUpdatePlanAction.SkipUpToDate
+                : ManagedModuleUpdatePlanAction.SourceMismatchBlocked;
 
         return ManagedModuleUpdatePlanAction.Update;
+    }
+
+    private static bool ActionWritesFiles(ManagedModuleUpdatePlanAction action)
+        => action is ManagedModuleUpdatePlanAction.InstallMissing
+            or ManagedModuleUpdatePlanAction.Update
+            or ManagedModuleUpdatePlanAction.Reinstall
+            or ManagedModuleUpdatePlanAction.RepairSource;
+
+    private static ManagedModuleUpdateStatus ResolveUpdateStatus(ManagedModuleUpdatePlanAction action)
+        => action switch
+        {
+            ManagedModuleUpdatePlanAction.InstallMissing => ManagedModuleUpdateStatus.InstalledMissing,
+            ManagedModuleUpdatePlanAction.RepairSource => ManagedModuleUpdateStatus.SourceRepaired,
+            ManagedModuleUpdatePlanAction.SkipUpToDate => ManagedModuleUpdateStatus.UpToDate,
+            _ => ManagedModuleUpdateStatus.Updated
+        };
+
+    private static void ThrowIfSourcePolicyBlocked(
+        ManagedModuleUpdatePlanAction action,
+        SourcePolicyEvaluation sourceEvaluation)
+    {
+        if (action != ManagedModuleUpdatePlanAction.SourceMismatchBlocked)
+            return;
+
+        throw new InvalidOperationException(
+            $"Managed module source policy cannot be repaired safely without an explicit downgrade: {sourceEvaluation.Reason}");
+    }
+
+    private SourcePolicyEvaluation EvaluateSourcePolicy(ManagedModuleUpdateRequest request, string? modulePath)
+    {
+        if (request.SourcePolicy is null || string.IsNullOrWhiteSpace(modulePath))
+            return SourcePolicyEvaluation.Satisfied();
+
+        var receipt = _receiptStore.TryReadReceipt(modulePath!);
+        if (receipt is null)
+        {
+            return request.SourcePolicy.RequireManagedReceipt
+                ? SourcePolicyEvaluation.Failed("No managed module receipt was found for the installed version.", null)
+                : SourcePolicyEvaluation.Satisfied();
+        }
+
+        if (request.SourcePolicy.RequireRepositoryNameMatch &&
+            !receipt.RepositoryName.Equals(request.Repository.Name, StringComparison.OrdinalIgnoreCase))
+            return SourcePolicyEvaluation.Failed($"Receipt repository name '{receipt.RepositoryName}' does not match requested repository '{request.Repository.Name}'.", receipt);
+
+        if (request.SourcePolicy.RequireRepositorySourceMatch &&
+            !NormalizeRepositorySource(receipt.RepositorySource).Equals(NormalizeRepositorySource(request.Repository.Source), StringComparison.OrdinalIgnoreCase))
+            return SourcePolicyEvaluation.Failed("Receipt repository source does not match the requested repository source.", receipt);
+
+        return SourcePolicyEvaluation.Satisfied(receipt);
+    }
+
+    private static string NormalizeRepositorySource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return string.Empty;
+
+        var trimmed = source!.Trim().Trim('"');
+        if (Path.IsPathRooted(trimmed))
+            return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return trimmed.TrimEnd('/', '\\');
     }
 
     private static ManagedModuleFamilyUpdatePlanAction ResolveFamilyPlanAction(
@@ -497,4 +581,26 @@ public sealed class ManagedModuleUpdateService
         => string.IsNullOrWhiteSpace(versionPolicy)
             ? ManagedModuleVersionRange.FromBounds(minimumVersion, maximumVersion)
             : ManagedModuleVersionRange.Parse(versionPolicy);
+
+    private sealed class SourcePolicyEvaluation
+    {
+        private SourcePolicyEvaluation(bool isSatisfied, string? reason, ManagedModuleReceipt? receipt)
+        {
+            IsSatisfied = isSatisfied;
+            Reason = reason;
+            Receipt = receipt;
+        }
+
+        public bool IsSatisfied { get; }
+
+        public string? Reason { get; }
+
+        public ManagedModuleReceipt? Receipt { get; }
+
+        public static SourcePolicyEvaluation Satisfied(ManagedModuleReceipt? receipt = null)
+            => new(true, null, receipt);
+
+        public static SourcePolicyEvaluation Failed(string reason, ManagedModuleReceipt? receipt)
+            => new(false, reason, receipt);
+    }
 }

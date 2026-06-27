@@ -96,6 +96,11 @@ public sealed class ManagedModuleUpdateRequest
     public ManagedModuleFamilyPolicy? FamilyPolicy { get; set; }
 
     /// <summary>
+    /// Optional source policy used to require managed receipt evidence from the requested repository.
+    /// </summary>
+    public ManagedModuleSourcePolicy? SourcePolicy { get; set; }
+
+    /// <summary>
     /// Allow update when the requested module is already loaded in the current session.
     /// </summary>
     public bool AllowLoadedModuleUpdate { get; set; }
