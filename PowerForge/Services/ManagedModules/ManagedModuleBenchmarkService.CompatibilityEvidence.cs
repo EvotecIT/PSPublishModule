@@ -4,6 +4,8 @@ public sealed partial class ManagedModuleBenchmarkService
 {
     private sealed class CompatibilityEvidence
     {
+        internal string? ExpectedVersion { get; set; }
+
         internal string? ModulePath { get; set; }
 
         internal int FileCount { get; set; }
@@ -23,6 +25,7 @@ public sealed partial class ManagedModuleBenchmarkService
     {
         var evidence = new CompatibilityEvidence
         {
+            ExpectedVersion = result.ResolvedVersion,
             FinalDiskBytes = MeasureDirectoryBytes(scenario.ModuleRoot)
         };
         var manifest = FindCompatibilityManifest(scenario.ModuleRoot, scenario.Name, result.ResolvedVersion);
@@ -49,6 +52,33 @@ public sealed partial class ManagedModuleBenchmarkService
             : "Native-installed manifest version " + evidence.ValidatedVersion + " does not match expected " + result.ResolvedVersion + ".";
         return evidence;
     }
+
+    private static CompatibilityEvidence CreateFailedRunEvidence(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        Exception exception)
+    {
+        if (engine == ManagedModuleBenchmarkEngine.Managed ||
+            scenario.Operation is not (ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update))
+        {
+            return new CompatibilityEvidence();
+        }
+
+        var expectedVersion = ResolveExpectedCompatibilityVersion(scenario);
+        return CreateCompatibilityEvidence(
+            scenario,
+            new ModuleDependencyInstallResult(
+                scenario.Name,
+                installedVersion: null,
+                resolvedVersion: expectedVersion,
+                requestedVersion: expectedVersion,
+                ModuleDependencyInstallStatus.Failed,
+                engine.ToString(),
+                exception.GetBaseException().Message));
+    }
+
+    private static string? ResolveExpectedCompatibilityVersion(ManagedModuleBenchmarkScenario scenario)
+        => string.IsNullOrWhiteSpace(scenario.Version) ? null : scenario.Version;
 
     private static FileInfo? FindCompatibilityManifest(string? sandboxRoot, string moduleName, string? resolvedVersion)
     {

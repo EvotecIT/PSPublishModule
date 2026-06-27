@@ -152,6 +152,8 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
     {
         if (string.IsNullOrWhiteSpace(repositoryName))
             return;
+        if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
+            return;
 
         var source = scenario.Repository.Source;
         if (string.IsNullOrWhiteSpace(source))
@@ -251,7 +253,7 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
     private static string? ResolveRepositoryName(ManagedModuleBenchmarkScenario scenario)
     {
         var name = scenario.Repository?.Name?.Trim();
-        return string.Equals(name, "PSGallery", StringComparison.OrdinalIgnoreCase) ? null : name;
+        return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
     private static string? BuildPSResourceVersionArgument(ManagedModuleBenchmarkScenario scenario)

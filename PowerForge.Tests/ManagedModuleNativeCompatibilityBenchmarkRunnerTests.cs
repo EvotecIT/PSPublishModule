@@ -35,6 +35,7 @@ public sealed class ManagedModuleNativeCompatibilityBenchmarkRunnerTests
         Assert.Single(requests);
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
         Assert.Equal(moduleRoot.Path, requests[0].WorkingDirectory);
+        Assert.Contains("PSGallery", requests[0].Arguments);
         if (Path.DirectorySeparatorChar == '\\')
         {
             Assert.Contains("powershell.exe", requests[0].ExecutableOverride!, StringComparison.OrdinalIgnoreCase);

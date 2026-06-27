@@ -804,7 +804,9 @@ public sealed partial class ManagedModuleBenchmarkService
         int iteration,
         TimeSpan elapsed,
         Exception exception)
-        => new()
+    {
+        var evidence = CreateFailedRunEvidence(scenario, engine, exception);
+        return new ManagedModuleBenchmarkRunResult
         {
             ScenarioId = ResolveScenarioId(scenario),
             Operation = scenario.Operation,
@@ -813,9 +815,18 @@ public sealed partial class ManagedModuleBenchmarkService
             Succeeded = false,
             Status = "Failed",
             ModuleName = scenario.Name,
+            Version = evidence.ExpectedVersion,
+            ModuleRoot = scenario.ModuleRoot,
+            ModulePath = evidence.ModulePath,
+            FileCount = evidence.FileCount,
+            FinalDiskBytes = evidence.FinalDiskBytes,
+            ValidatedVersion = evidence.ValidatedVersion,
+            VersionValidationSucceeded = evidence.VersionValidationSucceeded,
+            VersionValidationMessage = evidence.VersionValidationMessage,
             Elapsed = elapsed,
             ErrorMessage = exception.GetBaseException().Message
         };
+    }
 
     private static void Validate(ManagedModuleBenchmarkRequest request)
     {
