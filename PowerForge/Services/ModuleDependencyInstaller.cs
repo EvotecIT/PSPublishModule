@@ -118,6 +118,13 @@ public sealed partial class ModuleDependencyInstaller
 
                 if (!currentDecision.NeedsInstall)
                 {
+                    if (RequiresScopedInstall(dep) && !CanUseScopedDependencyProbe(dep))
+                    {
+                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, perModuleTimeout);
+                        actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
+                        continue;
+                    }
+
                     if (RequiresScopedInstall(dep) && !HasInstalledModuleSatisfyingDependency(dep))
                     {
                         var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, perModuleTimeout);
@@ -168,7 +175,12 @@ public sealed partial class ModuleDependencyInstaller
         var installedBefore = before.TryGetValue(dependency.Name, out var version) ? version : null;
         var decision = Decide(dependency, installedBefore, force);
         if (!decision.NeedsInstall)
-            return RequiresScopedInstall(dependency) && !HasInstalledModuleSatisfyingDependency(dependency);
+        {
+            if (!RequiresScopedInstall(dependency))
+                return false;
+
+            return !CanUseScopedDependencyProbe(dependency) || !HasInstalledModuleSatisfyingDependency(dependency);
+        }
 
         var requiredVersion = dependency.RequiredVersion?.Trim();
         if (!force &&
@@ -309,7 +321,7 @@ public sealed partial class ModuleDependencyInstaller
                 }
                 else
                 {
-                    var updateStatus = RequiresScopedInstall(dep) && !HasInstalledModuleSatisfyingDependency(dep)
+                    var updateStatus = RequiresScopedInstall(dep) && (!CanUseScopedDependencyProbe(dep) || !HasInstalledModuleSatisfyingDependency(dep))
                         ? TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet, perModuleTimeout)
                         : HasVersionConstraint(dep)
                         ? TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet, perModuleTimeout)
@@ -718,6 +730,13 @@ public sealed partial class ModuleDependencyInstaller
 
     private static bool CanUseExactVersionProbe(string requiredVersion)
         => !(ModuleStateVersion.TryParse(requiredVersion, out var version) && version.IsPrerelease);
+
+    private static bool CanUseScopedDependencyProbe(ModuleDependency dependency)
+        => !ContainsPrereleaseBoundary(dependency.MinimumVersion) &&
+           !ContainsPrereleaseBoundary(dependency.MaximumVersion);
+
+    private static bool ContainsPrereleaseBoundary(string? version)
+        => ModuleStateVersion.TryParse(version, out var parsed) && parsed.IsPrerelease;
 
     private static bool RequiresPSResourceGetVersionRange(ModuleDependency dep)
         => string.IsNullOrWhiteSpace(dep.RequiredVersion) &&

@@ -165,6 +165,35 @@ public sealed class ModuleStateInventoryServiceTests
     }
 
     [Fact]
+    public void Collect_DiscoversFlatBinaryOnlyModules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleDirectory = Path.Combine(root.FullName, "Company.FlatBinary");
+            Directory.CreateDirectory(moduleDirectory);
+            File.WriteAllBytes(Path.Combine(moduleDirectory, "Company.FlatBinary.dll"), Array.Empty<byte>());
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            var module = Assert.Single(inventory.InstalledModules);
+            Assert.Equal("Company.FlatBinary", module.Name);
+            Assert.Equal("0.0", module.Version);
+            Assert.Equal("Core", module.PowerShellEdition);
+            Assert.Equal("CurrentUser", module.Scope);
+            Assert.True(module.IsEffectiveImportCandidate);
+            Assert.EndsWith("Company.FlatBinary", module.Path!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Collect_SkipsMissingModuleRoots()
     {
         var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
