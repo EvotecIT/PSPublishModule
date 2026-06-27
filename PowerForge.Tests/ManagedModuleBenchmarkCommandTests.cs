@@ -11,6 +11,9 @@ public sealed class ManagedModuleBenchmarkCommandTests
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
+        using var reportRoot = new TemporaryDirectory();
+        var jsonPath = Path.Combine(reportRoot.Path, "benchmark.json");
+        var markdownPath = Path.Combine(reportRoot.Path, "benchmark.md");
         TestPackageFactory.Create(
             Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
             "Company.Tools",
@@ -24,7 +27,9 @@ public sealed class ManagedModuleBenchmarkCommandTests
             .AddParameter("Repository", feed.Path)
             .AddParameter("RepositoryName", "Local")
             .AddParameter("ModuleRoot", moduleRoot.Path)
-            .AddParameter("Version", "1.0.0");
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("ReportPath", jsonPath)
+            .AddParameter("MarkdownReportPath", markdownPath);
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
@@ -36,6 +41,9 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.Equal("1.0.0", run.Version);
         Assert.True(run.PackageBytes > 0);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+        Assert.Contains("\"ScenarioId\": \"Install:Company.Tools\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
+        Assert.Contains("# Managed Module Benchmark Report", File.ReadAllText(markdownPath), StringComparison.Ordinal);
+        Assert.Contains("Install:Company.Tools", File.ReadAllText(markdownPath), StringComparison.Ordinal);
     }
 
     private static PowerShell CreatePowerShellWithModuleImported()

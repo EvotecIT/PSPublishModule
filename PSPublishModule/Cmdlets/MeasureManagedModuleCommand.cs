@@ -133,11 +133,23 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter StopOnError { get; set; }
 
+    /// <summary>Optional JSON report path for benchmark evidence.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ReportPath { get; set; }
+
+    /// <summary>Optional Markdown report path for benchmark evidence.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? MarkdownReportPath { get; set; }
+
     /// <summary>Runs the requested benchmark scenarios.</summary>
     protected override void ProcessRecord()
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
         var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
+        var reportPath = ManagedModuleCommandSupport.ResolveProviderPath(this, ReportPath);
+        var markdownReportPath = ManagedModuleCommandSupport.ResolveProviderPath(this, MarkdownReportPath);
         var repository = ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository);
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var scenarios = Name
@@ -158,7 +170,20 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
                 ContinueOnError = !StopOnError.IsPresent
             }).GetAwaiter().GetResult();
 
+        WriteReports(result, reportPath, markdownReportPath);
         WriteObject(result);
+    }
+
+    private void WriteReports(ManagedModuleBenchmarkResult result, string? reportPath, string? markdownReportPath)
+    {
+        if (string.IsNullOrWhiteSpace(reportPath) && string.IsNullOrWhiteSpace(markdownReportPath))
+            return;
+
+        var writer = new ManagedModuleBenchmarkReportWriter();
+        if (!string.IsNullOrWhiteSpace(reportPath) && ShouldProcess(reportPath, "Write managed module benchmark JSON report"))
+            writer.WriteJson(reportPath!, result);
+        if (!string.IsNullOrWhiteSpace(markdownReportPath) && ShouldProcess(markdownReportPath, "Write managed module benchmark Markdown report"))
+            writer.WriteMarkdown(markdownReportPath!, result);
     }
 
     private ManagedModuleBenchmarkScenario CreateScenario(
