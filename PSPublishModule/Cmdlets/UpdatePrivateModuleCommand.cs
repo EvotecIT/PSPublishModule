@@ -114,10 +114,56 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public string? JFrogRepository { get; set; }
 
-    /// <summary>Optional repository name override when Azure Artifacts details are supplied.</summary>
+    /// <summary>Optional repository name override when repository details are supplied.</summary>
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
+    [ValidateNotNullOrEmpty]
     public string? RepositoryName { get; set; }
+
+    /// <summary>Delivery engine used for module update.</summary>
+    [Parameter]
+    public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
+
+    /// <summary>Exact target version. When omitted, the latest repository version is used.</summary>
+    [Parameter]
+    [Alias("RequiredVersion")]
+    [ValidateNotNullOrEmpty]
+    public string? Version { get; set; }
+
+    /// <summary>Minimum target version when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? MinimumVersion { get; set; }
+
+    /// <summary>Maximum target version when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? MaximumVersion { get; set; }
+
+    /// <summary>NuGet-style version range policy used by the managed transport when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? VersionPolicy { get; set; }
+
+    /// <summary>Scope inspected by managed delivery, or by compatibility delivery when explicitly supplied.</summary>
+    [Parameter]
+    public ManagedModuleInstallScope Scope { get; set; } = ManagedModuleInstallScope.CurrentUser;
+
+    /// <summary>PowerShell path family used when managed delivery resolves default module roots.</summary>
+    [Parameter]
+    public ManagedModuleShellEdition ShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
+
+    /// <summary>Explicit module root used by managed delivery.</summary>
+    [Parameter]
+    [Alias("Path")]
+    [ValidateNotNullOrEmpty]
+    public string? ModuleRoot { get; set; }
+
+    /// <summary>Optional managed package cache directory.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? PackageCacheDirectory { get; set; }
 
     /// <summary>Registration strategy used when Azure Artifacts details are supplied. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
@@ -177,6 +223,31 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Prerelease { get; set; }
 
+    /// <summary>Reinstall the selected target version when managed delivery is used.</summary>
+    [Parameter]
+    public SwitchParameter Force { get; set; }
+
+    /// <summary>Allow command exports to overlap with other modules in the managed target root.</summary>
+    [Parameter]
+    public SwitchParameter AllowClobber { get; set; }
+
+    /// <summary>Accept package licenses when packages declare license acceptance is required.</summary>
+    [Parameter]
+    public SwitchParameter AcceptLicense { get; set; }
+
+    /// <summary>Skip installing dependencies declared by the package when managed delivery is used.</summary>
+    [Parameter]
+    [Alias("SkipDependenciesCheck")]
+    public SwitchParameter SkipDependencyCheck { get; set; }
+
+    /// <summary>Require managed receipt source evidence to match the requested repository before reporting up to date.</summary>
+    [Parameter]
+    public SwitchParameter RequireSourceMatch { get; set; }
+
+    /// <summary>Allow updating even when matching loaded module evidence is supplied to managed delivery.</summary>
+    [Parameter]
+    public SwitchParameter AllowLoadedModuleUpdate { get; set; }
+
     /// <summary>Executes the update workflow.</summary>
     protected override void ProcessRecord()
     {
@@ -188,7 +259,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
         var feed = AzureArtifactsFeed;
         var repositoryName = ParameterSetName == ParameterSetAzureArtifacts || ParameterSetName == ParameterSetMicrosoftArtifactRegistry
             ? (RepositoryName ?? string.Empty)
-            : Repository;
+            : RepositoryName ?? Repository;
         var tool = Tool;
         var bootstrapMode = BootstrapMode;
         var trusted = Trusted;
@@ -256,7 +327,22 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
                 CredentialSecretFilePath = CredentialSecretFilePath,
                 PromptForCredential = PromptForCredential,
                 InstallPrerequisites = InstallPrerequisites,
-                Prerelease = Prerelease
+                Prerelease = Prerelease,
+                Force = Force,
+                DeliveryTransport = Transport,
+                VersionPolicy = VersionPolicy,
+                ManagedScope = Scope,
+                ManagedShellEdition = ShellEdition,
+                ManagedModuleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
+                ManagedPackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                ManagedRepositorySource = Transport == ModuleStateDeliveryTransport.ManagedModule && ParameterSetName == ParameterSetRepository
+                    ? PrivateModuleCommandSupport.ResolveManagedRepositorySource(this, Repository)
+                    : null,
+                ManagedAllowClobber = AllowClobber,
+                ManagedAcceptLicense = AcceptLicense,
+                ManagedSkipDependencyCheck = SkipDependencyCheck,
+                ManagedRequireSourceMatch = RequireSourceMatch,
+                ManagedAllowLoadedModuleUpdate = AllowLoadedModuleUpdate
             },
             (target, action) => ShouldProcess(target, action));
 

@@ -46,9 +46,21 @@ internal sealed class PrivateModuleWorkflowService
         var preferPowerShellGet = false;
         var usePrivateGallery = request.UseAzureArtifacts;
         var useMicrosoftArtifactRegistry = request.UseMicrosoftArtifactRegistry;
+        var managedRepositorySource = request.ManagedRepositorySource;
 
         if (usePrivateGallery && useMicrosoftArtifactRegistry)
             throw new ArgumentException("Choose either a private gallery provider or Microsoft Artifact Registry, not both.", nameof(request));
+
+        if (request.DeliveryTransport == ModuleStateDeliveryTransport.PrivateModule)
+        {
+            if (!string.IsNullOrWhiteSpace(request.VersionPolicy))
+            {
+                throw new InvalidOperationException(
+                    "VersionPolicy requires -Transport ManagedModule. The private-module compatibility transport supports RequiredVersion, MinimumVersion, and MaximumVersion.");
+            }
+
+            ThrowIfManagedOnlyOptionsRequested(request);
+        }
 
         if (usePrivateGallery)
         {
@@ -66,6 +78,7 @@ internal sealed class PrivateModuleWorkflowService
                 request.RepositoryPublishUri,
                 request.JFrogBaseUri,
                 request.JFrogRepository);
+            managedRepositorySource = endpoint.PSResourceGetUri;
             var prerequisiteInstall = _privateGalleryService.EnsureBootstrapPrerequisites(
                 request.InstallPrerequisites,
                 request.BootstrapMode,
@@ -171,6 +184,7 @@ internal sealed class PrivateModuleWorkflowService
             registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
             registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
             repositoryName = registration.RepositoryName;
+            managedRepositorySource = registration.PSResourceGetUri;
 
             if (!registration.RegistrationPerformed)
             {
@@ -221,6 +235,17 @@ internal sealed class PrivateModuleWorkflowService
                 request.PromptForCredential);
         }
 
+        if (request.DeliveryTransport == ModuleStateDeliveryTransport.ManagedModule)
+        {
+            var managedResults = ExecuteManagedDependencies(request, modules, repositoryName, managedRepositorySource, credential);
+            return new PrivateModuleWorkflowResult
+            {
+                OperationPerformed = true,
+                RepositoryName = repositoryName,
+                DependencyResults = managedResults
+            };
+        }
+
         var results = _dependencyExecutor(new PrivateModuleDependencyExecutionRequest
         {
             Operation = request.Operation,
@@ -238,6 +263,165 @@ internal sealed class PrivateModuleWorkflowService
             RepositoryName = repositoryName,
             DependencyResults = results
         };
+    }
+
+    private IReadOnlyList<ModuleDependencyInstallResult> ExecuteManagedDependencies(
+        PrivateModuleWorkflowRequest request,
+        IReadOnlyList<ModuleDependency> modules,
+        string repositoryName,
+        string? repositorySource,
+        RepositoryCredential? credential)
+    {
+        if (string.IsNullOrWhiteSpace(repositorySource))
+        {
+            throw new InvalidOperationException(
+                "Managed private module delivery requires a repository source URI or local feed path. Use RepositoryUri/RepositorySourceUri, a saved profile with a source URI, or pass a local/URI Repository value.");
+        }
+
+        var repository = new ManagedModuleRepository(repositoryName, repositorySource!);
+        var installService = new ManagedModuleInstallService(_logger);
+        var updateService = new ManagedModuleUpdateService(_logger);
+        var results = new List<ModuleDependencyInstallResult>(modules.Count);
+        foreach (var module in modules)
+        {
+            results.Add(request.Operation == PrivateModuleWorkflowOperation.Install
+                ? ExecuteManagedInstall(request, module, repository, credential, installService)
+                : ExecuteManagedUpdate(request, module, repository, credential, updateService));
+        }
+
+        return results;
+    }
+
+    private static ModuleDependencyInstallResult ExecuteManagedInstall(
+        PrivateModuleWorkflowRequest workflow,
+        ModuleDependency module,
+        ManagedModuleRepository repository,
+        RepositoryCredential? credential,
+        ManagedModuleInstallService installService)
+    {
+        var result = installService.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = repository,
+            Name = module.Name,
+            Version = module.RequiredVersion,
+            MinimumVersion = module.MinimumVersion,
+            MaximumVersion = module.MaximumVersion,
+            VersionPolicy = workflow.VersionPolicy,
+            IncludePrerelease = workflow.Prerelease,
+            Scope = ResolveManagedScope(workflow),
+            ShellEdition = workflow.ManagedShellEdition,
+            ModuleRoot = workflow.ManagedModuleRoot,
+            PackageCacheDirectory = workflow.ManagedPackageCacheDirectory,
+            Credential = credential,
+            Force = workflow.Force,
+            AllowClobber = workflow.ManagedAllowClobber,
+            AcceptLicense = workflow.ManagedAcceptLicense,
+            SkipDependencyCheck = workflow.ManagedSkipDependencyCheck
+        }).GetAwaiter().GetResult();
+
+        return MapInstallResult(result);
+    }
+
+    private static ModuleDependencyInstallResult ExecuteManagedUpdate(
+        PrivateModuleWorkflowRequest workflow,
+        ModuleDependency module,
+        ManagedModuleRepository repository,
+        RepositoryCredential? credential,
+        ManagedModuleUpdateService updateService)
+    {
+        var result = updateService.UpdateAsync(new ManagedModuleUpdateRequest
+        {
+            Repository = repository,
+            Name = module.Name,
+            Version = module.RequiredVersion,
+            MinimumVersion = module.MinimumVersion,
+            MaximumVersion = module.MaximumVersion,
+            VersionPolicy = workflow.VersionPolicy,
+            IncludePrerelease = workflow.Prerelease,
+            Scope = ResolveManagedScope(workflow),
+            ShellEdition = workflow.ManagedShellEdition,
+            ModuleRoot = workflow.ManagedModuleRoot,
+            PackageCacheDirectory = workflow.ManagedPackageCacheDirectory,
+            Credential = credential,
+            Force = workflow.Force,
+            AllowClobber = workflow.ManagedAllowClobber,
+            AcceptLicense = workflow.ManagedAcceptLicense,
+            SkipDependencyCheck = workflow.ManagedSkipDependencyCheck,
+            SourcePolicy = workflow.ManagedRequireSourceMatch ? new ManagedModuleSourcePolicy() : null,
+            AllowLoadedModuleUpdate = workflow.ManagedAllowLoadedModuleUpdate
+        }).GetAwaiter().GetResult();
+
+        return MapUpdateResult(result);
+    }
+
+    private static ManagedModuleInstallScope ResolveManagedScope(PrivateModuleWorkflowRequest workflow)
+        => string.IsNullOrWhiteSpace(workflow.ManagedModuleRoot)
+            ? workflow.ManagedScope
+            : ManagedModuleInstallScope.Custom;
+
+    private static ModuleDependencyInstallResult MapInstallResult(ManagedModuleInstallResult result)
+        => new(
+            result.Name,
+            result.Status == ManagedModuleInstallStatus.AlreadyInstalled ? result.Version : null,
+            result.Version,
+            ResolveRequestedVersion(result.RequestedVersion, result.MinimumVersion, result.MaximumVersion, result.VersionPolicy),
+            result.Status == ManagedModuleInstallStatus.AlreadyInstalled
+                ? ModuleDependencyInstallStatus.Satisfied
+                : ModuleDependencyInstallStatus.Installed,
+            "ManagedModule",
+            null);
+
+    private static ModuleDependencyInstallResult MapUpdateResult(ManagedModuleUpdateResult result)
+        => new(
+            result.Name,
+            result.PreviousVersion,
+            result.TargetVersion,
+            ResolveRequestedVersion(result.RequestedVersion, result.MinimumVersion, result.MaximumVersion, result.VersionPolicy),
+            result.Status switch
+            {
+                ManagedModuleUpdateStatus.UpToDate => ModuleDependencyInstallStatus.Satisfied,
+                ManagedModuleUpdateStatus.InstalledMissing => ModuleDependencyInstallStatus.Installed,
+                _ => ModuleDependencyInstallStatus.Updated
+            },
+            "ManagedModule",
+            result.SourcePolicyReason);
+
+    private static string? ResolveRequestedVersion(string? exact, string? minimum, string? maximum, string? policy)
+    {
+        if (!string.IsNullOrWhiteSpace(exact))
+            return exact;
+        if (!string.IsNullOrWhiteSpace(policy))
+            return policy;
+        if (!string.IsNullOrWhiteSpace(minimum) || !string.IsNullOrWhiteSpace(maximum))
+            return $"{minimum ?? string.Empty}..{maximum ?? string.Empty}";
+        return null;
+    }
+
+    private static void ThrowIfManagedOnlyOptionsRequested(PrivateModuleWorkflowRequest request)
+    {
+        var managedOnly = new List<string>();
+        if (!string.IsNullOrWhiteSpace(request.ManagedModuleRoot))
+            managedOnly.Add("ModuleRoot");
+        if (!string.IsNullOrWhiteSpace(request.ManagedPackageCacheDirectory))
+            managedOnly.Add("PackageCacheDirectory");
+        if (!string.IsNullOrWhiteSpace(request.ManagedRepositorySource))
+            managedOnly.Add("Repository source URI/path");
+        if (request.ManagedAllowClobber)
+            managedOnly.Add("AllowClobber");
+        if (request.ManagedAcceptLicense)
+            managedOnly.Add("AcceptLicense");
+        if (request.ManagedSkipDependencyCheck)
+            managedOnly.Add("SkipDependencyCheck");
+        if (request.ManagedRequireSourceMatch)
+            managedOnly.Add("RequireSourceMatch");
+        if (request.ManagedAllowLoadedModuleUpdate)
+            managedOnly.Add("AllowLoadedModuleUpdate");
+
+        if (managedOnly.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"{string.Join(", ", managedOnly)} requires -Transport ManagedModule.");
     }
 
     private IReadOnlyList<ModuleDependencyInstallResult> ExecuteDependencies(PrivateModuleDependencyExecutionRequest request)
