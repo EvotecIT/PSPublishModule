@@ -23,7 +23,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Introduce `Save-ManagedModule`.
 - [x] Introduce `Install-ManagedModule`.
 - [x] Introduce `Update-ManagedModule`.
-- [ ] Introduce `Publish-ManagedModule`.
+- [x] Introduce `Publish-ManagedModule`.
 - [ ] Decide whether `Get-ManagedModule` is needed or whether `Get-ModuleState` remains the inventory surface.
 - [ ] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
 - [ ] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to `Install-ManagedModule`.
@@ -187,9 +187,9 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 8: Managed Publish
 
-- [ ] Implement module folder validation in C#.
-- [ ] Implement module package creation in C#.
-- [ ] Implement nuspec generation or preservation.
+- [x] Implement module folder validation in C#.
+- [x] Implement module package creation in C#.
+- [x] Implement nuspec generation or preservation.
 - [ ] Implement publish to NuGet v3-compatible feeds.
 - [ ] Implement PSGallery publish.
 - [ ] Implement private-feed publish with API key.
@@ -201,7 +201,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Integrate with required-module mirroring.
 - [ ] Emit typed publish result objects.
 - [ ] Add Spectre.Console summary output.
-- [ ] Add tests for package creation.
+- [x] Add tests for package creation.
 - [ ] Add tests for duplicate publish classification.
 - [ ] Add tests for private-feed publish request shaping.
 - [ ] Benchmark against `Publish-Module` and `Publish-PSResource`.
