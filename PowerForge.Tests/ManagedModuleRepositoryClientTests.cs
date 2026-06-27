@@ -87,6 +87,38 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_reads_local_folder_feed_with_wildcards()
+    {
+        using var temp = new TemporaryDirectory();
+        TestPackageFactory.Create(Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg"), "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(Path.Combine(temp.Path, "Company.Tools.1.1.0.nupkg"), "Company.Tools", "1.1.0");
+        TestPackageFactory.Create(Path.Combine(temp.Path, "Company.Core.2.0.0.nupkg"), "Company.Core", "2.0.0");
+        TestPackageFactory.Create(Path.Combine(temp.Path, "Other.Module.9.0.0.nupkg"), "Other.Module", "9.0.0");
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger());
+        var repository = new ManagedModuleRepository("Local", temp.Path);
+
+        var results = await repositoryClient.SearchPackagesAsync(repository, "Company.*");
+
+        Assert.Equal(new[] { "Company.Core", "Company.Tools" }, results.Select(result => result.Name));
+        Assert.Equal("1.1.0", results.Single(result => result.Name == "Company.Tools").Version);
+        Assert.All(results, result => Assert.Equal("Local", result.RepositoryName));
+    }
+
+    [Fact]
+    public async Task SearchPackagesAsync_uses_nuget_v3_search_query_service()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var results = await repositoryClient.SearchPackagesAsync(repository, "Company.*");
+
+        Assert.Equal(new[] { "Company.Core", "Company.Tools" }, results.Select(result => result.Name));
+        Assert.Contains(requests, request => request.Url == "https://example.test/search/?q=Company.&prerelease=false&take=100");
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_copies_package_from_local_folder_feed()
     {
         using var source = new TemporaryDirectory();
@@ -118,7 +150,10 @@ public sealed class ManagedModuleRepositoryClientTests
             _requests.Add(new RecordedRequest(uri.AbsoluteUri, request.Headers.Authorization));
 
             if (uri.AbsoluteUri == "https://example.test/v3/index.json")
-                return Json("{\"resources\":[{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}");
+                return Json("{\"resources\":[" +
+                            "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
+                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                            "]}");
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0-beta1\",\"1.1.0\"]}");
@@ -131,6 +166,13 @@ public sealed class ManagedModuleRepositoryClientTests
                     Content = new ByteArrayContent(bytes)
                 });
             }
+
+            if (uri.AbsoluteUri == "https://example.test/search/?q=Company.&prerelease=false&take=100")
+                return Json("{\"data\":[" +
+                            "{\"id\":\"Company.Tools\",\"version\":\"1.1.0\",\"listed\":true}," +
+                            "{\"id\":\"Company.Core\",\"version\":\"2.0.0\",\"listed\":true}," +
+                            "{\"id\":\"Other.Module\",\"version\":\"9.0.0\",\"listed\":true}" +
+                            "]}");
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }

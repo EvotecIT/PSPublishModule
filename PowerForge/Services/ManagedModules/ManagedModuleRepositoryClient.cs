@@ -15,6 +15,7 @@ public sealed class ManagedModuleRepositoryClient
     private readonly HttpClient _httpClient;
     private readonly ManagedModulePackageReader _packageReader;
     private readonly Dictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Creates a repository client.
@@ -54,6 +55,37 @@ public sealed class ManagedModuleRepositoryClient
         {
             ManagedModuleRepositoryKind.LocalFolder => GetLocalVersions(repository, packageId, includePrerelease),
             ManagedModuleRepositoryKind.NuGetV3 => await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
+            _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
+        };
+    }
+
+    /// <summary>
+    /// Searches package ids from the repository and returns the latest selected version per match.
+    /// </summary>
+    /// <param name="repository">Repository to query.</param>
+    /// <param name="query">Package id text or wildcard pattern.</param>
+    /// <param name="includePrerelease">Include prerelease versions.</param>
+    /// <param name="credential">Optional repository credential.</param>
+    /// <param name="take">Maximum number of results.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Latest selected package versions.</returns>
+    public async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchPackagesAsync(
+        ManagedModuleRepository repository,
+        string query,
+        bool includePrerelease = false,
+        RepositoryCredential? credential = null,
+        int take = 100,
+        CancellationToken cancellationToken = default)
+    {
+        if (repository is null)
+            throw new ArgumentNullException(nameof(repository));
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Search query is required.", nameof(query));
+
+        return repository.Kind switch
+        {
+            ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take),
+            ManagedModuleRepositoryKind.NuGetV3 => await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -184,6 +216,57 @@ public sealed class ManagedModuleRepositoryClient
             .ToArray();
     }
 
+    private IReadOnlyList<ManagedModuleVersionInfo> SearchLocalPackages(
+        ManagedModuleRepository repository,
+        string query,
+        bool includePrerelease,
+        int take)
+    {
+        var root = ResolveLocalFolder(repository.Source);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Managed module repository folder was not found: {root}");
+
+        return ReadLocalPackageVersions(repository, root, includePrerelease)
+            .Where(version => ManagedModuleSearchMatcher.IsMatch(query, version.Name))
+            .GroupBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance).Last())
+            .OrderBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(1, take))
+            .ToArray();
+    }
+
+    private async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchNuGetPackagesAsync(
+        ManagedModuleRepository repository,
+        string query,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        var searchService = await ResolveSearchQueryServiceAsync(repository, credential, cancellationToken).ConfigureAwait(false);
+        var searchText = ManagedModuleSearchMatcher.ToSearchText(query);
+        var uri = new Uri(
+            new Uri(EnsureTrailingSlash(searchService)),
+            $"?q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}");
+        using var request = CreateRequest(HttpMethod.Get, uri, credential, "application/json");
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Managed module search failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{query}' from {repository.Name}.");
+
+        using var stream = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException($"Repository '{repository.Name}' did not return a search data array.");
+
+        return data.EnumerateArray()
+            .Select(item => ReadSearchResult(repository, item))
+            .Where(version => version is not null && ManagedModuleSearchMatcher.IsMatch(query, version.Name))
+            .Select(static version => version!)
+            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(1, take))
+            .ToArray();
+    }
+
     private async Task<ManagedModuleDownloadResult> DownloadNuGetPackageAsync(
         ManagedModuleRepository repository,
         string packageId,
@@ -295,6 +378,48 @@ public sealed class ManagedModuleRepositoryClient
         throw new InvalidOperationException($"Repository '{repository.Name}' service index did not expose PackageBaseAddress.");
     }
 
+    private async Task<string> ResolveSearchQueryServiceAsync(
+        ManagedModuleRepository repository,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        if (_searchQueryServiceCache.TryGetValue(repository.Source, out var cached))
+            return cached;
+
+        if (!repository.Source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+        {
+            var flat = EnsureTrailingSlash(repository.Source);
+            _searchQueryServiceCache[repository.Source] = flat;
+            return flat;
+        }
+
+        using var request = CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json");
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
+
+        using var stream = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException($"Repository '{repository.Name}' service index did not include a resources array.");
+
+        foreach (var resource in resources.EnumerateArray())
+        {
+            if (!IsSearchQueryServiceResource(resource))
+                continue;
+
+            var id = resource.TryGetProperty("@id", out var idElement) ? idElement.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                var resolved = EnsureTrailingSlash(id!);
+                _searchQueryServiceCache[repository.Source] = resolved;
+                return resolved;
+            }
+        }
+
+        throw new InvalidOperationException($"Repository '{repository.Name}' service index did not expose SearchQueryService.");
+    }
+
     private static HttpRequestMessage CreateRequest(HttpMethod method, Uri uri, RepositoryCredential? credential, string accept)
     {
         var request = new HttpRequestMessage(method, uri);
@@ -331,12 +456,102 @@ public sealed class ManagedModuleRepositoryClient
                typeElement.EnumerateArray().Any(type => type.ValueKind == JsonValueKind.String && IsPackageBaseAddressType(type.GetString()));
     }
 
+    private static bool IsSearchQueryServiceResource(JsonElement resource)
+    {
+        if (!resource.TryGetProperty("@type", out var typeElement))
+            return false;
+
+        if (typeElement.ValueKind == JsonValueKind.String)
+            return IsSearchQueryServiceType(typeElement.GetString());
+
+        return typeElement.ValueKind == JsonValueKind.Array &&
+               typeElement.EnumerateArray().Any(type => type.ValueKind == JsonValueKind.String && IsSearchQueryServiceType(type.GetString()));
+    }
+
     private static bool IsPackageBaseAddressType(string? type)
     {
         if (string.IsNullOrWhiteSpace(type))
             return false;
 
         return type!.IndexOf("PackageBaseAddress", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsSearchQueryServiceType(string? type)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+            return false;
+
+        return type!.IndexOf("SearchQueryService", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private ManagedModuleVersionInfo? ReadSearchResult(ManagedModuleRepository repository, JsonElement item)
+    {
+        var id = item.TryGetProperty("id", out var idElement) ? idElement.GetString() : null;
+        if (string.IsNullOrWhiteSpace(id))
+            return null;
+
+        var version = ReadSearchVersion(item);
+        if (string.IsNullOrWhiteSpace(version))
+            return null;
+
+        return new ManagedModuleVersionInfo
+        {
+            Name = id!.Trim(),
+            Version = version!,
+            RepositoryName = repository.Name,
+            RepositorySource = repository.Source,
+            IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version!),
+            Listed = !item.TryGetProperty("listed", out var listedElement) || listedElement.ValueKind != JsonValueKind.False
+        };
+    }
+
+    private static string? ReadSearchVersion(JsonElement item)
+    {
+        if (item.TryGetProperty("version", out var versionElement) && versionElement.ValueKind == JsonValueKind.String)
+            return versionElement.GetString()?.Trim();
+
+        if (!item.TryGetProperty("versions", out var versionsElement) || versionsElement.ValueKind != JsonValueKind.Array)
+            return null;
+
+        return versionsElement.EnumerateArray()
+            .Select(static version => version.TryGetProperty("version", out var value) ? value.GetString() : null)
+            .Where(static version => !string.IsNullOrWhiteSpace(version))
+            .Select(static version => version!.Trim())
+            .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
+            .LastOrDefault();
+    }
+
+    private IEnumerable<ManagedModuleVersionInfo> ReadLocalPackageVersions(
+        ManagedModuleRepository repository,
+        string root,
+        bool includePrerelease)
+    {
+        foreach (var file in Directory.EnumerateFiles(root, "*.nupkg", SearchOption.AllDirectories))
+        {
+            ManagedModulePackageMetadata metadata;
+            try
+            {
+                metadata = _packageReader.ReadMetadata(file);
+            }
+            catch (Exception ex)
+            {
+                _logger.Verbose($"Managed module local feed skipped '{file}': {ex.Message}");
+                continue;
+            }
+
+            if (!includePrerelease && metadata.IsPrerelease)
+                continue;
+
+            yield return new ManagedModuleVersionInfo
+            {
+                Name = metadata.Id,
+                Version = metadata.Version,
+                RepositoryName = repository.Name,
+                RepositorySource = repository.Source,
+                PackageSource = file,
+                IsPrerelease = metadata.IsPrerelease
+            };
+        }
     }
 
     private static Uri BuildPackageUri(string packageBase, string packageId, string version)
