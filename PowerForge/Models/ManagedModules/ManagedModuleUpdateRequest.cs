@@ -1,0 +1,57 @@
+namespace PowerForge;
+
+/// <summary>
+/// Request for updating a module through the managed module engine.
+/// </summary>
+public sealed class ManagedModuleUpdateRequest
+{
+    /// <summary>
+    /// Repository to query and download from.
+    /// </summary>
+    public ManagedModuleRepository Repository { get; set; } = null!;
+
+    /// <summary>
+    /// Module or package id.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Exact target version. When omitted, the latest repository version is used.
+    /// </summary>
+    public string? Version { get; set; }
+
+    /// <summary>
+    /// Include prerelease versions when resolving latest.
+    /// </summary>
+    public bool IncludePrerelease { get; set; }
+
+    /// <summary>
+    /// Scope to inspect and update.
+    /// </summary>
+    public ManagedModuleInstallScope Scope { get; set; } = ManagedModuleInstallScope.CurrentUser;
+
+    /// <summary>
+    /// PowerShell path family used when resolving default module roots.
+    /// </summary>
+    public ManagedModuleShellEdition ShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
+
+    /// <summary>
+    /// Explicit module root. Required when scope is custom.
+    /// </summary>
+    public string? ModuleRoot { get; set; }
+
+    /// <summary>
+    /// Optional package cache directory.
+    /// </summary>
+    public string? PackageCacheDirectory { get; set; }
+
+    /// <summary>
+    /// Repository credential.
+    /// </summary>
+    public RepositoryCredential? Credential { get; set; }
+
+    /// <summary>
+    /// Reinstall the target version when it is already installed.
+    /// </summary>
+    public bool Force { get; set; }
+}
