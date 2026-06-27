@@ -48,6 +48,11 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string RepositoryName { get; set; } = ManagedModuleCommandSupport.DefaultRepositoryName;
 
+    /// <summary>Saved module repository profile to use instead of Repository.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ProfileName { get; set; }
+
     /// <summary>Exact package version to measure.</summary>
     [Parameter]
     [Alias("RequiredVersion")]
@@ -164,7 +169,12 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
         var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
         var reportPath = ManagedModuleCommandSupport.ResolveProviderPath(this, ReportPath);
         var markdownReportPath = ManagedModuleCommandSupport.ResolveProviderPath(this, MarkdownReportPath);
-        var repository = ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository);
+        var repository = ManagedModuleCommandSupport.CreateRepository(
+            this,
+            RepositoryName,
+            Repository,
+            ProfileName,
+            MyInvocation.BoundParameters.ContainsKey(nameof(Repository)));
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var scenarios = Name
             .Where(static moduleName => !string.IsNullOrWhiteSpace(moduleName))
