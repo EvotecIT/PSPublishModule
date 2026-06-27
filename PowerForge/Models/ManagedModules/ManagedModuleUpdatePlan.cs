@@ -76,6 +76,11 @@ public sealed class ManagedModuleUpdatePlan
     public string? VersionPolicy { get; set; }
 
     /// <summary>
+    /// Expected SHA256 hash supplied by the caller, when package integrity verification was requested.
+    /// </summary>
+    public string? ExpectedPackageSha256 { get; set; }
+
+    /// <summary>
     /// True when installed source evidence satisfies the requested source policy.
     /// </summary>
     public bool SourcePolicySatisfied { get; set; } = true;

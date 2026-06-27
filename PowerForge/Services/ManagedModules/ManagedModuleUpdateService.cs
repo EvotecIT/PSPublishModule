@@ -68,6 +68,7 @@ public sealed class ManagedModuleUpdateService
                 MinimumVersion = request.MinimumVersion,
                 MaximumVersion = request.MaximumVersion,
                 VersionPolicy = request.VersionPolicy,
+                ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
                 ModuleRoot = moduleRoot,
                 ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), currentVersion!),
                 Elapsed = stopwatch.Elapsed,
@@ -103,6 +104,7 @@ public sealed class ManagedModuleUpdateService
             MinimumVersion = request.MinimumVersion,
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
             ModuleRoot = moduleRoot,
             ModulePath = modulePath,
             Elapsed = stopwatch.Elapsed,
@@ -158,6 +160,7 @@ public sealed class ManagedModuleUpdateService
             MinimumVersion = request.MinimumVersion,
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
             SourcePolicySatisfied = sourceEvaluation.IsSatisfied,
             SourcePolicyReason = sourceEvaluation.Reason,
             InstalledReceipt = sourceEvaluation.Receipt,
@@ -184,6 +187,9 @@ public sealed class ManagedModuleUpdateService
                 ShellEdition = request.ShellEdition,
                 ModuleRoot = request.ModuleRoot,
                 PackageCacheDirectory = request.PackageCacheDirectory,
+                ExpectedPackageSha256 = string.Equals(moduleName, request.Name, StringComparison.OrdinalIgnoreCase)
+                    ? request.ExpectedPackageSha256
+                    : null,
                 Credential = request.Credential,
                 Force = true,
                 AllowClobber = request.AllowClobber,
@@ -578,6 +584,8 @@ public sealed class ManagedModuleUpdateService
             string.IsNullOrWhiteSpace(request.FamilyPolicy.ModuleNamePrefix) &&
             !(request.FamilyPolicy.ModuleNames?.Any(static name => !string.IsNullOrWhiteSpace(name)) == true))
             throw new ArgumentException("FamilyPolicy requires ModuleNamePrefix or ModuleNames when RequireSameVersion is enabled.", nameof(request));
+
+        _ = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256);
     }
 
     private static ManagedModuleVersionRange ResolveVersionRange(string? versionPolicy, string? minimumVersion, string? maximumVersion)

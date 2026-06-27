@@ -69,7 +69,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Define exact behavior for repository trust, credentials, retries, TLS, proxy support, and private feed authentication.
 - [ ] Define exact behavior for side-by-side versions, downgrade policies, clobber conflicts, loaded modules, and cross-scope installs.
 - [ ] Define exact behavior for prerelease labels and semantic version ordering.
-- [ ] Define package integrity requirements, including hash evidence and optional repository metadata validation.
+- [x] Define package integrity requirements, including hash evidence and optional caller-supplied SHA256 validation.
 - [x] Define rollback guarantees for partial install/update failures.
 - [x] Define receipt schema and where receipts are stored.
 - [ ] Define which existing cmdlets become wrappers and which remain independent.
@@ -79,6 +79,9 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - Receipts are typed `ManagedModuleReceipt` objects written as JSON at `<moduleRoot>/<moduleName>/<version>/.powerforge/managed-module-receipt.json`.
 - Receipts are created only after package download, extraction, and final promotion into the versioned module directory succeed.
 - Receipts and download results include the package SHA256 hash used for delivery evidence.
+- `Install-ManagedModule`, `Save-ManagedModule`, and `Update-ManagedModule` can require a caller-supplied `ExpectedPackageSha256`.
+- Expected SHA256 validation runs after download or local-feed copy and before package extraction, dependency installation, final promotion, or receipt creation.
+- Expected SHA256 applies only to the requested root package; dependency and family-member packages need their own future policy object instead of inheriting one hash accidentally.
 - Install and update result objects expose both the receipt object and receipt path when disk state changed.
 - Forced replacement stages the new version first, moves the existing version to a temporary backup, promotes the staged version, and restores the backup if promotion fails.
 - Per-module install locks are stored under `<moduleRoot>/.powerforge/locks` and guard install/update mutations for the same module name.

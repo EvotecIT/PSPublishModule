@@ -68,7 +68,8 @@ public sealed class ManagedModuleInstallService
             RequestedVersion = request.Version,
             MinimumVersion = request.MinimumVersion,
             MaximumVersion = request.MaximumVersion,
-            VersionPolicy = request.VersionPolicy
+            VersionPolicy = request.VersionPolicy,
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256)
         };
     }
 
@@ -110,6 +111,7 @@ public sealed class ManagedModuleInstallService
                     MinimumVersion = request.MinimumVersion,
                     MaximumVersion = request.MaximumVersion,
                     VersionPolicy = request.VersionPolicy,
+                    ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
                     ModuleRoot = moduleRoot,
                     ModulePath = modulePath,
                     Elapsed = stopwatch.Elapsed,
@@ -124,6 +126,7 @@ public sealed class ManagedModuleInstallService
                 cacheDirectory,
                 request.Credential,
                 cancellationToken).ConfigureAwait(false);
+            ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
             var extraction = _extractor.ExtractPackage(download.PackagePath, stageModulePath);
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
@@ -149,6 +152,7 @@ public sealed class ManagedModuleInstallService
                 MinimumVersion = request.MinimumVersion,
                 MaximumVersion = request.MaximumVersion,
                 VersionPolicy = request.VersionPolicy,
+                ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
                 ModuleRoot = moduleRoot,
                 ModulePath = modulePath,
                 Elapsed = stopwatch.Elapsed,
@@ -226,6 +230,7 @@ public sealed class ManagedModuleInstallService
                     ShellEdition = request.ShellEdition,
                     ModuleRoot = request.ModuleRoot,
                     PackageCacheDirectory = cacheDirectory,
+                    ExpectedPackageSha256 = null,
                     Credential = request.Credential,
                     Force = false,
                     AllowClobber = request.AllowClobber,
@@ -300,6 +305,8 @@ public sealed class ManagedModuleInstallService
             throw new ArgumentException("VersionPolicy cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
         if (request.Scope == ManagedModuleInstallScope.Custom && string.IsNullOrWhiteSpace(request.ModuleRoot))
             throw new ArgumentException("ModuleRoot is required when Scope is Custom.", nameof(request));
+
+        _ = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256);
     }
 
     private static void ThrowIfLicenseAcceptanceRequired(

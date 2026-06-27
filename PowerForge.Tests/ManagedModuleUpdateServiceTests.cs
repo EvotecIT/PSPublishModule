@@ -139,6 +139,33 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_rejects_package_when_expected_sha256_does_not_match()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.ExpectedPackageSha256 = new string('0', 64);
+
+        var exception = await Assert.ThrowsAsync<ManagedModulePackageIntegrityException>(() => service.UpdateAsync(request));
+
+        Assert.Equal("Company.Tools", exception.ModuleName);
+        Assert.Equal("1.1.0", exception.Version);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_honors_minimum_and_maximum_version()
     {
         using var feed = new TemporaryDirectory();

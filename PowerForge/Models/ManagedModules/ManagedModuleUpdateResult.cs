@@ -56,6 +56,11 @@ public sealed class ManagedModuleUpdateResult
     public string? VersionPolicy { get; set; }
 
     /// <summary>
+    /// Expected SHA256 hash supplied by the caller, when package integrity verification was requested.
+    /// </summary>
+    public string? ExpectedPackageSha256 { get; set; }
+
+    /// <summary>
     /// Module root that was inspected.
     /// </summary>
     public string ModuleRoot { get; set; } = string.Empty;
