@@ -130,7 +130,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement repository source preference rules.
 - [x] Implement family coherence policies for related module families.
 - [x] Implement conflict diagnostics for incompatible loaded modules.
-- [ ] Implement conflict diagnostics for mixed scopes and side-by-side versions.
+- [x] Implement conflict diagnostics for mixed scopes and side-by-side versions.
 - [x] Add tests for exact/min/max/range policies.
 - [x] Add tests for prerelease resolution.
 - [x] Add tests for dependency closure.

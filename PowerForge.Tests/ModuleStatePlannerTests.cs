@@ -245,6 +245,26 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_BlocksWhenDesiredScopeIsShadowedByEffectiveImportCandidate()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.3.0", scope: "AllUsers"),
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", isEffectiveImportCandidate: true)
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", scope: "AllUsers") });
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+
+        Assert.Equal(ModuleStatePlanActionKind.NoAction, Assert.Single(plan.Actions).Kind);
+        Assert.True(plan.HasErrors);
+        var finding = Assert.Single(plan.Findings, static finding => finding.Code == "ModuleState.ScopeShadowing");
+        Assert.Equal(ModuleStateConflictSeverity.Error, finding.Severity);
+        Assert.Equal("CurrentUser", finding.Scope);
+    }
+
+    [Fact]
     public void CreatePlan_IncludesMaintenanceReceiptDriftFindings()
     {
         var request = new ModuleStatePlanRequest(

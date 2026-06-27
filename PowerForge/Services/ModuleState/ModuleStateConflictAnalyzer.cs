@@ -24,7 +24,9 @@ internal sealed class ModuleStateConflictAnalyzer
                 continue;
 
             AddScopeAmbiguityFinding(findings, desiredModule, installedModules);
+            AddSideBySideVersionFindings(findings, desiredModule, installedModules);
             AddDesiredScopeFinding(findings, desiredModule, installedModules);
+            AddScopeShadowingFinding(findings, desiredModule, installedModules, policy);
             AddSourcePreferenceFinding(findings, desiredModule, installedModules, policy);
             AddDowngradeBlockFinding(findings, desiredModule, installedModules, policy);
             AddLoadedModuleFinding(findings, desiredModule, installedModules, policy);
@@ -65,6 +67,32 @@ internal sealed class ModuleStateConflictAnalyzer
             versions));
     }
 
+    private static void AddSideBySideVersionFindings(
+        List<ModuleStateConflictFinding> findings,
+        ModuleStateDesiredModule desiredModule,
+        ModuleStateInstalledModule[] installedModules)
+    {
+        foreach (var group in installedModules
+                     .GroupBy(static module => NormalizeScope(module.Scope), StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var versions = SortVersions(group
+                .Select(static module => module.Version)
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+            if (versions.Length <= 1)
+                continue;
+
+            findings.Add(new ModuleStateConflictFinding(
+                ModuleStateConflictSeverity.Warning,
+                "ModuleState.SideBySideVersions",
+                $"Module '{desiredModule.Name}' has multiple installed versions in scope '{group.Key}': {string.Join(", ", versions)}. Review loaded modules and cleanup policy before assuming a single effective version.",
+                string.Empty,
+                new[] { desiredModule.Name },
+                versions,
+                group.Key));
+        }
+    }
+
     private static void AddDesiredScopeFinding(
         List<ModuleStateConflictFinding> findings,
         ModuleStateDesiredModule desiredModule,
@@ -88,6 +116,42 @@ internal sealed class ModuleStateConflictAnalyzer
             string.Empty,
             new[] { desiredModule.Name },
             installedModules.Select(static module => module.Version).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
+    }
+
+    private static void AddScopeShadowingFinding(
+        List<ModuleStateConflictFinding> findings,
+        ModuleStateDesiredModule desiredModule,
+        ModuleStateInstalledModule[] installedModules,
+        ModuleStateVersionPolicy policy)
+    {
+        if (string.IsNullOrWhiteSpace(desiredModule.Scope))
+            return;
+
+        var desiredScopeModule = SelectInstalledModule(installedModules, desiredModule.Scope);
+        if (desiredScopeModule is null)
+            return;
+
+        foreach (var effectiveModule in installedModules
+                     .Where(module => module.IsEffectiveImportCandidate)
+                     .Where(module => !string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)))
+        {
+            var effectiveSatisfiesPolicy = policy.IsSatisfiedBy(effectiveModule.Version);
+            if (string.Equals(effectiveModule.Version, desiredScopeModule.Version, StringComparison.OrdinalIgnoreCase) &&
+                effectiveSatisfiesPolicy)
+            {
+                continue;
+            }
+
+            var shadowScope = NormalizeScope(effectiveModule.Scope);
+            findings.Add(new ModuleStateConflictFinding(
+                effectiveSatisfiesPolicy ? ModuleStateConflictSeverity.Warning : ModuleStateConflictSeverity.Error,
+                "ModuleState.ScopeShadowing",
+                $"Module '{desiredModule.Name}' is desired in scope '{desiredModule.Scope}' at version {desiredScopeModule.Version}, but effective import precedence points to scope '{shadowScope}' version {effectiveModule.Version}. Remove, update, or isolate the shadowing copy before relying on the scoped module.",
+                string.Empty,
+                new[] { desiredModule.Name },
+                SortVersions(new[] { desiredScopeModule.Version, effectiveModule.Version }),
+                shadowScope));
+        }
     }
 
     private static void AddSourcePreferenceFinding(
@@ -236,4 +300,12 @@ internal sealed class ModuleStateConflictAnalyzer
         => path.Trim()
             .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
             .Replace('\\', '/');
+
+    private static string NormalizeScope(string? scope)
+        => string.IsNullOrWhiteSpace(scope) ? "<unknown>" : scope!.Trim();
+
+    private static string[] SortVersions(IEnumerable<string> versions)
+        => versions
+            .OrderBy(static version => ModuleStateVersion.TryParse(version, out var parsed) ? parsed : default)
+            .ToArray();
 }
