@@ -1,0 +1,42 @@
+namespace PowerForge;
+
+/// <summary>
+/// Describes one package version discovered in a managed module repository.
+/// </summary>
+public sealed class ManagedModuleVersionInfo
+{
+    /// <summary>
+    /// Module or package id.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Package version text.
+    /// </summary>
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Repository name that returned this version.
+    /// </summary>
+    public string RepositoryName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Repository source URL or local folder.
+    /// </summary>
+    public string RepositorySource { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Direct package download URI or local package path when known.
+    /// </summary>
+    public string? PackageSource { get; set; }
+
+    /// <summary>
+    /// True when the version contains a prerelease label.
+    /// </summary>
+    public bool IsPrerelease { get; set; }
+
+    /// <summary>
+    /// True when repository metadata indicates the version is listed.
+    /// </summary>
+    public bool Listed { get; set; } = true;
+}
