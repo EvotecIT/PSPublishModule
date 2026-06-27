@@ -37,13 +37,30 @@ internal sealed class TestDependency
 
 internal static class TestPackageFactory
 {
-    public static void Create(string packagePath, string id, string version, IReadOnlyList<TestDependency>? dependencies = null)
+    public static void Create(
+        string packagePath,
+        string id,
+        string version,
+        IReadOnlyList<TestDependency>? dependencies = null,
+        IReadOnlyDictionary<string, string>? files = null)
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(packagePath)!);
         using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
         var nuspec = archive.CreateEntry(id + ".nuspec");
-        using var writer = new StreamWriter(nuspec.Open());
-        writer.Write(CreateNuspec(id, version, dependencies));
+        using (var writer = new StreamWriter(nuspec.Open()))
+        {
+            writer.Write(CreateNuspec(id, version, dependencies));
+        }
+
+        if (files is null)
+            return;
+
+        foreach (var file in files)
+        {
+            var entry = archive.CreateEntry(file.Key);
+            using var entryWriter = new StreamWriter(entry.Open());
+            entryWriter.Write(file.Value);
+        }
     }
 
     public static byte[] CreateBytes(string id, string version)
