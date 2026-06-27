@@ -62,7 +62,33 @@ internal sealed class PrivateModuleWorkflowService
             ThrowIfManagedOnlyOptionsRequested(request);
         }
 
-        if (usePrivateGallery)
+        if (usePrivateGallery && request.DeliveryTransport == ModuleStateDeliveryTransport.ManagedModule)
+        {
+            _privateGalleryService.EnsureProviderSupported(request.Provider);
+
+            var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+                request.Provider,
+                request.AzureDevOpsOrganization,
+                request.AzureDevOpsProject,
+                request.AzureArtifactsFeed,
+                request.RepositoryName,
+                request.Repository,
+                request.RepositoryUri,
+                request.RepositorySourceUri,
+                request.RepositoryPublishUri,
+                request.JFrogBaseUri,
+                request.JFrogRepository);
+
+            repositoryName = endpoint.RepositoryName;
+            managedRepositorySource = endpoint.PSResourceGetUri;
+            credential = _privateGalleryService.ResolveOptionalCredential(
+                repositoryName,
+                request.CredentialUserName,
+                request.CredentialSecret,
+                request.CredentialSecretFilePath,
+                request.PromptForCredential);
+        }
+        else if (usePrivateGallery)
         {
             _privateGalleryService.EnsureProviderSupported(request.Provider);
 

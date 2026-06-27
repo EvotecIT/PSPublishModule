@@ -4,6 +4,7 @@ using PSPublishModule;
 
 namespace PowerForge.Tests;
 
+[Collection("ModuleRepositoryProfileEnvironment")]
 public sealed class PrivateManagedModuleCommandTests
 {
     [Fact]
@@ -71,6 +72,74 @@ public sealed class PrivateManagedModuleCommandTests
     }
 
     [Fact]
+    public void InstallPrivateModule_can_use_managed_transport_from_repository_profile()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        SaveProfile(feed.Path);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-PrivateModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
+        Assert.Equal("ManagedModule", result.Installer);
+        Assert.Equal("1.0.0", result.ResolvedVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public void UpdatePrivateModule_can_use_managed_transport_from_repository_profile()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        SaveProfile(feed.Path);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Update-PrivateModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("Path", moduleRoot.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("ManagedModule", result.Installer);
+        Assert.Equal("1.0.0", result.InstalledVersion);
+        Assert.Equal("1.1.0", result.ResolvedVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public void Managed_transport_rejects_registered_repository_name_without_source()
     {
         using var ps = CreatePowerShellWithModuleImported();
@@ -93,6 +162,17 @@ public sealed class PrivateManagedModuleCommandTests
             ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
 
+    private static void SaveProfile(string feedPath)
+        => new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = feedPath,
+            RepositorySourceUri = feedPath,
+            RepositoryPublishUri = feedPath
+        });
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
@@ -109,5 +189,38 @@ public sealed class PrivateManagedModuleCommandTests
     {
         if (ps.HadErrors)
             throw new InvalidOperationException(string.Join(Environment.NewLine, ps.Streams.Error.Select(error => error.ToString())));
+    }
+
+    private static IDisposable UseProfileStore(string root)
+    {
+        Directory.CreateDirectory(root);
+        return new TestEnvironmentVariables(
+            ("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", Path.Combine(root, "profiles.json")),
+            ("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH", Path.Combine(root, "machine-profiles.json")));
+    }
+
+    private sealed class TestEnvironmentVariables : IDisposable
+    {
+        private readonly (string Name, string? PreviousValue)[] _previousValues;
+
+        internal TestEnvironmentVariables(params (string Name, string Value)[] values)
+        {
+            _previousValues = values
+                .Select(value => (value.Name, Environment.GetEnvironmentVariable(value.Name)))
+                .ToArray();
+
+            foreach (var value in values)
+            {
+                Environment.SetEnvironmentVariable(value.Name, value.Value);
+            }
+        }
+
+        public void Dispose()
+        {
+            foreach (var value in _previousValues)
+            {
+                Environment.SetEnvironmentVariable(value.Name, value.PreviousValue);
+            }
+        }
     }
 }
