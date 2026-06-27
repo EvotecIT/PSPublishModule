@@ -48,6 +48,16 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? Version { get; set; }
 
+    /// <summary>Minimum package version to install when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? MinimumVersion { get; set; }
+
+    /// <summary>Maximum package version to install when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? MaximumVersion { get; set; }
+
     /// <summary>Include prerelease versions when resolving the latest version.</summary>
     [Parameter]
     [Alias("AllowPrerelease")]
@@ -120,6 +130,8 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
                         Repository = repository,
                         Name = moduleName,
                         Version = Version,
+                        MinimumVersion = MinimumVersion,
+                        MaximumVersion = MaximumVersion,
                         IncludePrerelease = Prerelease.IsPresent,
                         Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
                         ShellEdition = ShellEdition,
