@@ -22,6 +22,7 @@ namespace PSPublishModule;
 /// <code>Install-ManagedModule -Name Company.Tools -Version 1.2.0 -Repository C:\Packages -Scope Custom -ModuleRoot C:\Modules</code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Install, "ManagedModule", SupportsShouldProcess = true)]
+[Alias("Install-PublicModule")]
 [OutputType(typeof(ManagedModuleInstallResult))]
 public sealed class InstallManagedModuleCommand : PSCmdlet
 {

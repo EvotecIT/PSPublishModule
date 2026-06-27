@@ -24,6 +24,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Introduce `Install-ManagedModule`.
 - [x] Introduce `Update-ManagedModule`.
 - [x] Introduce `Publish-ManagedModule`.
+- [x] Add non-conflicting public aliases for the managed find/save/install/update/publish commands.
 - [ ] Decide whether `Get-ManagedModule` is needed or whether `Get-ModuleState` remains the inventory surface.
 - [ ] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
 - [ ] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to `Install-ManagedModule`.
