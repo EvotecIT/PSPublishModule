@@ -54,4 +54,9 @@ public sealed class ManagedModuleInstallRequest
     /// Reinstall when the target module version already exists.
     /// </summary>
     public bool Force { get; set; }
+
+    /// <summary>
+    /// Skip installing dependencies declared by the package.
+    /// </summary>
+    public bool SkipDependencyCheck { get; set; }
 }

@@ -76,7 +76,8 @@ public sealed class ManagedModuleUpdateService
                 ModuleRoot = request.ModuleRoot,
                 PackageCacheDirectory = request.PackageCacheDirectory,
                 Credential = request.Credential,
-                Force = true
+                Force = true,
+                SkipDependencyCheck = request.SkipDependencyCheck
             },
             cancellationToken).ConfigureAwait(false);
         if (install.Status == ManagedModuleInstallStatus.Installed)

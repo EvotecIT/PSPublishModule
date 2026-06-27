@@ -44,7 +44,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-Prerelease`.
 - [x] Support `-AllowPrerelease` as an alias where it helps migration.
 - [ ] Support `-AcceptLicense`.
-- [ ] Support `-SkipDependencyCheck`.
+- [x] Support `-SkipDependencyCheck`.
 - [ ] Support `-AllowClobber`.
 - [x] Support `-Force`.
 - [x] Support `-Path` for save/publish workflows.
@@ -160,7 +160,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Implement `-AllowClobber` behavior.
 - [ ] Implement publisher/trust checks where metadata is available.
 - [ ] Implement license acceptance handling.
-- [ ] Implement dependency installation order.
+- [x] Implement dependency installation order.
 - [x] Implement receipt creation after successful install.
 - [x] Emit typed install result objects.
 - [ ] Add Spectre.Console summary output.
@@ -186,7 +186,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Emit typed update result objects.
 - [ ] Add Spectre.Console summary output.
 - [x] Add tests for no-op update.
-- [ ] Add tests for update with dependencies.
+- [x] Add tests for update with dependencies.
 - [x] Add tests for scoped missing-copy fallback to install.
 - [ ] Add tests for loaded-module conflict blocking.
 - [ ] Benchmark against `Update-Module` and `Update-PSResource`.
