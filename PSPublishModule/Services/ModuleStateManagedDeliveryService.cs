@@ -121,8 +121,8 @@ internal sealed class ModuleStateManagedDeliveryService
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
             IncludePrerelease = options.Prerelease,
-            Scope = ResolveScope(action.TargetScope),
-            ModuleRoot = action.TargetPath,
+            Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
+            ModuleRoot = ResolveModuleRoot(action, options),
             Credential = options.Credential,
             Force = options.Force || action.Force,
             AllowClobber = options.AllowClobber,
@@ -143,8 +143,8 @@ internal sealed class ModuleStateManagedDeliveryService
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
             IncludePrerelease = options.Prerelease,
-            Scope = ResolveScope(action.TargetScope),
-            ModuleRoot = action.TargetPath,
+            Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
+            ModuleRoot = ResolveModuleRoot(action, options),
             Credential = options.Credential,
             Force = options.Force || action.Force,
             AllowClobber = options.AllowClobber,
@@ -199,8 +199,13 @@ internal sealed class ModuleStateManagedDeliveryService
         return actionRepository ?? source;
     }
 
-    private static ManagedModuleInstallScope ResolveScope(string? scope)
-        => string.Equals(scope, "AllUsers", StringComparison.OrdinalIgnoreCase)
+    private static string? ResolveModuleRoot(ModuleStatePlanAction action, ModuleStateManagedDeliveryOptions options)
+        => string.IsNullOrWhiteSpace(action.TargetPath) ? options.ModuleRoot : action.TargetPath;
+
+    private static ManagedModuleInstallScope ResolveScope(string? scope, string? targetPath, string? moduleRoot)
+        => !string.IsNullOrWhiteSpace(targetPath) || !string.IsNullOrWhiteSpace(moduleRoot)
+            ? ManagedModuleInstallScope.Custom
+            : string.Equals(scope, "AllUsers", StringComparison.OrdinalIgnoreCase)
             ? ManagedModuleInstallScope.AllUsers
             : string.Equals(scope, "Custom", StringComparison.OrdinalIgnoreCase)
                 ? ManagedModuleInstallScope.Custom
@@ -260,6 +265,8 @@ internal sealed class ModuleStateManagedDeliveryOptions
     internal bool AllowClobber { get; set; }
 
     internal bool AcceptLicense { get; set; }
+
+    internal string? ModuleRoot { get; set; }
 
     internal RepositoryCredential? Credential { get; set; }
 }

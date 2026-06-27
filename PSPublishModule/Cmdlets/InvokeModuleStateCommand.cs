@@ -203,6 +203,12 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
     public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
 
     /// <summary>
+    /// Gets or sets a custom module root for managed module delivery.
+    /// </summary>
+    [Parameter]
+    public string? ModuleRoot { get; set; }
+
+    /// <summary>
     /// Gets or sets whether prepared private-module commands include Prerelease.
     /// </summary>
     [Parameter]
@@ -621,6 +627,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
                     Force = Force.IsPresent,
                     AllowClobber = AllowClobber.IsPresent,
                     AcceptLicense = AcceptLicense.IsPresent,
+                    ModuleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
                     Credential = ManagedModuleCommandSupport.ResolveCredential(
                         this,
                         null,

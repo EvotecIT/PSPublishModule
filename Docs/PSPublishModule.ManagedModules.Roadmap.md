@@ -237,8 +237,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Ensure maintenance receipts contain managed-engine evidence.
 - [ ] Ensure summaries explain what changed, what was skipped, and why.
 - [x] Add tests for ModuleState managed delivery command shaping.
-- [ ] Add tests for ModuleState managed install.
-- [ ] Add tests for ModuleState managed update.
+- [x] Add tests for ModuleState managed install.
+- [x] Add tests for ModuleState managed update.
 - [ ] Add tests for ModuleState source/scope/family repairs through the managed engine.
 
 ## Phase 10: Benchmarks And Proof
