@@ -22,6 +22,7 @@ namespace PSPublishModule;
 /// <code>Save-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -Repository C:\Packages -Path C:\Modules</code>
 /// </example>
 [Cmdlet(VerbsData.Save, "ManagedModule", SupportsShouldProcess = true)]
+[Alias("Save-PublicModule")]
 [OutputType(typeof(ManagedModuleInstallResult))]
 public sealed class SaveManagedModuleCommand : PSCmdlet
 {

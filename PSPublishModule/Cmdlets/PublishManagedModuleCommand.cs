@@ -18,6 +18,7 @@ namespace PSPublishModule;
 /// <code>Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages</code>
 /// </example>
 [Cmdlet(VerbsData.Publish, "ManagedModule", SupportsShouldProcess = true)]
+[Alias("Publish-PublicModule")]
 [OutputType(typeof(ManagedModulePublishResult))]
 public sealed class PublishManagedModuleCommand : PSCmdlet
 {
