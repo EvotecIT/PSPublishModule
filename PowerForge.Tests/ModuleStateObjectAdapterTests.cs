@@ -19,7 +19,8 @@ public sealed class ModuleStateObjectAdapterTests
                     ["Version"] = "=1.2.0",
                     ["Repository"] = "CompanyModules",
                     ["Scope"] = "CurrentUser",
-                    ["Path"] = @"C:\OfflineModules"
+                    ["Path"] = @"C:\OfflineModules",
+                    ["ExpectedPackageSha256"] = new string('A', 64)
                 }
             },
             ["Families"] = new object[]
@@ -41,6 +42,7 @@ public sealed class ModuleStateObjectAdapterTests
         Assert.Equal("CompanyModules", Assert.Single(module.AllowedSources));
         Assert.Equal("CurrentUser", module.Scope);
         Assert.Equal(@"C:\OfflineModules", module.TargetPath);
+        Assert.Equal(new string('a', 64), module.ExpectedPackageSha256);
 
         var family = Assert.Single(state.FamilyPolicies);
         Assert.Equal("CompanySuite", family.Name);

@@ -156,6 +156,12 @@ internal sealed class ModuleStateApplyService
             return "Plan includes save actions. Save delivery requires managed module transport.";
         }
 
+        if (deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule &&
+            plan.Actions.Any(static action => IsDeliveryAction(action.Kind) && !string.IsNullOrWhiteSpace(action.ExpectedPackageSha256)))
+        {
+            return "Plan includes package SHA256 requirements. Package integrity enforcement requires managed module transport.";
+        }
+
         if (plan.Actions.Any(static action => action.Kind == ModuleStatePlanActionKind.Save && string.IsNullOrWhiteSpace(action.TargetPath)))
             return "Plan includes save actions but no target path was supplied.";
 
@@ -222,6 +228,13 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-InstallPrerequisites");
         if (deliveryOptions.Prerelease)
             arguments.Add("-Prerelease");
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            !string.IsNullOrWhiteSpace(action.ExpectedPackageSha256))
+        {
+            arguments.Add("-ExpectedPackageSha256");
+            arguments.Add(action.ExpectedPackageSha256!);
+        }
+
         if ((deliveryOptions.Force || action.Force) &&
             action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Save)
         {

@@ -82,6 +82,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - `Install-ManagedModule`, `Save-ManagedModule`, and `Update-ManagedModule` can require a caller-supplied `ExpectedPackageSha256`.
 - Expected SHA256 validation runs after download or local-feed copy and before package extraction, dependency installation, final promotion, or receipt creation.
 - Expected SHA256 applies only to the requested root package; dependency and family-member packages need their own future policy object instead of inheriting one hash accidentally.
+- ModuleState desired-state objects can carry `ExpectedPackageSha256` / `PackageSha256` / `Sha256`; managed transport preserves it in plans, prepared commands, and direct `Invoke-ModuleStatePlan -Execute` delivery.
 - Install and update result objects expose both the receipt object and receipt path when disk state changed.
 - Forced replacement stages the new version first, moves the existing version to a temporary backup, promotes the staged version, and restores the backup if promotion fails.
 - Per-module install locks are stored under `<moduleRoot>/.powerforge/locks` and guard install/update mutations for the same module name.

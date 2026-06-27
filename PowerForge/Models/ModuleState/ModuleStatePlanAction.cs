@@ -12,7 +12,8 @@ internal sealed class ModuleStatePlanAction
         bool force = false,
         string? targetScope = null,
         string? targetPath = null,
-        string? targetRepository = null)
+        string? targetRepository = null,
+        string? expectedPackageSha256 = null)
     {
         Kind = kind;
         ModuleName = moduleName;
@@ -24,6 +25,7 @@ internal sealed class ModuleStatePlanAction
         TargetScope = string.IsNullOrWhiteSpace(targetScope) ? null : targetScope!.Trim();
         TargetPath = string.IsNullOrWhiteSpace(targetPath) ? null : targetPath!.Trim();
         TargetRepository = string.IsNullOrWhiteSpace(targetRepository) ? null : targetRepository!.Trim();
+        ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(expectedPackageSha256);
     }
 
     internal ModuleStatePlanActionKind Kind { get; }
@@ -45,6 +47,8 @@ internal sealed class ModuleStatePlanAction
     internal string? TargetPath { get; }
 
     internal string? TargetRepository { get; }
+
+    internal string? ExpectedPackageSha256 { get; }
 }
 
 internal enum ModuleStatePlanActionKind

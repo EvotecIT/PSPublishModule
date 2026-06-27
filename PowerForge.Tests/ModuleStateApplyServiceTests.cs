@@ -41,7 +41,14 @@ public sealed class ModuleStateApplyServiceTests
         var plan = new ModuleStatePlan(
             new[]
             {
-                new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Tools", "1.0.0", "=1.2.0", "stale", targetScope: "CurrentUser"),
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Update,
+                    "Company.Tools",
+                    "1.0.0",
+                    "=1.2.0",
+                    "stale",
+                    targetScope: "CurrentUser",
+                    expectedPackageSha256: new string('a', 64)),
                 new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Other", null, ">=1.0.0 <2.0.0", "missing", isRepair: true, targetRepository: "CompanyModules")
             },
             Array.Empty<ModuleStateConflictFinding>());
@@ -61,7 +68,7 @@ public sealed class ModuleStateApplyServiceTests
 
         var update = result.Receipt.Commands[0];
         Assert.Equal("Update-ManagedModule", update.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "CurrentUser", "-Repository", "FallbackModules", "-InstallPrerequisites", "-Prerelease" }, update.Arguments);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "CurrentUser", "-Repository", "FallbackModules", "-InstallPrerequisites", "-Prerelease", "-ExpectedPackageSha256", new string('a', 64) }, update.Arguments);
         Assert.Contains("Update-ManagedModule", update.CommandText, StringComparison.Ordinal);
 
         var install = result.Receipt.Commands[1];
@@ -123,6 +130,28 @@ public sealed class ModuleStateApplyServiceTests
 
         Assert.False(result.Receipt.CanApply);
         Assert.Contains("managed module transport", result.Receipt.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Prepare_BlocksPackageHashRequirementForPrivateTransport()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Install,
+                    "Company.Tools",
+                    null,
+                    "=1.2.0",
+                    "missing",
+                    expectedPackageSha256: new string('a', 64))
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(repository: "CompanyModules"));
+
+        Assert.False(result.Receipt.CanApply);
+        Assert.Contains("integrity enforcement", result.Receipt.BlockedReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -7,9 +7,10 @@ public sealed class ModuleStatePlannerTests
     [Fact]
     public void CreatePlan_PlansInstallForMissingDesiredModule()
     {
+        var expectedSha256 = new string('a', 64);
         var request = new ModuleStatePlanRequest(
             new ModuleStateInventory(Array.Empty<ModuleStateInstalledModule>()),
-            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.0.0") });
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.0.0", expectedPackageSha256: expectedSha256) });
 
         var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
 
@@ -17,6 +18,7 @@ public sealed class ModuleStatePlannerTests
         Assert.Equal("Company.Tools", action.ModuleName);
         Assert.Null(action.InstalledVersion);
         Assert.Equal(">=1.0.0", action.VersionPolicy);
+        Assert.Equal(expectedSha256, action.ExpectedPackageSha256);
     }
 
     [Fact]
