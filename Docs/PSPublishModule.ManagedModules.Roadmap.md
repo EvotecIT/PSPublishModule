@@ -289,7 +289,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Measure update with one newer version.
 - [x] Measure publish to local folder feed.
 - [x] Measure large dependency graph resolution.
-- [ ] Measure heavy module extraction.
+- [x] Measure heavy module extraction.
 - [x] Measure private feed metadata lookup.
 - [x] Record elapsed time, HTTP request count, package count, direct/total package bytes, direct/total extracted bytes, extraction timing, file count, and final disk size.
 - [x] Validate installed module directory version after install/update.
@@ -314,7 +314,9 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: `Measure-ManagedModule` command-surface contract tests installed a local package graph with one root module and six transitive dependency packages, recorded dependency/package totals, and validated the deepest dependency path.
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Publish` command-surface contract tests published a module that declared `RequiredModules`, verified the dependency was present in the target local feed, and confirmed the generated package nuspec preserved dependency metadata.
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Find` service contract tests queried a private NuGet v3 metadata endpoint with Basic credentials, recorded request-count evidence, and selected the latest stable version without downloading or extracting packages.
-- [ ] Public-feed, private-feed install/save, heavy-module, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: `Measure-ManagedModule` command-surface contract tests installed a synthetic heavy package payload with 65 extracted files and more than 250 KB of extracted bytes, recording extraction timing, file count, and final disk size.
+- [x] 2026-06-27: `Measure-ManagedModule -Operation Publish` command-surface contract tests published a binary-root module package and verified the `.dll` payload was preserved in the generated `.nupkg`.
+- [ ] Public-feed, private-feed install/save, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 
@@ -326,7 +328,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [ ] Private repository install with credentials.
 - [ ] Private repository save for offline use.
 - [x] Publish a simple module.
-- [ ] Publish a binary module.
+- [x] Publish a binary module.
 - [x] Publish a module with dependencies.
 - [x] Update already-current modules.
 - [x] Update stale modules.
