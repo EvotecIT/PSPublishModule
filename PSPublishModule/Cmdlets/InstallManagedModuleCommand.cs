@@ -23,7 +23,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsLifecycle.Install, "ManagedModule", SupportsShouldProcess = true)]
 [Alias("Install-PublicModule")]
-[OutputType(typeof(ManagedModuleInstallResult))]
+[OutputType(typeof(ManagedModuleInstallResult), typeof(ManagedModuleInstallPlan))]
 public sealed class InstallManagedModuleCommand : PSCmdlet
 {
     /// <summary>Module names to install.</summary>
@@ -124,6 +124,10 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     [Alias("SkipDependenciesCheck")]
     public SwitchParameter SkipDependencyCheck { get; set; }
 
+    /// <summary>Return an inspectable install plan without writing files.</summary>
+    [Parameter]
+    public SwitchParameter Plan { get; set; }
+
     /// <summary>Installs the requested modules.</summary>
     protected override void ProcessRecord()
     {
@@ -135,31 +139,36 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
 
         foreach (var moduleName in Name)
         {
+            var request = new ManagedModuleInstallRequest
+            {
+                Repository = repository,
+                Name = moduleName,
+                Version = Version,
+                MinimumVersion = MinimumVersion,
+                MaximumVersion = MaximumVersion,
+                VersionPolicy = VersionPolicy,
+                IncludePrerelease = Prerelease.IsPresent,
+                Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
+                ShellEdition = ShellEdition,
+                ModuleRoot = moduleRoot,
+                PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                Credential = credential,
+                Force = Force.IsPresent,
+                AllowClobber = AllowClobber.IsPresent,
+                AcceptLicense = AcceptLicense.IsPresent,
+                SkipDependencyCheck = SkipDependencyCheck.IsPresent
+            };
+
+            if (Plan.IsPresent)
+            {
+                WriteObject(service.PlanInstallAsync(request).GetAwaiter().GetResult());
+                continue;
+            }
+
             if (!ShouldProcess(moduleName, $"Install managed module from repository '{repository.Name}'"))
                 continue;
 
-            var result = service.InstallAsync(
-                    new ManagedModuleInstallRequest
-                    {
-                        Repository = repository,
-                        Name = moduleName,
-                        Version = Version,
-                        MinimumVersion = MinimumVersion,
-                        MaximumVersion = MaximumVersion,
-                        VersionPolicy = VersionPolicy,
-                        IncludePrerelease = Prerelease.IsPresent,
-                        Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
-                        ShellEdition = ShellEdition,
-                        ModuleRoot = moduleRoot,
-                        PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
-                        Credential = credential,
-                        Force = Force.IsPresent,
-                        AllowClobber = AllowClobber.IsPresent,
-                        AcceptLicense = AcceptLicense.IsPresent,
-                        SkipDependencyCheck = SkipDependencyCheck.IsPresent
-                    })
-                .GetAwaiter()
-                .GetResult();
+            var result = service.InstallAsync(request).GetAwaiter().GetResult();
 
             WriteObject(result);
         }
