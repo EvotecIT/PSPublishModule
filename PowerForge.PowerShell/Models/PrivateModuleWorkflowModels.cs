@@ -12,6 +12,13 @@ internal sealed class PrivateModuleWorkflowRequest
 {
     internal PrivateModuleWorkflowOperation Operation { get; set; }
     internal IReadOnlyList<string> ModuleNames { get; set; } = System.Array.Empty<string>();
+    internal IReadOnlyDictionary<string, string> RequiredVersions { get; set; } = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+    internal IReadOnlyDictionary<string, string> MinimumVersions { get; set; } = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+    internal IReadOnlyDictionary<string, bool> MinimumVersionInclusivity { get; set; } = new Dictionary<string, bool>(System.StringComparer.OrdinalIgnoreCase);
+    internal IReadOnlyDictionary<string, string> MaximumVersions { get; set; } = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+    internal IReadOnlyDictionary<string, bool> MaximumVersionInclusivity { get; set; } = new Dictionary<string, bool>(System.StringComparer.OrdinalIgnoreCase);
+    internal string? InstallScope { get; set; }
+    internal IReadOnlyDictionary<string, string> InstallScopes { get; set; } = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
     internal bool UseAzureArtifacts { get; set; }
     internal bool UseMicrosoftArtifactRegistry { get; set; }
     internal string? ProfileName { get; set; }

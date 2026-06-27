@@ -32,7 +32,15 @@ internal sealed class PrivateModuleWorkflowService
         if (shouldProcess is null)
             throw new ArgumentNullException(nameof(shouldProcess));
 
-        var modules = _privateGalleryService.BuildDependencies(request.ModuleNames);
+        var modules = _privateGalleryService.BuildDependencies(
+            request.ModuleNames,
+            request.RequiredVersions,
+            request.MinimumVersions,
+            request.MinimumVersionInclusivity,
+            request.MaximumVersions,
+            request.MaximumVersionInclusivity,
+            request.InstallScope,
+            request.InstallScopes);
         var repositoryName = request.RepositoryName;
         RepositoryCredential? credential = null;
         var preferPowerShellGet = false;
