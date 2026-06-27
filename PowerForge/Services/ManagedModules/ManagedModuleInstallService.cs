@@ -34,6 +34,44 @@ public sealed class ManagedModuleInstallService
         CancellationToken cancellationToken = default)
         => await InstallAsync(request, new ManagedModuleInstallContext(), cancellationToken).ConfigureAwait(false);
 
+    /// <summary>
+    /// Creates a non-mutating install plan for the requested module.
+    /// </summary>
+    /// <param name="request">Install request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Install plan.</returns>
+    public async Task<ManagedModuleInstallPlan> PlanInstallAsync(
+        ManagedModuleInstallRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        Validate(request);
+
+        var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
+        var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
+        var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
+        var exists = Directory.Exists(modulePath);
+        var action = exists
+            ? request.Force ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
+            : ManagedModuleInstallPlanAction.Install;
+
+        return new ManagedModuleInstallPlan
+        {
+            Name = request.Name.Trim(),
+            Version = version,
+            Action = action,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            ModuleRoot = moduleRoot,
+            ModulePath = modulePath,
+            ExistingVersionFound = exists,
+            WouldWriteFiles = action != ManagedModuleInstallPlanAction.SkipExisting,
+            RequestedVersion = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy
+        };
+    }
+
     private async Task<ManagedModuleInstallResult> InstallAsync(
         ManagedModuleInstallRequest request,
         ManagedModuleInstallContext context,
