@@ -166,6 +166,16 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter EnableNativeInstallUpdateBenchmark { get; set; }
 
+    /// <summary>Maximum allowed managed median slowdown ratio before transition readiness is blocked.</summary>
+    [Parameter]
+    [ValidateRange(1.0, double.MaxValue)]
+    public double MaximumManagedSlowdownRatio { get; set; } = 3.0;
+
+    /// <summary>Absolute managed median slowdown tolerance, in milliseconds, before transition readiness is blocked.</summary>
+    [Parameter]
+    [ValidateRange(0, int.MaxValue)]
+    public int MaximumManagedSlowdownMilliseconds { get; set; } = 5000;
+
     /// <summary>Import the delivered module in out-of-process PowerShell hosts and record version evidence.</summary>
     [Parameter]
     public SwitchParameter ValidateImport { get; set; }
@@ -219,7 +229,9 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
                 Scenarios = scenarios,
                 Engines = Engine,
                 ContinueOnError = !StopOnError.IsPresent,
-                EnableNativeInstallUpdateBenchmarks = EnableNativeInstallUpdateBenchmark.IsPresent
+                EnableNativeInstallUpdateBenchmarks = EnableNativeInstallUpdateBenchmark.IsPresent,
+                MaximumManagedSlowdownRatio = MaximumManagedSlowdownRatio,
+                MaximumManagedSlowdownMilliseconds = MaximumManagedSlowdownMilliseconds
             }).GetAwaiter().GetResult();
 
         if (ValidateImport.IsPresent)

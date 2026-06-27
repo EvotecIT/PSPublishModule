@@ -77,6 +77,8 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.True(command.Parameters.ContainsKey("ImportHost"));
         Assert.True(command.Parameters.ContainsKey("RequireTransitionReady"));
         Assert.True(command.Parameters.ContainsKey("EnableNativeInstallUpdateBenchmark"));
+        Assert.True(command.Parameters.ContainsKey("MaximumManagedSlowdownRatio"));
+        Assert.True(command.Parameters.ContainsKey("MaximumManagedSlowdownMilliseconds"));
         Assert.True(command.Parameters.ContainsKey("ModulePath"));
         Assert.True(command.Parameters.ContainsKey("PackageOutputDirectory"));
     }

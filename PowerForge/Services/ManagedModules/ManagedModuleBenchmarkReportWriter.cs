@@ -180,8 +180,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
             return;
         }
 
-        markdown.AppendLine("| Operation | Status | Default ready | Fallback | Managed | Compatibility | Covered baselines | Reasons |");
-        markdown.AppendLine("| --- | --- | --- | --- | ---: | ---: | --- | --- |");
+        markdown.AppendLine("| Operation | Status | Default ready | Fallback | Managed | Compatibility | Covered baselines | Performance | Reasons |");
+        markdown.AppendLine("| --- | --- | --- | --- | ---: | ---: | --- | --- | --- |");
         foreach (var gate in gates.OrderBy(static gate => gate.Operation))
         {
             markdown.Append("| ")
@@ -202,6 +202,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(gate.CompatibilityRunCount)
                 .Append(" | ")
                 .Append(Escape(FormatCompatibilityCoverage(gate)))
+                .Append(" | ")
+                .Append(Escape(FormatPerformance(gate)))
                 .Append(" | ")
                 .Append(Escape(string.Join("; ", gate.Reasons ?? Array.Empty<string>())))
                 .AppendLine(" |");
@@ -230,6 +232,23 @@ public sealed class ManagedModuleBenchmarkReportWriter
             ", ",
             required.Select(engine => covered.Contains(engine, StringComparer.OrdinalIgnoreCase) ? engine + ":ok" : engine + ":missing"));
     }
+
+    private static string FormatPerformance(ManagedModuleBenchmarkTransitionGateResult gate)
+    {
+        if (gate.PerformanceWithinPolicy is null)
+            return "not evaluated";
+
+        var state = gate.PerformanceWithinPolicy == true ? "ok" : "blocked";
+        return state +
+               " (managed median " + FormatNullableMilliseconds(gate.ManagedMedianMilliseconds) +
+               ", compatibility median " + FormatNullableMilliseconds(gate.CompatibilityMedianMilliseconds) +
+               ", allowed " + FormatNullableMilliseconds(gate.AllowedManagedMilliseconds) + ")";
+    }
+
+    private static string FormatNullableMilliseconds(double? milliseconds)
+        => milliseconds.HasValue
+            ? milliseconds.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " ms"
+            : "n/a";
 
     private static BenchmarkElapsedStatistics CalculateStatistics(IEnumerable<TimeSpan> elapsedValues)
     {

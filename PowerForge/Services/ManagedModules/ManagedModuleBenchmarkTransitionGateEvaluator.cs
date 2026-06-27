@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace PowerForge;
 
 /// <summary>
@@ -15,22 +17,32 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
     /// Evaluates operation-level transition gates from benchmark runs.
     /// </summary>
     /// <param name="runs">Benchmark runs.</param>
+    /// <param name="maximumManagedSlowdownRatio">Maximum allowed managed median slowdown ratio. Values less than or equal to zero disable performance gating.</param>
+    /// <param name="maximumManagedSlowdownMilliseconds">Absolute managed median slowdown tolerance, in milliseconds.</param>
     /// <returns>Transition gate results for benchmarked install/save/update/publish operations.</returns>
     public static IReadOnlyList<ManagedModuleBenchmarkTransitionGateResult> Evaluate(
-        IReadOnlyList<ManagedModuleBenchmarkRunResult>? runs)
+        IReadOnlyList<ManagedModuleBenchmarkRunResult>? runs,
+        double maximumManagedSlowdownRatio = 0,
+        int maximumManagedSlowdownMilliseconds = 0)
     {
         var benchmarkRuns = runs ?? Array.Empty<ManagedModuleBenchmarkRunResult>();
         return benchmarkRuns
             .Where(static run => IsTransitionOperation(run.Operation))
             .GroupBy(static run => run.Operation)
             .OrderBy(static group => group.Key)
-            .Select(static group => EvaluateOperation(group.Key, group.ToArray()))
+            .Select(group => EvaluateOperation(
+                group.Key,
+                group.ToArray(),
+                maximumManagedSlowdownRatio,
+                Math.Max(0, maximumManagedSlowdownMilliseconds)))
             .ToArray();
     }
 
     private static ManagedModuleBenchmarkTransitionGateResult EvaluateOperation(
         ManagedModuleBenchmarkOperation operation,
-        IReadOnlyList<ManagedModuleBenchmarkRunResult> runs)
+        IReadOnlyList<ManagedModuleBenchmarkRunResult> runs,
+        double maximumManagedSlowdownRatio,
+        int maximumManagedSlowdownMilliseconds)
     {
         var managedRuns = runs
             .Where(static run => IsManagedEngine(run.Engine))
@@ -41,7 +53,12 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
         var coveredCompatibilityEngines = RequiredCompatibilityEngines
             .Where(engine => compatibilityRuns.Any(run => IsEngine(run.Engine, engine) && run.Succeeded))
             .ToArray();
-        var reasons = BuildReasons(operation, managedRuns, compatibilityRuns, coveredCompatibilityEngines);
+        var performance = EvaluatePerformance(
+            managedRuns,
+            compatibilityRuns,
+            maximumManagedSlowdownRatio,
+            maximumManagedSlowdownMilliseconds);
+        var reasons = BuildReasons(operation, managedRuns, compatibilityRuns, coveredCompatibilityEngines, performance);
         var status = ResolveStatus(operation, compatibilityRuns, reasons);
         var nativeIsolationRequired = RequiresNativeIsolation(operation, compatibilityRuns);
         var fallbackReason = ResolveCompatibilityFallbackReason(status, nativeIsolationRequired, reasons);
@@ -60,6 +77,12 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
             SuccessfulCompatibilityRunCount = compatibilityRuns.Count(static run => run.Succeeded),
             RequiredCompatibilityEngines = RequiredCompatibilityEngines,
             CoveredCompatibilityEngines = coveredCompatibilityEngines,
+            ManagedMedianMilliseconds = ToMilliseconds(performance?.ManagedMedian),
+            CompatibilityMedianMilliseconds = ToMilliseconds(performance?.CompatibilityMedian),
+            AllowedManagedMilliseconds = ToMilliseconds(performance?.AllowedManagedMedian),
+            PerformanceWithinPolicy = performance?.WithinPolicy,
+            MaximumManagedSlowdownRatio = performance?.MaximumManagedSlowdownRatio,
+            MaximumManagedSlowdownMilliseconds = performance?.MaximumManagedSlowdownMilliseconds,
             Reasons = reasons.Count == 0
                 ? new[] { "Managed and compatibility benchmark evidence passed for this operation." }
                 : reasons
@@ -70,7 +93,8 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
         ManagedModuleBenchmarkOperation operation,
         IReadOnlyList<ManagedModuleBenchmarkRunResult> managedRuns,
         IReadOnlyList<ManagedModuleBenchmarkRunResult> compatibilityRuns,
-        IReadOnlyCollection<string> coveredCompatibilityEngines)
+        IReadOnlyCollection<string> coveredCompatibilityEngines,
+        PerformanceEvidence? performance)
     {
         var reasons = new List<string>();
         if (managedRuns.Count == 0)
@@ -82,6 +106,8 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
             reasons.Add("One or more managed runs failed installed-version validation.");
         if (managedRuns.Any(HasFailedImportValidation))
             reasons.Add("One or more managed runs failed import validation.");
+        if (performance is { WithinPolicy: false } && !string.IsNullOrWhiteSpace(performance.Reason))
+            reasons.Add(performance.Reason!);
 
         var missingCompatibility = RequiredCompatibilityEngines
             .Where(engine => !coveredCompatibilityEngines.Contains(engine, StringComparer.OrdinalIgnoreCase))
@@ -163,6 +189,70 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
         => (run.ImportValidations ?? Array.Empty<ManagedModuleImportValidationResult>())
             .Any(static validation => !validation.Succeeded);
 
+    private static PerformanceEvidence? EvaluatePerformance(
+        IReadOnlyList<ManagedModuleBenchmarkRunResult> managedRuns,
+        IReadOnlyList<ManagedModuleBenchmarkRunResult> compatibilityRuns,
+        double maximumManagedSlowdownRatio,
+        int maximumManagedSlowdownMilliseconds)
+    {
+        if (maximumManagedSlowdownRatio <= 0)
+            return null;
+
+        var managedMedian = MedianElapsed(managedRuns.Where(static run => run.Succeeded));
+        var compatibilityMedian = compatibilityRuns
+            .Where(static run => run.Succeeded)
+            .GroupBy(static run => string.IsNullOrWhiteSpace(run.Engine) ? "Unknown" : run.Engine!)
+            .Select(static group => MedianElapsed(group))
+            .Where(static median => median.HasValue)
+            .OrderBy(static median => median!.Value)
+            .FirstOrDefault();
+        if (!managedMedian.HasValue || !compatibilityMedian.HasValue)
+            return null;
+
+        var tolerance = TimeSpan.FromMilliseconds(Math.Max(0, maximumManagedSlowdownMilliseconds));
+        var ratioLimit = TimeSpan.FromTicks((long)(compatibilityMedian.Value.Ticks * maximumManagedSlowdownRatio));
+        var absoluteLimit = compatibilityMedian.Value + tolerance;
+        var allowed = ratioLimit > absoluteLimit ? ratioLimit : absoluteLimit;
+        var withinPolicy = managedMedian.Value <= allowed;
+        return new PerformanceEvidence
+        {
+            ManagedMedian = managedMedian.Value,
+            CompatibilityMedian = compatibilityMedian.Value,
+            AllowedManagedMedian = allowed,
+            WithinPolicy = withinPolicy,
+            MaximumManagedSlowdownRatio = maximumManagedSlowdownRatio,
+            MaximumManagedSlowdownMilliseconds = maximumManagedSlowdownMilliseconds,
+            Reason = withinPolicy
+                ? null
+                : "Managed median elapsed " + FormatMilliseconds(managedMedian.Value) +
+                  " exceeded allowed " + FormatMilliseconds(allowed) +
+                  " for fastest compatibility median " + FormatMilliseconds(compatibilityMedian.Value) +
+                  " with ratio " + maximumManagedSlowdownRatio.ToString("0.##", CultureInfo.InvariantCulture) +
+                  " and tolerance " + maximumManagedSlowdownMilliseconds.ToString(CultureInfo.InvariantCulture) + " ms."
+        };
+    }
+
+    private static TimeSpan? MedianElapsed(IEnumerable<ManagedModuleBenchmarkRunResult> runs)
+    {
+        var values = runs
+            .Select(static run => run.Elapsed)
+            .Where(static elapsed => elapsed > TimeSpan.Zero)
+            .OrderBy(static elapsed => elapsed)
+            .ToArray();
+        if (values.Length == 0)
+            return null;
+
+        return values.Length % 2 == 1
+            ? values[values.Length / 2]
+            : TimeSpan.FromTicks((values[(values.Length / 2) - 1].Ticks + values[values.Length / 2].Ticks) / 2);
+    }
+
+    private static double? ToMilliseconds(TimeSpan? value)
+        => value?.TotalMilliseconds;
+
+    private static string FormatMilliseconds(TimeSpan value)
+        => value.TotalMilliseconds.ToString("0.##", CultureInfo.InvariantCulture) + " ms";
+
     private static string FormatCompatibilityFailureReason(string engine, ManagedModuleBenchmarkRunResult run)
     {
         var message = NormalizeFailureMessage(run.ErrorMessage);
@@ -192,4 +282,21 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
         => !run.Succeeded &&
            !string.IsNullOrWhiteSpace(run.ErrorMessage) &&
            run.ErrorMessage!.IndexOf("custom module-root isolation", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private sealed class PerformanceEvidence
+    {
+        internal TimeSpan ManagedMedian { get; set; }
+
+        internal TimeSpan CompatibilityMedian { get; set; }
+
+        internal TimeSpan AllowedManagedMedian { get; set; }
+
+        internal bool WithinPolicy { get; set; }
+
+        internal double MaximumManagedSlowdownRatio { get; set; }
+
+        internal int MaximumManagedSlowdownMilliseconds { get; set; }
+
+        internal string? Reason { get; set; }
+    }
 }

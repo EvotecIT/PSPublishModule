@@ -11,7 +11,7 @@ Measures managed module lifecycle scenarios through the managed C# module engine
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Measure-ManagedModule [-Name] <string[]> [-Operation <ManagedModuleBenchmarkOperation>] [-Engine <ManagedModuleBenchmarkEngine[]>] [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-ModulePath <string>] [-ManifestPath <string>] [-PackageCacheDirectory <string>] [-PackageOutputDirectory <string>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-Iterations <int>] [-StopOnError] [-RequireTransitionReady] [-EnableNativeInstallUpdateBenchmark] [-ValidateImport] [-ImportHost <ManagedModuleImportValidationHost[]>] [-ReportPath <string>] [-MarkdownReportPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Measure-ManagedModule [-Name] <string[]> [-Operation <ManagedModuleBenchmarkOperation>] [-Engine <ManagedModuleBenchmarkEngine[]>] [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-ModulePath <string>] [-ManifestPath <string>] [-PackageCacheDirectory <string>] [-PackageOutputDirectory <string>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-Iterations <int>] [-StopOnError] [-RequireTransitionReady] [-EnableNativeInstallUpdateBenchmark] [-MaximumManagedSlowdownRatio <double>] [-MaximumManagedSlowdownMilliseconds <int>] [-ValidateImport] [-ImportHost <ManagedModuleImportValidationHost[]>] [-ReportPath <string>] [-MarkdownReportPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -225,6 +225,38 @@ Optional Markdown report path for benchmark evidence.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MaximumManagedSlowdownMilliseconds
+Absolute managed median slowdown tolerance, in milliseconds, before transition readiness is blocked.
+
+```yaml
+Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MaximumManagedSlowdownRatio
+Maximum allowed managed median slowdown ratio before transition readiness is blocked.
+
+```yaml
+Type: Double
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

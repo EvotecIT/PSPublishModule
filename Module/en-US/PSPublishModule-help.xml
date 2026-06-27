@@ -27212,6 +27212,30 @@ engine directly and returns typed benchmark run data that can be compared with c
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MaximumManagedSlowdownMilliseconds</maml:name>
+          <maml:description>
+            <maml:para>Absolute managed median slowdown tolerance, in milliseconds, before transition readiness is blocked.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MaximumManagedSlowdownRatio</maml:name>
+          <maml:description>
+            <maml:para>Maximum allowed managed median slowdown ratio before transition readiness is blocked.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>MaximumVersion</maml:name>
           <maml:description>
             <maml:para>Maximum package version to measure when Version is omitted.</maml:para>
@@ -27644,6 +27668,30 @@ engine directly and returns typed benchmark run data that can be compared with c
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MaximumManagedSlowdownMilliseconds</maml:name>
+        <maml:description>
+          <maml:para>Absolute managed median slowdown tolerance, in milliseconds, before transition readiness is blocked.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MaximumManagedSlowdownRatio</maml:name>
+        <maml:description>
+          <maml:para>Maximum allowed managed median slowdown ratio before transition readiness is blocked.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+        <dev:type>
+          <maml:name>Double</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

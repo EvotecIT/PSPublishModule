@@ -298,6 +298,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add optional benchmark import validation evidence for PowerShell host checks.
 - [x] Add typed transition-gate evidence to benchmark JSON and Markdown reports.
 - [x] Add `Measure-ManagedModule -RequireTransitionReady` for CI/default-switch gating.
+- [x] Add configurable transition-gate performance policy comparing managed median elapsed time with successful compatibility baselines.
 - [x] Add explicit disposable-host native install/update benchmark opt-in for `Install-Module`, `Install-PSResource`, `Update-Module`, and `Update-PSResource`.
 - [x] Validate imported module version after install in PS 5.1 and PS 7+ benchmark runners.
 - [x] Validate receipts after install/update.
