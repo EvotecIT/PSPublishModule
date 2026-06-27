@@ -284,8 +284,8 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [ ] Measure cold cache install.
 - [ ] Measure warm cache install.
 - [x] Measure save to empty path.
-- [ ] Measure save to warm path.
-- [ ] Measure update no-op.
+- [x] Measure save to warm path.
+- [x] Measure update no-op.
 - [x] Measure update with one newer version.
 - [x] Measure publish to local folder feed.
 - [ ] Measure large dependency graph resolution.
@@ -308,7 +308,9 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save` against the same local folder feed, saved `Company.Tools` 1.0.0 into empty custom roots, validated the saved manifest version, and confirmed out-of-process imports in both hosts returned version 1.0.0.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both seeded `Company.Tools` 1.0.0 with `Install-ManagedModule`, ran `Measure-ManagedModule -Operation Update` against a local folder feed containing 1.1.0, validated the updated manifest version, and confirmed out-of-process imports in both hosts returned version 1.1.0.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Publish-ManagedModule` against local folder feeds, produced `.nupkg` packages for simple source modules, and installed the published packages back through `Install-ManagedModule`.
-- [ ] Public-feed, private-feed, heavy-module, warm-cache, no-op update, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save` twice against the same local folder feed and destination root; the first save returned `Installed`, and the warm-path save returned `AlreadyInstalled`.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both seeded `Company.Tools` 1.0.0 with `Measure-ManagedModule -Operation Install`, then ran `Measure-ManagedModule -Operation Update -Version 1.0.0`; the update returned `UpToDate` with previous and target version 1.0.0.
+- [ ] Public-feed, private-feed, heavy-module, warm-cache install, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 
@@ -322,7 +324,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] Publish a simple module.
 - [ ] Publish a binary module.
 - [ ] Publish a module with dependencies.
-- [ ] Update already-current modules.
+- [x] Update already-current modules.
 - [ ] Update stale modules.
 - [ ] Repair source mismatch.
 - [ ] Repair scope mismatch.
