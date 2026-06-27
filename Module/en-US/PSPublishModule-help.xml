@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <helpItems schema="maml" xmlns="http://msh">
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
@@ -11305,6 +11305,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="RequiredAuthor,TrustedAuthor">
+          <maml:name>AllowedAuthor</maml:name>
+          <maml:description>
+            <maml:para>Allowed package author values from package metadata.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Credential</maml:name>
           <maml:description>
@@ -11345,6 +11357,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
           <maml:name>CredentialUserName</maml:name>
           <maml:description>
             <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="PackageSha256,Sha256">
+          <maml:name>ExpectedPackageSha256</maml:name>
+          <maml:description>
+            <maml:para>Expected SHA256 hash of the root package before it is extracted and promoted.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -11486,6 +11510,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireTrustedRepository</maml:name>
+          <maml:description>
+            <maml:para>Require the selected repository profile to be marked trusted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Scope</maml:name>
           <maml:description>
             <maml:para>Install scope used when ModuleRoot is not supplied.</maml:para>
@@ -11543,6 +11579,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TrustPolicy</maml:name>
+          <maml:description>
+            <maml:para>Optional typed repository/package trust policy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleTrustPolicy</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleTrustPolicy</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredVersion">
           <maml:name>Version</maml:name>
           <maml:description>
@@ -11594,6 +11642,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="RequiredAuthor,TrustedAuthor">
+        <maml:name>AllowedAuthor</maml:name>
+        <maml:description>
+          <maml:para>Allowed package author values from package metadata.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Credential</maml:name>
         <maml:description>
@@ -11634,6 +11694,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
         <maml:name>CredentialUserName</maml:name>
         <maml:description>
           <maml:para>Optional repository credential username.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="PackageSha256,Sha256">
+        <maml:name>ExpectedPackageSha256</maml:name>
+        <maml:description>
+          <maml:para>Expected SHA256 hash of the root package before it is extracted and promoted.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -11775,6 +11847,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequireTrustedRepository</maml:name>
+        <maml:description>
+          <maml:para>Require the selected repository profile to be marked trusted.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Scope</maml:name>
         <maml:description>
           <maml:para>Install scope used when ModuleRoot is not supplied.</maml:para>
@@ -11828,6 +11912,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TrustPolicy</maml:name>
+        <maml:description>
+          <maml:para>Optional typed repository/package trust policy.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleTrustPolicy</command:parameterValue>
+        <dev:type>
+          <maml:name>ManagedModuleTrustPolicy</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27066,6 +27162,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ManifestPath</maml:name>
+          <maml:description>
+            <maml:para>Module manifest path used by publish measurements.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>MarkdownReportPath</maml:name>
           <maml:description>
             <maml:para>Optional Markdown report path for benchmark evidence.</maml:para>
@@ -27093,6 +27201,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           <maml:name>MinimumVersion</maml:name>
           <maml:description>
             <maml:para>Minimum package version to measure when Version is omitted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ModulePath</maml:name>
+          <maml:description>
+            <maml:para>Module source folder used by publish measurements.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -27135,6 +27255,7 @@ engine directly and returns typed benchmark run data that can be compared with c
             <command:parameterValue required="false" variableLength="false">Install</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Save</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ManagedModuleBenchmarkOperation</maml:name>
@@ -27146,6 +27267,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           <maml:name>PackageCacheDirectory</maml:name>
           <maml:description>
             <maml:para>Optional package cache directory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackageOutputDirectory</maml:name>
+          <maml:description>
+            <maml:para>Optional package output directory used by publish measurements.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -27441,6 +27574,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ManifestPath</maml:name>
+        <maml:description>
+          <maml:para>Module manifest path used by publish measurements.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MarkdownReportPath</maml:name>
         <maml:description>
           <maml:para>Optional Markdown report path for benchmark evidence.</maml:para>
@@ -27468,6 +27613,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         <maml:name>MinimumVersion</maml:name>
         <maml:description>
           <maml:para>Minimum package version to measure when Version is omitted.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ModulePath</maml:name>
+        <maml:description>
+          <maml:para>Module source folder used by publish measurements.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -27510,6 +27667,7 @@ engine directly and returns typed benchmark run data that can be compared with c
           <command:parameterValue required="false" variableLength="false">Install</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Save</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ManagedModuleBenchmarkOperation</maml:name>
@@ -27521,6 +27679,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         <maml:name>PackageCacheDirectory</maml:name>
         <maml:description>
           <maml:para>Optional package cache directory.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PackageOutputDirectory</maml:name>
+        <maml:description>
+          <maml:para>Optional package output directory used by publish measurements.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -45891,7 +46061,7 @@ module build should coordinate with that package lane.</maml:para>
     <maml:description>
       <maml:para>This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.&#xD;
 Use -Type to choose a destination. For repository publishing, -Tool selects the provider&#xD;
-(PowerShellGet/PSResourceGet/Auto).</maml:para>
+(PowerShellGet/PSResourceGet/ManagedModule/Auto).</maml:para>
       <maml:para>For private repositories (for example Azure DevOps Artifacts, JFrog Artifactory, GitHub Packages, or private NuGet v3 feeds), provide repository URIs&#xD;
 and (optionally) credentials, or use provider-specific preset parameters to resolve those URIs automatically.&#xD;
 To avoid secrets in source control, pass API keys/tokens via -FilePath or environment-specific tooling.</maml:para>
@@ -46000,7 +46170,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -46160,6 +46330,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepositoryUri</maml:name>
+          <maml:description>
+            <maml:para>Repository URL or local feed path used by managed publishing as the source for missing RequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -46169,6 +46351,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PublishTool</maml:name>
@@ -46330,7 +46513,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -46490,6 +46673,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepositoryUri</maml:name>
+          <maml:description>
+            <maml:para>Repository URL or local feed path used by managed publishing as the source for missing RequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -46499,6 +46694,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PublishTool</maml:name>
@@ -46725,7 +46921,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -46885,6 +47081,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepositoryUri</maml:name>
+          <maml:description>
+            <maml:para>Repository URL or local feed path used by managed publishing as the source for missing RequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -46894,6 +47102,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PublishTool</maml:name>
@@ -47031,7 +47240,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -47155,6 +47364,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepositoryUri</maml:name>
+          <maml:description>
+            <maml:para>Repository URL or local feed path used by managed publishing as the source for missing RequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -47164,6 +47385,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>PublishTool</maml:name>
@@ -47273,7 +47495,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PublishRequiredModules</maml:name>
           <maml:description>
-            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+            <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -47334,6 +47556,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:name>RequiredModuleSourceRepository</maml:name>
           <maml:description>
             <maml:para>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModuleSourceRepositoryUri</maml:name>
+          <maml:description>
+            <maml:para>Repository URL or local feed path used by managed publishing as the source for missing RequiredModules.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -47593,7 +47827,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>PublishRequiredModules</maml:name>
         <maml:description>
-          <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</maml:para>
+          <maml:para>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -47753,6 +47987,18 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredModuleSourceRepositoryUri</maml:name>
+        <maml:description>
+          <maml:para>Repository URL or local feed path used by managed publishing as the source for missing RequiredModules.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Tool</maml:name>
         <maml:description>
           <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -47762,6 +48008,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PublishTool</maml:name>
@@ -56248,6 +56495,18 @@ an explicit destination root instead of installing into the default PowerShell m
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="RequiredAuthor,TrustedAuthor">
+          <maml:name>AllowedAuthor</maml:name>
+          <maml:description>
+            <maml:para>Allowed package author values from package metadata.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="MetadataPath,OfflineBundleMetadataPath">
           <maml:name>BundleMetadataPath</maml:name>
           <maml:description>
@@ -56300,6 +56559,18 @@ an explicit destination root instead of installing into the default PowerShell m
           <maml:name>CredentialUserName</maml:name>
           <maml:description>
             <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="PackageSha256,Sha256">
+          <maml:name>ExpectedPackageSha256</maml:name>
+          <maml:description>
+            <maml:para>Expected SHA256 hash of the root package before it is extracted and saved.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -56441,6 +56712,18 @@ an explicit destination root instead of installing into the default PowerShell m
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireTrustedRepository</maml:name>
+          <maml:description>
+            <maml:para>Require the selected repository profile to be marked trusted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
             <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
@@ -56460,6 +56743,18 @@ an explicit destination root instead of installing into the default PowerShell m
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TrustPolicy</maml:name>
+          <maml:description>
+            <maml:para>Optional typed repository/package trust policy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleTrustPolicy</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleTrustPolicy</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -56511,6 +56806,18 @@ an explicit destination root instead of installing into the default PowerShell m
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="RequiredAuthor,TrustedAuthor">
+        <maml:name>AllowedAuthor</maml:name>
+        <maml:description>
+          <maml:para>Allowed package author values from package metadata.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -56567,6 +56874,18 @@ an explicit destination root instead of installing into the default PowerShell m
         <maml:name>CredentialUserName</maml:name>
         <maml:description>
           <maml:para>Optional repository credential username.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="PackageSha256,Sha256">
+        <maml:name>ExpectedPackageSha256</maml:name>
+        <maml:description>
+          <maml:para>Expected SHA256 hash of the root package before it is extracted and saved.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -56708,6 +57027,18 @@ an explicit destination root instead of installing into the default PowerShell m
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequireTrustedRepository</maml:name>
+        <maml:description>
+          <maml:para>Require the selected repository profile to be marked trusted.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ShowSummary</maml:name>
         <maml:description>
           <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
@@ -56727,6 +57058,18 @@ an explicit destination root instead of installing into the default PowerShell m
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TrustPolicy</maml:name>
+        <maml:description>
+          <maml:para>Optional typed repository/package trust policy.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleTrustPolicy</command:parameterValue>
+        <dev:type>
+          <maml:name>ManagedModuleTrustPolicy</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -63873,6 +64216,18 @@ version, or installs the target when the selected scope has no copy.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="RequiredAuthor,TrustedAuthor">
+          <maml:name>AllowedAuthor</maml:name>
+          <maml:description>
+            <maml:para>Allowed package author values from package metadata.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>AllowLoadedModuleUpdate</maml:name>
           <maml:description>
@@ -63925,6 +64280,18 @@ version, or installs the target when the selected scope has no copy.</maml:para>
           <maml:name>CredentialUserName</maml:name>
           <maml:description>
             <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="PackageSha256,Sha256">
+          <maml:name>ExpectedPackageSha256</maml:name>
+          <maml:description>
+            <maml:para>Expected SHA256 hash of the requested module package before it is extracted and promoted.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -64138,6 +64505,18 @@ version, or installs the target when the selected scope has no copy.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireTrustedRepository</maml:name>
+          <maml:description>
+            <maml:para>Require the selected repository profile to be marked trusted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Scope</maml:name>
           <maml:description>
             <maml:para>Scope to inspect and update when ModuleRoot is not supplied.</maml:para>
@@ -64207,6 +64586,18 @@ version, or installs the target when the selected scope has no copy.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TrustPolicy</maml:name>
+          <maml:description>
+            <maml:para>Optional typed repository/package trust policy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleTrustPolicy</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleTrustPolicy</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredVersion">
           <maml:name>Version</maml:name>
           <maml:description>
@@ -64254,6 +64645,18 @@ version, or installs the target when the selected scope has no copy.</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="RequiredAuthor,TrustedAuthor">
+        <maml:name>AllowedAuthor</maml:name>
+        <maml:description>
+          <maml:para>Allowed package author values from package metadata.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -64310,6 +64713,18 @@ version, or installs the target when the selected scope has no copy.</maml:para>
         <maml:name>CredentialUserName</maml:name>
         <maml:description>
           <maml:para>Optional repository credential username.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="PackageSha256,Sha256">
+        <maml:name>ExpectedPackageSha256</maml:name>
+        <maml:description>
+          <maml:para>Expected SHA256 hash of the requested module package before it is extracted and promoted.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -64523,6 +64938,18 @@ version, or installs the target when the selected scope has no copy.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequireTrustedRepository</maml:name>
+        <maml:description>
+          <maml:para>Require the selected repository profile to be marked trusted.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Scope</maml:name>
         <maml:description>
           <maml:para>Scope to inspect and update when ModuleRoot is not supplied.</maml:para>
@@ -64588,6 +65015,18 @@ version, or installs the target when the selected scope has no copy.</maml:para>
         <command:parameterValue required="false" variableLength="false">ManagedModuleSourcePolicy</command:parameterValue>
         <dev:type>
           <maml:name>ManagedModuleSourcePolicy</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TrustPolicy</maml:name>
+        <maml:description>
+          <maml:para>Optional typed repository/package trust policy.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleTrustPolicy</command:parameterValue>
+        <dev:type>
+          <maml:name>ManagedModuleTrustPolicy</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

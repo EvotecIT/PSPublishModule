@@ -11,7 +11,7 @@ Updates installed PowerShell modules through the managed C# module engine.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Update-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-FamilyPolicy <ManagedModuleFamilyPolicy>] [-FamilyName <string>] [-FamilyModuleNamePrefix <string>] [-FamilyModuleName <string[]>] [-SourcePolicy <ManagedModuleSourcePolicy>] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-FamilyPolicy <ManagedModuleFamilyPolicy>] [-FamilyName <string>] [-FamilyModuleNamePrefix <string>] [-FamilyModuleName <string[]>] [-SourcePolicy <ManagedModuleSourcePolicy>] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -57,6 +57,22 @@ Allow command exports to overlap with other modules in the target root.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AllowedAuthor
+Allowed package author values from package metadata.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: RequiredAuthor, TrustedAuthor
 Possible values:
 
 Required: False
@@ -137,6 +153,22 @@ Optional repository credential username.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: UserName
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExpectedPackageSha256
+Expected SHA256 hash of the requested module package before it is extracted and promoted.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: PackageSha256, Sha256
 Possible values:
 
 Required: False
@@ -418,6 +450,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -RequireTrustedRepository
+Require the selected repository profile to be marked trusted.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -Scope
 Scope to inspect and update when ModuleRoot is not supplied.
 
@@ -487,6 +535,22 @@ Typed source policy used to require managed receipt evidence from the requested 
 
 ```yaml
 Type: ManagedModuleSourcePolicy
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TrustPolicy
+Optional typed repository/package trust policy.
+
+```yaml
+Type: ManagedModuleTrustPolicy
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

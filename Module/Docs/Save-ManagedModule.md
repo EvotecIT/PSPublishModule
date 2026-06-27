@@ -11,7 +11,7 @@ Saves modules from a managed repository to an explicit module root.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -57,6 +57,22 @@ Allow command exports to overlap with other modules in the destination root.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AllowedAuthor
+Allowed package author values from package metadata.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: RequiredAuthor, TrustedAuthor
 Possible values:
 
 Required: False
@@ -137,6 +153,22 @@ Optional repository credential username.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: UserName
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExpectedPackageSha256
+Expected SHA256 hash of the root package before it is extracted and saved.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: PackageSha256, Sha256
 Possible values:
 
 Required: False
@@ -322,6 +354,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -RequireTrustedRepository
+Require the selected repository profile to be marked trusted.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -ShowSummary
 Write a compact Spectre.Console summary for each plan or result.
 
@@ -345,6 +393,22 @@ Skip installing dependencies declared by the package.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: SkipDependenciesCheck
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TrustPolicy
+Optional typed repository/package trust policy.
+
+```yaml
+Type: ManagedModuleTrustPolicy
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False
