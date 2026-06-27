@@ -9,6 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Collection("ModuleRepositoryProfileEnvironment")]
 public sealed class InvokeModuleStateCommandTests
 {
     [Fact]

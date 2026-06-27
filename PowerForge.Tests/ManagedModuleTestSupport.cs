@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 
 namespace PowerForge.Tests;
 
@@ -129,4 +130,14 @@ internal static class TestPackageFactory
         => string.IsNullOrWhiteSpace(dependency.Version)
             ? $"        <dependency id=\"{dependency.Id}\" />"
             : $"        <dependency id=\"{dependency.Id}\" version=\"{dependency.Version}\" />";
+}
+
+internal static class TestHash
+{
+    public static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+    }
 }

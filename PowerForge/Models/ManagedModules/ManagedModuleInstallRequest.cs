@@ -61,6 +61,11 @@ public sealed class ManagedModuleInstallRequest
     public string? PackageCacheDirectory { get; set; }
 
     /// <summary>
+    /// Optional expected SHA256 hash for the root package being installed or saved.
+    /// </summary>
+    public string? ExpectedPackageSha256 { get; set; }
+
+    /// <summary>
     /// Repository credential.
     /// </summary>
     public RepositoryCredential? Credential { get; set; }

@@ -94,6 +94,12 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? PackageCacheDirectory { get; set; }
 
+    /// <summary>Expected SHA256 hash of the requested module package before it is extracted and promoted.</summary>
+    [Parameter]
+    [Alias("PackageSha256", "Sha256")]
+    [ValidateNotNullOrEmpty]
+    public string? ExpectedPackageSha256 { get; set; }
+
     /// <summary>Optional repository credential.</summary>
     [Parameter]
     public PSCredential? Credential { get; set; }
@@ -202,6 +208,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                 ShellEdition = ShellEdition,
                 ModuleRoot = moduleRoot,
                 PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                ExpectedPackageSha256 = ExpectedPackageSha256,
                 Credential = credential,
                 Force = Force.IsPresent,
                 AllowClobber = AllowClobber.IsPresent,

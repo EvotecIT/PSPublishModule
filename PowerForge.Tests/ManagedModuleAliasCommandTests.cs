@@ -3,6 +3,7 @@ using PSPublishModule;
 
 namespace PowerForge.Tests;
 
+[Collection("ModuleRepositoryProfileEnvironment")]
 public sealed class ManagedModuleAliasCommandTests
 {
     [Theory]
