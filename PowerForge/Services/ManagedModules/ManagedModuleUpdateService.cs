@@ -79,6 +79,7 @@ public sealed class ManagedModuleUpdateService
                 Credential = request.Credential,
                 Force = true,
                 AllowClobber = request.AllowClobber,
+                AcceptLicense = request.AcceptLicense,
                 SkipDependencyCheck = request.SkipDependencyCheck
             },
             cancellationToken).ConfigureAwait(false);

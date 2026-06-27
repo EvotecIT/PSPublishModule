@@ -75,6 +75,7 @@ public sealed class ManagedModulePackageReader
             Description = ReadElement(metadata, "description"),
             ProjectUrl = ReadElement(metadata, "projectUrl"),
             License = ReadLicense(metadata),
+            RequireLicenseAcceptance = ReadBoolean(metadata, "requireLicenseAcceptance"),
             Tags = ReadTags(ReadElement(metadata, "tags")),
             FileCount = CountFiles(archive),
             PackageBytes = info.Length,
@@ -149,6 +150,9 @@ public sealed class ManagedModulePackageReader
             .FirstOrDefault(element => element.Name.LocalName.Equals(localName, StringComparison.OrdinalIgnoreCase))
             ?.Value
             ?.Trim();
+
+    private static bool ReadBoolean(XElement parent, string localName)
+        => bool.TryParse(ReadElement(parent, localName), out var value) && value;
 
     private static string? ReadLicense(XElement metadata)
     {

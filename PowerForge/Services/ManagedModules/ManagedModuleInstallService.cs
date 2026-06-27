@@ -77,6 +77,7 @@ public sealed class ManagedModuleInstallService
                 cacheDirectory,
                 request.Credential,
                 cancellationToken).ConfigureAwait(false);
+            ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
             var extraction = _extractor.ExtractPackage(download.PackagePath, stageModulePath);
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
@@ -173,6 +174,7 @@ public sealed class ManagedModuleInstallService
                     Credential = request.Credential,
                     Force = false,
                     AllowClobber = request.AllowClobber,
+                    AcceptLicense = request.AcceptLicense,
                     SkipDependencyCheck = false
                 },
                 context,
@@ -243,6 +245,17 @@ public sealed class ManagedModuleInstallService
             throw new ArgumentException("VersionPolicy cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
         if (request.Scope == ManagedModuleInstallScope.Custom && string.IsNullOrWhiteSpace(request.ModuleRoot))
             throw new ArgumentException("ModuleRoot is required when Scope is Custom.", nameof(request));
+    }
+
+    private static void ThrowIfLicenseAcceptanceRequired(
+        ManagedModulePackageMetadata? metadata,
+        ManagedModuleInstallRequest request)
+    {
+        if (metadata?.RequireLicenseAcceptance != true || request.AcceptLicense)
+            return;
+
+        throw new InvalidOperationException(
+            $"Package '{metadata.Id}' {metadata.Version} requires license acceptance. Use AcceptLicense to continue.");
     }
 
     private static ManagedModuleVersionRange ResolveVersionRange(string? versionPolicy, string? minimumVersion, string? maximumVersion)

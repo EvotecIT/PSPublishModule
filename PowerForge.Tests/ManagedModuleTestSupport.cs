@@ -42,14 +42,15 @@ internal static class TestPackageFactory
         string id,
         string version,
         IReadOnlyList<TestDependency>? dependencies = null,
-        IReadOnlyDictionary<string, string>? files = null)
+        IReadOnlyDictionary<string, string>? files = null,
+        bool requireLicenseAcceptance = false)
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(packagePath)!);
         using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
         var nuspec = archive.CreateEntry(id + ".nuspec");
         using (var writer = new StreamWriter(nuspec.Open()))
         {
-            writer.Write(CreateNuspec(id, version, dependencies));
+            writer.Write(CreateNuspec(id, version, dependencies, requireLicenseAcceptance));
         }
 
         if (files is null)
@@ -76,8 +77,15 @@ internal static class TestPackageFactory
         return stream.ToArray();
     }
 
-    public static string CreateNuspec(string id, string version, IReadOnlyList<TestDependency>? dependencies = null)
+    public static string CreateNuspec(
+        string id,
+        string version,
+        IReadOnlyList<TestDependency>? dependencies = null,
+        bool requireLicenseAcceptance = false)
     {
+        var licenseAcceptanceXml = requireLicenseAcceptance
+            ? "    <requireLicenseAcceptance>true</requireLicenseAcceptance>" + Environment.NewLine
+            : string.Empty;
         var dependencyXml = CreateDependencyXml(dependencies);
         return $"""
 <?xml version="1.0" encoding="utf-8"?>
@@ -89,7 +97,7 @@ internal static class TestPackageFactory
     <description>Test package.</description>
     <projectUrl>https://example.test/{id}</projectUrl>
     <license type="expression">MIT</license>
-    <tags>powershell automation company</tags>
+{licenseAcceptanceXml}    <tags>powershell automation company</tags>
 {dependencyXml}
   </metadata>
 </package>
