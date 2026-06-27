@@ -427,6 +427,50 @@ public sealed class ManagedModuleBenchmarkServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_IsolatesModuleRootPerEngineForMultiEngineMeasurements()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var roots = new List<string?>();
+        var service = new ManagedModuleBenchmarkService(
+            new NullLogger(),
+            compatibilityRunner: (scenario, engine) =>
+            {
+                roots.Add(scenario.ModuleRoot);
+                return new ModuleDependencyInstallResult(
+                    scenario.Name,
+                    null,
+                    "1.0.0",
+                    scenario.Version,
+                    ModuleDependencyInstallStatus.Installed,
+                    engine.ToString(),
+                    null);
+            });
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet, ManagedModuleBenchmarkEngine.PowerShellGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "compat-install-isolated-roots",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("Local", "https://example.test/index.json"),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    ModuleRoot = moduleRoot.Path
+                }
+            }
+        });
+
+        Assert.Equal(2, result.Runs.Count);
+        Assert.Equal(2, roots.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Contains(Path.Combine(moduleRoot.Path, "PSResourceGet", "1"), roots);
+        Assert.Contains(Path.Combine(moduleRoot.Path, "PowerShellGet", "1"), roots);
+        Assert.All(result.Runs, run => Assert.StartsWith(moduleRoot.Path, run.ModuleRoot, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task RunAsync_RecordsUnsupportedCompatibilityVersionPolicyAsFailure()
     {
         using var root = new TemporaryDirectory();
@@ -454,6 +498,69 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.False(run.Succeeded);
         Assert.Equal("PSResourceGet", run.Engine);
         Assert.Contains("VersionPolicy", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunAsync_BlocksDefaultCompatibilityInstallWithModuleRoot()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var runner = new StubPowerShellRunner(_ => throw new InvalidOperationException("Runner should not be called."));
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), compatibilityPowerShellRunner: runner);
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            ContinueOnError = true,
+            Engines = new[] { ManagedModuleBenchmarkEngine.PowerShellGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "compat-install-isolated",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("CompanyRepository", "https://example.test/index.json"),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    ModuleRoot = moduleRoot.Path,
+                    AllowClobber = true
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.False(run.Succeeded);
+        Assert.Equal("Failed", run.Status);
+        Assert.Equal("PowerShellGet", run.Engine);
+        Assert.Contains("disabled", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("custom module-root isolation", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunAsync_BlocksDefaultCompatibilityInstallWithoutModuleRoot()
+    {
+        var runner = new StubPowerShellRunner(_ => throw new InvalidOperationException("Runner should not be called."));
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), compatibilityPowerShellRunner: runner);
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            ContinueOnError = true,
+            Engines = new[] { ManagedModuleBenchmarkEngine.PowerShellGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "compat-install-no-root",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("CompanyRepository", "https://example.test/index.json"),
+                    Name = "Company.Tools",
+                    Version = "1.0.0"
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.False(run.Succeeded);
+        Assert.Equal("Failed", run.Status);
+        Assert.Contains("disabled", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]

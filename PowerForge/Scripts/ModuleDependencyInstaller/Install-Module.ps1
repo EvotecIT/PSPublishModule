@@ -7,7 +7,8 @@
   [string]$Scope,
   [string]$CredentialUser,
   [string]$CredentialSecret,
-  [string]$PrereleaseFlag
+  [string]$PrereleaseFlag,
+  [string]$AllowClobberFlag
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -48,6 +49,7 @@ try {
     $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
     $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
   }
+  if ($AllowClobberFlag -eq '1') { $params.AllowClobber = $true }
 
   Install-Module @params | Out-Null
   Write-Output 'PFMOD::INSTALL::OK'
