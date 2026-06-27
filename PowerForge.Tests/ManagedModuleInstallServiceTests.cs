@@ -455,6 +455,73 @@ public sealed class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_rejects_export_conflicts_without_allow_clobber()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var existingPath = Path.Combine(moduleRoot.Path, "Company.Existing", "1.0.0");
+        Directory.CreateDirectory(existingPath);
+        File.WriteAllText(
+            Path.Combine(existingPath, "Company.Existing.psd1"),
+            CreateManifest("1.0.0", "Get-CompanyTool"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = CreateManifest("1.0.0", "Get-CompanyTool")
+            });
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("export conflict", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_allows_export_conflicts_with_allow_clobber()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var existingPath = Path.Combine(moduleRoot.Path, "Company.Existing", "1.0.0");
+        Directory.CreateDirectory(existingPath);
+        File.WriteAllText(
+            Path.Combine(existingPath, "Company.Existing.psd1"),
+            CreateManifest("1.0.0", "Get-CompanyTool"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = CreateManifest("1.0.0", "Get-CompanyTool")
+            });
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            AllowClobber = true
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_skip_dependency_check_installs_only_parent()
     {
         using var feed = new TemporaryDirectory();
@@ -530,6 +597,14 @@ public sealed class ManagedModuleInstallServiceTests
         {
             ["Company.Base.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static string CreateManifest(string version, string functionName)
+        => "@{" + Environment.NewLine +
+           "    ModuleVersion = '" + version + "'" + Environment.NewLine +
+           "    FunctionsToExport = @('" + functionName + "')" + Environment.NewLine +
+           "    CmdletsToExport = @()" + Environment.NewLine +
+           "    AliasesToExport = @()" + Environment.NewLine +
+           "}";
 
     private static void AssertReceipt(
         string? receiptPath,

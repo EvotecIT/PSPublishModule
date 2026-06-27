@@ -71,6 +71,11 @@ public sealed class ManagedModuleUpdateRequest
     public bool Force { get; set; }
 
     /// <summary>
+    /// Allow command exports to overlap with other installed modules in the target root.
+    /// </summary>
+    public bool AllowClobber { get; set; }
+
+    /// <summary>
     /// Skip installing dependencies declared by the package.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }

@@ -46,7 +46,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-AllowPrerelease` as an alias where it helps migration.
 - [ ] Support `-AcceptLicense`.
 - [x] Support `-SkipDependencyCheck`.
-- [ ] Support `-AllowClobber`.
+- [x] Support `-AllowClobber`.
 - [x] Support `-Force`.
 - [x] Support `-Path` for save/publish workflows.
 - [x] Support `-ApiKey`.
@@ -160,7 +160,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement CurrentUser module root resolution.
 - [x] Implement AllUsers module root resolution on Windows, macOS, and Linux.
 - [x] Implement side-by-side exact version install.
-- [ ] Implement `-AllowClobber` behavior.
+- [x] Implement `-AllowClobber` behavior.
 - [ ] Implement publisher/trust checks where metadata is available.
 - [ ] Implement license acceptance handling.
 - [x] Implement dependency installation order.
@@ -171,7 +171,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for scoped install.
 - [x] Add tests for exact side-by-side install.
 - [x] Add tests for failed extraction rollback.
-- [ ] Add tests for clobber detection.
+- [x] Add tests for clobber detection.
 - [ ] Benchmark against `Install-Module` and `Install-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.
 - [ ] Validate on PowerShell 7+.

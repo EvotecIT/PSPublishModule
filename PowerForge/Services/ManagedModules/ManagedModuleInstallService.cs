@@ -84,6 +84,9 @@ public sealed class ManagedModuleInstallService
                 ? Array.Empty<ManagedModuleInstallResult>()
                 : await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
 
+            if (!request.AllowClobber)
+                ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
+
             PromoteStagedModule(stageModulePath, modulePath);
             CleanupEmptyStage(stageRoot);
 
@@ -169,6 +172,7 @@ public sealed class ManagedModuleInstallService
                     PackageCacheDirectory = cacheDirectory,
                     Credential = request.Credential,
                     Force = false,
+                    AllowClobber = request.AllowClobber,
                     SkipDependencyCheck = false
                 },
                 context,
