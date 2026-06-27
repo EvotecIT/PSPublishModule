@@ -132,6 +132,7 @@ public sealed partial class ModulePublisher
             UseAsDependencyVersionSource = publish.UseAsDependencyVersionSource,
             PublishRequiredModules = publish.PublishRequiredModules,
             RequiredModuleSourceRepository = publish.RequiredModuleSourceRepository,
+            RequiredModuleSourceRepositoryUri = publish.RequiredModuleSourceRepositoryUri,
             Verbose = publish.Verbose
         };
     }

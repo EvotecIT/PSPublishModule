@@ -275,6 +275,15 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         ManagedModuleRepository targetRepository)
     {
         var source = ResolveSourceRepositoryName(publish);
+        if (!string.IsNullOrWhiteSpace(publish.RequiredModuleSourceRepositoryUri))
+        {
+            return new ManagedModuleRepository(
+                source,
+                publish.RequiredModuleSourceRepositoryUri!.Trim(),
+                ManagedModuleRepositoryKind.Auto,
+                trusted: true);
+        }
+
         if (string.Equals(source, "PSGallery", StringComparison.OrdinalIgnoreCase))
             return new ManagedModuleRepository("PSGallery", PowerShellGalleryV3, ManagedModuleRepositoryKind.NuGetV3, trusted: true);
 

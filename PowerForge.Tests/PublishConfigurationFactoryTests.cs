@@ -617,11 +617,13 @@ public sealed class PublishConfigurationFactoryTests
             RepositoryName = "CompanyGallery",
             Enabled = true,
             PublishRequiredModules = true,
-            RequiredModuleSourceRepository = "InternalUpstream"
+            RequiredModuleSourceRepository = "InternalUpstream",
+            RequiredModuleSourceRepositoryUri = "https://packages.example.test/nuget/v3/index.json"
         });
 
         Assert.True(segment.Configuration.PublishRequiredModules);
         Assert.Equal("InternalUpstream", segment.Configuration.RequiredModuleSourceRepository);
+        Assert.Equal("https://packages.example.test/nuget/v3/index.json", segment.Configuration.RequiredModuleSourceRepositoryUri);
     }
 
     [Fact]

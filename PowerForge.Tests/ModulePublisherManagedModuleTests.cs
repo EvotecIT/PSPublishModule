@@ -111,7 +111,8 @@ public sealed class ModulePublisherManagedModuleTests
                 Tool = PublishTool.ManagedModule,
                 RepositoryName = "Local",
                 PublishRequiredModules = true,
-                RequiredModuleSourceRepository = sourceFeed.Path,
+                RequiredModuleSourceRepository = "InternalUpstream",
+                RequiredModuleSourceRepositoryUri = sourceFeed.Path,
                 Repository = new PublishRepositoryConfiguration
                 {
                     Name = "Local",
