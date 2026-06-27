@@ -64,6 +64,10 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? PackageCacheDirectory { get; set; }
 
+    /// <summary>Optional repository credential.</summary>
+    [Parameter]
+    public PSCredential? Credential { get; set; }
+
     /// <summary>Optional repository credential username.</summary>
     [Parameter]
     [Alias("UserName")]
@@ -83,12 +87,17 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Force { get; set; }
 
+    /// <summary>Skip installing dependencies declared by the package.</summary>
+    [Parameter]
+    [Alias("SkipDependenciesCheck")]
+    public SwitchParameter SkipDependencyCheck { get; set; }
+
     /// <summary>Saves requested modules.</summary>
     protected override void ProcessRecord()
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, Path)!;
         var repository = ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository);
-        var credential = ManagedModuleCommandSupport.ResolveCredential(this, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
+        var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var service = new ManagedModuleInstallService(logger);
 
@@ -108,7 +117,8 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
                         ModuleRoot = moduleRoot,
                         PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
                         Credential = credential,
-                        Force = Force.IsPresent
+                        Force = Force.IsPresent,
+                        SkipDependencyCheck = SkipDependencyCheck.IsPresent
                     })
                 .GetAwaiter()
                 .GetResult();

@@ -34,7 +34,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - [x] Support `-Name`.
 - [x] Support `-Repository`.
-- [ ] Support `-Credential`.
+- [x] Support `-Credential`.
 - [x] Support `-Scope CurrentUser|AllUsers`.
 - [x] Support `-RequiredVersion`.
 - [ ] Support `-MinimumVersion`.

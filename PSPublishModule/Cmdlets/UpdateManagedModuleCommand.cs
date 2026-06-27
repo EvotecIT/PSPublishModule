@@ -72,6 +72,10 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? PackageCacheDirectory { get; set; }
 
+    /// <summary>Optional repository credential.</summary>
+    [Parameter]
+    public PSCredential? Credential { get; set; }
+
     /// <summary>Optional repository credential username.</summary>
     [Parameter]
     [Alias("UserName")]
@@ -101,7 +105,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
         var repository = ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository);
-        var credential = ManagedModuleCommandSupport.ResolveCredential(this, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
+        var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var service = new ManagedModuleUpdateService(logger);
 
