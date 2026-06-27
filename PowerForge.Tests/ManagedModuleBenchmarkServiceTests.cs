@@ -566,6 +566,9 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Equal(ManagedModuleBenchmarkOperation.Install, gate.Operation);
         Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Blocked, gate.Status);
         Assert.False(gate.ReadyForDefaultManagedTransport);
+        Assert.True(gate.CompatibilityFallbackRequired);
+        Assert.True(gate.NativeIsolationRequired);
+        Assert.Contains("isolated disposable host", gate.CompatibilityFallbackReason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(gate.Reasons, reason => reason.Contains("explicit disposable-host runner", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -619,6 +622,9 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Equal(ManagedModuleBenchmarkOperation.Install, gate.Operation);
         Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Ready, gate.Status);
         Assert.True(gate.ReadyForDefaultManagedTransport);
+        Assert.False(gate.CompatibilityFallbackRequired);
+        Assert.False(gate.NativeIsolationRequired);
+        Assert.Null(gate.CompatibilityFallbackReason);
         Assert.Equal(1, gate.SuccessfulManagedRunCount);
         Assert.Equal(2, gate.SuccessfulCompatibilityRunCount);
         Assert.Contains("PSResourceGet", gate.CoveredCompatibilityEngines);

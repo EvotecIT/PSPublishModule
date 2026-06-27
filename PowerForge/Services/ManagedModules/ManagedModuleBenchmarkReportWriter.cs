@@ -180,8 +180,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
             return;
         }
 
-        markdown.AppendLine("| Operation | Status | Default ready | Managed | Compatibility | Covered baselines | Reasons |");
-        markdown.AppendLine("| --- | --- | --- | ---: | ---: | --- | --- |");
+        markdown.AppendLine("| Operation | Status | Default ready | Fallback | Managed | Compatibility | Covered baselines | Reasons |");
+        markdown.AppendLine("| --- | --- | --- | --- | ---: | ---: | --- | --- |");
         foreach (var gate in gates.OrderBy(static gate => gate.Operation))
         {
             markdown.Append("| ")
@@ -190,6 +190,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(gate.Status)
                 .Append(" | ")
                 .Append(gate.ReadyForDefaultManagedTransport ? "yes" : "no")
+                .Append(" | ")
+                .Append(Escape(FormatFallback(gate)))
                 .Append(" | ")
                 .Append(gate.SuccessfulManagedRunCount)
                 .Append("/")
@@ -204,6 +206,17 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(Escape(string.Join("; ", gate.Reasons ?? Array.Empty<string>())))
                 .AppendLine(" |");
         }
+    }
+
+    private static string FormatFallback(ManagedModuleBenchmarkTransitionGateResult gate)
+    {
+        if (!gate.CompatibilityFallbackRequired)
+            return "not required";
+
+        if (!string.IsNullOrWhiteSpace(gate.CompatibilityFallbackReason))
+            return gate.CompatibilityFallbackReason!;
+
+        return gate.NativeIsolationRequired ? "native isolation required" : "required";
     }
 
     private static string FormatCompatibilityCoverage(ManagedModuleBenchmarkTransitionGateResult gate)
