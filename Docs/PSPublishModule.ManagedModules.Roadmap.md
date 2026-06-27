@@ -6,15 +6,15 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Principles
 
-- [ ] Keep the core implementation in managed C#.
-- [ ] Do not use `powershell.exe`, `pwsh`, `dotnet.exe`, `nuget.exe`, or embedded `.ps1` scripts for the new managed engine path.
-- [ ] Keep PowerShellGet and PSResourceGet as compatibility baselines and temporary fallbacks, not as the long-term engine.
-- [ ] Preserve easy migration from existing `Install-Module`, `Save-Module`, `Publish-Module`, `Install-PSResource`, `Save-PSResource`, and `Publish-PSResource` usage.
+- [x] Keep the core implementation in managed C#.
+- [x] Do not use `powershell.exe`, `pwsh`, `dotnet.exe`, `nuget.exe`, or embedded `.ps1` scripts for the new managed engine path.
+- [x] Keep PowerShellGet and PSResourceGet as compatibility baselines and temporary fallbacks, not as the long-term engine.
+- [x] Preserve easy migration from existing `Install-Module`, `Save-Module`, `Publish-Module`, `Install-PSResource`, `Save-PSResource`, and `Publish-PSResource` usage.
 - [x] Keep `Install-PrivateModule` and `Update-PrivateModule` as thin compatibility/convenience wrappers with opt-in managed transport.
-- [ ] Keep `Invoke-ModuleState` as the day-to-day estate maintenance entrypoint.
-- [ ] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
+- [x] Keep `Invoke-ModuleState` as the day-to-day estate maintenance entrypoint.
+- [x] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
 - [x] Write receipts and evidence only after successful delivery.
-- [ ] Treat destructive cleanup as a separately proven and explicitly gated capability.
+- [x] Treat destructive cleanup as a separately proven and explicitly gated capability.
 - [ ] Benchmark correctness and speed on both Windows PowerShell 5.1 and PowerShell 7+ before replacing existing compatibility paths.
 
 ## Public Command Shape
@@ -25,11 +25,11 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Introduce `Update-ManagedModule`.
 - [x] Introduce `Publish-ManagedModule`.
 - [x] Add non-conflicting public aliases for the managed find/save/install/update/publish commands.
-- [ ] Decide whether `Get-ManagedModule` is needed or whether `Get-ModuleState` remains the inventory surface.
-- [ ] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
+- [x] Decide whether `Get-ManagedModule` is needed or whether `Get-ModuleState` remains the inventory surface.
+- [x] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
 - [x] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed install delivery when `-Transport ManagedModule` is selected.
 - [x] Keep `Update-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed update delivery when `-Transport ManagedModule` is selected.
-- [ ] Avoid adding separate public/private command families unless a wrapper has a clearly different operator purpose.
+- [x] Avoid adding separate public/private command families unless a wrapper has a clearly different operator purpose.
 
 ## Compatibility Parameters
 
@@ -59,20 +59,22 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 1: Design And Contracts
 
+Compatibility mappings, public-surface decisions, provider support levels, and behavior rules are captured in `Docs/PSPublishModule.ManagedModules.Compatibility.md`.
+
 - [x] Create managed engine design notes under `Docs`.
-- [ ] Define compatibility matrix for PowerShellGet v2 commands.
-- [ ] Define compatibility matrix for PSResourceGet commands.
-- [ ] Define the managed command parameter matrix.
-- [ ] Define typed models for repositories, packages, versions, dependencies, plans, actions, receipts, and benchmark results.
-- [ ] Define a migration table from existing commands to managed commands.
-- [ ] Define provider support levels: PSGallery, generic NuGet v3, local folder, Azure Artifacts, JFrog/Artifactory, ProGet/Nexus-compatible feeds, and GitHub Packages.
-- [ ] Define exact behavior for repository trust, credentials, retries, TLS, proxy support, and private feed authentication.
-- [ ] Define exact behavior for side-by-side versions, downgrade policies, clobber conflicts, loaded modules, and cross-scope installs.
-- [ ] Define exact behavior for prerelease labels and semantic version ordering.
+- [x] Define compatibility matrix for PowerShellGet v2 commands.
+- [x] Define compatibility matrix for PSResourceGet commands.
+- [x] Define the managed command parameter matrix.
+- [x] Define typed models for repositories, packages, versions, dependencies, plans, actions, receipts, and benchmark results.
+- [x] Define a migration table from existing commands to managed commands.
+- [x] Define provider support levels: PSGallery, generic NuGet v3, local folder, Azure Artifacts, JFrog/Artifactory, ProGet/Nexus-compatible feeds, and GitHub Packages.
+- [x] Define exact behavior for repository trust, credentials, retries, TLS, proxy support, and private feed authentication.
+- [x] Define exact behavior for side-by-side versions, downgrade policies, clobber conflicts, loaded modules, and cross-scope installs.
+- [x] Define exact behavior for prerelease labels and semantic version ordering.
 - [x] Define package integrity requirements, including hash evidence and optional caller-supplied SHA256 validation.
 - [x] Define rollback guarantees for partial install/update failures.
 - [x] Define receipt schema and where receipts are stored.
-- [ ] Define which existing cmdlets become wrappers and which remain independent.
+- [x] Define which existing cmdlets become wrappers and which remain independent.
 
 ## Current Receipt And Rollback Contract
 
