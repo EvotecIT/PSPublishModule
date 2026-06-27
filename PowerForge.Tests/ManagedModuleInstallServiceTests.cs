@@ -157,6 +157,41 @@ public sealed class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_infers_prerelease_from_version_policy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0-preview.2.nupkg"),
+            "Company.Tools",
+            "1.1.0-preview.2",
+            files: CreateModuleFiles("1.1.0-preview.2"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0-preview.10.nupkg"),
+            "Company.Tools",
+            "1.1.0-preview.10",
+            files: CreateModuleFiles("1.1.0-preview.10"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            VersionPolicy = "[1.1.0-preview.1,1.1.0)",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.1.0-preview.10", result.Version);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0-preview.10", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_rejects_exact_version_with_bounds()
     {
         using var feed = new TemporaryDirectory();
@@ -303,6 +338,44 @@ public sealed class ManagedModuleInstallServiceTests
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Base", "1.0.0", "Company.Base.psd1")));
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_infers_prerelease_from_dependency_range()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.2.0.0-preview.2.nupkg"),
+            "Company.Core",
+            "2.0.0-preview.2",
+            files: CreateDependencyFiles("2.0.0-preview.2"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.2.0.0-preview.10.nupkg"),
+            "Company.Core",
+            "2.0.0-preview.10",
+            files: CreateDependencyFiles("2.0.0-preview.10"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[2.0.0-preview.1,2.0.0)", null) },
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal("2.0.0-preview.10", dependency.Version);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "2.0.0-preview.10", "Company.Core.psd1")));
     }
 
     [Fact]
