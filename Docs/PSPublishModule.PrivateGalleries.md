@@ -181,6 +181,20 @@ The wrappers refresh repository registration and run the access
 probe/session-prime step before install or update. If the cached credential
 provider session expired, the normal command can prompt the user again.
 
+When the feed is reachable as a NuGet v3 source and you want to use the managed
+C# module engine instead of the compatibility transport, opt in per command:
+
+```powershell
+Install-PrivateModule -ProfileName 'Company' -Name 'Company.Tools' -Transport ManagedModule
+Update-PrivateModule  -ProfileName 'Company' -Name 'Company.Tools' -Transport ManagedModule
+```
+
+The profile still owns the feed shape and credential bootstrap policy. The
+managed transport owns repository metadata lookup, dependency closure, package
+integrity, extraction, side-by-side install/update behavior, and receipts.
+Keep the default transport for providers that still need compatibility
+bootstrap or provider-specific behavior until the managed parity gates pass.
+
 ### Publish A PowerShell Module
 
 Direct preset:
