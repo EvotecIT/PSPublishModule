@@ -328,14 +328,17 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save -Engine Managed,PowerShellGet,PSResourceGet` for `ThreadJob` 2.1.0 into temp roots with `-AllowClobber`; all three engines completed successfully and recorded comparable save evidence.
 - [x] 2026-06-27: `Install-PrivateModule` and `Update-PrivateModule` wrapper tests install/update through `-Transport ManagedModule` from direct local feeds and saved NuGet repository profiles without invoking compatibility repository registration or interactive credential prompts.
 - [x] 2026-06-27: `Measure-ManagedModule` now fails closed for default PowerShellGet/PSResourceGet install/update compatibility benchmarks because native `Install-Module` and `Install-PSResource` do not provide a reliable custom module-root isolation contract; native install/update comparison requires a disposable host or explicit compatibility runner.
-- [ ] Large many-dependency public-feed, mixed-version family, and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: `Update-ManagedModule` command-surface tests repair an installed `Microsoft.Graph.*` family mismatch, aligning `Microsoft.Graph.Authentication` 2.36.0 to the requested `Microsoft.Graph.Users` 2.38.0 target through `-FamilyModuleNamePrefix`.
+- [x] 2026-06-27: Managed NuGet v2 version discovery now follows paged `FindPackagesById` next links; PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both confirmed `Microsoft.Graph` version discovery reaches 2.38.0 instead of stopping at the stale 2.34.0 first page.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `Microsoft.Graph` 2.38.0 from the public PowerShell Gallery NuGet v2 endpoint into temp roots with `Measure-ManagedModule -Operation Install -AcceptLicense`, recording 40 packages, 77 dependency entries, 41 installed module directories, 402 total files, and about 1.05 GB extracted bytes.
+- [ ] Publish comparison evidence still needs separate proof.
 
 ## Benchmark Scenarios
 
 - [x] Small public module install.
 - [x] Medium public module install.
-- [ ] Large public module with many dependencies.
-- [ ] Related module family with mixed versions.
+- [x] Large public module with many dependencies.
+- [x] Related module family with mixed versions.
 - [x] Large cloud administration module family.
 - [x] Private repository install with credentials.
 - [x] Private repository save for offline use.
