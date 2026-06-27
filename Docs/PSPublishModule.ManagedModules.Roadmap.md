@@ -142,7 +142,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support warm cache reuse.
 - [ ] Support offline bundle output metadata.
 - [x] Support `-SkipDependencyCheck`.
-- [ ] Support `-AcceptLicense`.
+- [x] Support `-AcceptLicense`.
 - [x] Emit typed save result objects.
 - [ ] Add `ShouldProcess` and dry-run planning.
 - [ ] Add Spectre.Console summary output.
