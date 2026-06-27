@@ -75,6 +75,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Define rollback guarantees for partial install/update failures.
 - [x] Define receipt schema and where receipts are stored.
 - [x] Define which existing cmdlets become wrappers and which remain independent.
+- [x] Support exact-version NuGet v2 package downloads for public gallery endpoints that do not expose a reachable NuGet v3 service index from the current host.
 
 ## Current Receipt And Rollback Contract
 
@@ -319,11 +320,12 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: Managed repair/conflict contract tests cover source repair, scoped missing-copy repair, and command-surface loaded-module update blocking without relying on PowerShellGet, PSResourceGet, or external executables.
 - [x] 2026-06-27: Managed path audit found external PowerShell runner usage only in explicit compatibility benchmark engines and import-validation hosts; managed install, save, update, publish, and ModuleState managed delivery stay in C# services.
 - [x] 2026-06-27: Managed benchmark service tests installed and saved a module from a private NuGet v3-style feed with Basic credentials, validating metadata, package download, extraction, request counts, and final manifest version.
-- [ ] Public-feed and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed `ThreadJob` 2.1.0 from the public PowerShell Gallery NuGet v2 endpoint into temp module roots with `Measure-ManagedModule -Operation Install`, validated manifest version 2.1.0, and recorded package bytes, extracted bytes, file count, and repository request count.
+- [ ] Medium/large public-feed and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 
-- [ ] Small public module install.
+- [x] Small public module install.
 - [ ] Medium public module install.
 - [ ] Large public module with many dependencies.
 - [ ] Related module family with mixed versions.

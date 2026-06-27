@@ -26,6 +26,7 @@ public sealed class ManagedModuleRepositoryClientTests
         });
         Assert.Contains(requests, request => request.Url == "https://example.test/v3/index.json");
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/index.json");
+        Assert.All(requests, request => Assert.Contains("PowerForge-ManagedModule/1.0", request.UserAgent, StringComparison.Ordinal));
         Assert.Equal(2, repositoryClient.RequestCount);
     }
 
@@ -205,6 +206,26 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("1.1.0", result.Metadata.Version);
         Assert.True(result.BytesWritten > 0);
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
+    }
+
+    [Fact]
+    public async Task DownloadPackageAsync_writes_exact_package_from_nuget_v2_feed()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var result = await repositoryClient.DownloadPackageAsync(repository, "Company.Tools", "1.1.0", temp.Path);
+
+        Assert.Equal(ManagedModuleRepositoryKind.NuGetV2, repository.Kind);
+        Assert.True(File.Exists(result.PackagePath));
+        Assert.Equal("Company.Tools", result.Metadata!.Id);
+        Assert.Equal("1.1.0", result.Metadata.Version);
+        Assert.True(result.BytesWritten > 0);
+        Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/package/Company.Tools/1.1.0");
+        Assert.Contains(requests, request => request.Url == "https://cdn.example.test/packages/company.tools.1.1.0.nupkg");
     }
 
     [Fact]
@@ -456,7 +477,7 @@ public sealed class ManagedModuleRepositoryClientTests
             var apiKey = request.Headers.TryGetValues("X-NuGet-ApiKey", out var values)
                 ? values.FirstOrDefault()
                 : null;
-            _requests.Add(new RecordedRequest(uri.AbsoluteUri, request.Method, request.Headers.Authorization, apiKey));
+            _requests.Add(new RecordedRequest(uri.AbsoluteUri, request.Method, request.Headers.Authorization, apiKey, request.Headers.UserAgent.ToString()));
 
             if (uri.AbsoluteUri == "https://example.test/v3/index.json")
             {
@@ -490,6 +511,24 @@ public sealed class ManagedModuleRepositoryClientTests
                 return Json("{\"versions\":[\"1.0.0\"");
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg")
+            {
+                var bytes = TestPackageFactory.CreateBytes("Company.Tools", "1.1.0");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(bytes)
+                });
+            }
+
+            if (uri.AbsoluteUri == "https://example.test/api/v2/package/Company.Tools/1.1.0")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Redirect)
+                {
+                    Headers =
+                    {
+                        Location = new Uri("https://cdn.example.test/packages/company.tools.1.1.0.nupkg")
+                    }
+                });
+
+            if (uri.AbsoluteUri == "https://cdn.example.test/packages/company.tools.1.1.0.nupkg")
             {
                 var bytes = TestPackageFactory.CreateBytes("Company.Tools", "1.1.0");
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -537,12 +576,13 @@ public sealed class ManagedModuleRepositoryClientTests
 
     private sealed class RecordedRequest
     {
-        public RecordedRequest(string url, HttpMethod method, AuthenticationHeaderValue? authorization, string? apiKey)
+        public RecordedRequest(string url, HttpMethod method, AuthenticationHeaderValue? authorization, string? apiKey, string userAgent)
         {
             Url = url;
             Method = method;
             Authorization = authorization;
             ApiKey = apiKey;
+            UserAgent = userAgent;
         }
 
         public string Url { get; }
@@ -552,5 +592,7 @@ public sealed class ManagedModuleRepositoryClientTests
         public AuthenticationHeaderValue? Authorization { get; }
 
         public string? ApiKey { get; }
+
+        public string UserAgent { get; }
     }
 }
