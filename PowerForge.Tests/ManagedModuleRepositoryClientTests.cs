@@ -69,6 +69,45 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task PublishPackageAsync_uses_nuget_v3_package_publish_endpoint_with_api_key()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var result = await repositoryClient.PublishPackageAsync(
+            repository,
+            packagePath,
+            new RepositoryCredential { Secret = "publish-key" });
+
+        Assert.True(result.Published);
+        Assert.Equal(201, result.StatusCode);
+        var publishRequest = Assert.Single(requests, request => request.Url == "https://example.test/publish/");
+        Assert.Equal(HttpMethod.Put, publishRequest.Method);
+        Assert.Equal("publish-key", publishRequest.ApiKey);
+    }
+
+    [Fact]
+    public async Task PublishPackageAsync_copies_package_to_local_folder_feed()
+    {
+        using var source = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(source.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger());
+        var repository = new ManagedModuleRepository("Local", destination.Path);
+
+        var result = await repositoryClient.PublishPackageAsync(repository, packagePath);
+
+        Assert.True(result.Published);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg")));
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_reads_local_folder_feed_and_filters_prerelease()
     {
         using var temp = new TemporaryDirectory();
@@ -147,12 +186,16 @@ public sealed class ManagedModuleRepositoryClientTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI is required.");
-            _requests.Add(new RecordedRequest(uri.AbsoluteUri, request.Headers.Authorization));
+            var apiKey = request.Headers.TryGetValues("X-NuGet-ApiKey", out var values)
+                ? values.FirstOrDefault()
+                : null;
+            _requests.Add(new RecordedRequest(uri.AbsoluteUri, request.Method, request.Headers.Authorization, apiKey));
 
             if (uri.AbsoluteUri == "https://example.test/v3/index.json")
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
-                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}," +
+                            "{\"@id\":\"https://example.test/publish/\",\"@type\":\"PackagePublish/2.0.0\"}" +
                             "]}");
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/index.json")
@@ -174,6 +217,9 @@ public sealed class ManagedModuleRepositoryClientTests
                             "{\"id\":\"Other.Module\",\"version\":\"9.0.0\",\"listed\":true}" +
                             "]}");
 
+            if (uri.AbsoluteUri == "https://example.test/publish/" && request.Method == HttpMethod.Put)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
 
@@ -186,14 +232,20 @@ public sealed class ManagedModuleRepositoryClientTests
 
     private sealed class RecordedRequest
     {
-        public RecordedRequest(string url, AuthenticationHeaderValue? authorization)
+        public RecordedRequest(string url, HttpMethod method, AuthenticationHeaderValue? authorization, string? apiKey)
         {
             Url = url;
+            Method = method;
             Authorization = authorization;
+            ApiKey = apiKey;
         }
 
         public string Url { get; }
 
+        public HttpMethod Method { get; }
+
         public AuthenticationHeaderValue? Authorization { get; }
+
+        public string? ApiKey { get; }
     }
 }

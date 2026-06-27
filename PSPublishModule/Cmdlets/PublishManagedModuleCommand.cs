@@ -9,8 +9,8 @@ namespace PSPublishModule;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This initial managed publish surface creates a NuGet package from a module folder and writes it to a local folder
-/// feed or output directory. Remote feed push support is intentionally left to the managed HTTP publish phase.
+/// This managed publish surface creates a NuGet package from a module folder and publishes it to a local folder feed
+/// or NuGet-compatible package publish endpoint.
 /// </para>
 /// </remarks>
 /// <example>
@@ -18,7 +18,7 @@ namespace PSPublishModule;
 /// <code>Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages</code>
 /// </example>
 [Cmdlet(VerbsData.Publish, "ManagedModule", SupportsShouldProcess = true)]
-[OutputType(typeof(ManagedModulePackResult))]
+[OutputType(typeof(ManagedModulePublishResult))]
 public sealed class PublishManagedModuleCommand : PSCmdlet
 {
     /// <summary>Module folder to package.</summary>
@@ -27,11 +27,16 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string Path { get; set; } = string.Empty;
 
-    /// <summary>Local folder repository that receives the package.</summary>
+    /// <summary>Repository URL, NuGet v3 service index, publish endpoint, or local folder feed.</summary>
     [Parameter(Position = 1)]
-    [Alias("RepositoryPath")]
+    [Alias("RepositoryPath", "RepositoryUri", "Source")]
     [ValidateNotNullOrEmpty]
     public string? Repository { get; set; }
+
+    /// <summary>Friendly repository name used in output.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string RepositoryName { get; set; } = ManagedModuleCommandSupport.DefaultRepositoryName;
 
     /// <summary>Output directory used when Repository is omitted.</summary>
     [Parameter]
@@ -70,51 +75,67 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     [Parameter]
     public string[]? Tags { get; set; }
 
+    /// <summary>Optional repository credential.</summary>
+    [Parameter]
+    public PSCredential? Credential { get; set; }
+
+    /// <summary>API key used by NuGet-compatible package publish endpoints.</summary>
+    [Parameter]
+    [Alias("NuGetApiKey")]
+    public string? ApiKey { get; set; }
+
+    /// <summary>Optional path to a file containing the API key.</summary>
+    [Parameter]
+    [Alias("ApiKeyPath", "NuGetApiKeyPath")]
+    public string? ApiKeyFilePath { get; set; }
+
     /// <summary>Overwrite an existing package.</summary>
     [Parameter]
     public SwitchParameter Force { get; set; }
 
-    /// <summary>Creates and publishes the package to the selected local destination.</summary>
+    /// <summary>Creates and publishes the package to the selected destination.</summary>
     protected override void ProcessRecord()
     {
         var modulePath = ManagedModuleCommandSupport.ResolveProviderPath(this, Path)!;
         var manifestPath = ManagedModuleCommandSupport.ResolveProviderPath(this, ManifestPath);
-        var outputDirectory = ResolveOutputDirectory();
+        var repository = ResolveRepository();
+        var outputDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, OutputDirectory);
+        var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, null, ApiKey, ApiKeyFilePath);
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
 
-        if (!ShouldProcess(modulePath, $"Publish managed module package to '{outputDirectory}'"))
+        if (!ShouldProcess(modulePath, $"Publish managed module package to '{repository.Source}'"))
             return;
 
-        var result = new ManagedModulePackService().Pack(new ManagedModulePackRequest
-        {
-            ModulePath = modulePath,
-            ManifestPath = manifestPath,
-            Name = Name,
-            Version = Version,
-            OutputDirectory = outputDirectory,
-            Authors = Authors,
-            Description = Description,
-            ProjectUrl = ProjectUrl,
-            Tags = Tags,
-            Force = Force.IsPresent
-        });
+        var result = new ManagedModulePublishService(logger).PublishAsync(
+                new ManagedModulePublishRequest
+                {
+                    ModulePath = modulePath,
+                    ManifestPath = manifestPath,
+                    Name = Name,
+                    Version = Version,
+                    Repository = repository,
+                    OutputDirectory = outputDirectory,
+                    Credential = credential,
+                    Authors = Authors,
+                    Description = Description,
+                    ProjectUrl = ProjectUrl,
+                    Tags = Tags,
+                    Force = Force.IsPresent
+                })
+            .GetAwaiter()
+            .GetResult();
 
         WriteObject(result);
     }
 
-    private string ResolveOutputDirectory()
+    private ManagedModuleRepository ResolveRepository()
     {
         if (!string.IsNullOrWhiteSpace(Repository))
-        {
-            var repository = new ManagedModuleRepository("Repository", Repository!);
-            if (repository.Kind != ManagedModuleRepositoryKind.LocalFolder)
-                throw new NotSupportedException("Managed remote publish is not implemented yet. Use a local folder repository or OutputDirectory.");
-
-            return ManagedModuleCommandSupport.ResolveProviderPath(this, Repository)!;
-        }
+            return ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository!);
 
         if (!string.IsNullOrWhiteSpace(OutputDirectory))
-            return ManagedModuleCommandSupport.ResolveProviderPath(this, OutputDirectory)!;
+            return new ManagedModuleRepository("Local", ManagedModuleCommandSupport.ResolveProviderPath(this, OutputDirectory)!);
 
-        throw new ArgumentException("Specify Repository as a local folder path or provide OutputDirectory.");
+        throw new ArgumentException("Specify Repository or OutputDirectory.");
     }
 }
