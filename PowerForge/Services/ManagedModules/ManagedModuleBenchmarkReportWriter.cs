@@ -67,6 +67,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine($"Succeeded: `{successful}`");
         markdown.AppendLine($"Failed: `{failed}`");
         markdown.AppendLine();
+        AppendSummary(markdown, runs);
+        markdown.AppendLine();
         markdown.AppendLine("| Scenario | Module | Engine | Operation | Iteration | Status | Version | Previous | Elapsed ms | Requests | Packages | Package bytes | Extracted bytes | Extraction ms | Files | Disk bytes | Version check | Import check | Error |");
         markdown.AppendLine("| --- | --- | --- | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |");
 
@@ -114,6 +116,76 @@ public sealed class ManagedModuleBenchmarkReportWriter
         }
 
         return markdown.ToString();
+    }
+
+    private static void AppendSummary(StringBuilder markdown, IReadOnlyList<ManagedModuleBenchmarkRunResult> runs)
+    {
+        markdown.AppendLine("## Scenario Summary");
+        markdown.AppendLine();
+        if (runs.Count == 0)
+        {
+            markdown.AppendLine("_No benchmark runs were recorded._");
+            return;
+        }
+
+        markdown.AppendLine("| Scenario | Operation | Engine | Runs | Succeeded | Failed | Avg ms | Median ms | Min ms | Max ms | Packages | Package bytes | Disk bytes |");
+        markdown.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+
+        foreach (var group in runs
+                     .GroupBy(static run => new { run.ScenarioId, run.Operation, run.Engine })
+                     .OrderBy(static group => group.Key.ScenarioId, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static group => group.Key.Operation)
+                     .ThenBy(static group => group.Key.Engine, StringComparer.OrdinalIgnoreCase))
+        {
+            var statistics = CalculateStatistics(group.Select(static run => run.Elapsed));
+            markdown.Append("| ")
+                .Append(Escape(group.Key.ScenarioId))
+                .Append(" | ")
+                .Append(group.Key.Operation)
+                .Append(" | ")
+                .Append(Escape(group.Key.Engine))
+                .Append(" | ")
+                .Append(group.Count())
+                .Append(" | ")
+                .Append(group.Count(static run => run.Succeeded))
+                .Append(" | ")
+                .Append(group.Count(static run => !run.Succeeded))
+                .Append(" | ")
+                .Append(FormatMilliseconds(statistics.Average))
+                .Append(" | ")
+                .Append(FormatMilliseconds(statistics.Median))
+                .Append(" | ")
+                .Append(FormatMilliseconds(statistics.Minimum))
+                .Append(" | ")
+                .Append(FormatMilliseconds(statistics.Maximum))
+                .Append(" | ")
+                .Append(group.Sum(static run => ResolveTotal(run.PackageCount, string.IsNullOrWhiteSpace(run.PackagePath) ? 0 : 1)))
+                .Append(" | ")
+                .Append(group.Sum(static run => ResolveTotal(run.TotalPackageBytes, run.PackageBytes)))
+                .Append(" | ")
+                .Append(group.Sum(static run => run.FinalDiskBytes))
+                .AppendLine(" |");
+        }
+    }
+
+    private static BenchmarkElapsedStatistics CalculateStatistics(IEnumerable<TimeSpan> elapsedValues)
+    {
+        var values = elapsedValues
+            .OrderBy(static elapsed => elapsed)
+            .ToArray();
+        if (values.Length == 0)
+            return new BenchmarkElapsedStatistics();
+
+        var median = values.Length % 2 == 1
+            ? values[values.Length / 2]
+            : TimeSpan.FromTicks((values[(values.Length / 2) - 1].Ticks + values[values.Length / 2].Ticks) / 2);
+        return new BenchmarkElapsedStatistics
+        {
+            Average = TimeSpan.FromTicks((long)values.Average(static elapsed => elapsed.Ticks)),
+            Median = median,
+            Minimum = values[0],
+            Maximum = values[values.Length - 1]
+        };
     }
 
     private static void EnsureDirectory(string path)
@@ -172,5 +244,16 @@ public sealed class ManagedModuleBenchmarkReportWriter
                     : " " + validation.ImportedVersion;
                 return validation.Host + ":" + status + Escape(version);
             }));
+    }
+
+    private struct BenchmarkElapsedStatistics
+    {
+        internal TimeSpan Average { get; set; }
+
+        internal TimeSpan Median { get; set; }
+
+        internal TimeSpan Minimum { get; set; }
+
+        internal TimeSpan Maximum { get; set; }
     }
 }
