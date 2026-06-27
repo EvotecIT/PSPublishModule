@@ -262,11 +262,17 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Record elapsed time, HTTP request count, package count, direct/total package bytes, direct/total extracted bytes, extraction timing, file count, and final disk size.
 - [x] Validate installed module directory version after install/update.
 - [x] Add optional benchmark import validation evidence for PowerShell host checks.
-- [ ] Validate imported module version after install in PS 5.1 and PS 7+ benchmark runners.
+- [x] Validate imported module version after install in PS 5.1 and PS 7+ benchmark runners.
 - [x] Validate receipts after install/update.
-- [ ] Validate behavior on Windows PowerShell 5.1.
-- [ ] Validate behavior on PowerShell 7+.
+- [x] Validate benchmark install/import behavior on Windows PowerShell 5.1.
+- [x] Validate benchmark install/import behavior on PowerShell 7+.
 - [ ] Publish benchmark results in a neutral PowerForge report.
+
+### Current Host Smoke Evidence
+
+- [x] 2026-06-27: PowerShell 7.6.3 imported `PSPublishModule` from the local `net10.0` build, ran `Measure-ManagedModule` against a local folder feed, installed `Company.Tools` 1.0.0 into a custom root, validated the installed manifest version, and confirmed out-of-process imports in PowerShell 7 and Windows PowerShell returned version 1.0.0.
+- [x] 2026-06-27: Windows PowerShell 5.1.26100.8655 imported `PSPublishModule` from the local `net472` build, ran the same managed benchmark scenario, and confirmed out-of-process imports in PowerShell 7 and Windows PowerShell returned version 1.0.0.
+- [ ] Save, update, publish, public-feed, private-feed, and heavy-module host validation still need separate benchmark evidence.
 
 ## Benchmark Scenarios
 
