@@ -9,13 +9,14 @@ namespace PowerForge;
 /// <summary>
 /// Managed NuGet/local-folder repository client for PowerShell module packages.
 /// </summary>
-public sealed class ManagedModuleRepositoryClient
+public sealed partial class ManagedModuleRepositoryClient
 {
     private readonly ILogger _logger;
     private readonly HttpClient _httpClient;
     private readonly ManagedModulePackageReader _packageReader;
     private readonly Dictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _packagePublishAddressCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Creates a repository client.

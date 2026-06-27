@@ -48,8 +48,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Support `-AllowClobber`.
 - [x] Support `-Force`.
 - [x] Support `-Path` for save/publish workflows.
-- [ ] Support `-ApiKey`.
-- [ ] Support `-NuGetApiKey` as an alias where it helps migration.
+- [x] Support `-ApiKey`.
+- [x] Support `-NuGetApiKey` as an alias where it helps migration.
 - [ ] Support `-SkipDependenciesCheck` for publish compatibility.
 - [ ] Support `-SkipModuleManifestValidate` for publish compatibility.
 - [x] Support `-WhatIf` and `-Confirm` on mutating cmdlets.
@@ -200,20 +200,20 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement module folder validation in C#.
 - [x] Implement module package creation in C#.
 - [x] Implement nuspec generation or preservation.
-- [ ] Implement publish to NuGet v3-compatible feeds.
+- [x] Implement publish to NuGet v3-compatible feeds.
 - [ ] Implement PSGallery publish.
-- [ ] Implement private-feed publish with API key.
-- [ ] Implement private-feed publish with credentials where supported.
+- [x] Implement private-feed publish with API key.
+- [x] Implement private-feed publish with credentials where supported.
 - [ ] Implement duplicate detection.
 - [ ] Implement `-SkipDependenciesCheck`.
 - [ ] Implement `-SkipModuleManifestValidate`.
 - [ ] Integrate with existing `ModulePublisher`.
 - [ ] Integrate with required-module mirroring.
-- [ ] Emit typed publish result objects.
+- [x] Emit typed publish result objects.
 - [ ] Add Spectre.Console summary output.
 - [x] Add tests for package creation.
 - [ ] Add tests for duplicate publish classification.
-- [ ] Add tests for private-feed publish request shaping.
+- [x] Add tests for private-feed publish request shaping.
 - [ ] Benchmark against `Publish-Module` and `Publish-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.
 - [ ] Validate on PowerShell 7+.
