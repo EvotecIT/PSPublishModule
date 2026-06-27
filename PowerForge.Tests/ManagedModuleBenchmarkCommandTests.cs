@@ -135,6 +135,40 @@ public sealed class ManagedModuleBenchmarkCommandTests
     }
 
     [Fact]
+    public void MeasureManagedModule_records_heavy_extraction_evidence()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var files = CreateHeavyModuleFiles("1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Heavy.1.0.0.nupkg"),
+            "Company.Heavy",
+            "1.0.0",
+            files: files);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Measure-ManagedModule")
+            .AddParameter("Name", "Company.Heavy")
+            .AddParameter("Operation", ManagedModuleBenchmarkOperation.Install)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Version", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleBenchmarkResult>(Assert.Single(results).BaseObject);
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal("Installed", run.Status);
+        Assert.Equal(files.Count, run.FileCount);
+        Assert.True(run.ExtractedBytes > 250_000);
+        Assert.True(run.FinalDiskBytes >= run.ExtractedBytes);
+        Assert.True(run.ExtractionElapsed.GetValueOrDefault() > TimeSpan.Zero);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Heavy", "1.0.0", "data", "payload-063.bin")));
+    }
+
+    [Fact]
     public void MeasureManagedModule_publishes_module_with_dependency_metadata()
     {
         using var feed = new TemporaryDirectory();
@@ -171,6 +205,35 @@ public sealed class ManagedModuleBenchmarkCommandTests
         AssertPackageDependency(run.PackagePath!, "Company.Core", "[2.0.0]");
     }
 
+    [Fact]
+    public void MeasureManagedModule_publishes_binary_module_package()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var packageOutput = new TemporaryDirectory();
+        WriteBinaryPublishModule(moduleRoot.Path, "Company.Binary", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Measure-ManagedModule")
+            .AddParameter("Name", "Company.Binary")
+            .AddParameter("Operation", ManagedModuleBenchmarkOperation.Publish)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ModulePath", moduleRoot.Path)
+            .AddParameter("PackageOutputDirectory", packageOutput.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleBenchmarkResult>(Assert.Single(results).BaseObject);
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.True(run.Published);
+        Assert.Equal("Published", run.Status);
+        Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Binary.1.0.0.nupkg")));
+        AssertPackageEntry(run.PackagePath!, "Company.Binary.dll");
+    }
+
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
@@ -194,6 +257,21 @@ public sealed class ManagedModuleBenchmarkCommandTests
         {
             [name + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static IReadOnlyDictionary<string, string> CreateHeavyModuleFiles(string version)
+    {
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Heavy.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+        };
+        var payload = new string('x', 4096);
+        for (var i = 0; i < 64; i++)
+        {
+            files[$"data/payload-{i:000}.bin"] = payload + i.ToString("000");
+        }
+
+        return files;
+    }
 
     private static void CreateGraphPackages(string feedPath)
     {
@@ -275,6 +353,27 @@ public sealed class ManagedModuleBenchmarkCommandTests
             }.Where(static line => !string.IsNullOrWhiteSpace(line))));
     }
 
+    private static void WriteBinaryPublishModule(string moduleRoot, string moduleName, string version)
+    {
+        Directory.CreateDirectory(moduleRoot);
+        File.WriteAllBytes(Path.Combine(moduleRoot, moduleName + ".dll"), Enumerable.Range(0, 2048).Select(i => (byte)(i % 251)).ToArray());
+        File.WriteAllText(
+            Path.Combine(moduleRoot, moduleName + ".psd1"),
+            string.Join(Environment.NewLine, new[]
+            {
+                "@{",
+                $"    RootModule = '{moduleName}.dll'",
+                $"    ModuleVersion = '{version}'",
+                "    GUID = '22222222-2222-2222-2222-222222222222'",
+                "    Author = 'Evotec'",
+                "    Description = 'Benchmark binary module.'",
+                "    FunctionsToExport = @()",
+                "    CmdletsToExport = @()",
+                "    AliasesToExport = @()",
+                "}"
+            }));
+    }
+
     private static void AssertPackageDependency(string packagePath, string id, string version)
     {
         using var archive = ZipFile.OpenRead(packagePath);
@@ -292,6 +391,12 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.Contains(dependencies, dependency =>
             string.Equals(dependency.Id, id, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(dependency.Version, version, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void AssertPackageEntry(string packagePath, string entryName)
+    {
+        using var archive = ZipFile.OpenRead(packagePath);
+        Assert.Contains(archive.Entries, entry => string.Equals(entry.FullName, entryName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
