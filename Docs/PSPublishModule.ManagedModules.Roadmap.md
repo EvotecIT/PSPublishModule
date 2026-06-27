@@ -76,6 +76,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - Receipts are typed `ManagedModuleReceipt` objects written as JSON at `<moduleRoot>/<moduleName>/<version>/.powerforge/managed-module-receipt.json`.
 - Receipts are created only after package download, extraction, and final promotion into the versioned module directory succeed.
+- Receipts and download results include the package SHA256 hash used for delivery evidence.
 - Install and update result objects expose both the receipt object and receipt path when disk state changed.
 - Forced replacement stages the new version first, moves the existing version to a temporary backup, promotes the staged version, and restores the backup if promotion fails.
 - Per-module install locks are stored under `<moduleRoot>/.powerforge/locks` and guard install/update mutations for the same module name.

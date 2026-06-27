@@ -30,6 +30,7 @@ internal sealed class ManagedModuleReceiptStore
             RepositorySource = repository.Source,
             Source = result.Download.Source,
             PackagePath = result.Download.PackagePath,
+            PackageSha256 = result.Download.PackageSha256,
             ModuleRoot = result.ModuleRoot,
             ModulePath = result.ModulePath,
             Status = result.Status.ToString(),

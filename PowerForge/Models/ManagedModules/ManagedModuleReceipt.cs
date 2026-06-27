@@ -46,6 +46,11 @@ public sealed class ManagedModuleReceipt
     public string PackagePath { get; set; } = string.Empty;
 
     /// <summary>
+    /// SHA256 hash of the package used for delivery.
+    /// </summary>
+    public string PackageSha256 { get; set; } = string.Empty;
+
+    /// <summary>
     /// Module root that contains module folders.
     /// </summary>
     public string ModuleRoot { get; set; } = string.Empty;
