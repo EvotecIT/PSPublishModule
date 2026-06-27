@@ -1,0 +1,286 @@
+# Managed Module Engine Roadmap
+
+This roadmap tracks the plan for a managed C# module lifecycle engine in PowerForge and PSPublishModule. The target is compatibility with the common PowerShellGet and PSResourceGet user workflows while removing those tools, external executables, and embedded PowerShell scripts from the core install/save/publish path over time.
+
+The public PowerShell surface should stay thin. Reusable behavior belongs in PowerForge, with PSPublishModule cmdlets handling parameter binding, `ShouldProcess`, pipeline output, and Spectre.Console summaries.
+
+## Principles
+
+- [ ] Keep the core implementation in managed C#.
+- [ ] Do not use `powershell.exe`, `pwsh`, `dotnet.exe`, `nuget.exe`, or embedded `.ps1` scripts for the new managed engine path.
+- [ ] Keep PowerShellGet and PSResourceGet as compatibility baselines and temporary fallbacks, not as the long-term engine.
+- [ ] Preserve easy migration from existing `Install-Module`, `Save-Module`, `Publish-Module`, `Install-PSResource`, `Save-PSResource`, and `Publish-PSResource` usage.
+- [ ] Keep `Install-PrivateModule` and `Update-PrivateModule` as thin compatibility/convenience wrappers over the managed engine.
+- [ ] Keep `Invoke-ModuleState` as the day-to-day estate maintenance entrypoint.
+- [ ] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
+- [ ] Write receipts and evidence only after successful delivery.
+- [ ] Treat destructive cleanup as a separately proven and explicitly gated capability.
+- [ ] Benchmark correctness and speed on both Windows PowerShell 5.1 and PowerShell 7+ before replacing existing compatibility paths.
+
+## Public Command Shape
+
+- [ ] Introduce `Find-ManagedModule`.
+- [ ] Introduce `Save-ManagedModule`.
+- [ ] Introduce `Install-ManagedModule`.
+- [ ] Introduce `Update-ManagedModule`.
+- [ ] Introduce `Publish-ManagedModule`.
+- [ ] Decide whether `Get-ManagedModule` is needed or whether `Get-ModuleState` remains the inventory surface.
+- [ ] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
+- [ ] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to `Install-ManagedModule`.
+- [ ] Keep `Update-PrivateModule` as a wrapper that maps private-gallery profile/repository options to `Update-ManagedModule`.
+- [ ] Avoid adding separate public/private command families unless a wrapper has a clearly different operator purpose.
+
+## Compatibility Parameters
+
+- [ ] Support `-Name`.
+- [ ] Support `-Repository`.
+- [ ] Support `-Credential`.
+- [ ] Support `-Scope CurrentUser|AllUsers`.
+- [ ] Support `-RequiredVersion`.
+- [ ] Support `-MinimumVersion`.
+- [ ] Support `-MaximumVersion`.
+- [ ] Support `-Version`.
+- [ ] Support `-VersionPolicy`.
+- [ ] Support `-Prerelease`.
+- [ ] Support `-AllowPrerelease` as an alias where it helps migration.
+- [ ] Support `-AcceptLicense`.
+- [ ] Support `-SkipDependencyCheck`.
+- [ ] Support `-AllowClobber`.
+- [ ] Support `-Force`.
+- [ ] Support `-Path` for save/publish workflows.
+- [ ] Support `-ApiKey`.
+- [ ] Support `-NuGetApiKey` as an alias where it helps migration.
+- [ ] Support `-SkipDependenciesCheck` for publish compatibility.
+- [ ] Support `-SkipModuleManifestValidate` for publish compatibility.
+- [ ] Support `-WhatIf` and `-Confirm` on mutating cmdlets.
+- [ ] Return typed result objects with enough data to audit source, target path, version policy, resolved version, dependency actions, elapsed time, and receipt state.
+
+## Phase 1: Design And Contracts
+
+- [ ] Create managed engine design notes under `Docs`.
+- [ ] Define compatibility matrix for PowerShellGet v2 commands.
+- [ ] Define compatibility matrix for PSResourceGet commands.
+- [ ] Define the managed command parameter matrix.
+- [ ] Define typed models for repositories, packages, versions, dependencies, plans, actions, receipts, and benchmark results.
+- [ ] Define a migration table from existing commands to managed commands.
+- [ ] Define provider support levels: PSGallery, generic NuGet v3, local folder, Azure Artifacts, JFrog/Artifactory, ProGet/Nexus-compatible feeds, and GitHub Packages.
+- [ ] Define exact behavior for repository trust, credentials, retries, TLS, proxy support, and private feed authentication.
+- [ ] Define exact behavior for side-by-side versions, downgrade policies, clobber conflicts, loaded modules, and cross-scope installs.
+- [ ] Define exact behavior for prerelease labels and semantic version ordering.
+- [ ] Define package integrity requirements, including hash evidence and optional repository metadata validation.
+- [ ] Define rollback guarantees for partial install/update failures.
+- [ ] Define receipt schema and where receipts are stored.
+- [ ] Define which existing cmdlets become wrappers and which remain independent.
+
+## Phase 2: Managed Repository Client
+
+- [ ] Implement NuGet v3 service index discovery in C#.
+- [ ] Implement package metadata lookup in C#.
+- [ ] Implement package version listing in C#.
+- [ ] Implement package search in C#.
+- [ ] Implement package flat-container download URI resolution in C#.
+- [ ] Implement local folder feed enumeration in C#.
+- [ ] Implement repository credentials in C# without relying on registered PowerShell repositories.
+- [ ] Implement retry, timeout, proxy, and cancellation behavior.
+- [ ] Implement provider-neutral errors with actionable remediation messages.
+- [ ] Add tests for PSGallery metadata lookup.
+- [ ] Add tests for local folder feeds.
+- [ ] Add tests for private-feed credential application.
+- [ ] Add tests for missing package, missing version, and malformed feed responses.
+
+## Phase 3: Managed Package Reader
+
+- [ ] Implement `.nupkg` identity reading in C#.
+- [ ] Implement nuspec metadata reading in C#.
+- [ ] Implement PowerShell module manifest discovery inside `.nupkg` files.
+- [ ] Implement module version and prerelease extraction from manifest metadata.
+- [ ] Implement dependency extraction from nuspec metadata.
+- [ ] Implement dependency extraction from module manifest `RequiredModules`.
+- [ ] Implement file list and size accounting.
+- [ ] Implement safe path normalization for archive entries.
+- [ ] Reject path traversal entries.
+- [ ] Reject absolute-path archive entries.
+- [ ] Add tests for normal packages.
+- [ ] Add tests for prerelease packages.
+- [ ] Add tests for malicious archive paths.
+- [ ] Add tests for packages with manifest/nuspec disagreement.
+
+## Phase 4: Managed Resolver
+
+- [ ] Implement semantic version parsing and comparison shared across module state and managed installs.
+- [ ] Implement PowerShellGet-style minimum/maximum/required version policies.
+- [ ] Implement PSResourceGet/NuGet range policies.
+- [ ] Implement `-VersionPolicy` as the canonical internal representation.
+- [ ] Implement prerelease inclusion rules.
+- [ ] Implement dependency graph resolution.
+- [ ] Implement cycle detection.
+- [ ] Implement repository source preference rules.
+- [ ] Implement family coherence policies for related module families.
+- [ ] Implement conflict diagnostics for incompatible loaded modules.
+- [ ] Implement conflict diagnostics for mixed scopes and side-by-side versions.
+- [ ] Add tests for exact/min/max/range policies.
+- [ ] Add tests for prerelease resolution.
+- [ ] Add tests for dependency closure.
+- [ ] Add tests for source preference and family conflict cases.
+
+## Phase 5: Managed Save
+
+- [ ] Implement `Save-ManagedModule` using the managed repository client.
+- [ ] Save resolved packages and dependency closure to a target path.
+- [ ] Preserve package structure expected by PowerShell module import conventions.
+- [ ] Support warm cache reuse.
+- [ ] Support offline bundle output metadata.
+- [ ] Support `-SkipDependencyCheck`.
+- [ ] Support `-AcceptLicense`.
+- [ ] Emit typed save result objects.
+- [ ] Add `ShouldProcess` and dry-run planning.
+- [ ] Add Spectre.Console summary output.
+- [ ] Benchmark against `Save-Module` and `Save-PSResource`.
+- [ ] Validate on Windows PowerShell 5.1.
+- [ ] Validate on PowerShell 7+.
+
+## Phase 6: Managed Install
+
+- [ ] Implement install planning without mutating disk.
+- [ ] Implement safe extraction with `System.IO.Compression` compatible with `net472`.
+- [ ] Implement atomic staging and final move.
+- [ ] Implement per-module install locks.
+- [ ] Implement rollback on failure.
+- [ ] Implement CurrentUser module root resolution.
+- [ ] Implement AllUsers module root resolution on Windows, macOS, and Linux.
+- [ ] Implement side-by-side exact version install.
+- [ ] Implement `-AllowClobber` behavior.
+- [ ] Implement publisher/trust checks where metadata is available.
+- [ ] Implement license acceptance handling.
+- [ ] Implement dependency installation order.
+- [ ] Implement receipt creation after successful install.
+- [ ] Emit typed install result objects.
+- [ ] Add Spectre.Console summary output.
+- [ ] Add tests for normal install.
+- [ ] Add tests for scoped install.
+- [ ] Add tests for exact side-by-side install.
+- [ ] Add tests for failed extraction rollback.
+- [ ] Add tests for clobber detection.
+- [ ] Benchmark against `Install-Module` and `Install-PSResource`.
+- [ ] Validate on Windows PowerShell 5.1.
+- [ ] Validate on PowerShell 7+.
+
+## Phase 7: Managed Update
+
+- [ ] Implement update planning from installed inventory and repository metadata.
+- [ ] Implement latest update.
+- [ ] Implement constrained update.
+- [ ] Implement prerelease update.
+- [ ] Implement scoped update.
+- [ ] Implement family-aware update.
+- [ ] Implement loaded-module safety checks.
+- [ ] Implement receipt updates after successful update.
+- [ ] Emit typed update result objects.
+- [ ] Add Spectre.Console summary output.
+- [ ] Add tests for no-op update.
+- [ ] Add tests for update with dependencies.
+- [ ] Add tests for scoped missing-copy fallback to install.
+- [ ] Add tests for loaded-module conflict blocking.
+- [ ] Benchmark against `Update-Module` and `Update-PSResource`.
+- [ ] Validate on Windows PowerShell 5.1.
+- [ ] Validate on PowerShell 7+.
+
+## Phase 8: Managed Publish
+
+- [ ] Implement module folder validation in C#.
+- [ ] Implement module package creation in C#.
+- [ ] Implement nuspec generation or preservation.
+- [ ] Implement publish to NuGet v3-compatible feeds.
+- [ ] Implement PSGallery publish.
+- [ ] Implement private-feed publish with API key.
+- [ ] Implement private-feed publish with credentials where supported.
+- [ ] Implement duplicate detection.
+- [ ] Implement `-SkipDependenciesCheck`.
+- [ ] Implement `-SkipModuleManifestValidate`.
+- [ ] Integrate with existing `ModulePublisher`.
+- [ ] Integrate with required-module mirroring.
+- [ ] Emit typed publish result objects.
+- [ ] Add Spectre.Console summary output.
+- [ ] Add tests for package creation.
+- [ ] Add tests for duplicate publish classification.
+- [ ] Add tests for private-feed publish request shaping.
+- [ ] Benchmark against `Publish-Module` and `Publish-PSResource`.
+- [ ] Validate on Windows PowerShell 5.1.
+- [ ] Validate on PowerShell 7+.
+
+## Phase 9: ModuleState Integration
+
+- [ ] Teach `Invoke-ModuleState` to use the managed engine for install/update/save operations.
+- [ ] Keep `Get-ModuleState` inventory object-first.
+- [ ] Keep `Get-ModuleStatePlan` as an inspectable plan surface.
+- [ ] Keep `Test-ModuleState` as a validation surface.
+- [ ] Keep `Invoke-ModuleStatePlan` as the low-level apply surface.
+- [ ] Add `-Transport Managed` to ModuleState apply flows if a transition switch is needed.
+- [ ] Keep compatibility transport available until managed parity is proven.
+- [ ] Ensure maintenance receipts contain managed-engine evidence.
+- [ ] Ensure summaries explain what changed, what was skipped, and why.
+- [ ] Add tests for ModuleState managed install.
+- [ ] Add tests for ModuleState managed update.
+- [ ] Add tests for ModuleState source/scope/family repairs through the managed engine.
+
+## Phase 10: Benchmarks And Proof
+
+- [ ] Build a benchmark harness that runs the same scenario through managed, PowerShellGet, and PSResourceGet paths.
+- [ ] Measure cold cache install.
+- [ ] Measure warm cache install.
+- [ ] Measure save to empty path.
+- [ ] Measure save to warm path.
+- [ ] Measure update no-op.
+- [ ] Measure update with one newer version.
+- [ ] Measure large dependency graph resolution.
+- [ ] Measure heavy module extraction.
+- [ ] Measure private feed metadata lookup.
+- [ ] Record elapsed time, HTTP request count, bytes downloaded, package count, extraction time, and final disk size.
+- [ ] Validate imported module version after install.
+- [ ] Validate receipts after install/update.
+- [ ] Validate behavior on Windows PowerShell 5.1.
+- [ ] Validate behavior on PowerShell 7+.
+- [ ] Publish benchmark results in a neutral PowerForge report.
+
+## Benchmark Scenarios
+
+- [ ] Small public module install.
+- [ ] Medium public module install.
+- [ ] Large public module with many dependencies.
+- [ ] Related module family with mixed versions.
+- [ ] Large cloud administration module family.
+- [ ] Private repository install with credentials.
+- [ ] Private repository save for offline use.
+- [ ] Publish a simple module.
+- [ ] Publish a binary module.
+- [ ] Publish a module with dependencies.
+- [ ] Update already-current modules.
+- [ ] Update stale modules.
+- [ ] Repair source mismatch.
+- [ ] Repair scope mismatch.
+- [ ] Detect loaded-module conflict.
+
+## Phase 11: Transition And Cleanup
+
+- [ ] Keep current PowerShellGet/PSResourceGet wrappers while managed parity is incomplete.
+- [ ] Route `Install-PrivateModule` through the managed engine after install parity is proven.
+- [ ] Route `Update-PrivateModule` through the managed engine after update parity is proven.
+- [ ] Route required-module mirroring through the managed engine after save/publish parity is proven.
+- [ ] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
+- [ ] Remove embedded PowerShell scripts from the managed path.
+- [ ] Remove external tool assumptions from managed tests.
+- [ ] Update generated command docs from source metadata.
+- [ ] Update README examples.
+- [ ] Update private gallery docs.
+- [ ] Update ModuleState docs.
+
+## Done Criteria
+
+- [ ] Managed install/save/update/publish works without PowerShellGet, PSResourceGet, PackageManagement, `nuget.exe`, `dotnet.exe`, `powershell.exe`, `pwsh`, or embedded `.ps1` scripts in the core path.
+- [ ] Common PowerShellGet workflows have a documented managed equivalent.
+- [ ] Common PSResourceGet workflows have a documented managed equivalent.
+- [ ] Existing private-gallery workflows continue to work through wrappers.
+- [ ] ModuleState can maintain installed modules through the managed engine.
+- [ ] Benchmarks prove correctness and performance on Windows PowerShell 5.1 and PowerShell 7+.
+- [ ] Compatibility fallback remains only where provider support is explicitly incomplete.
+- [ ] Public docs stay vendor-neutral and avoid naming community comparison projects.
