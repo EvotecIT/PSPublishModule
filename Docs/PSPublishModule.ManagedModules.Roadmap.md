@@ -149,8 +149,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add `ShouldProcess` and dry-run planning.
 - [x] Add Spectre.Console summary output.
 - [ ] Benchmark against `Save-Module` and `Save-PSResource`.
-- [ ] Validate on Windows PowerShell 5.1.
-- [ ] Validate on PowerShell 7+.
+- [x] Validate local-feed save smoke on Windows PowerShell 5.1.
+- [x] Validate local-feed save smoke on PowerShell 7+.
 
 ## Phase 6: Managed Install
 
@@ -175,8 +175,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for failed extraction rollback.
 - [x] Add tests for clobber detection.
 - [ ] Benchmark against `Install-Module` and `Install-PSResource`.
-- [ ] Validate on Windows PowerShell 5.1.
-- [ ] Validate on PowerShell 7+.
+- [x] Validate local-feed install smoke on Windows PowerShell 5.1.
+- [x] Validate local-feed install smoke on PowerShell 7+.
 
 ## Phase 7: Managed Update
 
@@ -198,8 +198,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for family-aware update and blocked family alignment.
 - [x] Add tests for source repair and blocked source mismatch.
 - [ ] Benchmark against `Update-Module` and `Update-PSResource`.
-- [ ] Validate on Windows PowerShell 5.1.
-- [ ] Validate on PowerShell 7+.
+- [x] Validate local-feed update smoke on Windows PowerShell 5.1.
+- [x] Validate local-feed update smoke on PowerShell 7+.
 
 ## Phase 8: Managed Publish
 
@@ -252,10 +252,10 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Record compatibility baseline success/failure/status/version evidence through the existing compatibility installer path.
 - [ ] Measure cold cache install.
 - [ ] Measure warm cache install.
-- [ ] Measure save to empty path.
+- [x] Measure save to empty path.
 - [ ] Measure save to warm path.
 - [ ] Measure update no-op.
-- [ ] Measure update with one newer version.
+- [x] Measure update with one newer version.
 - [ ] Measure large dependency graph resolution.
 - [ ] Measure heavy module extraction.
 - [ ] Measure private feed metadata lookup.
@@ -272,7 +272,9 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - [x] 2026-06-27: PowerShell 7.6.3 imported `PSPublishModule` from the local `net10.0` build, ran `Measure-ManagedModule` against a local folder feed, installed `Company.Tools` 1.0.0 into a custom root, validated the installed manifest version, and confirmed out-of-process imports in PowerShell 7 and Windows PowerShell returned version 1.0.0.
 - [x] 2026-06-27: Windows PowerShell 5.1.26100.8655 imported `PSPublishModule` from the local `net472` build, ran the same managed benchmark scenario, and confirmed out-of-process imports in PowerShell 7 and Windows PowerShell returned version 1.0.0.
-- [ ] Save, update, publish, public-feed, private-feed, and heavy-module host validation still need separate benchmark evidence.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save` against the same local folder feed, saved `Company.Tools` 1.0.0 into empty custom roots, validated the saved manifest version, and confirmed out-of-process imports in both hosts returned version 1.0.0.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both seeded `Company.Tools` 1.0.0 with `Install-ManagedModule`, ran `Measure-ManagedModule -Operation Update` against a local folder feed containing 1.1.0, validated the updated manifest version, and confirmed out-of-process imports in both hosts returned version 1.1.0.
+- [ ] Publish, public-feed, private-feed, heavy-module, warm-cache, no-op update, and compatibility-engine benchmark evidence still need separate proof.
 
 ## Benchmark Scenarios
 
