@@ -226,7 +226,9 @@ public sealed class ManagedModuleBenchmarkService
         ManagedModuleBenchmarkScenario scenario,
         int iteration,
         ManagedModuleInstallResult result)
-        => new()
+    {
+        var evidence = ManagedModuleBenchmarkEvidence.FromInstall(result);
+        return new ManagedModuleBenchmarkRunResult
         {
             ScenarioId = ResolveScenarioId(scenario),
             Operation = scenario.Operation,
@@ -241,15 +243,26 @@ public sealed class ManagedModuleBenchmarkService
             PackageBytes = result.Download?.BytesWritten ?? 0,
             ExtractedBytes = result.ExtractedBytes,
             FileCount = result.FileCount,
-            DependencyCount = result.DependencyResults.Count,
-            FromCache = result.Download?.FromCache ?? false
+            DependencyCount = evidence.DependencyCount,
+            PackageCount = evidence.PackageCount,
+            TotalPackageBytes = evidence.TotalPackageBytes,
+            TotalExtractedBytes = evidence.TotalExtractedBytes,
+            TotalFileCount = evidence.TotalFileCount,
+            FinalDiskBytes = evidence.FinalDiskBytes,
+            FromCache = result.Download?.FromCache ?? false,
+            ValidatedVersion = evidence.ValidatedVersion,
+            VersionValidationSucceeded = evidence.VersionValidationSucceeded,
+            VersionValidationMessage = evidence.VersionValidationMessage
         };
+    }
 
     private static ManagedModuleBenchmarkRunResult MapUpdate(
         ManagedModuleBenchmarkScenario scenario,
         int iteration,
         ManagedModuleUpdateResult result)
-        => new()
+    {
+        var evidence = ManagedModuleBenchmarkEvidence.FromUpdate(result);
+        return new ManagedModuleBenchmarkRunResult
         {
             ScenarioId = ResolveScenarioId(scenario),
             Operation = scenario.Operation,
@@ -265,9 +278,18 @@ public sealed class ManagedModuleBenchmarkService
             PackageBytes = result.InstallResult?.Download?.BytesWritten ?? 0,
             ExtractedBytes = result.InstallResult?.ExtractedBytes ?? 0,
             FileCount = result.InstallResult?.FileCount ?? 0,
-            DependencyCount = result.InstallResult?.DependencyResults.Count ?? 0,
-            FromCache = result.InstallResult?.Download?.FromCache ?? false
+            DependencyCount = evidence.DependencyCount,
+            PackageCount = evidence.PackageCount,
+            TotalPackageBytes = evidence.TotalPackageBytes,
+            TotalExtractedBytes = evidence.TotalExtractedBytes,
+            TotalFileCount = evidence.TotalFileCount,
+            FinalDiskBytes = evidence.FinalDiskBytes,
+            FromCache = result.InstallResult?.Download?.FromCache ?? false,
+            ValidatedVersion = evidence.ValidatedVersion,
+            VersionValidationSucceeded = evidence.VersionValidationSucceeded,
+            VersionValidationMessage = evidence.VersionValidationMessage
         };
+    }
 
     private static ManagedModuleBenchmarkRunResult MapCompatibilityResult(
         ManagedModuleBenchmarkScenario scenario,
