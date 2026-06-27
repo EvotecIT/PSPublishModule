@@ -22,7 +22,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Introduce `Find-ManagedModule`.
 - [x] Introduce `Save-ManagedModule`.
 - [x] Introduce `Install-ManagedModule`.
-- [ ] Introduce `Update-ManagedModule`.
+- [x] Introduce `Update-ManagedModule`.
 - [ ] Introduce `Publish-ManagedModule`.
 - [ ] Decide whether `Get-ManagedModule` is needed or whether `Get-ModuleState` remains the inventory surface.
 - [ ] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
@@ -168,18 +168,18 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 ## Phase 7: Managed Update
 
 - [ ] Implement update planning from installed inventory and repository metadata.
-- [ ] Implement latest update.
-- [ ] Implement constrained update.
-- [ ] Implement prerelease update.
-- [ ] Implement scoped update.
+- [x] Implement latest update.
+- [x] Implement constrained update.
+- [x] Implement prerelease update.
+- [x] Implement scoped update.
 - [ ] Implement family-aware update.
 - [ ] Implement loaded-module safety checks.
 - [ ] Implement receipt updates after successful update.
-- [ ] Emit typed update result objects.
+- [x] Emit typed update result objects.
 - [ ] Add Spectre.Console summary output.
-- [ ] Add tests for no-op update.
+- [x] Add tests for no-op update.
 - [ ] Add tests for update with dependencies.
-- [ ] Add tests for scoped missing-copy fallback to install.
+- [x] Add tests for scoped missing-copy fallback to install.
 - [ ] Add tests for loaded-module conflict blocking.
 - [ ] Benchmark against `Update-Module` and `Update-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.
