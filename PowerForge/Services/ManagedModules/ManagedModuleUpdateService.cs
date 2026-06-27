@@ -8,6 +8,7 @@ public sealed class ManagedModuleUpdateService
     private readonly ILogger _logger;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
     private readonly ManagedModuleInstallService _installService;
+    private readonly ManagedModuleReceiptStore _receiptStore;
 
     /// <summary>
     /// Creates a managed module update service.
@@ -23,6 +24,7 @@ public sealed class ManagedModuleUpdateService
         _logger = logger ?? new NullLogger();
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(_logger);
         _installService = installService ?? new ManagedModuleInstallService(_logger, _repositoryClient);
+        _receiptStore = new ManagedModuleReceiptStore();
     }
 
     /// <summary>
@@ -77,6 +79,8 @@ public sealed class ManagedModuleUpdateService
                 Force = true
             },
             cancellationToken).ConfigureAwait(false);
+        if (install.Status == ManagedModuleInstallStatus.Installed)
+            _receiptStore.WriteReceipt(request.Repository, install, currentVersion, "Update");
 
         return new ManagedModuleUpdateResult
         {
@@ -87,7 +91,9 @@ public sealed class ManagedModuleUpdateService
             RepositoryName = request.Repository.Name,
             ModuleRoot = moduleRoot,
             ModulePath = modulePath,
-            InstallResult = install
+            InstallResult = install,
+            Receipt = install.Receipt,
+            ReceiptPath = install.ReceiptPath
         };
     }
 

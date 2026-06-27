@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -50,6 +51,9 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.Equal("1.0.0", result.PreviousVersion);
         Assert.Equal("1.1.0", result.TargetVersion);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+        Assert.False(string.IsNullOrWhiteSpace(result.ReceiptPath));
+        Assert.Equal(result.ReceiptPath, result.InstallResult?.ReceiptPath);
+        AssertReceipt(result.ReceiptPath, "Update", "Company.Tools", "1.1.0", "1.0.0");
     }
 
     [Fact]
@@ -69,6 +73,7 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.Equal(ManagedModuleUpdateStatus.InstalledMissing, result.Status);
         Assert.Null(result.PreviousVersion);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+        AssertReceipt(result.ReceiptPath, "Update", "Company.Tools", "1.0.0", previousVersion: null);
     }
 
     [Fact]
@@ -145,4 +150,20 @@ public sealed class ManagedModuleUpdateServiceTests
         {
             ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static void AssertReceipt(
+        string? receiptPath,
+        string operation,
+        string name,
+        string version,
+        string? previousVersion)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(receiptPath));
+        var receipt = JsonSerializer.Deserialize<ManagedModuleReceipt>(File.ReadAllText(receiptPath!));
+        Assert.NotNull(receipt);
+        Assert.Equal(operation, receipt.Operation);
+        Assert.Equal(name, receipt.Name);
+        Assert.Equal(version, receipt.Version);
+        Assert.Equal(previousVersion, receipt.PreviousVersion);
+    }
 }

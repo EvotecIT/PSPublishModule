@@ -13,7 +13,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Keep `Install-PrivateModule` and `Update-PrivateModule` as thin compatibility/convenience wrappers over the managed engine.
 - [ ] Keep `Invoke-ModuleState` as the day-to-day estate maintenance entrypoint.
 - [ ] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
-- [ ] Write receipts and evidence only after successful delivery.
+- [x] Write receipts and evidence only after successful delivery.
 - [ ] Treat destructive cleanup as a separately proven and explicitly gated capability.
 - [ ] Benchmark correctness and speed on both Windows PowerShell 5.1 and PowerShell 7+ before replacing existing compatibility paths.
 
@@ -68,9 +68,17 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Define exact behavior for side-by-side versions, downgrade policies, clobber conflicts, loaded modules, and cross-scope installs.
 - [ ] Define exact behavior for prerelease labels and semantic version ordering.
 - [ ] Define package integrity requirements, including hash evidence and optional repository metadata validation.
-- [ ] Define rollback guarantees for partial install/update failures.
-- [ ] Define receipt schema and where receipts are stored.
+- [x] Define rollback guarantees for partial install/update failures.
+- [x] Define receipt schema and where receipts are stored.
 - [ ] Define which existing cmdlets become wrappers and which remain independent.
+
+## Current Receipt And Rollback Contract
+
+- Receipts are typed `ManagedModuleReceipt` objects written as JSON at `<moduleRoot>/<moduleName>/<version>/.powerforge/managed-module-receipt.json`.
+- Receipts are created only after package download, extraction, and final promotion into the versioned module directory succeed.
+- Install and update result objects expose both the receipt object and receipt path when disk state changed.
+- Forced replacement stages the new version first, moves the existing version to a temporary backup, promotes the staged version, and restores the backup if promotion fails.
+- Per-module install locks are stored under `<moduleRoot>/.powerforge/locks` and guard install/update mutations for the same module name.
 
 ## Phase 2: Managed Repository Client
 
@@ -144,8 +152,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Implement install planning without mutating disk.
 - [x] Implement safe extraction with `System.IO.Compression` compatible with `net472`.
 - [x] Implement atomic staging and final move.
-- [ ] Implement per-module install locks.
-- [ ] Implement rollback on failure.
+- [x] Implement per-module install locks.
+- [x] Implement rollback on failure.
 - [x] Implement CurrentUser module root resolution.
 - [x] Implement AllUsers module root resolution on Windows, macOS, and Linux.
 - [x] Implement side-by-side exact version install.
@@ -153,13 +161,13 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Implement publisher/trust checks where metadata is available.
 - [ ] Implement license acceptance handling.
 - [ ] Implement dependency installation order.
-- [ ] Implement receipt creation after successful install.
+- [x] Implement receipt creation after successful install.
 - [x] Emit typed install result objects.
 - [ ] Add Spectre.Console summary output.
 - [x] Add tests for normal install.
 - [x] Add tests for scoped install.
 - [x] Add tests for exact side-by-side install.
-- [ ] Add tests for failed extraction rollback.
+- [x] Add tests for failed extraction rollback.
 - [ ] Add tests for clobber detection.
 - [ ] Benchmark against `Install-Module` and `Install-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.
@@ -174,7 +182,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement scoped update.
 - [ ] Implement family-aware update.
 - [ ] Implement loaded-module safety checks.
-- [ ] Implement receipt updates after successful update.
+- [x] Implement receipt updates after successful update.
 - [x] Emit typed update result objects.
 - [ ] Add Spectre.Console summary output.
 - [x] Add tests for no-op update.
@@ -237,7 +245,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Measure private feed metadata lookup.
 - [ ] Record elapsed time, HTTP request count, bytes downloaded, package count, extraction time, and final disk size.
 - [ ] Validate imported module version after install.
-- [ ] Validate receipts after install/update.
+- [x] Validate receipts after install/update.
 - [ ] Validate behavior on Windows PowerShell 5.1.
 - [ ] Validate behavior on PowerShell 7+.
 - [ ] Publish benchmark results in a neutral PowerForge report.
