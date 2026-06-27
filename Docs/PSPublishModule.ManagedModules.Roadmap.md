@@ -145,7 +145,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-SkipDependencyCheck`.
 - [x] Support `-AcceptLicense`.
 - [x] Emit typed save result objects.
-- [ ] Add `ShouldProcess` and dry-run planning.
+- [x] Add `ShouldProcess` and dry-run planning.
 - [ ] Add Spectre.Console summary output.
 - [ ] Benchmark against `Save-Module` and `Save-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.

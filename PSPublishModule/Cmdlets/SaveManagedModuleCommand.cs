@@ -23,7 +23,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsData.Save, "ManagedModule", SupportsShouldProcess = true)]
 [Alias("Save-PublicModule")]
-[OutputType(typeof(ManagedModuleInstallResult))]
+[OutputType(typeof(ManagedModuleInstallResult), typeof(ManagedModuleInstallPlan))]
 public sealed class SaveManagedModuleCommand : PSCmdlet
 {
     /// <summary>Module names to save.</summary>
@@ -116,6 +116,10 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     [Alias("SkipDependenciesCheck")]
     public SwitchParameter SkipDependencyCheck { get; set; }
 
+    /// <summary>Return an inspectable save plan without writing files.</summary>
+    [Parameter]
+    public SwitchParameter Plan { get; set; }
+
     /// <summary>Saves requested modules.</summary>
     protected override void ProcessRecord()
     {
@@ -127,30 +131,35 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
 
         foreach (var moduleName in Name)
         {
+            var request = new ManagedModuleInstallRequest
+            {
+                Repository = repository,
+                Name = moduleName,
+                Version = Version,
+                MinimumVersion = MinimumVersion,
+                MaximumVersion = MaximumVersion,
+                VersionPolicy = VersionPolicy,
+                IncludePrerelease = Prerelease.IsPresent,
+                Scope = ManagedModuleInstallScope.Custom,
+                ModuleRoot = moduleRoot,
+                PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                Credential = credential,
+                Force = Force.IsPresent,
+                AllowClobber = AllowClobber.IsPresent,
+                AcceptLicense = AcceptLicense.IsPresent,
+                SkipDependencyCheck = SkipDependencyCheck.IsPresent
+            };
+
+            if (Plan.IsPresent)
+            {
+                WriteObject(service.PlanInstallAsync(request).GetAwaiter().GetResult());
+                continue;
+            }
+
             if (!ShouldProcess(moduleName, $"Save managed module to '{moduleRoot}'"))
                 continue;
 
-            var result = service.InstallAsync(
-                    new ManagedModuleInstallRequest
-                    {
-                        Repository = repository,
-                        Name = moduleName,
-                        Version = Version,
-                        MinimumVersion = MinimumVersion,
-                        MaximumVersion = MaximumVersion,
-                        VersionPolicy = VersionPolicy,
-                        IncludePrerelease = Prerelease.IsPresent,
-                        Scope = ManagedModuleInstallScope.Custom,
-                        ModuleRoot = moduleRoot,
-                        PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
-                        Credential = credential,
-                        Force = Force.IsPresent,
-                        AllowClobber = AllowClobber.IsPresent,
-                        AcceptLicense = AcceptLicense.IsPresent,
-                        SkipDependencyCheck = SkipDependencyCheck.IsPresent
-                    })
-                .GetAwaiter()
-                .GetResult();
+            var result = service.InstallAsync(request).GetAwaiter().GetResult();
 
             WriteObject(result);
         }
