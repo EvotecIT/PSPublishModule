@@ -292,6 +292,100 @@ public sealed class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task PlanInstallAsync_rejects_untrusted_repository_when_policy_requires_trust()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleTrustException>(() => service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path, ManagedModuleRepositoryKind.Auto, trusted: false),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            TrustPolicy = new ManagedModuleTrustPolicy
+            {
+                RequireTrustedRepository = true
+            }
+        }));
+
+        Assert.Equal("RepositoryNotTrusted", exception.Reason);
+        Assert.Equal("Local", exception.RepositoryName);
+    }
+
+    [Fact]
+    public async Task InstallAsync_rejects_package_when_author_is_not_allowed()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"),
+            authors: "OtherPublisher");
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleTrustException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            TrustPolicy = new ManagedModuleTrustPolicy
+            {
+                AllowedAuthors = new[] { "Evotec" }
+            }
+        }));
+
+        Assert.Equal("PackageAuthorNotAllowed", exception.Reason);
+        Assert.Equal("Company.Tools", exception.ModuleName);
+        Assert.Equal("1.0.0", exception.Version);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_applies_author_policy_to_dependency_packages()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateDependencyFiles("1.0.0"),
+            authors: "OtherPublisher");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateModuleFiles("1.0.0"),
+            authors: "Evotec");
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleTrustException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            TrustPolicy = new ManagedModuleTrustPolicy
+            {
+                AllowedAuthors = new[] { "Evotec" }
+            }
+        }));
+
+        Assert.Equal("Company.Core", exception.ModuleName);
+        Assert.Equal("PackageAuthorNotAllowed", exception.Reason);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0")));
+    }
+
+    [Fact]
     public async Task InstallAsync_installs_dependencies_before_parent()
     {
         using var feed = new TemporaryDirectory();

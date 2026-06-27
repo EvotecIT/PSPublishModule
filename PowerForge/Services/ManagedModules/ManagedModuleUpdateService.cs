@@ -38,6 +38,7 @@ public sealed class ManagedModuleUpdateService
         CancellationToken cancellationToken = default)
     {
         Validate(request);
+        ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var requestCountBefore = _repositoryClient.RequestCount;
 
@@ -69,6 +70,8 @@ public sealed class ManagedModuleUpdateService
                 MaximumVersion = request.MaximumVersion,
                 VersionPolicy = request.VersionPolicy,
                 ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+                RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
+                AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
                 ModuleRoot = moduleRoot,
                 ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), currentVersion!),
                 Elapsed = stopwatch.Elapsed,
@@ -105,6 +108,8 @@ public sealed class ManagedModuleUpdateService
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
             ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
+            AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
             ModuleRoot = moduleRoot,
             ModulePath = modulePath,
             Elapsed = stopwatch.Elapsed,
@@ -130,6 +135,7 @@ public sealed class ManagedModuleUpdateService
         CancellationToken cancellationToken = default)
     {
         Validate(request);
+        ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
 
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
@@ -161,6 +167,8 @@ public sealed class ManagedModuleUpdateService
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
             ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
+            AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
             SourcePolicySatisfied = sourceEvaluation.IsSatisfied,
             SourcePolicyReason = sourceEvaluation.Reason,
             InstalledReceipt = sourceEvaluation.Receipt,
@@ -190,6 +198,7 @@ public sealed class ManagedModuleUpdateService
                 ExpectedPackageSha256 = string.Equals(moduleName, request.Name, StringComparison.OrdinalIgnoreCase)
                     ? request.ExpectedPackageSha256
                     : null,
+                TrustPolicy = request.TrustPolicy,
                 Credential = request.Credential,
                 Force = true,
                 AllowClobber = request.AllowClobber,

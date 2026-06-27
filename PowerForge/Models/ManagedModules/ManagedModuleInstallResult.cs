@@ -56,6 +56,16 @@ public sealed class ManagedModuleInstallResult
     public string? ExpectedPackageSha256 { get; set; }
 
     /// <summary>
+    /// True when the caller required the repository to be trusted.
+    /// </summary>
+    public bool RequireTrustedRepository { get; set; }
+
+    /// <summary>
+    /// Package authors allowed by the caller's trust policy.
+    /// </summary>
+    public IReadOnlyList<string> AllowedAuthors { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Module root that contains module folders.
     /// </summary>
     public string ModuleRoot { get; set; } = string.Empty;

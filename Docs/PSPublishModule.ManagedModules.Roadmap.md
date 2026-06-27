@@ -87,6 +87,15 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - Forced replacement stages the new version first, moves the existing version to a temporary backup, promotes the staged version, and restores the backup if promotion fails.
 - Per-module install locks are stored under `<moduleRoot>/.powerforge/locks` and guard install/update mutations for the same module name.
 
+## Current Trust Policy Contract
+
+- `ManagedModuleRepository` carries profile/caller trust evidence.
+- `Install-ManagedModule`, `Save-ManagedModule`, and `Update-ManagedModule` accept a typed `TrustPolicy`, `RequireTrustedRepository`, and `AllowedAuthor`.
+- `RequireTrustedRepository` blocks repository access and disk changes when the selected repository profile is not trusted.
+- `AllowedAuthor` checks package metadata authors after download and before package extraction, dependency installation, final promotion, or receipt creation.
+- Author matching is case-insensitive and supports comma, semicolon, or pipe separated nuspec author values.
+- Package author policy applies to dependency packages by default; typed policy can opt dependencies out while still preserving repository-trust enforcement.
+
 ## Phase 2: Managed Repository Client
 
 - [x] Implement NuGet v3 service index discovery in C#.
@@ -168,7 +177,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement AllUsers module root resolution on Windows, macOS, and Linux.
 - [x] Implement side-by-side exact version install.
 - [x] Implement `-AllowClobber` behavior.
-- [ ] Implement publisher/trust checks where metadata is available.
+- [x] Implement publisher/trust checks where metadata is available.
 - [x] Implement license acceptance handling.
 - [x] Implement dependency installation order.
 - [x] Implement receipt creation after successful install.

@@ -100,6 +100,20 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? ExpectedPackageSha256 { get; set; }
 
+    /// <summary>Optional typed repository/package trust policy.</summary>
+    [Parameter]
+    public ManagedModuleTrustPolicy? TrustPolicy { get; set; }
+
+    /// <summary>Require the selected repository profile to be marked trusted.</summary>
+    [Parameter]
+    public SwitchParameter RequireTrustedRepository { get; set; }
+
+    /// <summary>Allowed package author values from package metadata.</summary>
+    [Parameter]
+    [Alias("RequiredAuthor", "TrustedAuthor")]
+    [ValidateNotNullOrEmpty]
+    public string[] AllowedAuthor { get; set; } = Array.Empty<string>();
+
     /// <summary>Optional repository credential.</summary>
     [Parameter]
     public PSCredential? Credential { get; set; }
@@ -190,6 +204,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
             ProfileName,
             MyInvocation.BoundParameters.ContainsKey("Repository"));
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
+        var trustPolicy = ManagedModuleCommandSupport.CreateTrustPolicy(TrustPolicy, RequireTrustedRepository.IsPresent, AllowedAuthor);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var service = new ManagedModuleUpdateService(logger);
 
@@ -209,6 +224,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                 ModuleRoot = moduleRoot,
                 PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
                 ExpectedPackageSha256 = ExpectedPackageSha256,
+                TrustPolicy = trustPolicy,
                 Credential = credential,
                 Force = Force.IsPresent,
                 AllowClobber = AllowClobber.IsPresent,
