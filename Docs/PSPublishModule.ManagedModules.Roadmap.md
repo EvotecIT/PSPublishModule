@@ -280,6 +280,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add `Measure-ManagedModule -Engine Managed,PSResourceGet,PowerShellGet` selection.
 - [x] Record compatibility baseline success/failure/status/version evidence through the existing compatibility installer path.
 - [x] Add managed publish benchmark operation and publish evidence fields.
+- [x] Publish benchmark results in a neutral PowerForge report.
 - [ ] Measure cold cache install.
 - [ ] Measure warm cache install.
 - [x] Measure save to empty path.
@@ -297,7 +298,8 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Validate receipts after install/update.
 - [x] Validate benchmark install/import behavior on Windows PowerShell 5.1.
 - [x] Validate benchmark install/import behavior on PowerShell 7+.
-- [ ] Publish benchmark results in a neutral PowerForge report.
+
+Benchmark Markdown reports include a neutral scenario summary grouped by scenario, operation, and engine, followed by the detailed run table. The report records observed counts and timing statistics without making unproven performance claims.
 
 ### Current Host Smoke Evidence
 
