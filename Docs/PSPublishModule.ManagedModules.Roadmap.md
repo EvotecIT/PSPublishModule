@@ -227,14 +227,16 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 ## Phase 9: ModuleState Integration
 
 - [ ] Teach `Invoke-ModuleState` to use the managed engine for install/update/save operations.
+- [x] Teach `Invoke-ModuleState` and `Invoke-ModuleStatePlan` to use the managed engine for install/update delivery when requested.
 - [ ] Keep `Get-ModuleState` inventory object-first.
 - [ ] Keep `Get-ModuleStatePlan` as an inspectable plan surface.
 - [ ] Keep `Test-ModuleState` as a validation surface.
 - [ ] Keep `Invoke-ModuleStatePlan` as the low-level apply surface.
-- [ ] Add `-Transport Managed` to ModuleState apply flows if a transition switch is needed.
+- [x] Add `-Transport ManagedModule` to ModuleState apply flows as a transition switch.
 - [ ] Keep compatibility transport available until managed parity is proven.
 - [ ] Ensure maintenance receipts contain managed-engine evidence.
 - [ ] Ensure summaries explain what changed, what was skipped, and why.
+- [x] Add tests for ModuleState managed delivery command shaping.
 - [ ] Add tests for ModuleState managed install.
 - [ ] Add tests for ModuleState managed update.
 - [ ] Add tests for ModuleState source/scope/family repairs through the managed engine.

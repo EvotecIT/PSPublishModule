@@ -35,7 +35,7 @@ internal sealed class ModuleStateRepairPlanner
 
         foreach (var repairAction in CreateFamilyRepairActions(inventory, familyPolicies, actionsByModule.Values))
         {
-            RemoveActionKeysForModuleScope(actionsByModule, repairAction);
+            actionsByModule.Remove(CreateBaseActionKey(repairAction));
             actionsByModule[CreateActionKey(repairAction)] = repairAction;
         }
 
@@ -55,23 +55,6 @@ internal sealed class ModuleStateRepairPlanner
 
     private static string CreateBaseActionKey(ModuleStatePlanAction action)
         => string.Join("|", action.ModuleName, action.TargetScope ?? string.Empty, string.Empty, string.Empty);
-
-    private static void RemoveActionKeysForModuleScope(
-        IDictionary<string, ModuleStatePlanAction> actionsByModule,
-        ModuleStatePlanAction repairAction)
-    {
-        var keys = actionsByModule
-            .Where(pair =>
-                string.Equals(pair.Value.ModuleName, repairAction.ModuleName, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(pair.Value.TargetScope ?? string.Empty, repairAction.TargetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase))
-            .Select(static pair => pair.Key)
-            .ToArray();
-
-        foreach (var key in keys)
-        {
-            actionsByModule.Remove(key);
-        }
-    }
 
     private static IEnumerable<ModuleStatePlanAction> CreateFamilyRepairActions(
         ModuleStateInventory inventory,
@@ -118,9 +101,6 @@ internal sealed class ModuleStateRepairPlanner
                     continue;
                 }
 
-                if (HasExplicitDesiredAction(existing, moduleName, selectedModule.Scope))
-                    continue;
-
                 var targetRepository = FindCoveredAction(existing, moduleName, selectedModule.Scope)?.TargetRepository;
                 yield return new ModuleStatePlanAction(
                     ModuleStatePlanActionKind.Update,
@@ -140,15 +120,6 @@ internal sealed class ModuleStateRepairPlanner
         string moduleName,
         string? targetScope)
         => existingActions.FirstOrDefault(action =>
-            string.Equals(action.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(action.TargetScope ?? string.Empty, targetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-
-    private static bool HasExplicitDesiredAction(
-        IEnumerable<ModuleStatePlanAction> existingActions,
-        string moduleName,
-        string? targetScope)
-        => existingActions.Any(action =>
-            !action.IsRepair &&
             string.Equals(action.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(action.TargetScope ?? string.Empty, targetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 

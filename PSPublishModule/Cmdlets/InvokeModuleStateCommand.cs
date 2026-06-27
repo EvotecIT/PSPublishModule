@@ -197,6 +197,12 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
     public SwitchParameter InstallPrerequisites { get; set; }
 
     /// <summary>
+    /// Gets or sets the delivery transport used for prepared and executed install/update actions.
+    /// </summary>
+    [Parameter]
+    public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
+
+    /// <summary>
     /// Gets or sets whether prepared private-module commands include Prerelease.
     /// </summary>
     [Parameter]
@@ -207,6 +213,18 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
     /// </summary>
     [Parameter]
     public SwitchParameter Force { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether managed module delivery may overwrite exported command conflicts.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter AllowClobber { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether managed module delivery accepts package licenses.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter AcceptLicense { get; set; }
 
     /// <summary>
     /// Gets or sets whether the prepared private-module workflow should be executed.
@@ -491,7 +509,8 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             InstallPrerequisites.IsPresent,
             Prerelease.IsPresent,
             Force.IsPresent,
-            AllowConflict.IsPresent);
+            AllowConflict.IsPresent,
+            Transport);
         var service = new ModuleStateApplyService();
         var corePlan = ModuleStatePlanResultMapper.ToCorePlan(plan);
         var result = service.Prepare(corePlan, deliveryOptions);
@@ -505,20 +524,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
             if (!result.Receipt.CanApply)
                 throw new InvalidOperationException(result.Receipt.BlockedReason ?? "ModuleState plan cannot be applied.");
 
-            executionResults = new ModuleStatePrivateDeliveryService(this).Execute(
-                result,
-                new ModuleStatePrivateDeliveryOptions
-                {
-                    ProfileName = ProfileName,
-                    Repository = Repository,
-                    InstallPrerequisites = InstallPrerequisites.IsPresent,
-                    Prerelease = Prerelease.IsPresent,
-                    Force = Force.IsPresent,
-                    CredentialUserName = CredentialUserName,
-                    CredentialSecret = CredentialSecret,
-                    CredentialSecretFilePath = CredentialSecretFilePath,
-                    PromptForCredential = PromptForCredential.IsPresent
-                });
+            executionResults = ExecuteDelivery(result);
         }
 
         if (PostApplyModulePath is { Length: > 0 })
@@ -600,6 +606,45 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
 
     private string? ResolveMaintenanceReceiptSourceRepository()
         => ResolveRepositoryName();
+
+    private ModuleStateDeliveryExecutionResult[] ExecuteDelivery(PowerForge.ModuleStateApplyResult result)
+    {
+        if (Transport == ModuleStateDeliveryTransport.ManagedModule)
+        {
+            return new ModuleStateManagedDeliveryService(this).Execute(
+                result,
+                new ModuleStateManagedDeliveryOptions
+                {
+                    ProfileName = ProfileName,
+                    Repository = Repository,
+                    Prerelease = Prerelease.IsPresent,
+                    Force = Force.IsPresent,
+                    AllowClobber = AllowClobber.IsPresent,
+                    AcceptLicense = AcceptLicense.IsPresent,
+                    Credential = ManagedModuleCommandSupport.ResolveCredential(
+                        this,
+                        null,
+                        CredentialUserName,
+                        CredentialSecret,
+                        CredentialSecretFilePath)
+                });
+        }
+
+        return new ModuleStatePrivateDeliveryService(this).Execute(
+            result,
+            new ModuleStatePrivateDeliveryOptions
+            {
+                ProfileName = ProfileName,
+                Repository = Repository,
+                InstallPrerequisites = InstallPrerequisites.IsPresent,
+                Prerelease = Prerelease.IsPresent,
+                Force = Force.IsPresent,
+                CredentialUserName = CredentialUserName,
+                CredentialSecret = CredentialSecret,
+                CredentialSecretFilePath = CredentialSecretFilePath,
+                PromptForCredential = PromptForCredential.IsPresent
+            });
+    }
 
     private void ApplyLatestUpdateIntent(ModuleStatePlanResult plan)
     {

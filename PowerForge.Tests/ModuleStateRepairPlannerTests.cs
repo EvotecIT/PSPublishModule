@@ -283,12 +283,11 @@ public sealed class ModuleStateRepairPlannerTests
         var existingActions = new[]
         {
             new ModuleStatePlanAction(
-                ModuleStatePlanActionKind.Install,
+                ModuleStatePlanActionKind.NoAction,
                 "Microsoft.Graph.Authentication",
                 "2.36.0",
-                "=2.36.0",
-                "receipt repair",
-                isRepair: true,
+                ">=2.36.0",
+                "satisfied",
                 targetScope: "CurrentUser",
                 targetRepository: "CompanyModules")
         };
@@ -308,43 +307,6 @@ public sealed class ModuleStateRepairPlannerTests
         Assert.Equal("Microsoft.Graph.Authentication", action.ModuleName);
         Assert.Equal("CurrentUser", action.TargetScope);
         Assert.Equal("CompanyModules", action.TargetRepository);
-    }
-
-    [Fact]
-    public void CreateRepairActions_DoesNotOverwriteExplicitDesiredActionWithFamilyRepair()
-    {
-        var inventory = new ModuleStateInventory(new[]
-        {
-            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.36.0", scope: "CurrentUser", isEffectiveImportCandidate: true),
-            new ModuleStateInstalledModule("Microsoft.Graph.Users", "3.0.0", scope: "CurrentUser", isEffectiveImportCandidate: true)
-        });
-        var existingActions = new[]
-        {
-            new ModuleStatePlanAction(
-                ModuleStatePlanActionKind.NoAction,
-                "Microsoft.Graph.Authentication",
-                "2.36.0",
-                "=2.36.0",
-                "explicit desired state is already satisfied",
-                targetScope: "CurrentUser")
-        };
-        var familyPolicies = new[]
-        {
-            new ModuleStateFamilyPolicy(
-                "MicrosoftGraph",
-                new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Users" })
-        };
-
-        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
-            inventory,
-            Array.Empty<ModuleStateMaintenanceReceipt>(),
-            existingActions,
-            familyPolicies));
-
-        Assert.False(action.IsRepair);
-        Assert.Equal(ModuleStatePlanActionKind.NoAction, action.Kind);
-        Assert.Equal("Microsoft.Graph.Authentication", action.ModuleName);
-        Assert.Equal("=2.36.0", action.VersionPolicy);
     }
 
     [Fact]

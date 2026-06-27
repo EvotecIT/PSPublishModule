@@ -36,6 +36,42 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void Prepare_CreatesManagedModuleDeliveryCommands()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Tools", "1.0.0", "=1.2.0", "stale", targetScope: "CurrentUser"),
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Other", null, ">=1.0.0 <2.0.0", "missing", isRepair: true, targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(
+                repository: "FallbackModules",
+                installPrerequisites: true,
+                prerelease: true,
+                force: true,
+                transport: ModuleStateDeliveryTransport.ManagedModule));
+
+        Assert.True(result.Receipt.CanApply);
+        Assert.Null(result.Receipt.BlockedReason);
+        Assert.Equal(2, result.Receipt.Commands.Length);
+
+        var update = result.Receipt.Commands[0];
+        Assert.Equal("Update-ManagedModule", update.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "CurrentUser", "-Repository", "FallbackModules", "-InstallPrerequisites", "-Prerelease" }, update.Arguments);
+        Assert.Contains("Update-ManagedModule", update.CommandText, StringComparison.Ordinal);
+
+        var install = result.Receipt.Commands[1];
+        Assert.Equal("Install-ManagedModule", install.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Other", "-VersionPolicy", ">=1.0.0 <2.0.0", "-Repository", "CompanyModules", "-InstallPrerequisites", "-Prerelease", "-Force" }, install.Arguments);
+        Assert.Equal(">=1.0.0 <2.0.0", install.VersionPolicy);
+        Assert.True(install.IsRepair);
+    }
+
+    [Fact]
     public void Prepare_BlocksWhenPlanHasErrorFindings()
     {
         var plan = new ModuleStatePlan(
@@ -68,6 +104,23 @@ public sealed class ModuleStateApplyServiceTests
 
         Assert.False(result.Receipt.CanApply);
         Assert.Contains("action target repository", result.Receipt.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Prepare_BlocksManagedDeliveryWhenDeliveryTargetIsMissing()
+    {
+        var plan = new ModuleStatePlan(
+            new[] { new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Other", "1.0.0", ">=1.2.0", "stale") },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(transport: ModuleStateDeliveryTransport.ManagedModule));
+
+        Assert.False(result.Receipt.CanApply);
+        Assert.Contains("managed module delivery", result.Receipt.BlockedReason, StringComparison.OrdinalIgnoreCase);
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal("Update-ManagedModule", command.CommandName);
     }
 
     [Fact]

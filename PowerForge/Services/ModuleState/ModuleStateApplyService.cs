@@ -151,7 +151,9 @@ internal sealed class ModuleStateApplyService
             return "Plan includes cleanup actions that private module delivery does not execute. Review the plan and run without Cleanup to execute install/update delivery only.";
 
         if (commands.Any(static command => !HasCommandDeliveryTarget(command)))
-            return "Plan has install/update actions but no ProfileName, Repository, or action target repository was supplied for private module delivery.";
+            return deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule
+                ? "Plan has install/update actions but no ProfileName, Repository, or action target repository was supplied for managed module delivery."
+                : "Plan has install/update actions but no ProfileName, Repository, or action target repository was supplied for private module delivery.";
 
         return null;
     }
@@ -160,9 +162,7 @@ internal sealed class ModuleStateApplyService
         ModuleStatePlanAction action,
         ModuleStateDeliveryOptions deliveryOptions)
     {
-        var commandName = action.Kind == ModuleStatePlanActionKind.Update
-            ? "Update-PrivateModule"
-            : "Install-PrivateModule";
+        var commandName = ResolveCommandName(action.Kind, deliveryOptions.Transport);
         var arguments = new List<string>
         {
             "-Name",
@@ -219,6 +219,20 @@ internal sealed class ModuleStateApplyService
             commandName,
             arguments.ToArray(),
             commandName + " " + string.Join(" ", FormatArguments(arguments)));
+    }
+
+    private static string ResolveCommandName(ModuleStatePlanActionKind actionKind, ModuleStateDeliveryTransport transport)
+    {
+        if (transport == ModuleStateDeliveryTransport.ManagedModule)
+        {
+            return actionKind == ModuleStatePlanActionKind.Update
+                ? "Update-ManagedModule"
+                : "Install-ManagedModule";
+        }
+
+        return actionKind == ModuleStatePlanActionKind.Update
+            ? "Update-PrivateModule"
+            : "Install-PrivateModule";
     }
 
     private static string? GetExactVersionPolicyValue(string? versionPolicy)

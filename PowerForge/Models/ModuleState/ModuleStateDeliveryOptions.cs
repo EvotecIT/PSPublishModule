@@ -10,7 +10,8 @@ internal sealed class ModuleStateDeliveryOptions
         bool installPrerequisites = false,
         bool prerelease = false,
         bool force = false,
-        bool allowErrorFindings = false)
+        bool allowErrorFindings = false,
+        ModuleStateDeliveryTransport transport = ModuleStateDeliveryTransport.PrivateModule)
     {
         ProfileName = NormalizeOptional(profileName);
         Repository = NormalizeOptional(repository);
@@ -18,6 +19,7 @@ internal sealed class ModuleStateDeliveryOptions
         Prerelease = prerelease;
         Force = force;
         AllowErrorFindings = allowErrorFindings;
+        Transport = transport;
     }
 
     internal string? ProfileName { get; }
@@ -31,6 +33,8 @@ internal sealed class ModuleStateDeliveryOptions
     internal bool Force { get; }
 
     internal bool AllowErrorFindings { get; }
+
+    internal ModuleStateDeliveryTransport Transport { get; }
 
     internal bool HasDeliveryTarget => !string.IsNullOrWhiteSpace(ProfileName) || !string.IsNullOrWhiteSpace(Repository);
 
