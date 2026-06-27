@@ -281,8 +281,8 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Record compatibility baseline success/failure/status/version evidence through the existing compatibility install, save, update, and publish paths.
 - [x] Add managed publish benchmark operation and publish evidence fields.
 - [x] Publish benchmark results in a neutral PowerForge report.
-- [ ] Measure cold cache install.
-- [ ] Measure warm cache install.
+- [x] Measure cold cache install.
+- [x] Measure warm cache install.
 - [x] Measure save to empty path.
 - [x] Measure save to warm path.
 - [x] Measure update no-op.
@@ -310,7 +310,8 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Publish-ManagedModule` against local folder feeds, produced `.nupkg` packages for simple source modules, and installed the published packages back through `Install-ManagedModule`.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save` twice against the same local folder feed and destination root; the first save returned `Installed`, and the warm-path save returned `AlreadyInstalled`.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both seeded `Company.Tools` 1.0.0 with `Measure-ManagedModule -Operation Install`, then ran `Measure-ManagedModule -Operation Update -Version 1.0.0`; the update returned `UpToDate` with previous and target version 1.0.0.
-- [ ] Public-feed, private-feed, heavy-module, warm-cache install, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran cold and warm cache install measurements against a local folder feed; the cold install returned `Installed` with `FromCache = false`, and the warm install into a fresh root returned `Installed` with `FromCache = true`.
+- [ ] Public-feed, private-feed, heavy-module, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 
@@ -325,7 +326,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [ ] Publish a binary module.
 - [ ] Publish a module with dependencies.
 - [x] Update already-current modules.
-- [ ] Update stale modules.
+- [x] Update stale modules.
 - [ ] Repair source mismatch.
 - [ ] Repair scope mismatch.
 - [ ] Detect loaded-module conflict.
