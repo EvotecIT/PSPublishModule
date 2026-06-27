@@ -19,4 +19,9 @@ public sealed class ManagedModuleBenchmarkRequest
     /// Continue measuring later scenarios when one scenario fails.
     /// </summary>
     public bool ContinueOnError { get; set; } = true;
+
+    /// <summary>
+    /// Enables disposable-host native install and update benchmarks for compatibility engines.
+    /// </summary>
+    public bool EnableNativeInstallUpdateBenchmarks { get; set; }
 }

@@ -1,4 +1,4 @@
-﻿---
+---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
@@ -11,7 +11,7 @@ Measures managed module lifecycle scenarios through the managed C# module engine
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Measure-ManagedModule [-Name] <string[]> [-Operation <ManagedModuleBenchmarkOperation>] [-Engine <ManagedModuleBenchmarkEngine[]>] [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-ModulePath <string>] [-ManifestPath <string>] [-PackageCacheDirectory <string>] [-PackageOutputDirectory <string>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-Iterations <int>] [-StopOnError] [-ValidateImport] [-ImportHost <ManagedModuleImportValidationHost[]>] [-ReportPath <string>] [-MarkdownReportPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Measure-ManagedModule [-Name] <string[]> [-Operation <ManagedModuleBenchmarkOperation>] [-Engine <ManagedModuleBenchmarkEngine[]>] [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-ModulePath <string>] [-ManifestPath <string>] [-PackageCacheDirectory <string>] [-PackageOutputDirectory <string>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-Iterations <int>] [-StopOnError] [-RequireTransitionReady] [-EnableNativeInstallUpdateBenchmark] [-ValidateImport] [-ImportHost <ManagedModuleImportValidationHost[]>] [-ReportPath <string>] [-MarkdownReportPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -115,6 +115,22 @@ Optional repository credential username.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: UserName
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -EnableNativeInstallUpdateBenchmark
+Allow native Install-Module, Install-PSResource, Update-Module, and Update-PSResource comparisons in disposable child hosts.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False
@@ -307,7 +323,7 @@ Lifecycle operation to measure.
 Type: ManagedModuleBenchmarkOperation
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: Install, Save, Update, Publish
+Possible values: Find, Install, Save, Update, Publish
 
 Required: False
 Position: named
@@ -417,6 +433,22 @@ Friendly repository name used in output.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequireTransitionReady
+Fail the command when benchmark transition gates are not ready for managed transport defaults.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

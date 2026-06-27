@@ -162,6 +162,10 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter RequireTransitionReady { get; set; }
 
+    /// <summary>Allow native Install-Module, Install-PSResource, Update-Module, and Update-PSResource comparisons in disposable child hosts.</summary>
+    [Parameter]
+    public SwitchParameter EnableNativeInstallUpdateBenchmark { get; set; }
+
     /// <summary>Import the delivered module in out-of-process PowerShell hosts and record version evidence.</summary>
     [Parameter]
     public SwitchParameter ValidateImport { get; set; }
@@ -214,7 +218,8 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             {
                 Scenarios = scenarios,
                 Engines = Engine,
-                ContinueOnError = !StopOnError.IsPresent
+                ContinueOnError = !StopOnError.IsPresent,
+                EnableNativeInstallUpdateBenchmarks = EnableNativeInstallUpdateBenchmark.IsPresent
             }).GetAwaiter().GetResult();
 
         if (ValidateImport.IsPresent)

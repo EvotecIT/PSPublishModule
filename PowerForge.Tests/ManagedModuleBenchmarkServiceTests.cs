@@ -631,6 +631,131 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Contains("PowerShellGet", gate.CoveredCompatibilityEngines);
     }
 
+    [Fact]
+    public async Task RunAsync_UsesNativeCompatibilityRunnerWhenExplicitlyEnabled()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var nativeRunner = new StubNativeCompatibilityRunner();
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), nativeCompatibilityRunner: nativeRunner);
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            EnableNativeInstallUpdateBenchmarks = true,
+            Engines = new[]
+            {
+                ManagedModuleBenchmarkEngine.Managed,
+                ManagedModuleBenchmarkEngine.PSResourceGet,
+                ManagedModuleBenchmarkEngine.PowerShellGet
+            },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "install-native-transition",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    Scope = ManagedModuleInstallScope.Custom,
+                    ModuleRoot = moduleRoot.Path,
+                    AllowClobber = true
+                }
+            }
+        });
+
+        Assert.Equal(3, result.Runs.Count);
+        Assert.Equal(
+            new[] { ManagedModuleBenchmarkEngine.PSResourceGet, ManagedModuleBenchmarkEngine.PowerShellGet },
+            nativeRunner.Calls);
+        var gate = Assert.Single(result.TransitionGates);
+        Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Ready, gate.Status);
+        Assert.False(gate.CompatibilityFallbackRequired);
+        Assert.False(gate.NativeIsolationRequired);
+    }
+
+    [Fact]
+    public async Task RunAsync_NativeCompatibilityRunnerUsesSandboxWhenModuleRootIsOmitted()
+    {
+        var nativeRunner = new StubNativeCompatibilityRunner();
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), nativeCompatibilityRunner: nativeRunner);
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            EnableNativeInstallUpdateBenchmarks = true,
+            Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "install-native-sandbox",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("Local", "https://example.test/index.json"),
+                    Name = "Company.Tools",
+                    Version = "1.0.0"
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.False(string.IsNullOrWhiteSpace(run.ModuleRoot));
+        Assert.Contains("managed-module-native", run.ModuleRoot, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(nativeRunner.Scenarios);
+        Assert.Equal(run.ModuleRoot, nativeRunner.Scenarios[0].ModuleRoot);
+    }
+
+    [Fact]
+    public async Task RunAsync_UpdateIsolationDoesNotCopyDestinationIntoItself()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        var service = new ManagedModuleBenchmarkService(
+            new NullLogger(),
+            nativeCompatibilityRunner: new StubNativeCompatibilityRunner());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            EnableNativeInstallUpdateBenchmarks = true,
+            Engines = new[] { ManagedModuleBenchmarkEngine.Managed, ManagedModuleBenchmarkEngine.PSResourceGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "update-isolation",
+                    Operation = ManagedModuleBenchmarkOperation.Update,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    Scope = ManagedModuleInstallScope.Custom,
+                    ModuleRoot = moduleRoot.Path
+                }
+            }
+        });
+
+        Assert.Equal(2, result.Runs.Count);
+        Assert.DoesNotContain(
+            Directory.EnumerateDirectories(moduleRoot.Path, "Managed", SearchOption.AllDirectories),
+            path => path.Contains(Path.Combine("Managed", "1", "Managed"), StringComparison.OrdinalIgnoreCase));
+    }
+
     [Theory]
     [InlineData(ManagedModuleBenchmarkEngine.PSResourceGet, "Save-PSResource", "PFPSRG::SAVE::ITEM::")]
     [InlineData(ManagedModuleBenchmarkEngine.PowerShellGet, "Save-Module", "PFPWSGET::SAVE::ITEM::")]
@@ -772,6 +897,43 @@ public sealed class ManagedModuleBenchmarkServiceTests
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => _run(request);
+    }
+
+    private sealed class StubNativeCompatibilityRunner : IManagedModuleNativeCompatibilityBenchmarkRunner
+    {
+        public List<ManagedModuleBenchmarkEngine> Calls { get; } = new();
+
+        public List<ManagedModuleBenchmarkScenario> Scenarios { get; } = new();
+
+        public void Prepare(
+            ManagedModuleBenchmarkScenario scenario,
+            ManagedModuleBenchmarkEngine engine)
+        {
+        }
+
+        public ModuleDependencyInstallResult Run(
+            ManagedModuleBenchmarkScenario scenario,
+            ManagedModuleBenchmarkEngine engine)
+        {
+            Calls.Add(engine);
+            Scenarios.Add(scenario);
+            WriteNativeInstalledModule(scenario.ModuleRoot!, scenario.Name, scenario.Version ?? "1.0.0");
+            return new ModuleDependencyInstallResult(
+                scenario.Name,
+                null,
+                scenario.Version ?? "1.0.0",
+                scenario.Version,
+                ModuleDependencyInstallStatus.Installed,
+                engine.ToString(),
+                null);
+        }
+    }
+
+    private static void WriteNativeInstalledModule(string sandboxRoot, string moduleName, string version)
+    {
+        var modulePath = Path.Combine(sandboxRoot, "native", moduleName, version);
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(Path.Combine(modulePath, moduleName + ".psd1"), "@{ ModuleVersion = '" + version + "' }");
     }
 
     private sealed class PrivateMetadataHandler : HttpMessageHandler

@@ -13587,6 +13587,7 @@ the requested modules.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -14032,6 +14033,7 @@ the requested modules.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -14313,6 +14315,7 @@ the requested modules.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -14576,6 +14579,7 @@ the requested modules.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -15057,6 +15061,7 @@ the requested modules.</maml:para>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -18713,6 +18718,7 @@ independently.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -19155,6 +19161,7 @@ independently.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -19545,6 +19552,7 @@ independently.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -20023,6 +20031,7 @@ independently.</maml:para>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -20427,6 +20436,7 @@ Install-PrivateModule and Update-PrivateModule.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -20686,6 +20696,7 @@ Install-PrivateModule and Update-PrivateModule.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -20945,6 +20956,7 @@ Install-PrivateModule and Update-PrivateModule.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -21275,6 +21287,7 @@ Install-PrivateModule and Update-PrivateModule.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -21653,6 +21666,7 @@ Install-PrivateModule and Update-PrivateModule.</maml:para>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -27104,6 +27118,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EnableNativeInstallUpdateBenchmark</maml:name>
+          <maml:description>
+            <maml:para>Allow native Install-Module, Install-PSResource, Update-Module, and Update-PSResource comparisons in disposable child hosts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Engine</maml:name>
           <maml:description>
@@ -27252,6 +27278,7 @@ engine directly and returns typed benchmark run data that can be compared with c
           </maml:description>
           <command:parameterValue required="false" variableLength="false">ManagedModuleBenchmarkOperation</command:parameterValue>
           <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Find</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Install</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Save</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
@@ -27343,6 +27370,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireTransitionReady</maml:name>
+          <maml:description>
+            <maml:para>Fail the command when benchmark transition gates are not ready for managed transport defaults.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -27516,6 +27555,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EnableNativeInstallUpdateBenchmark</maml:name>
+        <maml:description>
+          <maml:para>Allow native Install-Module, Install-PSResource, Update-Module, and Update-PSResource comparisons in disposable child hosts.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Engine</maml:name>
         <maml:description>
@@ -27664,6 +27715,7 @@ engine directly and returns typed benchmark run data that can be compared with c
         </maml:description>
         <command:parameterValue required="false" variableLength="false">ManagedModuleBenchmarkOperation</command:parameterValue>
         <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Find</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Install</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Save</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Update</command:parameterValue>
@@ -27755,6 +27807,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequireTransitionReady</maml:name>
+        <maml:description>
+          <maml:para>Fail the command when benchmark transition gates are not ready for managed transport defaults.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -66137,6 +66201,7 @@ are provided, the repository registration is refreshed before the update is atte
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -66606,6 +66671,7 @@ are provided, the repository registration is refreshed before the update is atte
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -66911,6 +66977,7 @@ are provided, the repository registration is refreshed before the update is atte
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -67198,6 +67265,7 @@ are provided, the repository registration is refreshed before the update is atte
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ModuleStateDeliveryTransport</maml:name>
@@ -67703,6 +67771,7 @@ are provided, the repository registration is refreshed before the update is atte
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">PrivateModule</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ManagedModule</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ModuleStateDeliveryTransport</maml:name>

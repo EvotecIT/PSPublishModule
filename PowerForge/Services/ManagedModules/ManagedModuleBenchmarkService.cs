@@ -13,6 +13,7 @@ public sealed partial class ManagedModuleBenchmarkService
     private readonly ManagedModulePublishService _publishService;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
     private readonly IPowerShellRunner _compatibilityPowerShellRunner;
+    private readonly IManagedModuleNativeCompatibilityBenchmarkRunner _nativeCompatibilityRunner;
     private readonly Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? _compatibilityRunner;
 
     /// <summary>
@@ -33,6 +34,42 @@ public sealed partial class ManagedModuleBenchmarkService
         Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? compatibilityRunner = null,
         IPowerShellRunner? compatibilityPowerShellRunner = null,
         ManagedModuleRepositoryClient? repositoryClient = null)
+        : this(
+            logger,
+            installService,
+            updateService,
+            publishService,
+            compatibilityRunner,
+            compatibilityPowerShellRunner,
+            repositoryClient,
+            nativeCompatibilityRunner: null)
+    {
+    }
+
+    internal ManagedModuleBenchmarkService(
+        ILogger logger,
+        IManagedModuleNativeCompatibilityBenchmarkRunner nativeCompatibilityRunner)
+        : this(
+            logger,
+            installService: null,
+            updateService: null,
+            publishService: null,
+            compatibilityRunner: null,
+            compatibilityPowerShellRunner: null,
+            repositoryClient: null,
+            nativeCompatibilityRunner: nativeCompatibilityRunner)
+    {
+    }
+
+    internal ManagedModuleBenchmarkService(
+        ILogger logger,
+        ManagedModuleInstallService? installService,
+        ManagedModuleUpdateService? updateService,
+        ManagedModulePublishService? publishService,
+        Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? compatibilityRunner,
+        IPowerShellRunner? compatibilityPowerShellRunner,
+        ManagedModuleRepositoryClient? repositoryClient,
+        IManagedModuleNativeCompatibilityBenchmarkRunner? nativeCompatibilityRunner = null)
     {
         var safeLogger = logger ?? new NullLogger();
         _logger = safeLogger;
@@ -41,6 +78,7 @@ public sealed partial class ManagedModuleBenchmarkService
         _publishService = publishService ?? new ManagedModulePublishService(safeLogger);
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(safeLogger);
         _compatibilityPowerShellRunner = compatibilityPowerShellRunner ?? new PowerShellRunner();
+        _nativeCompatibilityRunner = nativeCompatibilityRunner ?? new ManagedModuleNativeCompatibilityBenchmarkRunner(_compatibilityPowerShellRunner, safeLogger);
         _compatibilityRunner = compatibilityRunner;
     }
 
@@ -67,7 +105,13 @@ public sealed partial class ManagedModuleBenchmarkService
                 for (var iteration = 1; iteration <= Math.Max(1, scenario.Iterations); iteration++)
                 {
                     var runScenario = CreateRunScenario(scenario, engine, iteration, isolateModuleRoots);
-                    var run = await RunScenarioAsync(runScenario, engine, iteration, request.ContinueOnError, cancellationToken)
+                    var run = await RunScenarioAsync(
+                            runScenario,
+                            engine,
+                            iteration,
+                            request.ContinueOnError,
+                            request.EnableNativeInstallUpdateBenchmarks,
+                            cancellationToken)
                         .ConfigureAwait(false);
                     runs.Add(run);
                 }
@@ -88,14 +132,16 @@ public sealed partial class ManagedModuleBenchmarkService
         ManagedModuleBenchmarkEngine engine,
         int iteration,
         bool continueOnError,
+        bool enableNativeInstallUpdateBenchmarks,
         CancellationToken cancellationToken)
     {
+        PrepareCompatibilityScenario(scenario, engine, enableNativeInstallUpdateBenchmarks);
         var stopwatch = Stopwatch.StartNew();
         try
         {
             var run = engine == ManagedModuleBenchmarkEngine.Managed
                 ? await RunManagedScenarioAsync(scenario, iteration, cancellationToken).ConfigureAwait(false)
-                : RunCompatibilityScenario(scenario, engine, iteration);
+                : RunCompatibilityScenario(scenario, engine, iteration, enableNativeInstallUpdateBenchmarks);
 
             stopwatch.Stop();
             run.Elapsed = stopwatch.Elapsed;
@@ -106,6 +152,22 @@ public sealed partial class ManagedModuleBenchmarkService
             stopwatch.Stop();
             return CreateFailedRun(scenario, engine, iteration, stopwatch.Elapsed, ex);
         }
+    }
+
+    private void PrepareCompatibilityScenario(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        bool enableNativeInstallUpdateBenchmarks)
+    {
+        if (!enableNativeInstallUpdateBenchmarks ||
+            _compatibilityRunner is not null ||
+            engine == ManagedModuleBenchmarkEngine.Managed ||
+            scenario.Operation != ManagedModuleBenchmarkOperation.Update)
+        {
+            return;
+        }
+
+        _nativeCompatibilityRunner.Prepare(scenario, engine);
     }
 
     private async Task<ManagedModuleBenchmarkRunResult> RunManagedScenarioAsync(
@@ -184,21 +246,19 @@ public sealed partial class ManagedModuleBenchmarkService
     private ManagedModuleBenchmarkRunResult RunCompatibilityScenario(
         ManagedModuleBenchmarkScenario scenario,
         ManagedModuleBenchmarkEngine engine,
-        int iteration)
+        int iteration,
+        bool enableNativeInstallUpdateBenchmarks)
     {
         if (!string.IsNullOrWhiteSpace(scenario.VersionPolicy))
             throw new InvalidOperationException("Compatibility benchmark engines support Version, MinimumVersion, and MaximumVersion. Use the managed engine for VersionPolicy measurements.");
 
         return scenario.Operation switch
         {
-            ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update => _compatibilityRunner is null
-                ? throw new InvalidOperationException(
-                    "Default compatibility install/update benchmarks are disabled because Install-Module and Install-PSResource do not provide a reliable custom module-root isolation contract. Use managed install/update benchmarks, save/publish compatibility benchmarks, or run native install/update comparisons in a disposable host with an explicit compatibility runner.")
-                : MapCompatibilityResult(
-                    scenario,
-                    engine,
-                    iteration,
-                    _compatibilityRunner(scenario, engine)),
+            ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update => RunCompatibilityInstallOrUpdateScenario(
+                scenario,
+                engine,
+                iteration,
+                enableNativeInstallUpdateBenchmarks),
             ManagedModuleBenchmarkOperation.Save => RunCompatibilitySaveScenario(scenario, engine, iteration),
             ManagedModuleBenchmarkOperation.Publish => RunCompatibilityPublishScenario(scenario, engine, iteration),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario.Operation, "Unsupported benchmark operation.")
@@ -259,6 +319,35 @@ public sealed partial class ManagedModuleBenchmarkService
             PackageCount = Math.Max(1, items.Count),
             FinalDiskBytes = MeasureDirectoryBytes(destinationPath)
         };
+    }
+
+    private ManagedModuleBenchmarkRunResult RunCompatibilityInstallOrUpdateScenario(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        int iteration,
+        bool enableNativeInstallUpdateBenchmarks)
+    {
+        if (_compatibilityRunner is not null)
+        {
+            return MapCompatibilityResult(
+                scenario,
+                engine,
+                iteration,
+                _compatibilityRunner(scenario, engine));
+        }
+
+        if (!enableNativeInstallUpdateBenchmarks)
+        {
+            throw new InvalidOperationException(
+                "Default compatibility install/update benchmarks are disabled because Install-Module and Install-PSResource do not provide a reliable custom module-root isolation contract. Use managed install/update benchmarks, save/publish compatibility benchmarks, or enable disposable-host native install/update comparisons explicitly.");
+        }
+
+        var nativeScenario = EnsureNativeCompatibilitySandbox(scenario, engine, iteration);
+        return MapCompatibilityResult(
+            nativeScenario,
+            engine,
+            iteration,
+            _nativeCompatibilityRunner.Run(nativeScenario, engine));
     }
 
     private static ManagedModuleInstallRequest CreateInstallRequest(ManagedModuleBenchmarkScenario scenario, bool forceCustomRoot)
@@ -513,7 +602,9 @@ public sealed partial class ManagedModuleBenchmarkService
         ManagedModuleBenchmarkEngine engine,
         int iteration,
         ModuleDependencyInstallResult result)
-        => new()
+    {
+        var evidence = CreateCompatibilityEvidence(scenario, result);
+        return new ManagedModuleBenchmarkRunResult
         {
             ScenarioId = ResolveScenarioId(scenario),
             Operation = scenario.Operation,
@@ -525,14 +616,19 @@ public sealed partial class ManagedModuleBenchmarkService
             Version = result.ResolvedVersion,
             PreviousVersion = result.InstalledVersion,
             ModuleRoot = scenario.ModuleRoot,
+            ModulePath = evidence.ModulePath,
             PackageBytes = 0,
             ExtractedBytes = 0,
-            FileCount = 0,
+            FileCount = evidence.FileCount,
             DependencyCount = 0,
-            FinalDiskBytes = MeasureDirectoryBytes(scenario.ModuleRoot),
+            FinalDiskBytes = evidence.FinalDiskBytes,
             FromCache = false,
+            ValidatedVersion = evidence.ValidatedVersion,
+            VersionValidationSucceeded = evidence.VersionValidationSucceeded,
+            VersionValidationMessage = evidence.VersionValidationMessage,
             ErrorMessage = result.Status == ModuleDependencyInstallStatus.Failed ? result.Message : null
         };
+    }
 
     private static ManagedModuleBenchmarkScenario CreateRunScenario(
         ManagedModuleBenchmarkScenario scenario,
@@ -555,10 +651,12 @@ public sealed partial class ManagedModuleBenchmarkService
             return scenario;
         }
 
-        var isolatedRoot = Path.Combine(
-            Path.GetFullPath(moduleRoot!),
-            SanitizePathSegment(engine.ToString()),
-            iteration.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var isolatedRoot = scenario.Operation == ManagedModuleBenchmarkOperation.Update
+            ? CreateUpdateIsolationRoot(moduleRoot!, engine, iteration)
+            : Path.Combine(
+                Path.GetFullPath(moduleRoot!),
+                SanitizePathSegment(engine.ToString()),
+                iteration.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
         if (scenario.Operation == ManagedModuleBenchmarkOperation.Update && Directory.Exists(moduleRoot))
             CopyDirectory(moduleRoot!, isolatedRoot);
@@ -590,6 +688,49 @@ public sealed partial class ManagedModuleBenchmarkService
         };
     }
 
+    private static ManagedModuleBenchmarkScenario EnsureNativeCompatibilitySandbox(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        int iteration)
+    {
+        if (!string.IsNullOrWhiteSpace(scenario.ModuleRoot))
+            return scenario;
+
+        var sandboxRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge",
+            "managed-module-native",
+            SanitizePathSegment(engine.ToString()),
+            iteration.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Guid.NewGuid().ToString("N"));
+
+        return new ManagedModuleBenchmarkScenario
+        {
+            Id = scenario.Id,
+            Operation = scenario.Operation,
+            Repository = scenario.Repository,
+            Name = scenario.Name,
+            Version = scenario.Version,
+            MinimumVersion = scenario.MinimumVersion,
+            MaximumVersion = scenario.MaximumVersion,
+            VersionPolicy = scenario.VersionPolicy,
+            IncludePrerelease = scenario.IncludePrerelease,
+            Scope = scenario.Scope,
+            ShellEdition = scenario.ShellEdition,
+            ModuleRoot = sandboxRoot,
+            ModulePath = scenario.ModulePath,
+            ManifestPath = scenario.ManifestPath,
+            PackageCacheDirectory = scenario.PackageCacheDirectory,
+            PackageOutputDirectory = scenario.PackageOutputDirectory,
+            Credential = scenario.Credential,
+            Force = scenario.Force,
+            AllowClobber = scenario.AllowClobber,
+            AcceptLicense = scenario.AcceptLicense,
+            SkipDependencyCheck = scenario.SkipDependencyCheck,
+            Iterations = scenario.Iterations
+        };
+    }
+
     private static string SanitizePathSegment(string value)
     {
         var invalid = Path.GetInvalidFileNameChars();
@@ -597,25 +738,64 @@ public sealed partial class ManagedModuleBenchmarkService
         return new string(chars);
     }
 
+    private static string CreateUpdateIsolationRoot(
+        string moduleRoot,
+        ManagedModuleBenchmarkEngine engine,
+        int iteration)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(moduleRoot));
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var rootKey = BitConverter.ToString(sha.ComputeHash(bytes), 0, 8).Replace("-", string.Empty).ToLowerInvariant();
+        return Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge",
+            "managed-module-benchmark",
+            rootKey,
+            SanitizePathSegment(engine.ToString()),
+            iteration.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Guid.NewGuid().ToString("N"));
+    }
+
     private static void CopyDirectory(string sourceRoot, string destinationRoot)
     {
         if (!Directory.Exists(sourceRoot))
             return;
 
+        var fullSource = Path.GetFullPath(sourceRoot);
+        var fullDestination = Path.GetFullPath(destinationRoot);
+        var directories = Directory
+            .EnumerateDirectories(fullSource, "*", SearchOption.AllDirectories)
+            .Where(directory => !IsSameOrChildPath(directory, fullDestination))
+            .ToArray();
+        var files = Directory
+            .EnumerateFiles(fullSource, "*", SearchOption.AllDirectories)
+            .Where(file => !IsSameOrChildPath(file, fullDestination))
+            .ToArray();
+
         Directory.CreateDirectory(destinationRoot);
-        foreach (var directory in Directory.EnumerateDirectories(sourceRoot, "*", SearchOption.AllDirectories))
+        foreach (var directory in directories)
         {
-            var relative = FrameworkCompatibility.GetRelativePath(sourceRoot, directory);
+            var relative = FrameworkCompatibility.GetRelativePath(fullSource, directory);
             Directory.CreateDirectory(Path.Combine(destinationRoot, relative));
         }
 
-        foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        foreach (var file in files)
         {
-            var relative = FrameworkCompatibility.GetRelativePath(sourceRoot, file);
+            var relative = FrameworkCompatibility.GetRelativePath(fullSource, file);
             var destination = Path.Combine(destinationRoot, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             File.Copy(file, destination, overwrite: true);
         }
+    }
+
+    private static bool IsSameOrChildPath(string candidate, string root)
+    {
+        var fullCandidate = Path.GetFullPath(candidate)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(fullCandidate, fullRoot, StringComparison.OrdinalIgnoreCase) ||
+               fullCandidate.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               fullCandidate.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ManagedModuleBenchmarkRunResult CreateFailedRun(
