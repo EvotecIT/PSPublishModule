@@ -177,7 +177,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Emit typed save result objects.
 - [x] Add `ShouldProcess` and dry-run planning.
 - [x] Add Spectre.Console summary output.
-- [ ] Benchmark against `Save-Module` and `Save-PSResource`.
+- [x] Benchmark against `Save-Module` and `Save-PSResource`.
 - [x] Validate local-feed save smoke on Windows PowerShell 5.1.
 - [x] Validate local-feed save smoke on PowerShell 7+.
 
@@ -325,6 +325,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `PSScriptAnalyzer` 1.25.0 from the public PowerShell Gallery NuGet v2 endpoint, validating a medium public package with 14.6 MB downloaded, 299 MB extracted, and 48 files.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `Microsoft.Graph.Users` 2.38.0 with `-AcceptLicense`, resolving and installing its related dependency package through the managed engine and recording 2 packages, 65 total files, and 71 MB total extracted bytes.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Find-ManagedModule -Name PSScript*` against the public PowerShell Gallery NuGet v2 endpoint, returning package-id wildcard results with `PSScriptAnalyzer` 1.25.0 first.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save -Engine Managed,PowerShellGet,PSResourceGet` for `ThreadJob` 2.1.0 into temp roots with `-AllowClobber`; all three engines completed successfully and recorded comparable save evidence.
 - [ ] Large many-dependency public-feed, mixed-version family, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
