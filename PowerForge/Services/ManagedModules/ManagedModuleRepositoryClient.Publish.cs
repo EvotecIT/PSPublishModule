@@ -52,8 +52,10 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
 
-        using var stream = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var document = await ReadJsonDocumentAsync(
+            response.Content,
+            $"NuGet package publish service discovery for repository '{repository.Name}'",
+            cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException($"Repository '{repository.Name}' service index did not include a resources array.");
 
