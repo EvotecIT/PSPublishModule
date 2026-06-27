@@ -5,7 +5,7 @@ namespace PowerForge;
 /// <summary>
 /// Measures managed module lifecycle scenarios using the managed C# module engine.
 /// </summary>
-public sealed class ManagedModuleBenchmarkService
+public sealed partial class ManagedModuleBenchmarkService
 {
     private readonly ILogger _logger;
     private readonly ManagedModuleInstallService _installService;
@@ -257,53 +257,6 @@ public sealed class ManagedModuleBenchmarkService
             ModuleRoot = destinationPath,
             PackageCount = Math.Max(1, items.Count),
             FinalDiskBytes = MeasureDirectoryBytes(destinationPath)
-        };
-    }
-
-    private ManagedModuleBenchmarkRunResult RunCompatibilityPublishScenario(
-        ManagedModuleBenchmarkScenario scenario,
-        ManagedModuleBenchmarkEngine engine,
-        int iteration)
-    {
-        var repositoryName = ResolveCompatibilityRepositoryName(scenario);
-        var modulePath = NormalizeOptional(scenario.ModulePath) ?? throw new InvalidOperationException("Publish benchmark scenarios require ModulePath.");
-        if (engine == ManagedModuleBenchmarkEngine.PSResourceGet)
-        {
-            new PSResourceGetClient(_compatibilityPowerShellRunner, _logger).Publish(
-                new PSResourcePublishOptions(
-                    modulePath,
-                    isNupkg: false,
-                    repository: repositoryName,
-                    destinationPath: NormalizeOptional(scenario.PackageOutputDirectory),
-                    skipDependenciesCheck: scenario.SkipDependencyCheck,
-                    skipModuleManifestValidate: false,
-                    credential: scenario.Credential),
-                TimeSpan.FromMinutes(10));
-        }
-        else
-        {
-            new PowerShellGetClient(_compatibilityPowerShellRunner, _logger).Publish(
-                new PowerShellGetPublishOptions(
-                    modulePath,
-                    repositoryName,
-                    credential: scenario.Credential),
-                TimeSpan.FromMinutes(10));
-        }
-
-        return new ManagedModuleBenchmarkRunResult
-        {
-            ScenarioId = ResolveScenarioId(scenario),
-            Operation = scenario.Operation,
-            Engine = engine.ToString(),
-            Iteration = iteration,
-            Succeeded = true,
-            Status = "Published",
-            ModuleName = scenario.Name,
-            Version = scenario.Version,
-            ModulePath = modulePath,
-            PublishSource = repositoryName,
-            Published = true,
-            FinalDiskBytes = MeasureDirectoryBytes(NormalizeOptional(scenario.PackageOutputDirectory))
         };
     }
 
@@ -587,6 +540,13 @@ public sealed class ManagedModuleBenchmarkService
         bool isolateModuleRoot)
     {
         var moduleRoot = NormalizeOptional(scenario.ModuleRoot);
+        if (isolateModuleRoot &&
+            scenario.Operation == ManagedModuleBenchmarkOperation.Publish &&
+            scenario.Repository.Kind == ManagedModuleRepositoryKind.LocalFolder)
+        {
+            return CreateIsolatedPublishScenario(scenario, engine, iteration);
+        }
+
         if (!isolateModuleRoot ||
             string.IsNullOrWhiteSpace(moduleRoot) ||
             scenario.Operation is ManagedModuleBenchmarkOperation.Find or ManagedModuleBenchmarkOperation.Publish)
