@@ -59,4 +59,9 @@ public sealed class ManagedModuleInstallResult
     /// Full path to the receipt written after successful delivery.
     /// </summary>
     public string? ReceiptPath { get; set; }
+
+    /// <summary>
+    /// Dependency install results completed before this module was promoted.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleInstallResult> DependencyResults { get; set; } = Array.Empty<ManagedModuleInstallResult>();
 }

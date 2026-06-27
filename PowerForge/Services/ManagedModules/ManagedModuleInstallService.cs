@@ -32,6 +32,12 @@ public sealed class ManagedModuleInstallService
     public async Task<ManagedModuleInstallResult> InstallAsync(
         ManagedModuleInstallRequest request,
         CancellationToken cancellationToken = default)
+        => await InstallAsync(request, new ManagedModuleInstallContext(), cancellationToken).ConfigureAwait(false);
+
+    private async Task<ManagedModuleInstallResult> InstallAsync(
+        ManagedModuleInstallRequest request,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken)
     {
         Validate(request);
 
@@ -40,6 +46,7 @@ public sealed class ManagedModuleInstallService
             : request.Version!.Trim();
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
+        using var dependencyScope = context.Enter(request.Name);
 
         var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
         var cacheDirectory = ownsCache
@@ -75,6 +82,9 @@ public sealed class ManagedModuleInstallService
             var extraction = _extractor.ExtractPackage(download.PackagePath, stageModulePath);
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
+            var dependencyResults = request.SkipDependencyCheck
+                ? Array.Empty<ManagedModuleInstallResult>()
+                : await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
 
             PromoteStagedModule(stageModulePath, modulePath);
             CleanupEmptyStage(stageRoot);
@@ -89,7 +99,8 @@ public sealed class ManagedModuleInstallService
                 ModulePath = modulePath,
                 Download = download,
                 FileCount = extraction.FileCount,
-                ExtractedBytes = extraction.BytesWritten
+                ExtractedBytes = extraction.BytesWritten,
+                DependencyResults = dependencyResults
             };
             _receiptStore.WriteReceipt(request.Repository, result);
             return result;
@@ -117,6 +128,92 @@ public sealed class ManagedModuleInstallService
             throw new InvalidOperationException($"No versions of '{request.Name}' were found in repository '{request.Repository.Name}'.");
 
         return latest.Version;
+    }
+
+    private async Task<IReadOnlyList<ManagedModuleInstallResult>> InstallDependenciesAsync(
+        ManagedModuleInstallRequest request,
+        ManagedModulePackageMetadata? metadata,
+        string cacheDirectory,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken)
+    {
+        var dependencies = SelectDependencies(metadata).ToArray();
+        if (dependencies.Length == 0)
+            return Array.Empty<ManagedModuleInstallResult>();
+
+        var results = new List<ManagedModuleInstallResult>();
+        foreach (var dependency in dependencies)
+        {
+            var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+            var dependencyVersion = await ResolveDependencyVersionAsync(
+                request,
+                dependency.Id,
+                range,
+                cancellationToken).ConfigureAwait(false);
+
+            var result = await InstallAsync(
+                new ManagedModuleInstallRequest
+                {
+                    Repository = request.Repository,
+                    Name = dependency.Id,
+                    Version = dependencyVersion,
+                    IncludePrerelease = request.IncludePrerelease || range.AllowsPrerelease,
+                    Scope = request.Scope,
+                    ShellEdition = request.ShellEdition,
+                    ModuleRoot = request.ModuleRoot,
+                    PackageCacheDirectory = cacheDirectory,
+                    Credential = request.Credential,
+                    Force = false,
+                    SkipDependencyCheck = false
+                },
+                context,
+                cancellationToken).ConfigureAwait(false);
+
+            results.Add(result);
+        }
+
+        return results;
+    }
+
+    private async Task<string> ResolveDependencyVersionAsync(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        ManagedModuleVersionRange range,
+        CancellationToken cancellationToken)
+    {
+        if (range.ExactVersion is not null)
+            return range.ExactVersion;
+
+        var includePrerelease = request.IncludePrerelease || range.AllowsPrerelease;
+        var versions = await _repositoryClient.GetVersionsAsync(
+            request.Repository,
+            dependencyName,
+            includePrerelease,
+            request.Credential,
+            cancellationToken).ConfigureAwait(false);
+
+        var selected = versions
+            .Where(version => range.IsSatisfiedBy(version.Version))
+            .LastOrDefault();
+        if (selected is null)
+            throw new InvalidOperationException($"No dependency version of '{dependencyName}' satisfies range '{range}' in repository '{request.Repository.Name}'.");
+
+        return selected.Version;
+    }
+
+    private static IEnumerable<ManagedModuleDependencyInfo> SelectDependencies(ManagedModulePackageMetadata? metadata)
+    {
+        if (metadata?.Dependencies is null || metadata.Dependencies.Count == 0)
+            return Array.Empty<ManagedModuleDependencyInfo>();
+
+        return metadata.Dependencies
+            .Where(static dependency => !string.IsNullOrWhiteSpace(dependency.Id))
+            .GroupBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group
+                .OrderBy(static dependency => string.IsNullOrWhiteSpace(dependency.TargetFramework) ? 0 : 1)
+                .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
+                .First())
+            .OrderBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase);
     }
 
     private static void Validate(ManagedModuleInstallRequest request)

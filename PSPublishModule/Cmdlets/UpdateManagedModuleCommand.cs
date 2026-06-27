@@ -91,6 +91,11 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Force { get; set; }
 
+    /// <summary>Skip installing dependencies declared by the package.</summary>
+    [Parameter]
+    [Alias("SkipDependenciesCheck")]
+    public SwitchParameter SkipDependencyCheck { get; set; }
+
     /// <summary>Updates requested modules.</summary>
     protected override void ProcessRecord()
     {
@@ -117,7 +122,8 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                         ModuleRoot = moduleRoot,
                         PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
                         Credential = credential,
-                        Force = Force.IsPresent
+                        Force = Force.IsPresent,
+                        SkipDependencyCheck = SkipDependencyCheck.IsPresent
                     })
                 .GetAwaiter()
                 .GetResult();
