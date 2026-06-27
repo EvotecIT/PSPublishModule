@@ -316,6 +316,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Find` service contract tests queried a private NuGet v3 metadata endpoint with Basic credentials, recorded request-count evidence, and selected the latest stable version without downloading or extracting packages.
 - [x] 2026-06-27: `Measure-ManagedModule` command-surface contract tests installed a synthetic heavy package payload with 65 extracted files and more than 250 KB of extracted bytes, recording extraction timing, file count, and final disk size.
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Publish` command-surface contract tests published a binary-root module package and verified the `.dll` payload was preserved in the generated `.nupkg`.
+- [x] 2026-06-27: Managed repair/conflict contract tests cover source repair, scoped missing-copy repair, and command-surface loaded-module update blocking without relying on PowerShellGet, PSResourceGet, or external executables.
 - [ ] Public-feed, private-feed install/save, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
@@ -332,9 +333,9 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] Publish a module with dependencies.
 - [x] Update already-current modules.
 - [x] Update stale modules.
-- [ ] Repair source mismatch.
-- [ ] Repair scope mismatch.
-- [ ] Detect loaded-module conflict.
+- [x] Repair source mismatch.
+- [x] Repair scope mismatch.
+- [x] Detect loaded-module conflict.
 
 ## Phase 11: Transition And Cleanup
 
