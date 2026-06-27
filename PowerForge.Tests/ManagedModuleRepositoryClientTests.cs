@@ -82,6 +82,44 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_retries_transient_repository_failures()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests, serviceIndexFailures: 1));
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: new ManagedModuleRepositoryClientOptions
+            {
+                MaxRetries = 1,
+                RetryDelay = TimeSpan.Zero
+            });
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Company.Tools");
+
+        Assert.Equal(new[] { "1.0.0", "1.1.0" }, versions.Select(version => version.Version));
+        Assert.Equal(2, requests.Count(request => request.Url == "https://example.test/v3/index.json"));
+    }
+
+    [Fact]
+    public async Task GetVersionsAsync_times_out_slow_repository_requests()
+    {
+        using var client = new HttpClient(new SlowHandler());
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: new ManagedModuleRepositoryClientOptions
+            {
+                MaxRetries = 0,
+                RequestTimeout = TimeSpan.FromMilliseconds(10)
+            });
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        await Assert.ThrowsAsync<TimeoutException>(() => repositoryClient.GetVersionsAsync(repository, "Company.Tools"));
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_writes_package_from_nuget_v3_feed()
     {
         var requests = new List<RecordedRequest>();
@@ -301,11 +339,16 @@ public sealed class ManagedModuleRepositoryClientTests
     {
         private readonly List<RecordedRequest> _requests;
         private readonly bool _conflictPublishes;
+        private int _serviceIndexFailures;
 
-        public ManagedModuleHandler(List<RecordedRequest> requests, bool conflictPublishes = false)
+        public ManagedModuleHandler(
+            List<RecordedRequest> requests,
+            bool conflictPublishes = false,
+            int serviceIndexFailures = 0)
         {
             _requests = requests;
             _conflictPublishes = conflictPublishes;
+            _serviceIndexFailures = serviceIndexFailures;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -317,11 +360,19 @@ public sealed class ManagedModuleRepositoryClientTests
             _requests.Add(new RecordedRequest(uri.AbsoluteUri, request.Method, request.Headers.Authorization, apiKey));
 
             if (uri.AbsoluteUri == "https://example.test/v3/index.json")
+            {
+                if (_serviceIndexFailures > 0)
+                {
+                    _serviceIndexFailures--;
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+                }
+
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
                             "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}," +
                             "{\"@id\":\"https://example.test/publish/\",\"@type\":\"PackagePublish/2.0.0\"}" +
                             "]}");
+            }
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0-beta1\",\"1.1.0\"]}");
@@ -361,6 +412,15 @@ public sealed class ManagedModuleRepositoryClientTests
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             });
+    }
+
+    private sealed class SlowHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
     }
 
     private sealed class RecordedRequest
