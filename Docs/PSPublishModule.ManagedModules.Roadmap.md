@@ -105,7 +105,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - Managed required-module mirroring can publish missing manifest `RequiredModules` from PSGallery, a direct NuGet v3 URL, a local feed path, or the target repository name.
 - Managed publish configuration can name a private required-module upstream and provide `RequiredModuleSourceRepositoryUri` for the managed source.
 - Managed required-module mirroring publishes package dependency metadata transitively before the package that requires it.
-- Named private upstream profiles beyond the target repository still require an explicit source URI until repository profile resolution is added to publish configuration.
+- Named private upstream profiles can be used as managed required-module sources; publish configuration resolves the profile into the repository name and source URI.
 
 ## Phase 2: Managed Repository Client
 
