@@ -36,6 +36,11 @@ public sealed class ManagedModulePackageMetadata
     public string? License { get; set; }
 
     /// <summary>
+    /// True when the package declares that license acceptance is required before install.
+    /// </summary>
+    public bool RequireLicenseAcceptance { get; set; }
+
+    /// <summary>
     /// Package tags split into individual values.
     /// </summary>
     public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();

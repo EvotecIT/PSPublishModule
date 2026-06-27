@@ -115,6 +115,10 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter AllowClobber { get; set; }
 
+    /// <summary>Accept package licenses when packages declare license acceptance is required.</summary>
+    [Parameter]
+    public SwitchParameter AcceptLicense { get; set; }
+
     /// <summary>Skip installing dependencies declared by the package.</summary>
     [Parameter]
     [Alias("SkipDependenciesCheck")]
@@ -151,6 +155,7 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
                         Credential = credential,
                         Force = Force.IsPresent,
                         AllowClobber = AllowClobber.IsPresent,
+                        AcceptLicense = AcceptLicense.IsPresent,
                         SkipDependencyCheck = SkipDependencyCheck.IsPresent
                     })
                 .GetAwaiter()

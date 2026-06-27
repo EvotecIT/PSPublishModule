@@ -44,7 +44,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-VersionPolicy`.
 - [x] Support `-Prerelease`.
 - [x] Support `-AllowPrerelease` as an alias where it helps migration.
-- [ ] Support `-AcceptLicense`.
+- [x] Support `-AcceptLicense`.
 - [x] Support `-SkipDependencyCheck`.
 - [x] Support `-AllowClobber`.
 - [x] Support `-Force`.
@@ -162,7 +162,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement side-by-side exact version install.
 - [x] Implement `-AllowClobber` behavior.
 - [ ] Implement publisher/trust checks where metadata is available.
-- [ ] Implement license acceptance handling.
+- [x] Implement license acceptance handling.
 - [x] Implement dependency installation order.
 - [x] Implement receipt creation after successful install.
 - [x] Emit typed install result objects.
