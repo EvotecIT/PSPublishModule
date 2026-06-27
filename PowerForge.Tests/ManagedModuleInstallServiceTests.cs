@@ -38,6 +38,7 @@ public sealed class ManagedModuleInstallServiceTests
 
         Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
         Assert.Equal("1.1.0", result.Version);
+        Assert.True(result.Elapsed > TimeSpan.Zero);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Public", "Get-CompanyTool.ps1")));
         Assert.False(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.nuspec")));
@@ -78,6 +79,7 @@ public sealed class ManagedModuleInstallServiceTests
         });
 
         Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
+        Assert.True(result.Elapsed > TimeSpan.Zero);
         Assert.Equal("keep", File.ReadAllText(Path.Combine(existingPath, "marker.txt")));
         Assert.Null(result.Download);
         Assert.Null(result.Receipt);

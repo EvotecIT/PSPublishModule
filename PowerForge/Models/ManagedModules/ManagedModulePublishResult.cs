@@ -31,6 +31,11 @@ public sealed class ManagedModulePublishResult
     public long PackageBytes { get; set; }
 
     /// <summary>
+    /// Elapsed time spent by the package and publish operation.
+    /// </summary>
+    public TimeSpan Elapsed { get; set; }
+
+    /// <summary>
     /// Repository name that received the package.
     /// </summary>
     public string RepositoryName { get; set; } = string.Empty;
