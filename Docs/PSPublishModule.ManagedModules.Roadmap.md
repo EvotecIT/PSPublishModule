@@ -278,7 +278,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Expose a thin `Measure-ManagedModule` surface over the managed benchmark core.
 - [x] Write managed benchmark JSON and Markdown evidence reports.
 - [x] Add `Measure-ManagedModule -Engine Managed,PSResourceGet,PowerShellGet` selection.
-- [x] Record compatibility baseline success/failure/status/version evidence through the existing compatibility installer path.
+- [x] Record compatibility baseline success/failure/status/version evidence through the existing compatibility install, save, update, and publish paths.
 - [x] Add managed publish benchmark operation and publish evidence fields.
 - [x] Publish benchmark results in a neutral PowerForge report.
 - [ ] Measure cold cache install.
@@ -299,7 +299,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Validate benchmark install/import behavior on Windows PowerShell 5.1.
 - [x] Validate benchmark install/import behavior on PowerShell 7+.
 
-Benchmark Markdown reports include a neutral scenario summary grouped by scenario, operation, and engine, followed by the detailed run table. The report records observed counts and timing statistics without making unproven performance claims.
+Benchmark Markdown reports include a neutral scenario summary grouped by scenario, operation, and engine, followed by the detailed run table. The report records observed counts and timing statistics without making unproven performance claims. Compatibility baseline routing now covers install, save, update, and publish; live benchmark evidence still needs to be collected for the unchecked scenarios below.
 
 ### Current Host Smoke Evidence
 

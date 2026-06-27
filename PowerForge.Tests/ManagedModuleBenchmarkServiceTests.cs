@@ -316,7 +316,7 @@ public sealed class ManagedModuleBenchmarkServiceTests
     }
 
     [Fact]
-    public async Task RunAsync_RecordsUnsupportedCompatibilitySaveAsFailure()
+    public async Task RunAsync_RecordsUnsupportedCompatibilityVersionPolicyAsFailure()
     {
         using var root = new TemporaryDirectory();
         var service = new ManagedModuleBenchmarkService(new NullLogger());
@@ -325,52 +325,118 @@ public sealed class ManagedModuleBenchmarkServiceTests
         {
             ContinueOnError = true,
             Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "compat-version-policy",
+                    Operation = ManagedModuleBenchmarkOperation.Save,
+                    Repository = new ManagedModuleRepository("Local", "https://example.test/index.json"),
+                    Name = "Company.Tools",
+                    ModuleRoot = root.Path,
+                    VersionPolicy = "[1.0.0,2.0.0)"
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.False(run.Succeeded);
+        Assert.Equal("PSResourceGet", run.Engine);
+        Assert.Contains("VersionPolicy", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(ManagedModuleBenchmarkEngine.PSResourceGet, "Save-PSResource", "PFPSRG::SAVE::ITEM::")]
+    [InlineData(ManagedModuleBenchmarkEngine.PowerShellGet, "Save-Module", "PFPWSGET::SAVE::ITEM::")]
+    public async Task RunAsync_MeasuresCompatibilitySaveScenario(
+        ManagedModuleBenchmarkEngine engine,
+        string expectedCommand,
+        string outputPrefix)
+    {
+        using var saveRoot = new TemporaryDirectory();
+        var requests = new List<PowerShellRunRequest>();
+        var runner = new StubPowerShellRunner(request =>
+        {
+            requests.Add(request);
+            var script = File.ReadAllText(request.ScriptPath!);
+            Assert.Contains(expectedCommand, script, StringComparison.Ordinal);
+            var output = outputPrefix + Encode("Company.Tools") + "::" + Encode("1.0.0");
+            return new PowerShellRunResult(0, output, string.Empty, "pwsh");
+        });
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), compatibilityPowerShellRunner: runner);
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            ContinueOnError = true,
+            Engines = new[] { engine },
             Scenarios = new[]
             {
                 new ManagedModuleBenchmarkScenario
                 {
                     Id = "compat-save",
                     Operation = ManagedModuleBenchmarkOperation.Save,
-                    Repository = new ManagedModuleRepository("Local", "https://example.test/index.json"),
+                    Repository = new ManagedModuleRepository("CompanyRepository", "https://example.test/index.json"),
                     Name = "Company.Tools",
-                    ModuleRoot = root.Path
+                    Version = "1.0.0",
+                    ModuleRoot = saveRoot.Path
                 }
             }
         });
 
         var run = Assert.Single(result.Runs);
-        Assert.False(run.Succeeded);
-        Assert.Equal("PSResourceGet", run.Engine);
-        Assert.Contains("support Install and Update", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(run.Succeeded);
+        Assert.Equal(engine.ToString(), run.Engine);
+        Assert.Equal("Saved", run.Status);
+        Assert.Equal("1.0.0", run.Version);
+        Assert.Equal(saveRoot.Path, run.ModuleRoot);
+        Assert.Single(requests);
+        Assert.Contains("CompanyRepository", requests[0].Arguments);
     }
 
-    [Fact]
-    public async Task RunAsync_RecordsUnsupportedCompatibilityPublishAsFailure()
+    [Theory]
+    [InlineData(ManagedModuleBenchmarkEngine.PSResourceGet, "Publish-PSResource")]
+    [InlineData(ManagedModuleBenchmarkEngine.PowerShellGet, "Publish-Module")]
+    public async Task RunAsync_MeasuresCompatibilityPublishScenario(
+        ManagedModuleBenchmarkEngine engine,
+        string expectedCommand)
     {
-        using var root = new TemporaryDirectory();
-        var service = new ManagedModuleBenchmarkService(new NullLogger());
+        using var moduleRoot = new TemporaryDirectory();
+        var requests = new List<PowerShellRunRequest>();
+        var runner = new StubPowerShellRunner(request =>
+        {
+            requests.Add(request);
+            var script = File.ReadAllText(request.ScriptPath!);
+            Assert.Contains(expectedCommand, script, StringComparison.Ordinal);
+            return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
+        });
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), compatibilityPowerShellRunner: runner);
 
         var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
         {
             ContinueOnError = true,
-            Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet },
+            Engines = new[] { engine },
             Scenarios = new[]
             {
                 new ManagedModuleBenchmarkScenario
                 {
                     Id = "compat-publish",
                     Operation = ManagedModuleBenchmarkOperation.Publish,
-                    Repository = new ManagedModuleRepository("Local", "https://example.test/index.json"),
+                    Repository = new ManagedModuleRepository("CompanyRepository", "https://example.test/index.json"),
                     Name = "Company.Tools",
-                    ModulePath = root.Path
+                    Version = "1.0.0",
+                    ModulePath = moduleRoot.Path
                 }
             }
         });
 
         var run = Assert.Single(result.Runs);
-        Assert.False(run.Succeeded);
-        Assert.Equal("PSResourceGet", run.Engine);
-        Assert.Contains("Save and Publish", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(run.Succeeded);
+        Assert.Equal(engine.ToString(), run.Engine);
+        Assert.Equal("Published", run.Status);
+        Assert.True(run.Published);
+        Assert.Equal("CompanyRepository", run.PublishSource);
+        Assert.Single(requests);
+        Assert.Contains(moduleRoot.Path, requests[0].Arguments);
     }
 
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
@@ -404,5 +470,21 @@ public sealed class ManagedModuleBenchmarkServiceTests
                 "    AliasesToExport = @()",
                 "}"
             }));
+    }
+
+    private static string Encode(string value)
+        => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(value));
+
+    private sealed class StubPowerShellRunner : IPowerShellRunner
+    {
+        private readonly Func<PowerShellRunRequest, PowerShellRunResult> _run;
+
+        public StubPowerShellRunner(Func<PowerShellRunRequest, PowerShellRunResult> run)
+        {
+            _run = run;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+            => _run(request);
     }
 }

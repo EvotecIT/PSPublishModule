@@ -7,9 +7,11 @@ namespace PowerForge;
 /// </summary>
 public sealed class ManagedModuleBenchmarkService
 {
+    private readonly ILogger _logger;
     private readonly ManagedModuleInstallService _installService;
     private readonly ManagedModuleUpdateService _updateService;
     private readonly ManagedModulePublishService _publishService;
+    private readonly IPowerShellRunner _compatibilityPowerShellRunner;
     private readonly Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? _compatibilityRunner;
 
     /// <summary>
@@ -20,17 +22,21 @@ public sealed class ManagedModuleBenchmarkService
     /// <param name="updateService">Optional update service override.</param>
     /// <param name="publishService">Optional publish service override.</param>
     /// <param name="compatibilityRunner">Optional compatibility benchmark runner override.</param>
+    /// <param name="compatibilityPowerShellRunner">Optional PowerShell runner used by compatibility benchmark engines.</param>
     public ManagedModuleBenchmarkService(
         ILogger logger,
         ManagedModuleInstallService? installService = null,
         ManagedModuleUpdateService? updateService = null,
         ManagedModulePublishService? publishService = null,
-        Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? compatibilityRunner = null)
+        Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? compatibilityRunner = null,
+        IPowerShellRunner? compatibilityPowerShellRunner = null)
     {
         var safeLogger = logger ?? new NullLogger();
+        _logger = safeLogger;
         _installService = installService ?? new ManagedModuleInstallService(safeLogger);
         _updateService = updateService ?? new ManagedModuleUpdateService(safeLogger);
         _publishService = publishService ?? new ManagedModulePublishService(safeLogger);
+        _compatibilityPowerShellRunner = compatibilityPowerShellRunner ?? new PowerShellRunner();
         _compatibilityRunner = compatibilityRunner;
     }
 
@@ -128,23 +134,31 @@ public sealed class ManagedModuleBenchmarkService
         ManagedModuleBenchmarkEngine engine,
         int iteration)
     {
-        if (scenario.Operation == ManagedModuleBenchmarkOperation.Save ||
-            scenario.Operation == ManagedModuleBenchmarkOperation.Publish)
-            throw new InvalidOperationException("Compatibility benchmark engines support Install and Update operations. Use the managed engine for Save and Publish measurements.");
         if (!string.IsNullOrWhiteSpace(scenario.VersionPolicy))
             throw new InvalidOperationException("Compatibility benchmark engines support Version, MinimumVersion, and MaximumVersion. Use the managed engine for VersionPolicy measurements.");
 
-        var result = _compatibilityRunner is null
-            ? RunDefaultCompatibilityScenario(scenario, engine)
-            : _compatibilityRunner(scenario, engine);
-        return MapCompatibilityResult(scenario, engine, iteration, result);
+        return scenario.Operation switch
+        {
+            ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update => MapCompatibilityResult(
+                scenario,
+                engine,
+                iteration,
+                _compatibilityRunner is null
+                    ? RunDefaultCompatibilityScenario(scenario, engine, _compatibilityPowerShellRunner, _logger)
+                    : _compatibilityRunner(scenario, engine)),
+            ManagedModuleBenchmarkOperation.Save => RunCompatibilitySaveScenario(scenario, engine, iteration),
+            ManagedModuleBenchmarkOperation.Publish => RunCompatibilityPublishScenario(scenario, engine, iteration),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario.Operation, "Unsupported benchmark operation.")
+        };
     }
 
     private static ModuleDependencyInstallResult RunDefaultCompatibilityScenario(
         ManagedModuleBenchmarkScenario scenario,
-        ManagedModuleBenchmarkEngine engine)
+        ManagedModuleBenchmarkEngine engine,
+        IPowerShellRunner runner,
+        ILogger logger)
     {
-        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), new NullLogger());
+        var installer = new ModuleDependencyInstaller(runner, logger);
         var dependency = new ModuleDependency(
             scenario.Name,
             scenario.Version,
@@ -178,6 +192,109 @@ public sealed class ManagedModuleBenchmarkService
                 engine.ToString(),
                 "Compatibility engine returned no result.")
             : results[0];
+    }
+
+    private ManagedModuleBenchmarkRunResult RunCompatibilitySaveScenario(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        int iteration)
+    {
+        if (!string.IsNullOrWhiteSpace(scenario.MaximumVersion) &&
+            engine == ManagedModuleBenchmarkEngine.PowerShellGet)
+        {
+            throw new InvalidOperationException("PowerShellGet Save-Module compatibility benchmarks do not support MaximumVersion. Use PSResourceGet or the managed engine for range measurements.");
+        }
+
+        var repositoryName = ResolveCompatibilityRepositoryName(scenario);
+        var destinationPath = NormalizeOptional(scenario.ModuleRoot) ?? throw new InvalidOperationException("Save benchmark scenarios require ModuleRoot.");
+        var items = engine == ManagedModuleBenchmarkEngine.PSResourceGet
+            ? new PSResourceGetClient(_compatibilityPowerShellRunner, _logger).Save(
+                new PSResourceSaveOptions(
+                    scenario.Name,
+                    destinationPath,
+                    BuildPSResourceVersionArgument(scenario),
+                    repositoryName,
+                    scenario.IncludePrerelease,
+                    trustRepository: true,
+                    skipDependencyCheck: scenario.SkipDependencyCheck,
+                    acceptLicense: scenario.AcceptLicense,
+                    quiet: true,
+                    credential: scenario.Credential),
+                TimeSpan.FromMinutes(10))
+            : new PowerShellGetClient(_compatibilityPowerShellRunner, _logger).Save(
+                new PowerShellGetSaveOptions(
+                    scenario.Name,
+                    destinationPath,
+                    minimumVersion: NormalizeOptional(scenario.MinimumVersion),
+                    requiredVersion: NormalizeOptional(scenario.Version),
+                    repository: repositoryName,
+                    prerelease: scenario.IncludePrerelease,
+                    acceptLicense: scenario.AcceptLicense,
+                    credential: scenario.Credential),
+                TimeSpan.FromMinutes(10));
+        var selected = SelectCompatibilityItem(items, scenario.Name);
+
+        return new ManagedModuleBenchmarkRunResult
+        {
+            ScenarioId = ResolveScenarioId(scenario),
+            Operation = scenario.Operation,
+            Engine = engine.ToString(),
+            Iteration = iteration,
+            Succeeded = true,
+            Status = "Saved",
+            ModuleName = scenario.Name,
+            Version = selected?.Version ?? scenario.Version,
+            ModuleRoot = destinationPath,
+            PackageCount = Math.Max(1, items.Count),
+            FinalDiskBytes = MeasureDirectoryBytes(destinationPath)
+        };
+    }
+
+    private ManagedModuleBenchmarkRunResult RunCompatibilityPublishScenario(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        int iteration)
+    {
+        var repositoryName = ResolveCompatibilityRepositoryName(scenario);
+        var modulePath = NormalizeOptional(scenario.ModulePath) ?? throw new InvalidOperationException("Publish benchmark scenarios require ModulePath.");
+        if (engine == ManagedModuleBenchmarkEngine.PSResourceGet)
+        {
+            new PSResourceGetClient(_compatibilityPowerShellRunner, _logger).Publish(
+                new PSResourcePublishOptions(
+                    modulePath,
+                    isNupkg: false,
+                    repository: repositoryName,
+                    destinationPath: NormalizeOptional(scenario.PackageOutputDirectory),
+                    skipDependenciesCheck: scenario.SkipDependencyCheck,
+                    skipModuleManifestValidate: false,
+                    credential: scenario.Credential),
+                TimeSpan.FromMinutes(10));
+        }
+        else
+        {
+            new PowerShellGetClient(_compatibilityPowerShellRunner, _logger).Publish(
+                new PowerShellGetPublishOptions(
+                    modulePath,
+                    repositoryName,
+                    credential: scenario.Credential),
+                TimeSpan.FromMinutes(10));
+        }
+
+        return new ManagedModuleBenchmarkRunResult
+        {
+            ScenarioId = ResolveScenarioId(scenario),
+            Operation = scenario.Operation,
+            Engine = engine.ToString(),
+            Iteration = iteration,
+            Succeeded = true,
+            Status = "Published",
+            ModuleName = scenario.Name,
+            Version = scenario.Version,
+            ModulePath = modulePath,
+            PublishSource = repositoryName,
+            Published = true,
+            FinalDiskBytes = MeasureDirectoryBytes(NormalizeOptional(scenario.PackageOutputDirectory))
+        };
     }
 
     private static ManagedModuleInstallRequest CreateInstallRequest(ManagedModuleBenchmarkScenario scenario, bool forceCustomRoot)
@@ -327,6 +444,59 @@ public sealed class ManagedModuleBenchmarkService
         {
             return 0;
         }
+    }
+
+    private static long MeasureDirectoryBytes(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            return 0;
+
+        try
+        {
+            return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                .Sum(static file => new FileInfo(file).Length);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static PSResourceInfo? SelectCompatibilityItem(IReadOnlyList<PSResourceInfo> items, string moduleName)
+        => (items ?? Array.Empty<PSResourceInfo>())
+            .FirstOrDefault(item => string.Equals(item.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+           ?? (items ?? Array.Empty<PSResourceInfo>()).FirstOrDefault();
+
+    private static string? ResolveCompatibilityRepositoryName(ManagedModuleBenchmarkScenario scenario)
+    {
+        var name = NormalizeOptional(scenario.Repository.Name);
+        return string.Equals(name, "PSGallery", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : name;
+    }
+
+    private static string? BuildPSResourceVersionArgument(ManagedModuleBenchmarkScenario scenario)
+    {
+        if (!string.IsNullOrWhiteSpace(scenario.Version))
+            return scenario.Version!.Trim();
+        if (!string.IsNullOrWhiteSpace(scenario.MinimumVersion) || !string.IsNullOrWhiteSpace(scenario.MaximumVersion))
+            return BuildNuGetRange(scenario.MinimumVersion, scenario.MaximumVersion);
+
+        return null;
+    }
+
+    private static string BuildNuGetRange(string? minInclusive, string? maxInclusive)
+    {
+        var minimum = NormalizeOptional(minInclusive);
+        var maximum = NormalizeOptional(maxInclusive);
+        if (minimum is null && maximum is null)
+            return string.Empty;
+        if (minimum is not null && maximum is not null)
+            return "[" + minimum + ", " + maximum + "]";
+        if (minimum is not null)
+            return "[" + minimum + ", ]";
+
+        return "[, " + maximum + "]";
     }
 
     private static ManagedModuleBenchmarkRunResult MapUpdate(
