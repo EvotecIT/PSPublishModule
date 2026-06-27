@@ -44,14 +44,15 @@ internal static class TestPackageFactory
         string version,
         IReadOnlyList<TestDependency>? dependencies = null,
         IReadOnlyDictionary<string, string>? files = null,
-        bool requireLicenseAcceptance = false)
+        bool requireLicenseAcceptance = false,
+        string authors = "Evotec")
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(packagePath)!);
         using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
         var nuspec = archive.CreateEntry(id + ".nuspec");
         using (var writer = new StreamWriter(nuspec.Open()))
         {
-            writer.Write(CreateNuspec(id, version, dependencies, requireLicenseAcceptance));
+            writer.Write(CreateNuspec(id, version, dependencies, requireLicenseAcceptance, authors));
         }
 
         if (files is null)
@@ -82,7 +83,8 @@ internal static class TestPackageFactory
         string id,
         string version,
         IReadOnlyList<TestDependency>? dependencies = null,
-        bool requireLicenseAcceptance = false)
+        bool requireLicenseAcceptance = false,
+        string authors = "Evotec")
     {
         var licenseAcceptanceXml = requireLicenseAcceptance
             ? "    <requireLicenseAcceptance>true</requireLicenseAcceptance>" + Environment.NewLine
@@ -94,7 +96,7 @@ internal static class TestPackageFactory
   <metadata>
     <id>{id}</id>
     <version>{version}</version>
-    <authors>Evotec</authors>
+    <authors>{authors}</authors>
     <description>Test package.</description>
     <projectUrl>https://example.test/{id}</projectUrl>
     <license type="expression">MIT</license>

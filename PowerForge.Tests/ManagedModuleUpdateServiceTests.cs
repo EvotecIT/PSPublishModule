@@ -166,6 +166,30 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_rejects_untrusted_repository_when_policy_requires_trust()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.Repository = new ManagedModuleRepository("Local", feed.Path, ManagedModuleRepositoryKind.Auto, trusted: false);
+        request.TrustPolicy = new ManagedModuleTrustPolicy
+        {
+            RequireTrustedRepository = true
+        };
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleTrustException>(() => service.UpdateAsync(request));
+
+        Assert.Equal("RepositoryNotTrusted", exception.Reason);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_honors_minimum_and_maximum_version()
     {
         using var feed = new TemporaryDirectory();

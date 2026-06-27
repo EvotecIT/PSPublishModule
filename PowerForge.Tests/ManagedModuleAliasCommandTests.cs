@@ -53,6 +53,24 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Theory]
+    [InlineData("Install-ManagedModule")]
+    [InlineData("Save-ManagedModule")]
+    [InlineData("Update-ManagedModule")]
+    public void Managed_module_delivery_commands_expose_trust_policy_parameters(string commandName)
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument(commandName);
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(command.Parameters.ContainsKey("TrustPolicy"));
+        Assert.True(command.Parameters.ContainsKey("RequireTrustedRepository"));
+        Assert.True(command.Parameters.ContainsKey("AllowedAuthor"));
+    }
+
+    [Theory]
     [InlineData("Find-ManagedModule")]
     [InlineData("Install-ManagedModule")]
     [InlineData("Measure-ManagedModule")]
@@ -99,6 +117,45 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.Equal("Company.Tools", result.Name);
         Assert.Equal("1.0.0", result.Version);
         Assert.Equal("CompanyModules", result.RepositoryName);
+    }
+
+    [Fact]
+    public void InstallManagedModule_requires_trusted_repository_profile_when_requested()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = "@{ ModuleVersion = '1.0.0' }"
+            });
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = feed.Path,
+            Trusted = false
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Scope", ManagedModuleInstallScope.Custom)
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("RequireTrustedRepository");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("not trusted", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Management.Automation;
 using System.Net;
 using PowerForge;
@@ -33,7 +34,11 @@ internal static class ManagedModuleCommandSupport
 
         var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
         var source = ResolveProfileSource(profile, profileName!, publish: false);
-        return new ManagedModuleRepository(ResolveProfileRepositoryName(profile, profileName!), ResolveRepositorySource(cmdlet, source));
+        return new ManagedModuleRepository(
+            ResolveProfileRepositoryName(profile, profileName!),
+            ResolveRepositorySource(cmdlet, source),
+            ManagedModuleRepositoryKind.Auto,
+            profile.Trusted);
     }
 
     internal static ManagedModuleRepository CreatePublishRepository(
@@ -52,7 +57,11 @@ internal static class ManagedModuleCommandSupport
 
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
             var source = ResolveProfileSource(profile, profileName!, publish: true);
-            return new ManagedModuleRepository(ResolveProfileRepositoryName(profile, profileName!), ResolveRepositorySource(cmdlet, source));
+            return new ManagedModuleRepository(
+                ResolveProfileRepositoryName(profile, profileName!),
+                ResolveRepositorySource(cmdlet, source),
+                ManagedModuleRepositoryKind.Auto,
+                profile.Trusted);
         }
 
         if (!string.IsNullOrWhiteSpace(repository))
@@ -116,6 +125,33 @@ internal static class ManagedModuleCommandSupport
                 UserName = userName,
                 Secret = secret
             };
+    }
+
+    internal static ManagedModuleTrustPolicy? CreateTrustPolicy(
+        ManagedModuleTrustPolicy? trustPolicy,
+        bool requireTrustedRepository,
+        string[]? allowedAuthors)
+    {
+        var normalizedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(allowedAuthors);
+        if (trustPolicy is null)
+        {
+            if (!requireTrustedRepository && normalizedAuthors.Count == 0)
+                return null;
+
+            return new ManagedModuleTrustPolicy
+            {
+                RequireTrustedRepository = requireTrustedRepository,
+                AllowedAuthors = normalizedAuthors
+            };
+        }
+
+        return new ManagedModuleTrustPolicy
+        {
+            RequireTrustedRepository = trustPolicy.RequireTrustedRepository || requireTrustedRepository,
+            AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(
+                (trustPolicy.AllowedAuthors ?? Array.Empty<string>()).Concat(normalizedAuthors).ToArray()),
+            ApplyToDependencies = trustPolicy.ApplyToDependencies
+        };
     }
 
     private static ManagedModuleRepositoryKind GetRepositoryKind(string repository)

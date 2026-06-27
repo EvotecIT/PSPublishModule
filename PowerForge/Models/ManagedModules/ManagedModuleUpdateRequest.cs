@@ -66,6 +66,11 @@ public sealed class ManagedModuleUpdateRequest
     public string? ExpectedPackageSha256 { get; set; }
 
     /// <summary>
+    /// Optional repository/package trust policy.
+    /// </summary>
+    public ManagedModuleTrustPolicy? TrustPolicy { get; set; }
+
+    /// <summary>
     /// Repository credential.
     /// </summary>
     public RepositoryCredential? Credential { get; set; }

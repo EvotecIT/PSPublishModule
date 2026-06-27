@@ -12,6 +12,22 @@ public sealed class ManagedModuleRepository
     /// <param name="source">Repository URL or local folder path.</param>
     /// <param name="kind">Repository kind, or auto to infer from the source.</param>
     public ManagedModuleRepository(string name, string source, ManagedModuleRepositoryKind kind = ManagedModuleRepositoryKind.Auto)
+        : this(name, source, kind, trusted: true)
+    {
+    }
+
+    /// <summary>
+    /// Creates a repository descriptor with explicit trust evidence.
+    /// </summary>
+    /// <param name="name">Friendly repository name.</param>
+    /// <param name="source">Repository URL or local folder path.</param>
+    /// <param name="kind">Repository kind, or auto to infer from the source.</param>
+    /// <param name="trusted">True when the repository is trusted by profile or caller policy.</param>
+    public ManagedModuleRepository(
+        string name,
+        string source,
+        ManagedModuleRepositoryKind kind,
+        bool trusted)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Repository name is required.", nameof(name));
@@ -23,6 +39,7 @@ public sealed class ManagedModuleRepository
         Kind = kind == ManagedModuleRepositoryKind.Auto
             ? InferKind(Source)
             : kind;
+        Trusted = trusted;
     }
 
     /// <summary>
@@ -39,6 +56,11 @@ public sealed class ManagedModuleRepository
     /// Repository protocol.
     /// </summary>
     public ManagedModuleRepositoryKind Kind { get; }
+
+    /// <summary>
+    /// True when repository trust was asserted by an explicit profile or caller policy.
+    /// </summary>
+    public bool Trusted { get; }
 
     private static ManagedModuleRepositoryKind InferKind(string source)
     {

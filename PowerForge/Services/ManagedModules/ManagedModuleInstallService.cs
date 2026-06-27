@@ -45,6 +45,7 @@ public sealed class ManagedModuleInstallService
         CancellationToken cancellationToken = default)
     {
         Validate(request);
+        ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
 
         var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
@@ -69,7 +70,9 @@ public sealed class ManagedModuleInstallService
             MinimumVersion = request.MinimumVersion,
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
-            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256)
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
+            AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors)
         };
     }
 
@@ -79,6 +82,7 @@ public sealed class ManagedModuleInstallService
         CancellationToken cancellationToken)
     {
         Validate(request);
+        ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var requestCountBefore = _repositoryClient.RequestCount;
 
@@ -112,6 +116,8 @@ public sealed class ManagedModuleInstallService
                     MaximumVersion = request.MaximumVersion,
                     VersionPolicy = request.VersionPolicy,
                     ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+                    RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
+                    AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
                     ModuleRoot = moduleRoot,
                     ModulePath = modulePath,
                     Elapsed = stopwatch.Elapsed,
@@ -127,6 +133,7 @@ public sealed class ManagedModuleInstallService
                 request.Credential,
                 cancellationToken).ConfigureAwait(false);
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
+            ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
             var extraction = _extractor.ExtractPackage(download.PackagePath, stageModulePath);
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
@@ -153,6 +160,8 @@ public sealed class ManagedModuleInstallService
                 MaximumVersion = request.MaximumVersion,
                 VersionPolicy = request.VersionPolicy,
                 ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+                RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
+                AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
                 ModuleRoot = moduleRoot,
                 ModulePath = modulePath,
                 Elapsed = stopwatch.Elapsed,
@@ -231,6 +240,7 @@ public sealed class ManagedModuleInstallService
                     ModuleRoot = request.ModuleRoot,
                     PackageCacheDirectory = cacheDirectory,
                     ExpectedPackageSha256 = null,
+                    TrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy),
                     Credential = request.Credential,
                     Force = false,
                     AllowClobber = request.AllowClobber,
@@ -324,6 +334,22 @@ public sealed class ManagedModuleInstallService
         => string.IsNullOrWhiteSpace(versionPolicy)
             ? ManagedModuleVersionRange.FromBounds(minimumVersion, maximumVersion)
             : ManagedModuleVersionRange.Parse(versionPolicy);
+
+    private static ManagedModuleTrustPolicy? ResolveDependencyTrustPolicy(ManagedModuleTrustPolicy? trustPolicy)
+    {
+        if (trustPolicy is null || !ManagedModuleTrustEvaluator.HasPolicy(trustPolicy))
+            return null;
+        if (trustPolicy.ApplyToDependencies)
+            return trustPolicy;
+        if (!trustPolicy.RequireTrustedRepository)
+            return null;
+
+        return new ManagedModuleTrustPolicy
+        {
+            RequireTrustedRepository = true,
+            ApplyToDependencies = false
+        };
+    }
 
     private static void CleanupEmptyStage(string stageRoot)
     {
