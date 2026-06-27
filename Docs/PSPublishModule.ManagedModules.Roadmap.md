@@ -10,7 +10,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Do not use `powershell.exe`, `pwsh`, `dotnet.exe`, `nuget.exe`, or embedded `.ps1` scripts for the new managed engine path.
 - [ ] Keep PowerShellGet and PSResourceGet as compatibility baselines and temporary fallbacks, not as the long-term engine.
 - [ ] Preserve easy migration from existing `Install-Module`, `Save-Module`, `Publish-Module`, `Install-PSResource`, `Save-PSResource`, and `Publish-PSResource` usage.
-- [ ] Keep `Install-PrivateModule` and `Update-PrivateModule` as thin compatibility/convenience wrappers over the managed engine.
+- [x] Keep `Install-PrivateModule` and `Update-PrivateModule` as thin compatibility/convenience wrappers with opt-in managed transport.
 - [ ] Keep `Invoke-ModuleState` as the day-to-day estate maintenance entrypoint.
 - [ ] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
 - [x] Write receipts and evidence only after successful delivery.
@@ -27,8 +27,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add non-conflicting public aliases for the managed find/save/install/update/publish commands.
 - [ ] Decide whether `Get-ManagedModule` is needed or whether `Get-ModuleState` remains the inventory surface.
 - [ ] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
-- [ ] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to `Install-ManagedModule`.
-- [ ] Keep `Update-PrivateModule` as a wrapper that maps private-gallery profile/repository options to `Update-ManagedModule`.
+- [x] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed install delivery when `-Transport ManagedModule` is selected.
+- [x] Keep `Update-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed update delivery when `-Transport ManagedModule` is selected.
 - [ ] Avoid adding separate public/private command families unless a wrapper has a clearly different operator purpose.
 
 ## Compatibility Parameters
@@ -244,10 +244,12 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 10: Benchmarks And Proof
 
-- [ ] Build a benchmark harness that runs the same scenario through managed, PowerShellGet, and PSResourceGet paths.
+- [x] Build a benchmark harness that runs the same scenario through managed, PowerShellGet, and PSResourceGet paths.
 - [x] Build the managed C# benchmark core for install, save, update, and failure-evidence scenarios.
 - [x] Expose a thin `Measure-ManagedModule` surface over the managed benchmark core.
 - [x] Write managed benchmark JSON and Markdown evidence reports.
+- [x] Add `Measure-ManagedModule -Engine Managed,PSResourceGet,PowerShellGet` selection.
+- [x] Record compatibility baseline success/failure/status/version evidence through the existing compatibility installer path.
 - [ ] Measure cold cache install.
 - [ ] Measure warm cache install.
 - [ ] Measure save to empty path.
@@ -285,8 +287,10 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 ## Phase 11: Transition And Cleanup
 
 - [ ] Keep current PowerShellGet/PSResourceGet wrappers while managed parity is incomplete.
-- [ ] Route `Install-PrivateModule` through the managed engine after install parity is proven.
-- [ ] Route `Update-PrivateModule` through the managed engine after update parity is proven.
+- [x] Add opt-in `Install-PrivateModule -Transport ManagedModule` routing.
+- [x] Add opt-in `Update-PrivateModule -Transport ManagedModule` routing.
+- [ ] Make managed transport the default for `Install-PrivateModule` after install parity is proven.
+- [ ] Make managed transport the default for `Update-PrivateModule` after update parity is proven.
 - [ ] Route required-module mirroring through the managed engine after save/publish parity is proven.
 - [ ] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
 - [ ] Remove embedded PowerShell scripts from the managed path.
