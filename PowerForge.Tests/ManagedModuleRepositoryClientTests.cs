@@ -77,6 +77,21 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_follows_nuget_v2_find_packages_next_pages()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Paged.Tools", includePrerelease: false);
+
+        Assert.Equal(new[] { "2.34.0", "2.38.0" }, versions.Select(version => version.Version));
+        Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/FindPackagesById()?id='Paged.Tools'");
+        Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/FindPackagesById()?id='Paged.Tools'&$skip=100");
+    }
+
+    [Fact]
     public async Task SearchPackagesAsync_uses_nuget_v2_search_endpoint()
     {
         var requests = new List<RecordedRequest>();
@@ -560,6 +575,21 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0-beta1</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Paged.Tools'")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
+                    "<link rel=\"next\" href=\"https://example.test/api/v2/FindPackagesById()?id='Paged.Tools'&amp;$skip=100\" />" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>2.34.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Paged.Tools'&$skip=100")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>2.38.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsLatestVersion&$top=10")

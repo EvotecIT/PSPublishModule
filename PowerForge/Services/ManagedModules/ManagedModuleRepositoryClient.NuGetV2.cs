@@ -12,7 +12,7 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        var document = await ReadNuGetV2XmlAsync(
+        var documents = await ReadNuGetV2XmlPagesAsync(
                 repository,
                 BuildNuGetV2FindPackagesByIdUri(repository.Source, packageId),
                 credential,
@@ -23,8 +23,8 @@ public sealed partial class ManagedModuleRepositoryClient
             .ConfigureAwait(false);
 
         XNamespace data = "http://schemas.microsoft.com/ado/2007/08/dataservices";
-        return document
-            .Descendants(data + "Version")
+        return documents
+            .SelectMany(document => document.Descendants(data + "Version"))
             .Select(static version => version.Value)
             .Where(version => !string.IsNullOrWhiteSpace(version))
             .Select(version => version.Trim())
@@ -136,6 +136,53 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             throw CreateRepositoryContractException(repository, operation, malformedMessage);
         }
+    }
+
+    private async Task<IReadOnlyList<XDocument>> ReadNuGetV2XmlPagesAsync(
+        ManagedModuleRepository repository,
+        Uri uri,
+        RepositoryCredential? credential,
+        string operation,
+        string failureMessage,
+        string malformedMessage,
+        CancellationToken cancellationToken)
+    {
+        const int MaxPages = 100;
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+        var documents = new List<XDocument>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var current = uri;
+
+        for (var page = 0; page < MaxPages; page++)
+        {
+            if (!visited.Add(current.AbsoluteUri))
+                throw CreateRepositoryContractException(repository, operation, $"Managed module NuGet v2 query for '{uri}' returned a repeated next page link.");
+
+            var document = await ReadNuGetV2XmlAsync(
+                    repository,
+                    current,
+                    credential,
+                    operation,
+                    failureMessage,
+                    malformedMessage,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            documents.Add(document);
+
+            var next = document
+                .Descendants(atom + "link")
+                .FirstOrDefault(link => string.Equals((string?)link.Attribute("rel"), "next", StringComparison.OrdinalIgnoreCase))
+                ?.Attribute("href")
+                ?.Value;
+            if (string.IsNullOrWhiteSpace(next))
+                return documents;
+
+            current = Uri.TryCreate(next, UriKind.Absolute, out var absolute)
+                ? absolute
+                : new Uri(current, next);
+        }
+
+        throw CreateRepositoryContractException(repository, operation, $"Managed module NuGet v2 query for '{uri}' exceeded the page limit.");
     }
 
     private static ManagedModuleVersionInfo? ReadNuGetV2SearchResult(
