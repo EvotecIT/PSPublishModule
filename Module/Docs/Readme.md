@@ -1,8 +1,8 @@
----
+﻿---
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.36
+Help Version: 3.0.38
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -31,6 +31,9 @@ Exports a PowerShell-authored project release object to JSON.
 ### [Export-ModuleRepositoryProfile](Export-ModuleRepositoryProfile.md)
 Exports saved private module repository profiles to a non-secret JSON file.
 
+### [Find-ManagedModule](Find-ManagedModule.md)
+Finds module versions from a managed module repository.
+
 ### [Get-AppleDevice](Get-AppleDevice.md)
 Lists Apple devices available through xcrun devicectl.
 
@@ -45,6 +48,9 @@ Reads App Store Connect TestFlight beta testers.
 
 ### [Get-AppStoreConnectBuild](Get-AppStoreConnectBuild.md)
 Reads build information from App Store Connect.
+
+### [Get-AppStoreConnectReleaseState](Get-AppStoreConnectReleaseState.md)
+Reads a compact App Store Connect release state summary for App Store and TestFlight release work.
 
 ### [Get-AppStoreConnectScreenshot](Get-AppStoreConnectScreenshot.md)
 Reads screenshots in an App Store Connect screenshot set.
@@ -77,6 +83,12 @@ Gets module manifest information from a project directory.
 
 ### [Get-ModuleRepositoryProfile](Get-ModuleRepositoryProfile.md)
 Gets saved private module repository profiles.
+
+### [Get-ModuleState](Get-ModuleState.md)
+Gets module-state inventory from the local machine or an inventory artifact.
+
+### [Get-ModuleStatePlan](Get-ModuleStatePlan.md)
+Builds a module-state plan from module-state objects or artifacts.
 
 ### [Get-ModuleTestFailures](Get-ModuleTestFailures.md)
 Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.
@@ -114,6 +126,9 @@ Performs one-command enterprise onboarding for a private module repository profi
 ### [Install-AppleApp](Install-AppleApp.md)
 Installs a built Apple .app bundle on a physical device.
 
+### [Install-ManagedModule](Install-ManagedModule.md)
+Installs PowerShell modules through the managed C# module engine.
+
 ### [Install-ModuleDependency](Install-ModuleDependency.md)
 Installs a module and its embedded dependencies to an explicit private runtime folder.
 
@@ -141,6 +156,12 @@ Repository-wide .NET package release workflow (discover, version, pack, publish)
 ### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
 Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
 
+### [Invoke-ModuleState](Invoke-ModuleState.md)
+Runs the one-stop module-state management workflow.
+
+### [Invoke-ModuleStatePlan](Invoke-ModuleStatePlan.md)
+Prepares private-module delivery commands and an optional receipt from a module-state plan.
+
 ### [Invoke-ModuleTestSuite](Invoke-ModuleTestSuite.md)
 Complete module testing suite that handles dependencies, imports, and test execution.
 
@@ -161,6 +182,9 @@ Executes a repository-wide .NET build/release pipeline from a JSON configuration
 
 ### [Invoke-ProjectRelease](Invoke-ProjectRelease.md)
 Executes a PowerShell-authored project release object through the unified PowerForge release engine.
+
+### [Measure-ManagedModule](Measure-ManagedModule.md)
+Measures managed module lifecycle scenarios through the managed C# module engine.
 
 ### [New-AppleAppArchive](New-AppleAppArchive.md)
 Creates an Apple app .xcarchive using xcodebuild.
@@ -351,6 +375,9 @@ Distributes a processed App Store Connect build to TestFlight beta groups and op
 ### [Publish-GitHubReleaseAsset](Publish-GitHubReleaseAsset.md)
 Publishes a release asset to GitHub (creates a release and uploads a zip).
 
+### [Publish-ManagedModule](Publish-ManagedModule.md)
+Publishes a PowerShell module package through the managed C# module engine.
+
 ### [Publish-NugetPackage](Publish-NugetPackage.md)
 Pushes NuGet packages to a feed using dotnet nuget push.
 
@@ -368,6 +395,9 @@ Removes a saved private module repository profile.
 
 ### [Remove-ProjectFiles](Remove-ProjectFiles.md)
 Removes specific files and folders from a project directory with safety features.
+
+### [Save-ManagedModule](Save-ManagedModule.md)
+Saves modules from a managed repository to an explicit module root.
 
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
 Creates a new release for the given GitHub repository and optionally uploads assets.
@@ -403,6 +433,9 @@ Launches an installed Apple app on a physical device.
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
 
+### [Submit-AppStoreConnectTestFlightBuildForReview](Submit-AppStoreConnectTestFlightBuildForReview.md)
+Submits a TestFlight build to Beta App Review for external testing.
+
 ### [Submit-AppStoreConnectVersionForReview](Submit-AppStoreConnectVersionForReview.md)
 Submits a prepared App Store Connect Distribution version to App Review.
 
@@ -426,6 +459,12 @@ Validates a curated isolated module profile without importing it.
 
 ### [Test-ModuleRepositoryProfile](Test-ModuleRepositoryProfile.md)
 Tests saved private module repository profiles and local authentication prerequisites.
+
+### [Test-ModuleState](Test-ModuleState.md)
+Tests module state against a desired state or an existing plan.
+
+### [Update-ManagedModule](Update-ManagedModule.md)
+Updates installed PowerShell modules through the managed C# module engine.
 
 ### [Update-ModuleRepository](Update-ModuleRepository.md)
 Refreshes or repairs an Azure Artifacts private PowerShell module repository registration.

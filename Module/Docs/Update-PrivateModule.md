@@ -1,4 +1,4 @@
----
+﻿---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
@@ -11,22 +11,22 @@ Updates one or more modules from a private repository, optionally refreshing Azu
 ## SYNTAX
 ### Repository (Default)
 ```powershell
-Update-PrivateModule [-Name] <string[]> -Repository <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-Prerelease] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-PrivateModule [-Name] <string[]> -Repository <string> [-RepositoryName <string>] [-Transport <ModuleStateDeliveryTransport>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### AzureArtifacts
 ```powershell
-Update-PrivateModule [-Name] <string[]> [-Repository <string>] [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-PrivateModule [-Name] <string[]> [-Repository <string>] [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-RepositoryName <string>] [-Transport <ModuleStateDeliveryTransport>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Profile
 ```powershell
-Update-PrivateModule [-Name] <string[]> -ProfileName <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-PrivateModule [-Name] <string[]> -ProfileName <string> [-Transport <ModuleStateDeliveryTransport>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### MicrosoftArtifactRegistry
 ```powershell
-Update-PrivateModule [-Name] <string[]> -MicrosoftArtifactRegistry [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <int>] [-InstallPrerequisites] [-Prerelease] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-PrivateModule [-Name] <string[]> -MicrosoftArtifactRegistry [-RepositoryName <string>] [-Transport <ModuleStateDeliveryTransport>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <int>] [-InstallPrerequisites] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -48,6 +48,54 @@ Update-PrivateModule -Name 'ModuleA', 'ModuleB' -ProfileName 'Company' -InstallP
 
 
 ## PARAMETERS
+
+### -AcceptLicense
+Accept package licenses when packages declare license acceptance is required.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AllowClobber
+Allow command exports to overlap with other modules in the managed target root.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AllowLoadedModuleUpdate
+Allow updating even when matching loaded module evidence is supplied to managed delivery.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -AzureArtifactsFeed
 Azure Artifacts feed name.
@@ -161,6 +209,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -Force
+Reinstall the selected target version when managed delivery is used.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -InstallPrerequisites
 Installs missing private-gallery prerequisites before automatic registration refresh, including PSResourceGet requirements and, for Azure Artifacts, the credential provider.
 
@@ -209,6 +273,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -MaximumVersion
+Maximum target version when Version is omitted.
+
+```yaml
+Type: String
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -MicrosoftArtifactRegistry
 Updates Microsoft-owned packages from Microsoft Artifact Registry, registering MAR first when needed.
 
@@ -219,6 +299,38 @@ Aliases: None
 Possible values:
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MinimumVersion
+Minimum target version when Version is omitted.
+
+```yaml
+Type: String
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ModuleRoot
+Explicit module root used by managed delivery.
+
+```yaml
+Type: String
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: Path
+Possible values:
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -236,6 +348,22 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PackageCacheDirectory
+Optional managed package cache directory.
+
+```yaml
+Type: String
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
@@ -338,11 +466,11 @@ Accept wildcard characters: True
 ```
 
 ### -RepositoryName
-Optional repository name override when Azure Artifacts details are supplied.
+Optional repository name override when repository details are supplied.
 
 ```yaml
 Type: String
-Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
+Parameter Sets: Repository, AzureArtifacts, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
@@ -401,6 +529,70 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -RequireSourceMatch
+Require managed receipt source evidence to match the requested repository before reporting up to date.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Scope inspected by managed delivery, or by compatibility delivery when explicitly supplied.
+
+```yaml
+Type: ManagedModuleInstallScope
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values: CurrentUser, AllUsers, Custom
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ShellEdition
+PowerShell path family used when managed delivery resolves default module roots.
+
+```yaml
+Type: ManagedModuleShellEdition
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values: Auto, Desktop, Core
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipDependencyCheck
+Skip installing dependencies declared by the package when managed delivery is used.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: SkipDependenciesCheck
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -Tool
 Registration strategy used when Azure Artifacts details are supplied. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.
 
@@ -417,12 +609,60 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -Transport
+Delivery engine used for module update.
+
+```yaml
+Type: ModuleStateDeliveryTransport
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: None
+Possible values: PrivateModule, ManagedModule
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -Trusted
 When true, marks the repository as trusted during automatic registration refresh.
 
 ```yaml
 Type: Boolean
 Parameter Sets: AzureArtifacts, MicrosoftArtifactRegistry
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Version
+Exact target version. When omitted, the latest repository version is used.
+
+```yaml
+Type: String
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
+Aliases: RequiredVersion
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -VersionPolicy
+NuGet-style version range policy used by the managed transport when Version is omitted.
+
+```yaml
+Type: String
+Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
 
