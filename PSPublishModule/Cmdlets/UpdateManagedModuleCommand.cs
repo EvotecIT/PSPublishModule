@@ -23,7 +23,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsData.Update, "ManagedModule", SupportsShouldProcess = true)]
 [Alias("Update-PublicModule")]
-[OutputType(typeof(ManagedModuleUpdateResult))]
+[OutputType(typeof(ManagedModuleUpdateResult), typeof(ManagedModuleUpdatePlan))]
 public sealed class UpdateManagedModuleCommand : PSCmdlet
 {
     /// <summary>Module names to update.</summary>
@@ -124,6 +124,10 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [Alias("SkipDependenciesCheck")]
     public SwitchParameter SkipDependencyCheck { get; set; }
 
+    /// <summary>Return an inspectable update plan without writing files.</summary>
+    [Parameter]
+    public SwitchParameter Plan { get; set; }
+
     /// <summary>Updates requested modules.</summary>
     protected override void ProcessRecord()
     {
@@ -135,31 +139,36 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
 
         foreach (var moduleName in Name)
         {
+            var request = new ManagedModuleUpdateRequest
+            {
+                Repository = repository,
+                Name = moduleName,
+                Version = Version,
+                MinimumVersion = MinimumVersion,
+                MaximumVersion = MaximumVersion,
+                VersionPolicy = VersionPolicy,
+                IncludePrerelease = Prerelease.IsPresent,
+                Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
+                ShellEdition = ShellEdition,
+                ModuleRoot = moduleRoot,
+                PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                Credential = credential,
+                Force = Force.IsPresent,
+                AllowClobber = AllowClobber.IsPresent,
+                AcceptLicense = AcceptLicense.IsPresent,
+                SkipDependencyCheck = SkipDependencyCheck.IsPresent
+            };
+
+            if (Plan.IsPresent)
+            {
+                WriteObject(service.PlanUpdateAsync(request).GetAwaiter().GetResult());
+                continue;
+            }
+
             if (!ShouldProcess(moduleName, $"Update managed module from repository '{repository.Name}'"))
                 continue;
 
-            var result = service.UpdateAsync(
-                    new ManagedModuleUpdateRequest
-                    {
-                        Repository = repository,
-                        Name = moduleName,
-                        Version = Version,
-                        MinimumVersion = MinimumVersion,
-                        MaximumVersion = MaximumVersion,
-                        VersionPolicy = VersionPolicy,
-                        IncludePrerelease = Prerelease.IsPresent,
-                        Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
-                        ShellEdition = ShellEdition,
-                        ModuleRoot = moduleRoot,
-                        PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
-                        Credential = credential,
-                        Force = Force.IsPresent,
-                        AllowClobber = AllowClobber.IsPresent,
-                        AcceptLicense = AcceptLicense.IsPresent,
-                        SkipDependencyCheck = SkipDependencyCheck.IsPresent
-                    })
-                .GetAwaiter()
-                .GetResult();
+            var result = service.UpdateAsync(request).GetAwaiter().GetResult();
 
             WriteObject(result);
         }
