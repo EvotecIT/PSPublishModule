@@ -372,19 +372,130 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
     }
 
+    [Fact]
+    public async Task UpdateAsync_aligns_installed_family_members_to_selected_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Users.2.0.0.nupkg"),
+            "Company.Cloud.Users",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Users", "2.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Groups.2.0.0.nupkg"),
+            "Company.Cloud.Groups",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Groups", "2.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "1.5.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path, "Company.Cloud.Users");
+        request.FamilyPolicy = new ManagedModuleFamilyPolicy
+        {
+            Name = "CompanyCloud",
+            ModuleNamePrefix = "Company.Cloud."
+        };
+
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "2.0.0", "Company.Cloud.Users.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "2.0.0", "Company.Cloud.Groups.psd1")));
+        var familyResult = Assert.Single(result.FamilyResults);
+        Assert.Equal("Company.Cloud.Groups", familyResult.Name);
+        Assert.Equal(ManagedModuleFamilyUpdatePlanAction.Update, familyResult.Action);
+        Assert.Equal("1.5.0", familyResult.PreviousVersion);
+        Assert.Equal("2.0.0", familyResult.TargetVersion);
+        Assert.NotNull(familyResult.InstallResult);
+        AssertReceipt(familyResult.ReceiptPath, "Update", "Company.Cloud.Groups", "2.0.0", "1.5.0");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_blocks_family_update_before_writing_when_target_version_is_missing_for_member()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Users.2.0.0.nupkg"),
+            "Company.Cloud.Users",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Users", "2.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "1.5.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path, "Company.Cloud.Users");
+        request.FamilyPolicy = new ManagedModuleFamilyPolicy
+        {
+            ModuleNamePrefix = "Company.Cloud."
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(request));
+
+        Assert.Contains("family update cannot be applied", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "2.0.0")));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_blocks_loaded_family_member_when_family_update_would_write()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Users.2.0.0.nupkg"),
+            "Company.Cloud.Users",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Users", "2.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Groups.2.0.0.nupkg"),
+            "Company.Cloud.Groups",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Groups", "2.0.0"));
+        var loadedPath = Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "1.5.0");
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "2.0.0"));
+        Directory.CreateDirectory(loadedPath);
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path, "Company.Cloud.Users");
+        request.FamilyPolicy = new ManagedModuleFamilyPolicy
+        {
+            ModuleNamePrefix = "Company.Cloud."
+        };
+        request.LoadedModules = new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Cloud.Groups",
+                Version = "1.5.0",
+                ModuleBase = loadedPath
+            }
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(request));
+
+        Assert.Contains("already loaded", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Company.Cloud.Groups", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "2.0.0")));
+    }
+
     private static ManagedModuleUpdateRequest CreateRequest(string feedPath, string moduleRoot)
+        => CreateRequest(feedPath, moduleRoot, "Company.Tools");
+
+    private static ManagedModuleUpdateRequest CreateRequest(string feedPath, string moduleRoot, string name)
         => new()
         {
             Repository = new ManagedModuleRepository("Local", feedPath),
-            Name = "Company.Tools",
+            Name = name,
             Scope = ManagedModuleInstallScope.Custom,
             ModuleRoot = moduleRoot
         };
 
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
+        => CreateModuleFiles("Company.Tools", version);
+
+    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string moduleName, string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+            [moduleName + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
 
     private static IReadOnlyDictionary<string, string> CreateDependencyFiles(string version)

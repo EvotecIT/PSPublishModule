@@ -74,4 +74,9 @@ public sealed class ManagedModuleUpdatePlan
     /// NuGet-style version policy requested by the caller, when supplied.
     /// </summary>
     public string? VersionPolicy { get; set; }
+
+    /// <summary>
+    /// Planned actions for related installed modules covered by the family policy.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> FamilyActions { get; set; } = Array.Empty<ManagedModuleFamilyUpdatePlanItem>();
 }

@@ -91,6 +91,11 @@ public sealed class ManagedModuleUpdateRequest
     public IReadOnlyList<ManagedModuleLoadedModule> LoadedModules { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
 
     /// <summary>
+    /// Optional family policy used to keep related installed modules version-coherent.
+    /// </summary>
+    public ManagedModuleFamilyPolicy? FamilyPolicy { get; set; }
+
+    /// <summary>
     /// Allow update when the requested module is already loaded in the current session.
     /// </summary>
     public bool AllowLoadedModuleUpdate { get; set; }
