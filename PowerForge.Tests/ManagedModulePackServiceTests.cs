@@ -93,6 +93,7 @@ public sealed class ManagedModulePackServiceTests
 
         Assert.False(result.Published);
         Assert.True(result.Duplicate);
+        Assert.True(result.Elapsed > TimeSpan.Zero);
         Assert.Equal("existing", File.ReadAllText(destinationPath));
         Assert.Contains("already exists", result.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -116,6 +117,7 @@ public sealed class ManagedModulePackServiceTests
 
         Assert.True(result.Published);
         Assert.False(result.Duplicate);
+        Assert.True(result.Elapsed > TimeSpan.Zero);
         Assert.NotEqual("existing", File.ReadAllText(destinationPath));
     }
 

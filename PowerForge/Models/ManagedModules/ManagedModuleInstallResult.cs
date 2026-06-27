@@ -36,6 +36,11 @@ public sealed class ManagedModuleInstallResult
     public string ModulePath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Elapsed time spent by this install operation.
+    /// </summary>
+    public TimeSpan Elapsed { get; set; }
+
+    /// <summary>
     /// Package download or copy result when the install performed package delivery.
     /// </summary>
     public ManagedModuleDownloadResult? Download { get; set; }

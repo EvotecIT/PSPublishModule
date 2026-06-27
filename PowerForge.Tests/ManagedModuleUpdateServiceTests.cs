@@ -24,6 +24,7 @@ public sealed class ManagedModuleUpdateServiceTests
 
         Assert.Equal(ManagedModuleUpdateStatus.UpToDate, result.Status);
         Assert.Equal("1.0.0", result.PreviousVersion);
+        Assert.True(result.Elapsed > TimeSpan.Zero);
         Assert.Null(result.InstallResult);
     }
 
@@ -50,6 +51,7 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
         Assert.Equal("1.0.0", result.PreviousVersion);
         Assert.Equal("1.1.0", result.TargetVersion);
+        Assert.True(result.Elapsed > TimeSpan.Zero);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
         Assert.False(string.IsNullOrWhiteSpace(result.ReceiptPath));
         Assert.Equal(result.ReceiptPath, result.InstallResult?.ReceiptPath);

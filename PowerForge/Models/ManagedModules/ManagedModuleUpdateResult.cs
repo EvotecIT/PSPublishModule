@@ -41,6 +41,11 @@ public sealed class ManagedModuleUpdateResult
     public string ModulePath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Elapsed time spent by this update operation.
+    /// </summary>
+    public TimeSpan Elapsed { get; set; }
+
+    /// <summary>
     /// Install result when the operation wrote files.
     /// </summary>
     public ManagedModuleInstallResult? InstallResult { get; set; }

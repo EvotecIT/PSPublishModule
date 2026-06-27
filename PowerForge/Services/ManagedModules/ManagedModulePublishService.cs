@@ -30,6 +30,7 @@ public sealed class ManagedModulePublishService
         CancellationToken cancellationToken = default)
     {
         Validate(request);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var outputDirectory = ResolveOutputDirectory(request);
         var package = _packService.Pack(new ManagedModulePackRequest
@@ -60,6 +61,7 @@ public sealed class ManagedModulePublishService
             PackagePath = package.PackagePath,
             FileCount = package.FileCount,
             PackageBytes = package.PackageBytes,
+            Elapsed = stopwatch.Elapsed,
             RepositoryName = request.Repository.Name,
             RepositorySource = request.Repository.Source,
             PublishSource = publish.PublishSource,

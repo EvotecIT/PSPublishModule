@@ -40,6 +40,7 @@ public sealed class ManagedModuleInstallService
         CancellationToken cancellationToken)
     {
         Validate(request);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
@@ -66,7 +67,8 @@ public sealed class ManagedModuleInstallService
                     Status = ManagedModuleInstallStatus.AlreadyInstalled,
                     RepositoryName = request.Repository.Name,
                     ModuleRoot = moduleRoot,
-                    ModulePath = modulePath
+                    ModulePath = modulePath,
+                    Elapsed = stopwatch.Elapsed
                 };
             }
 
@@ -99,6 +101,7 @@ public sealed class ManagedModuleInstallService
                 RepositoryName = request.Repository.Name,
                 ModuleRoot = moduleRoot,
                 ModulePath = modulePath,
+                Elapsed = stopwatch.Elapsed,
                 Download = download,
                 FileCount = extraction.FileCount,
                 ExtractedBytes = extraction.BytesWritten,
