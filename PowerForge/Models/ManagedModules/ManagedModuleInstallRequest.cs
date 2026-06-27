@@ -21,6 +21,16 @@ public sealed class ManagedModuleInstallRequest
     public string? Version { get; set; }
 
     /// <summary>
+    /// Minimum package version allowed when <see cref="Version" /> is omitted.
+    /// </summary>
+    public string? MinimumVersion { get; set; }
+
+    /// <summary>
+    /// Maximum package version allowed when <see cref="Version" /> is omitted.
+    /// </summary>
+    public string? MaximumVersion { get; set; }
+
+    /// <summary>
     /// Include prerelease versions when resolving latest.
     /// </summary>
     public bool IncludePrerelease { get; set; }

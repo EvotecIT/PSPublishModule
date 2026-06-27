@@ -85,6 +85,61 @@ public sealed class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_selects_highest_version_within_bounds()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.5.0.nupkg"),
+            "Company.Tools",
+            "1.5.0",
+            files: CreateModuleFiles("1.5.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.0.0.nupkg"),
+            "Company.Tools",
+            "2.0.0",
+            files: CreateModuleFiles("2.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            MinimumVersion = "1.1.0",
+            MaximumVersion = "1.9.9",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.5.0", result.Version);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.5.0", "Company.Tools.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_rejects_exact_version_with_bounds()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            MinimumVersion = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+    }
+
+    [Fact]
     public async Task InstallAsync_force_replaces_existing_version()
     {
         using var feed = new TemporaryDirectory();

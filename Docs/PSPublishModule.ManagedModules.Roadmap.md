@@ -37,8 +37,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-Credential`.
 - [x] Support `-Scope CurrentUser|AllUsers`.
 - [x] Support `-RequiredVersion`.
-- [ ] Support `-MinimumVersion`.
-- [ ] Support `-MaximumVersion`.
+- [x] Support `-MinimumVersion`.
+- [x] Support `-MaximumVersion`.
 - [x] Support `-Version`.
 - [ ] Support `-VersionPolicy`.
 - [x] Support `-Prerelease`.
@@ -117,7 +117,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 ## Phase 4: Managed Resolver
 
 - [ ] Implement semantic version parsing and comparison shared across module state and managed installs.
-- [ ] Implement PowerShellGet-style minimum/maximum/required version policies.
+- [x] Implement PowerShellGet-style minimum/maximum/required version policies.
 - [ ] Implement PSResourceGet/NuGet range policies.
 - [ ] Implement `-VersionPolicy` as the canonical internal representation.
 - [ ] Implement prerelease inclusion rules.
@@ -127,7 +127,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Implement family coherence policies for related module families.
 - [ ] Implement conflict diagnostics for incompatible loaded modules.
 - [ ] Implement conflict diagnostics for mixed scopes and side-by-side versions.
-- [ ] Add tests for exact/min/max/range policies.
+- [x] Add tests for exact/min/max/range policies.
 - [ ] Add tests for prerelease resolution.
 - [ ] Add tests for dependency closure.
 - [ ] Add tests for source preference and family conflict cases.

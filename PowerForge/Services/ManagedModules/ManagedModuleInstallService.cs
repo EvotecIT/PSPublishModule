@@ -41,9 +41,7 @@ public sealed class ManagedModuleInstallService
     {
         Validate(request);
 
-        var version = string.IsNullOrWhiteSpace(request.Version)
-            ? await ResolveLatestVersionAsync(request, cancellationToken).ConfigureAwait(false)
-            : request.Version!.Trim();
+        var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
         using var dependencyScope = context.Enter(request.Name);
@@ -114,8 +112,12 @@ public sealed class ManagedModuleInstallService
         }
     }
 
-    private async Task<string> ResolveLatestVersionAsync(ManagedModuleInstallRequest request, CancellationToken cancellationToken)
+    private async Task<string> ResolveSelectedVersionAsync(ManagedModuleInstallRequest request, CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(request.Version))
+            return request.Version!.Trim();
+
+        var range = ManagedModuleVersionRange.FromBounds(request.MinimumVersion, request.MaximumVersion);
         var versions = await _repositoryClient.GetVersionsAsync(
             request.Repository,
             request.Name,
@@ -123,9 +125,11 @@ public sealed class ManagedModuleInstallService
             request.Credential,
             cancellationToken).ConfigureAwait(false);
 
-        var latest = versions.LastOrDefault();
+        var latest = versions
+            .Where(version => range.IsSatisfiedBy(version.Version))
+            .LastOrDefault();
         if (latest is null)
-            throw new InvalidOperationException($"No versions of '{request.Name}' were found in repository '{request.Repository.Name}'.");
+            throw new InvalidOperationException($"No versions of '{request.Name}' satisfying range '{range}' were found in repository '{request.Repository.Name}'.");
 
         return latest.Version;
     }
@@ -224,6 +228,9 @@ public sealed class ManagedModuleInstallService
             throw new ArgumentException("Repository is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Module name is required.", nameof(request));
+        if (!string.IsNullOrWhiteSpace(request.Version) &&
+            (!string.IsNullOrWhiteSpace(request.MinimumVersion) || !string.IsNullOrWhiteSpace(request.MaximumVersion)))
+            throw new ArgumentException("Version cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
         if (request.Scope == ManagedModuleInstallScope.Custom && string.IsNullOrWhiteSpace(request.ModuleRoot))
             throw new ArgumentException("ModuleRoot is required when Scope is Custom.", nameof(request));
     }

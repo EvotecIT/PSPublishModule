@@ -40,9 +40,7 @@ public sealed class ManagedModuleUpdateService
         Validate(request);
 
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        var targetVersion = string.IsNullOrWhiteSpace(request.Version)
-            ? await ResolveLatestVersionAsync(request, cancellationToken).ConfigureAwait(false)
-            : request.Version!.Trim();
+        var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
         var currentVersion = installedVersions.LastOrDefault();
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), targetVersion);
@@ -70,6 +68,8 @@ public sealed class ManagedModuleUpdateService
                 Repository = request.Repository,
                 Name = request.Name,
                 Version = targetVersion,
+                MinimumVersion = null,
+                MaximumVersion = null,
                 IncludePrerelease = request.IncludePrerelease,
                 Scope = request.Scope,
                 ShellEdition = request.ShellEdition,
@@ -98,8 +98,12 @@ public sealed class ManagedModuleUpdateService
         };
     }
 
-    private async Task<string> ResolveLatestVersionAsync(ManagedModuleUpdateRequest request, CancellationToken cancellationToken)
+    private async Task<string> ResolveSelectedVersionAsync(ManagedModuleUpdateRequest request, CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(request.Version))
+            return request.Version!.Trim();
+
+        var range = ManagedModuleVersionRange.FromBounds(request.MinimumVersion, request.MaximumVersion);
         var versions = await _repositoryClient.GetVersionsAsync(
             request.Repository,
             request.Name,
@@ -107,9 +111,11 @@ public sealed class ManagedModuleUpdateService
             request.Credential,
             cancellationToken).ConfigureAwait(false);
 
-        var latest = versions.LastOrDefault();
+        var latest = versions
+            .Where(version => range.IsSatisfiedBy(version.Version))
+            .LastOrDefault();
         if (latest is null)
-            throw new InvalidOperationException($"No versions of '{request.Name}' were found in repository '{request.Repository.Name}'.");
+            throw new InvalidOperationException($"No versions of '{request.Name}' satisfying range '{range}' were found in repository '{request.Repository.Name}'.");
 
         return latest.Version;
     }
@@ -136,6 +142,9 @@ public sealed class ManagedModuleUpdateService
             throw new ArgumentException("Repository is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Module name is required.", nameof(request));
+        if (!string.IsNullOrWhiteSpace(request.Version) &&
+            (!string.IsNullOrWhiteSpace(request.MinimumVersion) || !string.IsNullOrWhiteSpace(request.MaximumVersion)))
+            throw new ArgumentException("Version cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
         if (request.Scope == ManagedModuleInstallScope.Custom && string.IsNullOrWhiteSpace(request.ModuleRoot))
             throw new ArgumentException("ModuleRoot is required when Scope is Custom.", nameof(request));
     }

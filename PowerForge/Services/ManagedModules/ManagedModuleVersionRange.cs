@@ -32,6 +32,18 @@ internal sealed class ManagedModuleVersionRange
 
     public static ManagedModuleVersionRange Any { get; } = new(null, false, null, false, null, false);
 
+    public static ManagedModuleVersionRange FromBounds(string? minimumVersion, string? maximumVersion)
+        => string.IsNullOrWhiteSpace(minimumVersion) && string.IsNullOrWhiteSpace(maximumVersion)
+            ? Any
+            : new ManagedModuleVersionRange(
+                Normalize(minimumVersion),
+                includeMinimum: true,
+                Normalize(maximumVersion),
+                includeMaximum: true,
+                exactVersion: null,
+                allowsPrerelease: ManagedModuleVersionComparer.IsPrerelease(minimumVersion ?? string.Empty) ||
+                                   ManagedModuleVersionComparer.IsPrerelease(maximumVersion ?? string.Empty));
+
     public static ManagedModuleVersionRange Parse(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -96,6 +108,6 @@ internal sealed class ManagedModuleVersionRange
            value.EndsWith("]", StringComparison.Ordinal) ||
            value.EndsWith(")", StringComparison.Ordinal);
 
-    private static string? Normalize(string value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string? Normalize(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 }
