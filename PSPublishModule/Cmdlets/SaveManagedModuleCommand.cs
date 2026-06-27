@@ -5,34 +5,40 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Installs PowerShell modules through the managed C# module engine.
+/// Saves modules from a managed repository to an explicit module root.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This command is the first managed install surface. It uses PowerForge repository lookup, package download, and
-/// safe archive extraction directly instead of invoking PowerShellGet or PSResourceGet.
+/// This command uses the same managed C# repository and archive engine as <c>Install-ManagedModule</c>, but requires
+/// an explicit destination root instead of installing into the default PowerShell module paths.
 /// </para>
 /// </remarks>
 /// <example>
-/// <summary>Install the latest stable module from the default public gallery endpoint</summary>
-/// <code>Install-ManagedModule -Name Company.Tools</code>
+/// <summary>Save the latest stable module from the default public gallery endpoint</summary>
+/// <code>Save-ManagedModule -Name Company.Tools -Path C:\Modules</code>
 /// </example>
 /// <example>
-/// <summary>Install an exact module version from a local feed into an explicit root</summary>
-/// <code>Install-ManagedModule -Name Company.Tools -Version 1.2.0 -Repository C:\Packages -Scope Custom -ModuleRoot C:\Modules</code>
+/// <summary>Save an exact version from a local feed</summary>
+/// <code>Save-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -Repository C:\Packages -Path C:\Modules</code>
 /// </example>
-[Cmdlet(VerbsLifecycle.Install, "ManagedModule", SupportsShouldProcess = true)]
+[Cmdlet(VerbsData.Save, "ManagedModule", SupportsShouldProcess = true)]
 [OutputType(typeof(ManagedModuleInstallResult))]
-public sealed class InstallManagedModuleCommand : PSCmdlet
+public sealed class SaveManagedModuleCommand : PSCmdlet
 {
-    /// <summary>Module names to install.</summary>
+    /// <summary>Module names to save.</summary>
     [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
 
+    /// <summary>Destination module root.</summary>
+    [Parameter(Mandatory = true, Position = 1)]
+    [Alias("DestinationPath", "ModuleRoot")]
+    [ValidateNotNullOrEmpty]
+    public string Path { get; set; } = string.Empty;
+
     /// <summary>Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.</summary>
-    [Parameter(Position = 1)]
+    [Parameter]
     [Alias("Source", "RepositoryUri")]
     [ValidateNotNullOrEmpty]
     public string Repository { get; set; } = ManagedModuleCommandSupport.DefaultRepositorySource;
@@ -42,7 +48,7 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string RepositoryName { get; set; } = ManagedModuleCommandSupport.DefaultRepositoryName;
 
-    /// <summary>Exact package version to install. When omitted, the latest repository version is used.</summary>
+    /// <summary>Exact package version to save. When omitted, the latest repository version is used.</summary>
     [Parameter]
     [Alias("RequiredVersion")]
     [ValidateNotNullOrEmpty]
@@ -52,20 +58,6 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     [Parameter]
     [Alias("AllowPrerelease")]
     public SwitchParameter Prerelease { get; set; }
-
-    /// <summary>Install scope used when ModuleRoot is not supplied.</summary>
-    [Parameter]
-    public ManagedModuleInstallScope Scope { get; set; } = ManagedModuleInstallScope.CurrentUser;
-
-    /// <summary>PowerShell path family used when resolving default CurrentUser or AllUsers module roots.</summary>
-    [Parameter]
-    public ManagedModuleShellEdition ShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
-
-    /// <summary>Explicit module root. Use with Scope Custom.</summary>
-    [Parameter]
-    [Alias("Path")]
-    [ValidateNotNullOrEmpty]
-    public string? ModuleRoot { get; set; }
 
     /// <summary>Optional package cache directory.</summary>
     [Parameter]
@@ -87,14 +79,14 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     [Alias("CredentialPath", "TokenPath")]
     public string? CredentialSecretFilePath { get; set; }
 
-    /// <summary>Reinstall the module version when it already exists.</summary>
+    /// <summary>Overwrite an existing saved version.</summary>
     [Parameter]
     public SwitchParameter Force { get; set; }
 
-    /// <summary>Installs the requested modules.</summary>
+    /// <summary>Saves requested modules.</summary>
     protected override void ProcessRecord()
     {
-        var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+        var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, Path)!;
         var repository = ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository);
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
@@ -102,7 +94,7 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
 
         foreach (var moduleName in Name)
         {
-            if (!ShouldProcess(moduleName, $"Install managed module from repository '{repository.Name}'"))
+            if (!ShouldProcess(moduleName, $"Save managed module to '{moduleRoot}'"))
                 continue;
 
             var result = service.InstallAsync(
@@ -112,8 +104,7 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
                         Name = moduleName,
                         Version = Version,
                         IncludePrerelease = Prerelease.IsPresent,
-                        Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
-                        ShellEdition = ShellEdition,
+                        Scope = ManagedModuleInstallScope.Custom,
                         ModuleRoot = moduleRoot,
                         PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
                         Credential = credential,
@@ -125,5 +116,4 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
             WriteObject(result);
         }
     }
-
 }
