@@ -51,6 +51,11 @@ public sealed class ManagedModulePackRequest
     public IReadOnlyList<string>? Tags { get; set; }
 
     /// <summary>
+    /// Skip managed manifest metadata validation before packaging.
+    /// </summary>
+    public bool SkipModuleManifestValidate { get; set; }
+
+    /// <summary>
     /// Overwrite an existing package file.
     /// </summary>
     public bool Force { get; set; }

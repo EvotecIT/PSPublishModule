@@ -94,6 +94,14 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Force { get; set; }
 
+    /// <summary>Skip checking RequiredModules against the target repository.</summary>
+    [Parameter]
+    public SwitchParameter SkipDependenciesCheck { get; set; }
+
+    /// <summary>Skip managed manifest metadata validation before packaging.</summary>
+    [Parameter]
+    public SwitchParameter SkipModuleManifestValidate { get; set; }
+
     /// <summary>Creates and publishes the package to the selected destination.</summary>
     protected override void ProcessRecord()
     {
@@ -121,6 +129,8 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
                     Description = Description,
                     ProjectUrl = ProjectUrl,
                     Tags = Tags,
+                    SkipDependenciesCheck = SkipDependenciesCheck.IsPresent,
+                    SkipModuleManifestValidate = SkipModuleManifestValidate.IsPresent,
                     Force = Force.IsPresent
                 })
             .GetAwaiter()

@@ -20,6 +20,7 @@ public sealed class ManagedModulePackService
         var modulePath = Path.GetFullPath(request.ModulePath.Trim().Trim('"'));
         var manifestPath = ResolveManifestPath(modulePath, request.ManifestPath);
         var manifestText = File.ReadAllText(manifestPath);
+        ValidateManifestMetadata(manifestPath, manifestText, request);
         var name = ResolveName(modulePath, manifestPath, request.Name, manifestText);
         var version = ResolveVersion(request.Version, manifestPath);
         var outputDirectory = Path.GetFullPath(request.OutputDirectory.Trim().Trim('"'));
@@ -151,8 +152,70 @@ public sealed class ManagedModulePackService
             metadata.Add(new XElement(ns + "projectUrl", request.ProjectUrl));
         if (tags.Count > 0)
             metadata.Add(new XElement(ns + "tags", string.Join(" ", tags)));
+        var dependencies = ReadPackageDependencies(manifestPath);
+        if (dependencies.Length > 0)
+        {
+            metadata.Add(new XElement(ns + "dependencies",
+                dependencies.Select(dependency => CreateDependencyElement(ns, dependency))));
+        }
 
         return new XDocument(new XElement(ns + "package", metadata));
+    }
+
+    private static void ValidateManifestMetadata(
+        string manifestPath,
+        string manifestText,
+        ManagedModulePackRequest request)
+    {
+        if (request.SkipModuleManifestValidate)
+            return;
+
+        if (string.IsNullOrWhiteSpace(ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ModuleVersion")))
+            throw new InvalidOperationException("Module manifest does not declare ModuleVersion.");
+        if (string.IsNullOrWhiteSpace(request.Description) &&
+            string.IsNullOrWhiteSpace(ReadManifestString(manifestText, "Description")))
+        {
+            throw new InvalidOperationException("Module manifest does not declare Description. Use SkipModuleManifestValidate to bypass this check.");
+        }
+
+        var author = FirstNonEmpty(ReadManifestString(manifestText, "Author"), ReadManifestString(manifestText, "CompanyName"));
+        if (string.IsNullOrWhiteSpace(request.Authors) && string.IsNullOrWhiteSpace(author))
+            throw new InvalidOperationException("Module manifest does not declare Author or CompanyName. Use SkipModuleManifestValidate to bypass this check.");
+    }
+
+    private static ManagedModuleDependencyInfo[] ReadPackageDependencies(string manifestPath)
+        => ModuleManifestValueReader.ReadRequiredModules(manifestPath)
+            .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
+            .Select(static module => new ManagedModuleDependencyInfo
+            {
+                Id = module.ModuleName,
+                VersionRange = ToVersionRange(module)
+            })
+            .OrderBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static XElement CreateDependencyElement(XNamespace ns, ManagedModuleDependencyInfo dependency)
+    {
+        var element = new XElement(ns + "dependency", new XAttribute("id", dependency.Id));
+        if (!string.IsNullOrWhiteSpace(dependency.VersionRange))
+            element.Add(new XAttribute("version", dependency.VersionRange));
+
+        return element;
+    }
+
+    private static string? ToVersionRange(RequiredModuleReference module)
+    {
+        if (!string.IsNullOrWhiteSpace(module.RequiredVersion))
+            return "[" + module.RequiredVersion!.Trim() + "]";
+        if (!string.IsNullOrWhiteSpace(module.ModuleVersion) && !string.IsNullOrWhiteSpace(module.MaximumVersion))
+            return "[" + module.ModuleVersion!.Trim() + "," + module.MaximumVersion!.Trim() + "]";
+        if (!string.IsNullOrWhiteSpace(module.ModuleVersion))
+            return module.ModuleVersion!.Trim();
+        if (!string.IsNullOrWhiteSpace(module.MaximumVersion))
+            return "(," + module.MaximumVersion!.Trim() + "]";
+
+        return null;
     }
 
     private static string? ReadManifestString(string manifestText, string key)

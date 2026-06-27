@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Xml.Linq;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -47,6 +49,74 @@ public sealed class ManagedModulePackServiceTests
         Assert.Equal("2.0.0-beta1", result.Version);
         var metadata = new ManagedModulePackageReader().ReadMetadata(result.PackagePath);
         Assert.Equal("2.0.0-beta1", metadata.Version);
+    }
+
+    [Fact]
+    public void Pack_writes_required_modules_as_nuspec_dependencies()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' }, 'Loose.Dependency')");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        var nuspec = archive.Entries.Single(entry => entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
+        using var stream = nuspec.Open();
+        var document = XDocument.Load(stream);
+        var dependencies = document.Descendants()
+            .Where(static element => element.Name.LocalName == "dependency")
+            .Select(static element => new
+            {
+                Id = element.Attribute("id")?.Value,
+                Version = element.Attribute("version")?.Value
+            })
+            .ToArray();
+
+        Assert.Contains(dependencies, dependency => dependency.Id == "Company.Core" && dependency.Version == "[2.0.0]");
+        Assert.Contains(dependencies, dependency => dependency.Id == "Loose.Dependency" && dependency.Version is null);
+    }
+
+    [Fact]
+    public void Pack_requires_manifest_metadata_unless_validation_is_skipped()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        Directory.CreateDirectory(moduleRoot.Path);
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.psm1"), "function Get-CompanyTool { 'ok' }");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.psd1"), """
+@{
+    RootModule = 'Company.Tools.psm1'
+    ModuleVersion = '1.0.0'
+}
+""");
+        var service = new ManagedModulePackService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        }));
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path,
+            SkipModuleManifestValidate = true,
+            Force = true
+        });
+
+        Assert.Contains("Description", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(result.PackagePath));
     }
 
     [Fact]
@@ -121,18 +191,80 @@ public sealed class ManagedModulePackServiceTests
         Assert.NotEqual("existing", File.ReadAllText(destinationPath));
     }
 
-    private static void CreateModule(string root, string name, string version, string? prerelease)
+    [Fact]
+    public async Task Publish_checks_required_modules_in_target_repository_by_default()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(Path.Combine(feed.Path, "Company.Core.2.0.0.nupkg"), "Company.Core", "2.0.0");
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' })");
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Local", feed.Path)
+        });
+
+        Assert.True(result.Published);
+        Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
+    }
+
+    [Fact]
+    public async Task Publish_can_skip_required_module_repository_check()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' })");
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Local", feed.Path)
+        }));
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            SkipDependenciesCheck = true,
+            Force = true
+        });
+
+        Assert.Contains("Required module dependency check failed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.Published);
+    }
+
+    private static void CreateModule(
+        string root,
+        string name,
+        string version,
+        string? prerelease,
+        string? requiredModules = null)
     {
         Directory.CreateDirectory(root);
         File.WriteAllText(Path.Combine(root, name + ".psm1"), "function Get-CompanyTool { 'ok' }");
-        File.WriteAllText(Path.Combine(root, name + ".psd1"), CreateManifest(name, version, prerelease));
+        File.WriteAllText(Path.Combine(root, name + ".psd1"), CreateManifest(name, version, prerelease, requiredModules));
     }
 
-    private static string CreateManifest(string name, string version, string? prerelease)
+    private static string CreateManifest(string name, string version, string? prerelease, string? requiredModules)
     {
         var prereleaseLine = string.IsNullOrWhiteSpace(prerelease)
             ? string.Empty
             : $"            Prerelease = '{prerelease}'";
+        var requiredModulesLine = string.IsNullOrWhiteSpace(requiredModules)
+            ? string.Empty
+            : requiredModules + Environment.NewLine;
 
         return $$"""
 @{
@@ -140,6 +272,7 @@ public sealed class ManagedModulePackServiceTests
     ModuleVersion = '{{version}}'
     Author = 'Evotec'
     Description = 'Company tools module.'
+{{requiredModulesLine}}
     PrivateData = @{
         PSData = @{
             Tags = @('company', 'automation')
