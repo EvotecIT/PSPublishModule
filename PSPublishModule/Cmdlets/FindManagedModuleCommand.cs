@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
 
@@ -15,6 +16,10 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Find the latest stable version of a module</summary>
 /// <code>Find-ManagedModule -Name Company.Tools</code>
+/// </example>
+/// <example>
+/// <summary>Find modules using a wildcard package id</summary>
+/// <code>Find-ManagedModule -Name Company.* -Repository C:\Packages</code>
 /// </example>
 /// <example>
 /// <summary>Find all versions from a local folder feed</summary>
@@ -44,6 +49,11 @@ public sealed class FindManagedModuleCommand : PSCmdlet
     /// <summary>Return all matching versions instead of only the latest selected version.</summary>
     [Parameter]
     public SwitchParameter AllVersions { get; set; }
+
+    /// <summary>Maximum search results returned for wildcard name queries.</summary>
+    [Parameter]
+    [ValidateRange(1, 1000)]
+    public int First { get; set; } = 100;
 
     /// <summary>Include prerelease versions.</summary>
     [Parameter]
@@ -79,15 +89,24 @@ public sealed class FindManagedModuleCommand : PSCmdlet
 
         foreach (var moduleName in Name)
         {
-            var versions = client.GetVersionsAsync(repository, moduleName, Prerelease.IsPresent, credential)
-                .GetAwaiter()
-                .GetResult();
-            var output = AllVersions.IsPresent || versions.Count == 0
-                ? versions
-                : new[] { versions[versions.Count - 1] };
+            var output = ManagedModuleCommandSupport.HasWildcard(moduleName)
+                ? client.SearchPackagesAsync(repository, moduleName, Prerelease.IsPresent, credential, First)
+                    .GetAwaiter()
+                    .GetResult()
+                : SelectVersions(client.GetVersionsAsync(repository, moduleName, Prerelease.IsPresent, credential)
+                    .GetAwaiter()
+                    .GetResult());
 
             foreach (var version in output)
                 WriteObject(version);
         }
+    }
+
+    private IReadOnlyList<ManagedModuleVersionInfo> SelectVersions(IReadOnlyList<ManagedModuleVersionInfo> versions)
+    {
+        if (AllVersions.IsPresent || versions.Count == 0)
+            return versions;
+
+        return new[] { versions[versions.Count - 1] };
     }
 }

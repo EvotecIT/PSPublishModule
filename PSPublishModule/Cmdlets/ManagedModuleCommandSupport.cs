@@ -33,6 +33,9 @@ internal static class ManagedModuleCommandSupport
             ? ResolveProviderPath(cmdlet, repository) ?? repository
             : repository;
 
+    internal static bool HasWildcard(string value)
+        => value.IndexOf('*') >= 0 || value.IndexOf('?') >= 0;
+
     internal static string? ResolveProviderPath(PSCmdlet cmdlet, string? path)
     {
         if (string.IsNullOrWhiteSpace(path))

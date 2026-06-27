@@ -86,7 +86,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement NuGet v3 service index discovery in C#.
 - [x] Implement package metadata lookup in C#.
 - [x] Implement package version listing in C#.
-- [ ] Implement package search in C#.
+- [x] Implement package search in C#.
 - [x] Implement package flat-container download URI resolution in C#.
 - [x] Implement local folder feed enumeration in C#.
 - [x] Implement repository credentials in C# without relying on registered PowerShell repositories.
@@ -95,6 +95,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Add tests for PSGallery metadata lookup.
 - [x] Add tests for local folder feeds.
 - [x] Add tests for private-feed credential application.
+- [x] Add tests for package search.
 - [ ] Add tests for missing package, missing version, and malformed feed responses.
 
 ## Phase 3: Managed Package Reader
