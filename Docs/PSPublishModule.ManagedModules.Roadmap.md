@@ -203,7 +203,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement module package creation in C#.
 - [x] Implement nuspec generation or preservation.
 - [x] Implement publish to NuGet v3-compatible feeds.
-- [ ] Implement PSGallery publish.
+- [x] Implement PSGallery publish.
 - [x] Implement private-feed publish with API key.
 - [x] Implement private-feed publish with credentials where supported.
 - [x] Implement duplicate detection.

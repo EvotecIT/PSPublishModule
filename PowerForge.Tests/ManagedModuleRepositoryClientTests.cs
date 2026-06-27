@@ -256,6 +256,31 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task PublishPackageAsync_resolves_powershellgallery_publish_endpoint_with_api_key()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "PSGallery",
+            "https://www.powershellgallery.com/api/v3/index.json");
+
+        var result = await repositoryClient.PublishPackageAsync(
+            repository,
+            packagePath,
+            new RepositoryCredential { Secret = "gallery-key" });
+
+        Assert.True(result.Published);
+        Assert.Equal(201, result.StatusCode);
+        var publishRequest = Assert.Single(requests, request => request.Url == "https://psgallery.test/publish/");
+        Assert.Equal(HttpMethod.Put, publishRequest.Method);
+        Assert.Equal("gallery-key", publishRequest.ApiKey);
+    }
+
+    [Fact]
     public async Task PublishPackageAsync_copies_package_to_local_folder_feed()
     {
         using var source = new TemporaryDirectory();
@@ -437,7 +462,8 @@ public sealed class ManagedModuleRepositoryClientTests
             if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v3/index.json")
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://psgallery.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
-                            "{\"@id\":\"https://psgallery.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                            "{\"@id\":\"https://psgallery.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}," +
+                            "{\"@id\":\"https://psgallery.test/publish/\",\"@type\":\"PackagePublish/2.0.0\"}" +
                             "]}");
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/index.json")
@@ -472,6 +498,9 @@ public sealed class ManagedModuleRepositoryClientTests
 
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
             }
+
+            if (uri.AbsoluteUri == "https://psgallery.test/publish/" && request.Method == HttpMethod.Put)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
