@@ -6,6 +6,11 @@ namespace PowerForge;
 public enum ManagedModuleBenchmarkOperation
 {
     /// <summary>
+    /// Query repository metadata for matching module versions.
+    /// </summary>
+    Find,
+
+    /// <summary>
     /// Install a module into a PowerShell module root.
     /// </summary>
     Install,

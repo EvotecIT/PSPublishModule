@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -186,6 +189,52 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.True(run.PackageCount > 0);
         Assert.True(File.Exists(run.PackagePath));
         Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
+    }
+
+    [Fact]
+    public async Task RunAsync_MeasuresManagedPrivateMetadataLookupScenario()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new PrivateMetadataHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), repositoryClient: repositoryClient);
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "private-metadata",
+                    Operation = ManagedModuleBenchmarkOperation.Find,
+                    Repository = new ManagedModuleRepository("Private", "https://private.example.test/v3/index.json"),
+                    Name = "Company.Tools",
+                    Credential = new RepositoryCredential
+                    {
+                        UserName = "build",
+                        Secret = "token"
+                    }
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal(ManagedModuleBenchmarkOperation.Find, run.Operation);
+        Assert.Equal("Found", run.Status);
+        Assert.Equal("Company.Tools", run.ModuleName);
+        Assert.Equal("1.1.0", run.Version);
+        Assert.Equal(2, run.PackageCount);
+        Assert.Equal(2, run.RepositoryRequestCount);
+        Assert.Equal(0, run.PackageBytes);
+        Assert.True(run.ServiceElapsed.GetValueOrDefault() > TimeSpan.Zero);
+        Assert.All(requests, request =>
+        {
+            Assert.NotNull(request.Authorization);
+            Assert.Equal("Basic", request.Authorization!.Scheme);
+            var decoded = Encoding.ASCII.GetString(Convert.FromBase64String(request.Authorization.Parameter!));
+            Assert.Equal("build:token", decoded);
+        });
     }
 
     [Fact]
@@ -486,5 +535,52 @@ public sealed class ManagedModuleBenchmarkServiceTests
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => _run(request);
+    }
+
+    private sealed class PrivateMetadataHandler : HttpMessageHandler
+    {
+        private readonly List<RecordedRequest> _requests;
+
+        public PrivateMetadataHandler(List<RecordedRequest> requests)
+        {
+            _requests = requests;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI is required.");
+            _requests.Add(new RecordedRequest(uri.AbsoluteUri, request.Headers.Authorization));
+
+            if (uri.AbsoluteUri == "https://private.example.test/v3/index.json")
+            {
+                return Json("{\"resources\":[" +
+                            "{\"@id\":\"https://private.example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}" +
+                            "]}");
+            }
+
+            if (uri.AbsoluteUri == "https://private.example.test/packages/company.tools/index.json")
+                return Json("{\"versions\":[\"1.0.0\",\"1.1.0-preview1\",\"1.1.0\"]}");
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static Task<HttpResponseMessage> Json(string json)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
+    }
+
+    private sealed class RecordedRequest
+    {
+        public RecordedRequest(string url, AuthenticationHeaderValue? authorization)
+        {
+            Url = url;
+            Authorization = authorization;
+        }
+
+        public string Url { get; }
+
+        public AuthenticationHeaderValue? Authorization { get; }
     }
 }
