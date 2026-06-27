@@ -298,12 +298,13 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add optional benchmark import validation evidence for PowerShell host checks.
 - [x] Add typed transition-gate evidence to benchmark JSON and Markdown reports.
 - [x] Add `Measure-ManagedModule -RequireTransitionReady` for CI/default-switch gating.
+- [x] Add explicit disposable-host native install/update benchmark opt-in for `Install-Module`, `Install-PSResource`, `Update-Module`, and `Update-PSResource`.
 - [x] Validate imported module version after install in PS 5.1 and PS 7+ benchmark runners.
 - [x] Validate receipts after install/update.
 - [x] Validate benchmark install/import behavior on Windows PowerShell 5.1.
 - [x] Validate benchmark install/import behavior on PowerShell 7+.
 
-Benchmark Markdown reports include a neutral scenario summary grouped by scenario, operation, and engine, transition gates for default-managed-transport readiness, and the detailed run table. The report records observed counts and timing statistics without making unproven performance claims. Compatibility baseline routing now covers install, save, update, and publish; live benchmark evidence still needs to be collected for the unchecked scenarios below.
+Benchmark Markdown reports include a neutral scenario summary grouped by scenario, operation, and engine, transition gates for default-managed-transport readiness, and the detailed run table. The report records observed counts and timing statistics without making unproven performance claims. Compatibility baseline routing now covers install, save, update, and publish. Native install/update compatibility measurements are explicit opt-in because they run the real compatibility cmdlets inside disposable hosts; heavy-module install/update parity evidence still needs to be collected before defaulting away from compatibility transport.
 
 ### Current Host Smoke Evidence
 
@@ -339,6 +340,10 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: `Install-PrivateModule` and `Update-PrivateModule` now default to Auto transport, which uses managed delivery for local/URI repository sources and repository profiles with source endpoints, while falling back to compatibility transport for bare registered repository names.
 - [x] 2026-06-28: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both imported the local build and ran `Install-PrivateModule` without `-Transport` against a temp local feed; Auto selected `ManagedModule`, installed `Company.Tools` 1.0.0 into a custom root, and the versioned module manifest existed after install.
 - [x] 2026-06-28: Native install/update transition gates now record typed compatibility fallback reasons and mark native isolation as required until a disposable-host runner can prove `Install-Module`, `Install-PSResource`, `Update-Module`, and `Update-PSResource` comparisons without writing to real CurrentUser module paths.
+- [x] 2026-06-28: `Measure-ManagedModule -EnableNativeInstallUpdateBenchmark` runs native install/update compatibility baselines in disposable host roots instead of real CurrentUser paths, with explicit sandboxed environment variables and isolated module roots.
+- [x] 2026-06-28: Local-feed native install smoke validated `Company.Tools` 1.0.0 through managed, PSResourceGet, and PowerShellGet engines, with installed manifest version evidence for each engine.
+- [x] 2026-06-28: Local-feed native update smoke validated `Company.Tools` 1.0.0 to 1.1.0 through managed, PSResourceGet, and PowerShellGet engines, with updated manifest version evidence for each engine.
+- [x] 2026-06-28: PowerShellGet native local-feed baselines require a PowerShellGet-produced feed shape; PSResourceGet and the managed engine can consume the flat local `.nupkg` feed shape used by managed tests.
 
 ## Benchmark Scenarios
 

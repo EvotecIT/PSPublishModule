@@ -1,4 +1,4 @@
-﻿---
+---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
@@ -648,7 +648,7 @@ Gets or sets the delivery transport used for prepared and executed install/updat
 Type: ModuleStateDeliveryTransport
 Parameter Sets: Modules, Installed, DesiredState
 Aliases: None
-Possible values: PrivateModule, ManagedModule
+Possible values: PrivateModule, ManagedModule, Auto
 
 Required: False
 Position: named

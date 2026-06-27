@@ -1,4 +1,4 @@
-﻿---
+---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
@@ -585,7 +585,7 @@ Delivery engine used for module installation.
 Type: ModuleStateDeliveryTransport
 Parameter Sets: Repository, AzureArtifacts, Profile, MicrosoftArtifactRegistry
 Aliases: None
-Possible values: PrivateModule, ManagedModule
+Possible values: PrivateModule, ManagedModule, Auto
 
 Required: False
 Position: named
