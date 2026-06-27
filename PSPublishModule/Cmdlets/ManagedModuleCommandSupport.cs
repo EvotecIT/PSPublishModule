@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Management.Automation;
+using System.Net;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -42,22 +43,28 @@ internal static class ManagedModuleCommandSupport
 
     internal static RepositoryCredential? ResolveCredential(
         PSCmdlet cmdlet,
+        PSCredential? credential,
         string? credentialUserName,
         string? credentialSecret,
         string? credentialSecretFilePath)
     {
-        var secret = credentialSecret;
+        var userName = credential?.UserName;
+        var secret = credential?.GetNetworkCredential()?.Password;
+        if (!string.IsNullOrWhiteSpace(credentialUserName))
+            userName = credentialUserName;
+        if (!string.IsNullOrWhiteSpace(credentialSecret))
+            secret = credentialSecret;
         if (string.IsNullOrWhiteSpace(secret) && !string.IsNullOrWhiteSpace(credentialSecretFilePath))
         {
             var path = ResolveProviderPath(cmdlet, credentialSecretFilePath);
             secret = File.ReadAllText(path!).Trim();
         }
 
-        return string.IsNullOrWhiteSpace(credentialUserName) && string.IsNullOrWhiteSpace(secret)
+        return string.IsNullOrWhiteSpace(userName) && string.IsNullOrWhiteSpace(secret)
             ? null
             : new RepositoryCredential
             {
-                UserName = credentialUserName,
+                UserName = userName,
                 Secret = secret
             };
     }

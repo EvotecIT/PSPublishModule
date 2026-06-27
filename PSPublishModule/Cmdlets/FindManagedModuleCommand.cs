@@ -50,6 +50,10 @@ public sealed class FindManagedModuleCommand : PSCmdlet
     [Alias("AllowPrerelease")]
     public SwitchParameter Prerelease { get; set; }
 
+    /// <summary>Optional repository credential.</summary>
+    [Parameter]
+    public PSCredential? Credential { get; set; }
+
     /// <summary>Optional repository credential username.</summary>
     [Parameter]
     [Alias("UserName")]
@@ -69,7 +73,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var repository = ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository);
-        var credential = ManagedModuleCommandSupport.ResolveCredential(this, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
+        var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var client = new ManagedModuleRepositoryClient(logger);
 
