@@ -36,6 +36,11 @@ public sealed class ManagedModuleDownloadResult
     public long BytesWritten { get; set; }
 
     /// <summary>
+    /// SHA256 hash of the downloaded or copied package, encoded as lowercase hexadecimal.
+    /// </summary>
+    public string PackageSha256 { get; set; } = string.Empty;
+
+    /// <summary>
     /// Metadata read from the downloaded package when available.
     /// </summary>
     public ManagedModulePackageMetadata? Metadata { get; set; }

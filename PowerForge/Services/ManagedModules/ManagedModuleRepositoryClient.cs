@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -215,6 +216,7 @@ public sealed class ManagedModuleRepositoryClient
             Source = packageUri.ToString(),
             PackagePath = destinationPath,
             BytesWritten = bytesWritten,
+            PackageSha256 = ComputeSha256(destinationPath),
             Metadata = _packageReader.ReadMetadata(destinationPath)
         };
     }
@@ -246,6 +248,7 @@ public sealed class ManagedModuleRepositoryClient
             Source = match.PackageSource,
             PackagePath = destinationPath,
             BytesWritten = new FileInfo(destinationPath).Length,
+            PackageSha256 = ComputeSha256(destinationPath),
             Metadata = _packageReader.ReadMetadata(destinationPath)
         };
     }
@@ -347,6 +350,14 @@ public sealed class ManagedModuleRepositoryClient
 
     private static string BuildDestinationPath(string destinationDirectory, string packageId, string version)
         => Path.Combine(Path.GetFullPath(destinationDirectory), $"{packageId.Trim().ToLowerInvariant()}.{version.Trim().ToLowerInvariant()}.nupkg");
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(stream);
+        return string.Concat(hash.Select(static value => value.ToString("x2")));
+    }
 
     private static string ResolveLocalFolder(string source)
     {

@@ -203,5 +203,6 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.Equal(name, receipt.Name);
         Assert.Equal(version, receipt.Version);
         Assert.Equal(previousVersion, receipt.PreviousVersion);
+        Assert.Equal(64, receipt.PackageSha256.Length);
     }
 }

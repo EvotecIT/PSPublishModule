@@ -49,6 +49,8 @@ public sealed class ManagedModuleInstallServiceTests
         Assert.Equal("Install", result.Receipt.Operation);
         Assert.Equal("Company.Tools", result.Receipt.Name);
         Assert.Equal("1.1.0", result.Receipt.Version);
+        Assert.Equal(64, result.Download?.PackageSha256.Length);
+        Assert.Equal(result.Download?.PackageSha256, result.Receipt.PackageSha256);
     }
 
     [Fact]
@@ -238,6 +240,7 @@ public sealed class ManagedModuleInstallServiceTests
         Assert.Equal(name, receipt.Name);
         Assert.Equal(version, receipt.Version);
         Assert.Equal(previousVersion, receipt.PreviousVersion);
+        Assert.Equal(64, receipt.PackageSha256.Length);
         Assert.True(receipt.FileCount > 0);
         Assert.True(receipt.ExtractedBytes > 0);
     }
