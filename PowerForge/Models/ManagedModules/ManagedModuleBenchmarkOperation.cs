@@ -18,5 +18,10 @@ public enum ManagedModuleBenchmarkOperation
     /// <summary>
     /// Update an existing module in a PowerShell module root.
     /// </summary>
-    Update
+    Update,
+
+    /// <summary>
+    /// Package and publish a module folder to a repository.
+    /// </summary>
+    Publish
 }

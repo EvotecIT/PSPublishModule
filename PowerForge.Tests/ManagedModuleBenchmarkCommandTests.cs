@@ -69,6 +69,37 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.True(command.Parameters.ContainsKey("Engine"));
         Assert.True(command.Parameters.ContainsKey("ValidateImport"));
         Assert.True(command.Parameters.ContainsKey("ImportHost"));
+        Assert.True(command.Parameters.ContainsKey("ModulePath"));
+        Assert.True(command.Parameters.ContainsKey("PackageOutputDirectory"));
+    }
+
+    [Fact]
+    public void MeasureManagedModule_ReturnsBenchmarkResultForPublish()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var packageOutput = new TemporaryDirectory();
+        WritePublishModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Measure-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Operation", ManagedModuleBenchmarkOperation.Publish)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ModulePath", moduleRoot.Path)
+            .AddParameter("PackageOutputDirectory", packageOutput.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleBenchmarkResult>(Assert.Single(results).BaseObject);
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal(ManagedModuleBenchmarkOperation.Publish, run.Operation);
+        Assert.Equal("Published", run.Status);
+        Assert.True(run.Published);
+        Assert.Equal("1.0.0", run.Version);
+        Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
     }
 
     private static PowerShell CreatePowerShellWithModuleImported()
@@ -88,6 +119,27 @@ public sealed class ManagedModuleBenchmarkCommandTests
         {
             ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static void WritePublishModule(string moduleRoot, string moduleName, string version)
+    {
+        Directory.CreateDirectory(moduleRoot);
+        File.WriteAllText(Path.Combine(moduleRoot, moduleName + ".psm1"), string.Empty);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, moduleName + ".psd1"),
+            string.Join(Environment.NewLine, new[]
+            {
+                "@{",
+                $"    RootModule = '{moduleName}.psm1'",
+                $"    ModuleVersion = '{version}'",
+                "    GUID = '11111111-1111-1111-1111-111111111111'",
+                "    Author = 'Evotec'",
+                "    Description = 'Benchmark publish module.'",
+                "    FunctionsToExport = @()",
+                "    CmdletsToExport = @()",
+                "    AliasesToExport = @()",
+                "}"
+            }));
+    }
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {

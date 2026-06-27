@@ -93,10 +93,25 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? ModuleRoot { get; set; }
 
+    /// <summary>Module source folder used by publish measurements.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ModulePath { get; set; }
+
+    /// <summary>Module manifest path used by publish measurements.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ManifestPath { get; set; }
+
     /// <summary>Optional package cache directory.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
     public string? PackageCacheDirectory { get; set; }
+
+    /// <summary>Optional package output directory used by publish measurements.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? PackageOutputDirectory { get; set; }
 
     /// <summary>Optional repository credential.</summary>
     [Parameter]
@@ -166,7 +181,10 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+        var modulePath = ManagedModuleCommandSupport.ResolveProviderPath(this, ModulePath);
+        var manifestPath = ManagedModuleCommandSupport.ResolveProviderPath(this, ManifestPath);
         var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
+        var packageOutputDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageOutputDirectory);
         var reportPath = ManagedModuleCommandSupport.ResolveProviderPath(this, ReportPath);
         var markdownReportPath = ManagedModuleCommandSupport.ResolveProviderPath(this, MarkdownReportPath);
         var repository = ManagedModuleCommandSupport.CreateRepository(
@@ -178,7 +196,7 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var scenarios = Name
             .Where(static moduleName => !string.IsNullOrWhiteSpace(moduleName))
-            .Select(moduleName => CreateScenario(moduleName, repository, moduleRoot, packageCacheDirectory, credential))
+            .Select(moduleName => CreateScenario(moduleName, repository, moduleRoot, modulePath, manifestPath, packageCacheDirectory, packageOutputDirectory, credential))
             .ToArray();
 
         if (scenarios.Length == 0)
@@ -218,7 +236,10 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
         string moduleName,
         ManagedModuleRepository repository,
         string? moduleRoot,
+        string? modulePath,
+        string? manifestPath,
         string? packageCacheDirectory,
+        string? packageOutputDirectory,
         RepositoryCredential? credential)
         => new()
         {
@@ -234,7 +255,10 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
             ShellEdition = ShellEdition,
             ModuleRoot = moduleRoot,
+            ModulePath = modulePath,
+            ManifestPath = manifestPath,
             PackageCacheDirectory = packageCacheDirectory,
+            PackageOutputDirectory = packageOutputDirectory,
             Credential = credential,
             Force = Force.IsPresent,
             AllowClobber = AllowClobber.IsPresent,
