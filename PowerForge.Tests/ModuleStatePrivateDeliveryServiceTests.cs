@@ -58,6 +58,26 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void ResolveActionRepository_PreservesActionTargetOverGlobalRepository()
+    {
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Install,
+            "Company.Tools",
+            installedVersion: null,
+            ">=1.2.0",
+            "missing",
+            targetRepository: "CompanyModules");
+        var options = new ModuleStatePrivateDeliveryOptions
+        {
+            Repository = "FallbackGallery"
+        };
+
+        var repository = InvokeResolveActionRepository(action, options);
+
+        Assert.Equal("CompanyModules", repository);
+    }
+
+    [Fact]
     public void CreateRequest_RejectsConflictingDuplicateModulePolicies()
     {
         var exception = Assert.Throws<TargetInvocationException>(() => InvokeCreateRequest(new[]
@@ -99,5 +119,15 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
             });
 
         return Assert.IsType<PrivateModuleWorkflowRequest>(result);
+    }
+
+    private static string? InvokeResolveActionRepository(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
+    {
+        var method = typeof(ModuleStatePrivateDeliveryService).GetMethod(
+            "ResolveActionRepository",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        return Assert.IsType<string?>(method!.Invoke(null, new object?[] { action, options }));
     }
 }

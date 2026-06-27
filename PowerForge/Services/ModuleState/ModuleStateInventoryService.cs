@@ -83,6 +83,10 @@ internal sealed class ModuleStateInventoryService
         {
             yield return CreateScriptModule(moduleDirectory.Name, directScriptModule, modulePath, "0.0");
         }
+        else if (FindBinaryModule(moduleDirectory, moduleDirectory.Name) is { } directBinaryModule)
+        {
+            yield return CreateBinaryModule(moduleDirectory.Name, directBinaryModule, modulePath, "0.0");
+        }
 
         foreach (var versionDirectory in EnumerateDirectoriesSafe(moduleDirectory.FullName)
                      .Where(static directory => ModuleStateVersion.TryParse(directory.Name, out _)))

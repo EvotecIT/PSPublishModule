@@ -308,6 +308,39 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     }
 
     [Fact]
+    public void EnsureInstalled_SkipsScopedProbeForPrereleaseRangeBounds()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "1.2.0-preview1"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    minimumVersion: "1.2.0-preview1",
+                    maximumVersion: "1.2.0",
+                    maximumVersionInclusive: false,
+                    installScope: "AllUsers")
+            },
+            repository: "Company",
+            prerelease: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal(0, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("[1.2.0-preview1, 1.2.0)", runner.LastInstallArguments![1]);
+        Assert.Equal("AllUsers", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
     public void EnsureInstalled_BootstrapsPSResourceGetDirectly_WhenRepositoryClientsAreUnavailable()
     {
         var moduleRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

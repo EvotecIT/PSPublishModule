@@ -104,6 +104,9 @@ internal sealed class ModuleStatePrivateDeliveryService
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
         {
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(options.ProfileName!);
+            if (!ShouldApplyProfile(repository, profile))
+                return request;
+
             request.UseAzureArtifacts = true;
             request.ProfileName = options.ProfileName;
             request.Provider = profile.Provider;
@@ -126,6 +129,10 @@ internal sealed class ModuleStatePrivateDeliveryService
         return request;
     }
 
+    private static bool ShouldApplyProfile(string? repository, ModuleRepositoryProfile profile)
+        => string.IsNullOrWhiteSpace(repository) ||
+           string.Equals(repository, profile.RepositoryName, StringComparison.OrdinalIgnoreCase);
+
     private static void ValidateNoConflictingDuplicateActions(IReadOnlyList<ModuleStatePlanAction> actions)
     {
         foreach (var group in actions
@@ -145,12 +152,14 @@ internal sealed class ModuleStatePrivateDeliveryService
 
     private static string? ResolveActionRepository(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
     {
+        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+            return action.TargetRepository;
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
             return options.Repository;
         if (!string.IsNullOrWhiteSpace(options.Repository))
             return options.Repository;
 
-        return action.TargetRepository;
+        return null;
     }
 
     private static bool ResolveActionForce(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
