@@ -53,6 +53,7 @@ The same contracts are available from PowerShell cmdlets, JSON files, and CLI co
 | Module dependencies and isolation | Resolves required/external/approved modules, supports online dependency install, packages required modules, detects missing helpers, and imports selected modules through AssemblyLoadContext isolation profiles. | `New-ConfigurationModule`, `Get-MissingFunctions`, `Import-IsolatedModule`, `Test-IsolatedModuleProfile` |
 | Documentation and delivery | Generates Markdown command docs, MAML external help, about topics, and bundled module documentation. It can also copy or render installed module docs from local files, GitHub, or Azure DevOps. | `New-ConfigurationDocumentation`, `New-ModuleAboutTopic`, `Show-ModuleDocumentation`, `Install-ModuleDocumentation`, `Install-ModuleScript` |
 | Private galleries | Onboards users and publishers to private PowerShell module feeds, especially Azure Artifacts, without storing secrets in profiles. | `Initialize-ModuleRepository`, `Connect-ModuleRepository`, `Register-ModuleRepository`, `Install-PrivateModule`, `Update-PrivateModule`, `Publish-NugetPackage` |
+| Managed module lifecycle | Finds, saves, installs, updates, publishes, benchmarks, and maintains PowerShell modules through the managed C# engine with typed results and receipts. | `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Publish-ManagedModule`, `Measure-ManagedModule`, `Invoke-ModuleState` |
 | .NET publish and packaging | Builds publish matrices for apps, services, tools, bundles, plugins, MSI, MSIX, Microsoft Store packages, appinstaller files, signing, checksums, and manifests. | `New-DotNetPublishConfig`, `Invoke-DotNetPublish`, `Invoke-PowerForgeBundlePostProcess`, `Invoke-PowerForgePluginExport`, `Invoke-PowerForgePluginPack` |
 | Unified release | Coordinates module artifacts, NuGet packages, tool binaries, installers, GitHub releases, staging folders, checksums, Winget manifests/submission, and release manifests from one release config. | `New-PowerForgeReleaseConfig`, `Invoke-PowerForgeRelease`, `Invoke-ProjectRelease`, `Invoke-ProjectBuild`, `powerforge release` |
 | GitHub housekeeping | Prunes Actions artifacts and caches, performs runner cleanup, and provides reusable workflows/actions for cross-repo maintenance. | `powerforge github housekeeping`, `.github/workflows/powerforge-github-housekeeping.yml` |
@@ -285,6 +286,38 @@ Publish-NugetPackage -Path .\Artifacts -ProfileName Company -SkipDuplicate
 
 See [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md) and `Get-Help about_PrivateGalleries`.
 
+## Quick Start: Managed Module Lifecycle
+
+The managed module commands are the C# engine path for module discovery, save,
+install, update, publish, and estate maintenance. They are designed to cover the
+common module workflows while keeping the existing private-gallery wrappers
+available during the transition.
+
+```powershell
+Find-ManagedModule -Name Company.Tools -Repository PSGallery
+Save-ManagedModule -Name Company.Tools -Path C:\OfflineModules -Repository PSGallery
+Install-ManagedModule -Name Company.Tools -Scope CurrentUser -Repository PSGallery
+Update-ManagedModule -Name Company.Tools -Repository PSGallery
+```
+
+Private-gallery profiles can opt into the managed transport without changing
+their profile shape:
+
+```powershell
+Install-PrivateModule -ProfileName Company -Name Company.Tools -Transport ManagedModule
+Update-PrivateModule  -ProfileName Company -Name Company.Tools -Transport ManagedModule
+```
+
+For machine-wide maintenance, use the object-first ModuleState workflow:
+
+```powershell
+Invoke-ModuleState -Installed -Latest -Repository PSGallery -Transport ManagedModule -ShowSummary
+```
+
+See [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
+for the switching matrix and [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
+for the remaining parity and benchmark gates.
+
 ## Quick Start: .NET Publish and Packaging
 
 Scaffold a JSON config:
@@ -468,6 +501,8 @@ Start here:
 - [Docs/PSPublishModule.ProjectBuild.md](Docs/PSPublishModule.ProjectBuild.md)
 - [Docs/PSPublishModule.ModuleDocumentation.md](Docs/PSPublishModule.ModuleDocumentation.md)
 - [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md)
+- [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
+- [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
 - [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md)
 - [Docs/PowerForge.Web.QualityGates.md](Docs/PowerForge.Web.QualityGates.md)

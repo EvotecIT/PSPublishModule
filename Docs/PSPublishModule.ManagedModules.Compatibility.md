@@ -33,6 +33,75 @@ Baseline references:
 - `Install-PrivateModule` and `Update-PrivateModule` stay as convenience wrappers. The reusable path is `Install-ManagedModule`, `Save-ManagedModule`, `Update-ManagedModule`, `Publish-ManagedModule`, and `Invoke-ModuleState`.
 - Public and private command aliases are allowed only when they point to the same managed command implementation. New command families need a distinct operator purpose.
 
+## Switching Examples
+
+The managed commands keep the common module lifecycle shape familiar while moving repository access, dependency resolution, package extraction, receipts, and publish packing into the C# engine.
+
+### Find
+
+```powershell
+Find-ManagedModule -Name Company.Tools -Repository 'https://packages.company.test/nuget/v3/index.json'
+Find-ManagedModule -Name Company.* -ProfileName CompanyModules -AllVersions
+```
+
+### Save
+
+```powershell
+Save-ManagedModule -Name Company.Tools -Path C:\OfflineModules -Repository PSGallery
+Save-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -Path C:\OfflineModules -ProfileName CompanyModules
+```
+
+### Install
+
+```powershell
+Install-ManagedModule -Name Company.Tools -Scope CurrentUser -Repository PSGallery
+Install-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -ProfileName CompanyModules -AcceptLicense
+```
+
+### Update
+
+```powershell
+Update-ManagedModule -Name Company.Tools -Repository PSGallery
+Update-ManagedModule -Name Company.Tools -VersionPolicy '>=1.2.0 <2.0.0' -ProfileName CompanyModules
+```
+
+### Publish
+
+```powershell
+Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages
+Publish-ManagedModule -Path C:\Source\Company.Tools -ProfileName CompanyModules -ApiKeyFilePath C:\Secrets\company-feed-key.txt
+```
+
+### Private Gallery Wrapper Opt-In
+
+Existing private-gallery wrappers remain available while parity is proven. Use `-Transport ManagedModule` when a profile should use the managed engine for module install/update delivery:
+
+```powershell
+Install-PrivateModule -ProfileName CompanyModules -Name Company.Tools -Transport ManagedModule
+Update-PrivateModule  -ProfileName CompanyModules -Name Company.Tools -Transport ManagedModule
+```
+
+### Estate Maintenance
+
+Use `Invoke-ModuleState` as the operator entrypoint when the question is not just "install this module", but "keep this machine's module estate under control":
+
+```powershell
+Invoke-ModuleState -Installed -Latest -Repository PSGallery -Transport ManagedModule -ShowSummary
+```
+
+For automation and support bundles, keep the steps inspectable:
+
+```powershell
+$inventory = Get-ModuleState -IncludeLoaded -ShowSummary
+$plan = $inventory | Get-ModuleStatePlan -DesiredState @{
+    Modules = @(
+        @{ Name = 'Company.Tools'; Version = '=1.2.0'; Repository = 'CompanyModules'; Scope = 'CurrentUser' }
+    )
+} -Repair -ShowSummary
+$plan | Test-ModuleState -PassThru -ShowSummary
+$plan | Invoke-ModuleStatePlan -Repository CompanyModules -Transport ManagedModule -Execute -ShowSummary
+```
+
 ## Parameter Matrix
 
 | Capability | Managed support | Compatible inputs |

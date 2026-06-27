@@ -332,7 +332,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 
 ## Phase 11: Transition And Cleanup
 
-- [ ] Keep current PowerShellGet/PSResourceGet wrappers while managed parity is incomplete.
+- [x] Keep current PowerShellGet/PSResourceGet wrappers while managed parity is incomplete.
 - [x] Add opt-in `Install-PrivateModule -Transport ManagedModule` routing.
 - [x] Add opt-in `Update-PrivateModule -Transport ManagedModule` routing.
 - [ ] Make managed transport the default for `Install-PrivateModule` after install parity is proven.
@@ -342,17 +342,17 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [ ] Remove embedded PowerShell scripts from the managed path.
 - [ ] Remove external tool assumptions from managed tests.
 - [x] Update generated command docs from source metadata.
-- [ ] Update README examples.
-- [ ] Update private gallery docs.
-- [ ] Update ModuleState docs.
+- [x] Update README examples.
+- [x] Update private gallery docs.
+- [x] Update ModuleState docs.
 
 ## Done Criteria
 
 - [ ] Managed install/save/update/publish works without PowerShellGet, PSResourceGet, PackageManagement, `nuget.exe`, `dotnet.exe`, `powershell.exe`, `pwsh`, or embedded `.ps1` scripts in the core path.
-- [ ] Common PowerShellGet workflows have a documented managed equivalent.
-- [ ] Common PSResourceGet workflows have a documented managed equivalent.
+- [x] Common PowerShellGet workflows have a documented managed equivalent.
+- [x] Common PSResourceGet workflows have a documented managed equivalent.
 - [ ] Existing private-gallery workflows continue to work through wrappers.
 - [ ] ModuleState can maintain installed modules through the managed engine.
 - [ ] Benchmarks prove correctness and performance on Windows PowerShell 5.1 and PowerShell 7+.
 - [ ] Compatibility fallback remains only where provider support is explicitly incomplete.
-- [ ] Public docs stay vendor-neutral and avoid naming community comparison projects.
+- [x] Public docs stay vendor-neutral and avoid naming community comparison projects.
