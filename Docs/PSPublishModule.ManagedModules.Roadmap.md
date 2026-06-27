@@ -142,23 +142,23 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 ## Phase 6: Managed Install
 
 - [ ] Implement install planning without mutating disk.
-- [ ] Implement safe extraction with `System.IO.Compression` compatible with `net472`.
-- [ ] Implement atomic staging and final move.
+- [x] Implement safe extraction with `System.IO.Compression` compatible with `net472`.
+- [x] Implement atomic staging and final move.
 - [ ] Implement per-module install locks.
 - [ ] Implement rollback on failure.
-- [ ] Implement CurrentUser module root resolution.
-- [ ] Implement AllUsers module root resolution on Windows, macOS, and Linux.
-- [ ] Implement side-by-side exact version install.
+- [x] Implement CurrentUser module root resolution.
+- [x] Implement AllUsers module root resolution on Windows, macOS, and Linux.
+- [x] Implement side-by-side exact version install.
 - [ ] Implement `-AllowClobber` behavior.
 - [ ] Implement publisher/trust checks where metadata is available.
 - [ ] Implement license acceptance handling.
 - [ ] Implement dependency installation order.
 - [ ] Implement receipt creation after successful install.
-- [ ] Emit typed install result objects.
+- [x] Emit typed install result objects.
 - [ ] Add Spectre.Console summary output.
-- [ ] Add tests for normal install.
-- [ ] Add tests for scoped install.
-- [ ] Add tests for exact side-by-side install.
+- [x] Add tests for normal install.
+- [x] Add tests for scoped install.
+- [x] Add tests for exact side-by-side install.
 - [ ] Add tests for failed extraction rollback.
 - [ ] Add tests for clobber detection.
 - [ ] Benchmark against `Install-Module` and `Install-PSResource`.
