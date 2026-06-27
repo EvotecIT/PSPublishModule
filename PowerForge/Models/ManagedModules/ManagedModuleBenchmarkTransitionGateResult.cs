@@ -21,6 +21,21 @@ public sealed class ManagedModuleBenchmarkTransitionGateResult
     public bool ReadyForDefaultManagedTransport { get; set; }
 
     /// <summary>
+    /// True when compatibility fallback is still required for this operation.
+    /// </summary>
+    public bool CompatibilityFallbackRequired { get; set; }
+
+    /// <summary>
+    /// Reason compatibility fallback is still required.
+    /// </summary>
+    public string? CompatibilityFallbackReason { get; set; }
+
+    /// <summary>
+    /// True when native install/update comparison needs an isolated disposable host before it can be trusted.
+    /// </summary>
+    public bool NativeIsolationRequired { get; set; }
+
+    /// <summary>
     /// Number of managed engine runs recorded for this operation.
     /// </summary>
     public int ManagedRunCount { get; set; }

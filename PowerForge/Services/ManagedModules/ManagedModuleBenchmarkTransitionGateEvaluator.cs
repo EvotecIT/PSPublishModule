@@ -43,12 +43,17 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
             .ToArray();
         var reasons = BuildReasons(operation, managedRuns, compatibilityRuns, coveredCompatibilityEngines);
         var status = ResolveStatus(operation, compatibilityRuns, reasons);
+        var nativeIsolationRequired = RequiresNativeIsolation(operation, compatibilityRuns);
+        var fallbackReason = ResolveCompatibilityFallbackReason(status, nativeIsolationRequired, reasons);
 
         return new ManagedModuleBenchmarkTransitionGateResult
         {
             Operation = operation,
             Status = status,
             ReadyForDefaultManagedTransport = status == ManagedModuleBenchmarkTransitionGateStatus.Ready,
+            CompatibilityFallbackRequired = status != ManagedModuleBenchmarkTransitionGateStatus.Ready,
+            CompatibilityFallbackReason = fallbackReason,
+            NativeIsolationRequired = nativeIsolationRequired,
             ManagedRunCount = managedRuns.Length,
             SuccessfulManagedRunCount = managedRuns.Count(static run => run.Succeeded),
             CompatibilityRunCount = compatibilityRuns.Length,
@@ -123,6 +128,25 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
             or ManagedModuleBenchmarkOperation.Save
             or ManagedModuleBenchmarkOperation.Update
             or ManagedModuleBenchmarkOperation.Publish;
+
+    private static bool RequiresNativeIsolation(
+        ManagedModuleBenchmarkOperation operation,
+        IReadOnlyList<ManagedModuleBenchmarkRunResult> compatibilityRuns)
+        => operation is ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update &&
+           (compatibilityRuns.Count == 0 || compatibilityRuns.Any(IsDefaultIsolationBlock));
+
+    private static string? ResolveCompatibilityFallbackReason(
+        ManagedModuleBenchmarkTransitionGateStatus status,
+        bool nativeIsolationRequired,
+        IReadOnlyList<string> reasons)
+    {
+        if (status == ManagedModuleBenchmarkTransitionGateStatus.Ready)
+            return null;
+        if (nativeIsolationRequired)
+            return "Native install/update comparison requires an isolated disposable host before compatibility fallback can be retired.";
+
+        return reasons.FirstOrDefault();
+    }
 
     private static bool IsManagedEngine(string? engine)
         => IsEngine(engine, ManagedModuleBenchmarkEngine.Managed.ToString());

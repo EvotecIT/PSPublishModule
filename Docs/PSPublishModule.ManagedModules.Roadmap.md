@@ -338,6 +338,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: `Measure-ManagedModule -RequireTransitionReady` now fails the command when transition gates are incomplete or blocked, while still writing requested benchmark reports for CI evidence.
 - [x] 2026-06-28: `Install-PrivateModule` and `Update-PrivateModule` now default to Auto transport, which uses managed delivery for local/URI repository sources and repository profiles with source endpoints, while falling back to compatibility transport for bare registered repository names.
 - [x] 2026-06-28: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both imported the local build and ran `Install-PrivateModule` without `-Transport` against a temp local feed; Auto selected `ManagedModule`, installed `Company.Tools` 1.0.0 into a custom root, and the versioned module manifest existed after install.
+- [x] 2026-06-28: Native install/update transition gates now record typed compatibility fallback reasons and mark native isolation as required until a disposable-host runner can prove `Install-Module`, `Install-PSResource`, `Update-Module`, and `Update-PSResource` comparisons without writing to real CurrentUser module paths.
 
 ## Benchmark Scenarios
 
