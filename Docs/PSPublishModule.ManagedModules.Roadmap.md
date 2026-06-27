@@ -327,6 +327,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Find-ManagedModule -Name PSScript*` against the public PowerShell Gallery NuGet v2 endpoint, returning package-id wildcard results with `PSScriptAnalyzer` 1.25.0 first.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save -Engine Managed,PowerShellGet,PSResourceGet` for `ThreadJob` 2.1.0 into temp roots with `-AllowClobber`; all three engines completed successfully and recorded comparable save evidence.
 - [x] 2026-06-27: `Install-PrivateModule` and `Update-PrivateModule` wrapper tests install/update through `-Transport ManagedModule` from direct local feeds and saved NuGet repository profiles without invoking compatibility repository registration or interactive credential prompts.
+- [x] 2026-06-27: `Measure-ManagedModule` now fails closed for default PowerShellGet/PSResourceGet install/update compatibility benchmarks because native `Install-Module` and `Install-PSResource` do not provide a reliable custom module-root isolation contract; native install/update comparison requires a disposable host or explicit compatibility runner.
 - [ ] Large many-dependency public-feed, mixed-version family, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios

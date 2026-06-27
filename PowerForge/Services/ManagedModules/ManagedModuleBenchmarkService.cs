@@ -57,14 +57,17 @@ public sealed class ManagedModuleBenchmarkService
         Validate(request);
         var started = DateTimeOffset.UtcNow;
         var runs = new List<ManagedModuleBenchmarkRunResult>();
+        var engines = ResolveEngines(request);
+        var isolateModuleRoots = engines.Count > 1;
 
         foreach (var scenario in request.Scenarios)
         {
-            foreach (var engine in ResolveEngines(request))
+            foreach (var engine in engines)
             {
                 for (var iteration = 1; iteration <= Math.Max(1, scenario.Iterations); iteration++)
                 {
-                    var run = await RunScenarioAsync(scenario, engine, iteration, request.ContinueOnError, cancellationToken)
+                    var runScenario = CreateRunScenario(scenario, engine, iteration, isolateModuleRoots);
+                    var run = await RunScenarioAsync(runScenario, engine, iteration, request.ContinueOnError, cancellationToken)
                         .ConfigureAwait(false);
                     runs.Add(run);
                 }
@@ -187,59 +190,18 @@ public sealed class ManagedModuleBenchmarkService
 
         return scenario.Operation switch
         {
-            ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update => MapCompatibilityResult(
-                scenario,
-                engine,
-                iteration,
-                _compatibilityRunner is null
-                    ? RunDefaultCompatibilityScenario(scenario, engine, _compatibilityPowerShellRunner, _logger)
-                    : _compatibilityRunner(scenario, engine)),
+            ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update => _compatibilityRunner is null
+                ? throw new InvalidOperationException(
+                    "Default compatibility install/update benchmarks are disabled because Install-Module and Install-PSResource do not provide a reliable custom module-root isolation contract. Use managed install/update benchmarks, save/publish compatibility benchmarks, or run native install/update comparisons in a disposable host with an explicit compatibility runner.")
+                : MapCompatibilityResult(
+                    scenario,
+                    engine,
+                    iteration,
+                    _compatibilityRunner(scenario, engine)),
             ManagedModuleBenchmarkOperation.Save => RunCompatibilitySaveScenario(scenario, engine, iteration),
             ManagedModuleBenchmarkOperation.Publish => RunCompatibilityPublishScenario(scenario, engine, iteration),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario.Operation, "Unsupported benchmark operation.")
         };
-    }
-
-    private static ModuleDependencyInstallResult RunDefaultCompatibilityScenario(
-        ManagedModuleBenchmarkScenario scenario,
-        ManagedModuleBenchmarkEngine engine,
-        IPowerShellRunner runner,
-        ILogger logger)
-    {
-        var installer = new ModuleDependencyInstaller(runner, logger);
-        var dependency = new ModuleDependency(
-            scenario.Name,
-            scenario.Version,
-            scenario.MinimumVersion,
-            scenario.MaximumVersion);
-        var preferPowerShellGet = engine == ManagedModuleBenchmarkEngine.PowerShellGet;
-        var results = scenario.Operation == ManagedModuleBenchmarkOperation.Install
-            ? installer.EnsureInstalled(
-                new[] { dependency },
-                force: scenario.Force,
-                repository: scenario.Repository.Name,
-                credential: scenario.Credential,
-                prerelease: scenario.IncludePrerelease,
-                preferPowerShellGet: preferPowerShellGet,
-                timeoutPerModule: TimeSpan.FromMinutes(10))
-            : installer.EnsureUpdated(
-                new[] { dependency },
-                repository: scenario.Repository.Name,
-                credential: scenario.Credential,
-                prerelease: scenario.IncludePrerelease,
-                preferPowerShellGet: preferPowerShellGet,
-                timeoutPerModule: TimeSpan.FromMinutes(10));
-
-        return results.Count == 0
-            ? new ModuleDependencyInstallResult(
-                scenario.Name,
-                null,
-                null,
-                scenario.Version,
-                ModuleDependencyInstallStatus.Skipped,
-                engine.ToString(),
-                "Compatibility engine returned no result.")
-            : results[0];
     }
 
     private ManagedModuleBenchmarkRunResult RunCompatibilitySaveScenario(
@@ -613,9 +575,87 @@ public sealed class ManagedModuleBenchmarkService
             ExtractedBytes = 0,
             FileCount = 0,
             DependencyCount = 0,
+            FinalDiskBytes = MeasureDirectoryBytes(scenario.ModuleRoot),
             FromCache = false,
             ErrorMessage = result.Status == ModuleDependencyInstallStatus.Failed ? result.Message : null
         };
+
+    private static ManagedModuleBenchmarkScenario CreateRunScenario(
+        ManagedModuleBenchmarkScenario scenario,
+        ManagedModuleBenchmarkEngine engine,
+        int iteration,
+        bool isolateModuleRoot)
+    {
+        var moduleRoot = NormalizeOptional(scenario.ModuleRoot);
+        if (!isolateModuleRoot ||
+            string.IsNullOrWhiteSpace(moduleRoot) ||
+            scenario.Operation is ManagedModuleBenchmarkOperation.Find or ManagedModuleBenchmarkOperation.Publish)
+        {
+            return scenario;
+        }
+
+        var isolatedRoot = Path.Combine(
+            Path.GetFullPath(moduleRoot!),
+            SanitizePathSegment(engine.ToString()),
+            iteration.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        if (scenario.Operation == ManagedModuleBenchmarkOperation.Update && Directory.Exists(moduleRoot))
+            CopyDirectory(moduleRoot!, isolatedRoot);
+
+        return new ManagedModuleBenchmarkScenario
+        {
+            Id = scenario.Id,
+            Operation = scenario.Operation,
+            Repository = scenario.Repository,
+            Name = scenario.Name,
+            Version = scenario.Version,
+            MinimumVersion = scenario.MinimumVersion,
+            MaximumVersion = scenario.MaximumVersion,
+            VersionPolicy = scenario.VersionPolicy,
+            IncludePrerelease = scenario.IncludePrerelease,
+            Scope = scenario.Scope,
+            ShellEdition = scenario.ShellEdition,
+            ModuleRoot = isolatedRoot,
+            ModulePath = scenario.ModulePath,
+            ManifestPath = scenario.ManifestPath,
+            PackageCacheDirectory = scenario.PackageCacheDirectory,
+            PackageOutputDirectory = scenario.PackageOutputDirectory,
+            Credential = scenario.Credential,
+            Force = scenario.Force,
+            AllowClobber = scenario.AllowClobber,
+            AcceptLicense = scenario.AcceptLicense,
+            SkipDependencyCheck = scenario.SkipDependencyCheck,
+            Iterations = scenario.Iterations
+        };
+    }
+
+    private static string SanitizePathSegment(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = value.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
+        return new string(chars);
+    }
+
+    private static void CopyDirectory(string sourceRoot, string destinationRoot)
+    {
+        if (!Directory.Exists(sourceRoot))
+            return;
+
+        Directory.CreateDirectory(destinationRoot);
+        foreach (var directory in Directory.EnumerateDirectories(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            var relative = FrameworkCompatibility.GetRelativePath(sourceRoot, directory);
+            Directory.CreateDirectory(Path.Combine(destinationRoot, relative));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            var relative = FrameworkCompatibility.GetRelativePath(sourceRoot, file);
+            var destination = Path.Combine(destinationRoot, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(file, destination, overwrite: true);
+        }
+    }
 
     private static ManagedModuleBenchmarkRunResult CreateFailedRun(
         ManagedModuleBenchmarkScenario scenario,
@@ -679,4 +719,5 @@ public sealed class ManagedModuleBenchmarkService
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+
 }
