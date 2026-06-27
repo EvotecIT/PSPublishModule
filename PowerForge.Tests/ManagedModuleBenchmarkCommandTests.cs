@@ -51,7 +51,10 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.Contains("\"ScenarioId\": \"Install:Company.Tools\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"FinalDiskBytes\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"RepositoryRequestCount\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
+        Assert.Contains("\"TransitionGates\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("# Managed Module Benchmark Report", File.ReadAllText(markdownPath), StringComparison.Ordinal);
+        Assert.Contains("## Transition Gates", File.ReadAllText(markdownPath), StringComparison.Ordinal);
+        Assert.Contains("Default ready", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Disk bytes", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Import check", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Requests", File.ReadAllText(markdownPath), StringComparison.Ordinal);

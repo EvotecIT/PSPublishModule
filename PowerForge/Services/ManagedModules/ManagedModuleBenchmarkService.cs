@@ -78,7 +78,8 @@ public sealed partial class ManagedModuleBenchmarkService
         {
             StartedAtUtc = started,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            Runs = runs
+            Runs = runs,
+            TransitionGates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(runs)
         };
     }
 
