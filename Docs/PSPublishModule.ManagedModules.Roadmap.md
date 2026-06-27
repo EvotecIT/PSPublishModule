@@ -326,6 +326,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `Microsoft.Graph.Users` 2.38.0 with `-AcceptLicense`, resolving and installing its related dependency package through the managed engine and recording 2 packages, 65 total files, and 71 MB total extracted bytes.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Find-ManagedModule -Name PSScript*` against the public PowerShell Gallery NuGet v2 endpoint, returning package-id wildcard results with `PSScriptAnalyzer` 1.25.0 first.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save -Engine Managed,PowerShellGet,PSResourceGet` for `ThreadJob` 2.1.0 into temp roots with `-AllowClobber`; all three engines completed successfully and recorded comparable save evidence.
+- [x] 2026-06-27: `Install-PrivateModule` and `Update-PrivateModule` wrapper tests install/update through `-Transport ManagedModule` from direct local feeds and saved NuGet repository profiles without invoking compatibility repository registration or interactive credential prompts.
 - [ ] Large many-dependency public-feed, mixed-version family, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
@@ -367,7 +368,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] Managed install/save/update/publish works without PowerShellGet, PSResourceGet, PackageManagement, `nuget.exe`, `dotnet.exe`, `powershell.exe`, `pwsh`, or embedded `.ps1` scripts in the core path.
 - [x] Common PowerShellGet workflows have a documented managed equivalent.
 - [x] Common PSResourceGet workflows have a documented managed equivalent.
-- [ ] Existing private-gallery workflows continue to work through wrappers.
+- [x] Existing private-gallery workflows continue to work through wrappers.
 - [x] ModuleState can maintain installed modules through the managed engine.
 - [ ] Benchmarks prove correctness and performance on Windows PowerShell 5.1 and PowerShell 7+.
 - [ ] Compatibility fallback remains only where provider support is explicitly incomplete.
