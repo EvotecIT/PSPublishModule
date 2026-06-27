@@ -316,10 +316,10 @@ public sealed class ModuleDependencyInstallerUpdateTests
         var result = Assert.Single(results);
         Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
         Assert.Equal("PSResourceGet", result.Installer);
-        Assert.Equal(4, runner.Requests.Count);
+        Assert.Equal(3, runner.Requests.Count);
 
-        var installRequest = runner.Requests[2];
-        Assert.Contains("Install-PSResource", runner.ScriptTexts[2], StringComparison.Ordinal);
+        var installRequest = runner.Requests[1];
+        Assert.Contains("Install-PSResource", runner.ScriptTexts[1], StringComparison.Ordinal);
         Assert.Equal("(, 2.0.0)", installRequest.Arguments[1]);
         Assert.Equal("AllUsers", installRequest.Arguments[3]);
     }

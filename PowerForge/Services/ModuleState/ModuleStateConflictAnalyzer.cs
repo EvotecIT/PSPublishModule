@@ -112,7 +112,9 @@ internal sealed class ModuleStateConflictAnalyzer
                 $"Module '{desiredModule.Name}' satisfies the version policy, but its source repository is unknown. Desired state allows: {string.Join(", ", desiredModule.AllowedSources)}.",
                 string.Empty,
                 new[] { desiredModule.Name },
-                new[] { selectedModule.Version }));
+                new[] { selectedModule.Version },
+                selectedModule.Scope,
+                selectedModule.SourceRepository));
             return;
         }
 
@@ -125,7 +127,9 @@ internal sealed class ModuleStateConflictAnalyzer
             $"Module '{desiredModule.Name}' was selected from source '{selectedModule.SourceRepository}', but desired state allows: {string.Join(", ", desiredModule.AllowedSources)}.",
             string.Empty,
             new[] { desiredModule.Name },
-            new[] { selectedModule.Version }));
+            new[] { selectedModule.Version },
+            selectedModule.Scope,
+            selectedModule.SourceRepository));
     }
 
     private static void AddLoadedModuleFinding(
@@ -155,7 +159,7 @@ internal sealed class ModuleStateConflictAnalyzer
         ModuleStateInstalledModule[] installedModules,
         ModuleStateVersionPolicy policy)
     {
-        var selectedModule = SelectInstalledModule(installedModules, desiredModule.Scope);
+        var selectedModule = SelectInstalledModuleForDowngrade(installedModules, desiredModule.Scope);
         if (selectedModule is null ||
             policy.IsSatisfiedBy(selectedModule.Version) ||
             !ModuleStateVersion.TryParse(selectedModule.Version, out var installedVersion))
@@ -199,6 +203,20 @@ internal sealed class ModuleStateConflictAnalyzer
             .OrderByDescending(static module => module.IsLoaded)
             .ThenByDescending(static module => module.IsEffectiveImportCandidate)
             .ThenByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+            .FirstOrDefault();
+    }
+
+    private static ModuleStateInstalledModule? SelectInstalledModuleForDowngrade(IEnumerable<ModuleStateInstalledModule> installedModules, string? desiredScope)
+    {
+        var candidates = installedModules
+            .Where(module => string.IsNullOrWhiteSpace(desiredScope)
+                || string.Equals(module.Scope, desiredScope, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        return candidates
+            .OrderByDescending(static module => module.IsEffectiveImportCandidate)
+            .ThenByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+            .ThenByDescending(static module => module.IsLoaded)
             .FirstOrDefault();
     }
 }

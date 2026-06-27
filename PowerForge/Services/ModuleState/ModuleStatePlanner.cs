@@ -154,7 +154,9 @@ internal sealed class ModuleStatePlanner
                     finding.Message,
                     finding.FamilyName,
                     finding.ModuleNames,
-                    finding.Versions)
+                    finding.Versions,
+                    finding.Scope,
+                    finding.SourceRepository)
                 : finding)
             .ToArray();
     }
@@ -162,7 +164,7 @@ internal sealed class ModuleStatePlanner
     private static bool IsCoveredByAction(ModuleStateConflictFinding finding, ModuleStatePlanAction[] actions)
     {
         if (string.Equals(finding.Code, "ModuleState.SourcePreferenceMismatch", StringComparison.OrdinalIgnoreCase))
-            return HasDeliveryActionForAnyModule(actions, finding.ModuleNames, requireRepair: false);
+            return IsSourcePreferenceCoveredByAction(finding, actions);
 
         if (string.Equals(finding.Code, "ModuleState.FamilyVersionMismatch", StringComparison.OrdinalIgnoreCase))
             return HasDeliveryActionForAnyModule(actions, finding.ModuleNames, requireRepair: true);
@@ -181,4 +183,12 @@ internal sealed class ModuleStatePlanner
             action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update &&
             (!requireRepair || action.IsRepair) &&
             moduleNames.Contains(action.ModuleName, StringComparer.OrdinalIgnoreCase));
+
+    private static bool IsSourcePreferenceCoveredByAction(ModuleStateConflictFinding finding, ModuleStatePlanAction[] actions)
+        => actions.Any(action =>
+            action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update &&
+            finding.ModuleNames.Contains(action.ModuleName, StringComparer.OrdinalIgnoreCase) &&
+            string.Equals(action.TargetScope, finding.Scope, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(action.TargetRepository) &&
+            !string.Equals(action.TargetRepository, finding.SourceRepository, StringComparison.OrdinalIgnoreCase));
 }
