@@ -561,6 +561,68 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.False(run.Succeeded);
         Assert.Equal("Failed", run.Status);
         Assert.Contains("disabled", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        var gate = Assert.Single(result.TransitionGates);
+        Assert.Equal(ManagedModuleBenchmarkOperation.Install, gate.Operation);
+        Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Blocked, gate.Status);
+        Assert.False(gate.ReadyForDefaultManagedTransport);
+        Assert.Contains(gate.Reasons, reason => reason.Contains("explicit disposable-host runner", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RunAsync_MarksInstallTransitionReadyWhenManagedAndCompatibilityBaselinesPass()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleBenchmarkService(
+            new NullLogger(),
+            compatibilityRunner: (scenario, engine) => new ModuleDependencyInstallResult(
+                scenario.Name,
+                null,
+                "1.0.0",
+                scenario.Version,
+                ModuleDependencyInstallStatus.Installed,
+                engine.ToString(),
+                null));
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Engines = new[]
+            {
+                ManagedModuleBenchmarkEngine.Managed,
+                ManagedModuleBenchmarkEngine.PSResourceGet,
+                ManagedModuleBenchmarkEngine.PowerShellGet
+            },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "install-transition",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    Scope = ManagedModuleInstallScope.Custom,
+                    ModuleRoot = moduleRoot.Path,
+                    AllowClobber = true
+                }
+            }
+        });
+
+        Assert.Equal(3, result.Runs.Count);
+        var gate = Assert.Single(result.TransitionGates);
+        Assert.Equal(ManagedModuleBenchmarkOperation.Install, gate.Operation);
+        Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Ready, gate.Status);
+        Assert.True(gate.ReadyForDefaultManagedTransport);
+        Assert.Equal(1, gate.SuccessfulManagedRunCount);
+        Assert.Equal(2, gate.SuccessfulCompatibilityRunCount);
+        Assert.Contains("PSResourceGet", gate.CoveredCompatibilityEngines);
+        Assert.Contains("PowerShellGet", gate.CoveredCompatibilityEngines);
     }
 
     [Theory]

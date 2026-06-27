@@ -69,6 +69,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine();
         AppendSummary(markdown, runs);
         markdown.AppendLine();
+        AppendTransitionGates(markdown, result.TransitionGates ?? Array.Empty<ManagedModuleBenchmarkTransitionGateResult>());
+        markdown.AppendLine();
         markdown.AppendLine("| Scenario | Module | Engine | Operation | Iteration | Status | Version | Previous | Elapsed ms | Requests | Packages | Package bytes | Extracted bytes | Extraction ms | Files | Disk bytes | Version check | Import check | Error |");
         markdown.AppendLine("| --- | --- | --- | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |");
 
@@ -166,6 +168,54 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(group.Sum(static run => run.FinalDiskBytes))
                 .AppendLine(" |");
         }
+    }
+
+    private static void AppendTransitionGates(StringBuilder markdown, IReadOnlyList<ManagedModuleBenchmarkTransitionGateResult> gates)
+    {
+        markdown.AppendLine("## Transition Gates");
+        markdown.AppendLine();
+        if (gates.Count == 0)
+        {
+            markdown.AppendLine("_No install, save, update, or publish transition gates were evaluated._");
+            return;
+        }
+
+        markdown.AppendLine("| Operation | Status | Default ready | Managed | Compatibility | Covered baselines | Reasons |");
+        markdown.AppendLine("| --- | --- | --- | ---: | ---: | --- | --- |");
+        foreach (var gate in gates.OrderBy(static gate => gate.Operation))
+        {
+            markdown.Append("| ")
+                .Append(gate.Operation)
+                .Append(" | ")
+                .Append(gate.Status)
+                .Append(" | ")
+                .Append(gate.ReadyForDefaultManagedTransport ? "yes" : "no")
+                .Append(" | ")
+                .Append(gate.SuccessfulManagedRunCount)
+                .Append("/")
+                .Append(gate.ManagedRunCount)
+                .Append(" | ")
+                .Append(gate.SuccessfulCompatibilityRunCount)
+                .Append("/")
+                .Append(gate.CompatibilityRunCount)
+                .Append(" | ")
+                .Append(Escape(FormatCompatibilityCoverage(gate)))
+                .Append(" | ")
+                .Append(Escape(string.Join("; ", gate.Reasons ?? Array.Empty<string>())))
+                .AppendLine(" |");
+        }
+    }
+
+    private static string FormatCompatibilityCoverage(ManagedModuleBenchmarkTransitionGateResult gate)
+    {
+        var covered = gate.CoveredCompatibilityEngines ?? Array.Empty<string>();
+        var required = gate.RequiredCompatibilityEngines ?? Array.Empty<string>();
+        if (required.Count == 0)
+            return string.Empty;
+
+        return string.Join(
+            ", ",
+            required.Select(engine => covered.Contains(engine, StringComparer.OrdinalIgnoreCase) ? engine + ":ok" : engine + ":missing"));
     }
 
     private static BenchmarkElapsedStatistics CalculateStatistics(IEnumerable<TimeSpan> elapsedValues)

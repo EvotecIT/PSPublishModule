@@ -19,4 +19,9 @@ public sealed class ManagedModuleBenchmarkResult
     /// Individual measured scenario runs.
     /// </summary>
     public IReadOnlyList<ManagedModuleBenchmarkRunResult> Runs { get; set; } = Array.Empty<ManagedModuleBenchmarkRunResult>();
+
+    /// <summary>
+    /// Operation-level evidence gates used when deciding whether the managed engine can replace compatibility defaults.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleBenchmarkTransitionGateResult> TransitionGates { get; set; } = Array.Empty<ManagedModuleBenchmarkTransitionGateResult>();
 }
