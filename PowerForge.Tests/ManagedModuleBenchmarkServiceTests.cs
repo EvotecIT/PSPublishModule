@@ -237,6 +237,68 @@ public sealed class ManagedModuleBenchmarkServiceTests
         });
     }
 
+    [Theory]
+    [InlineData(ManagedModuleBenchmarkOperation.Install)]
+    [InlineData(ManagedModuleBenchmarkOperation.Save)]
+    public async Task RunAsync_MeasuresPrivatePackageDeliveryWithCredentials(ManagedModuleBenchmarkOperation operation)
+    {
+        var requests = new List<RecordedRequest>();
+        using var packageRoot = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var packagePath = Path.Combine(packageRoot.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        using var client = new HttpClient(new PrivateMetadataHandler(requests, File.ReadAllBytes(packagePath)));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var installService = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), installService: installService);
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "private-" + operation.ToString().ToLowerInvariant(),
+                    Operation = operation,
+                    Repository = new ManagedModuleRepository("Private", "https://private.example.test/v3/index.json"),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    Scope = ManagedModuleInstallScope.Custom,
+                    ModuleRoot = moduleRoot.Path,
+                    Credential = new RepositoryCredential
+                    {
+                        UserName = "build",
+                        Secret = "token"
+                    }
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal(operation, run.Operation);
+        Assert.Equal("Installed", run.Status);
+        Assert.Equal("1.0.0", run.Version);
+        Assert.Equal("1.0.0", run.ValidatedVersion);
+        Assert.True(run.PackageBytes > 0);
+        Assert.True(run.ExtractedBytes > 0);
+        Assert.True(run.RepositoryRequestCount > 0);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+        Assert.Contains(requests, request => request.Url == "https://private.example.test/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://private.example.test/packages/company.tools/1.0.0/company.tools.1.0.0.nupkg");
+        Assert.All(requests, request =>
+        {
+            Assert.NotNull(request.Authorization);
+            Assert.Equal("Basic", request.Authorization!.Scheme);
+            var decoded = Encoding.ASCII.GetString(Convert.FromBase64String(request.Authorization.Parameter!));
+            Assert.Equal("build:token", decoded);
+        });
+    }
+
     [Fact]
     public async Task RunAsync_RecordsDependencyTotalsForManagedInstall()
     {
@@ -540,10 +602,12 @@ public sealed class ManagedModuleBenchmarkServiceTests
     private sealed class PrivateMetadataHandler : HttpMessageHandler
     {
         private readonly List<RecordedRequest> _requests;
+        private readonly byte[]? _packageBytes;
 
-        public PrivateMetadataHandler(List<RecordedRequest> requests)
+        public PrivateMetadataHandler(List<RecordedRequest> requests, byte[]? packageBytes = null)
         {
             _requests = requests;
+            _packageBytes = packageBytes;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -561,6 +625,10 @@ public sealed class ManagedModuleBenchmarkServiceTests
             if (uri.AbsoluteUri == "https://private.example.test/packages/company.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0-preview1\",\"1.1.0\"]}");
 
+            if (uri.AbsoluteUri == "https://private.example.test/packages/company.tools/1.0.0/company.tools.1.0.0.nupkg" &&
+                _packageBytes is not null)
+                return Binary(_packageBytes);
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
 
@@ -568,6 +636,12 @@ public sealed class ManagedModuleBenchmarkServiceTests
             => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
+
+        private static Task<HttpResponseMessage> Binary(byte[] content)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(content)
             });
     }
 
