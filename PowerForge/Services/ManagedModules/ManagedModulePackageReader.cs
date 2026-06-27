@@ -76,6 +76,9 @@ public sealed class ManagedModulePackageReader
             ProjectUrl = ReadElement(metadata, "projectUrl"),
             License = ReadLicense(metadata),
             Tags = ReadTags(ReadElement(metadata, "tags")),
+            FileCount = CountFiles(archive),
+            PackageBytes = info.Length,
+            UncompressedBytes = CountUncompressedBytes(archive),
             Dependencies = MergeDependencies(nuspecDependencies, manifest.Dependencies),
             ModuleManifestPath = manifest.Path,
             ModuleManifestVersion = manifest.Version,
@@ -132,6 +135,14 @@ public sealed class ManagedModulePackageReader
             .ThenBy(static entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
             .First();
     }
+
+    private static int CountFiles(ZipArchive archive)
+        => archive.Entries.Count(static entry => !string.IsNullOrWhiteSpace(entry.Name));
+
+    private static long CountUncompressedBytes(ZipArchive archive)
+        => archive.Entries
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name))
+            .Sum(static entry => entry.Length);
 
     private static string? ReadElement(XElement parent, string localName)
         => parent.Elements()

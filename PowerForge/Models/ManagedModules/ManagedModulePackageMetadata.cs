@@ -41,6 +41,21 @@ public sealed class ManagedModulePackageMetadata
     public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Number of non-directory files in the package archive.
+    /// </summary>
+    public int FileCount { get; set; }
+
+    /// <summary>
+    /// Package file size in bytes on disk.
+    /// </summary>
+    public long PackageBytes { get; set; }
+
+    /// <summary>
+    /// Sum of uncompressed non-directory archive entry sizes.
+    /// </summary>
+    public long UncompressedBytes { get; set; }
+
+    /// <summary>
     /// Dependencies declared by the package.
     /// </summary>
     public IReadOnlyList<ManagedModuleDependencyInfo> Dependencies { get; set; } = Array.Empty<ManagedModuleDependencyInfo>();
