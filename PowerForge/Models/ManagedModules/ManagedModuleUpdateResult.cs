@@ -84,4 +84,9 @@ public sealed class ManagedModuleUpdateResult
     /// Full path to the receipt written after successful delivery.
     /// </summary>
     public string? ReceiptPath { get; set; }
+
+    /// <summary>
+    /// Results for related installed modules covered by the family policy.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleFamilyUpdateResult> FamilyResults { get; set; } = Array.Empty<ManagedModuleFamilyUpdateResult>();
 }

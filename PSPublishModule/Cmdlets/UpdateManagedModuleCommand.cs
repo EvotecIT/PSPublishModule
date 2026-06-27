@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -128,6 +129,25 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [Parameter]
     public ManagedModuleLoadedModule[] LoadedModule { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
 
+    /// <summary>Typed family policy used to keep related installed modules version-coherent.</summary>
+    [Parameter]
+    public ManagedModuleFamilyPolicy? FamilyPolicy { get; set; }
+
+    /// <summary>Friendly family policy name used in plans and diagnostics.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? FamilyName { get; set; }
+
+    /// <summary>Module name prefix used to discover installed family members.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? FamilyModuleNamePrefix { get; set; }
+
+    /// <summary>Exact installed module names that belong to the family.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string[] FamilyModuleName { get; set; } = Array.Empty<string>();
+
     /// <summary>Allow updating even when matching loaded module evidence is supplied.</summary>
     [Parameter]
     public SwitchParameter AllowLoadedModuleUpdate { get; set; }
@@ -166,6 +186,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                 AcceptLicense = AcceptLicense.IsPresent,
                 SkipDependencyCheck = SkipDependencyCheck.IsPresent,
                 LoadedModules = LoadedModule,
+                FamilyPolicy = ResolveFamilyPolicy(),
                 AllowLoadedModuleUpdate = AllowLoadedModuleUpdate.IsPresent
             };
 
@@ -182,5 +203,23 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
 
             WriteObject(result);
         }
+    }
+
+    private ManagedModuleFamilyPolicy? ResolveFamilyPolicy()
+    {
+        if (FamilyPolicy is not null)
+            return FamilyPolicy;
+
+        if (string.IsNullOrWhiteSpace(FamilyName) &&
+            string.IsNullOrWhiteSpace(FamilyModuleNamePrefix) &&
+            !FamilyModuleName.Any(static name => !string.IsNullOrWhiteSpace(name)))
+            return null;
+
+        return new ManagedModuleFamilyPolicy
+        {
+            Name = FamilyName ?? string.Empty,
+            ModuleNamePrefix = FamilyModuleNamePrefix,
+            ModuleNames = FamilyModuleName
+        };
     }
 }

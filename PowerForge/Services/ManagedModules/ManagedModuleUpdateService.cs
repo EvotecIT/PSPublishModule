@@ -44,11 +44,13 @@ public sealed class ManagedModuleUpdateService
         var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
         var currentVersion = installedVersions.LastOrDefault();
-        var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), targetVersion);
+        var targetWouldWrite = currentVersion is null ||
+                               request.Force ||
+                               ManagedModuleVersionComparer.Instance.Compare(currentVersion, targetVersion) < 0;
+        var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, cancellationToken).ConfigureAwait(false);
+        ThrowIfFamilyPlanBlocked(familyActions);
 
-        if (currentVersion is not null &&
-            !request.Force &&
-            ManagedModuleVersionComparer.Instance.Compare(currentVersion, targetVersion) >= 0)
+        if (!targetWouldWrite && !familyActions.Any(static action => action.WouldWriteFiles))
         {
             _logger.Verbose($"Managed module update skipped '{request.Name}' because {currentVersion} satisfies target {targetVersion}.");
             return new ManagedModuleUpdateResult
@@ -64,43 +66,32 @@ public sealed class ManagedModuleUpdateService
                 MaximumVersion = request.MaximumVersion,
                 VersionPolicy = request.VersionPolicy,
                 ModuleRoot = moduleRoot,
-                ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), currentVersion),
-                Elapsed = stopwatch.Elapsed
+                ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), currentVersion!),
+                Elapsed = stopwatch.Elapsed,
+                FamilyResults = MapFamilyResults(familyActions)
             };
         }
 
-        ThrowIfLoadedModuleBlocksUpdate(request);
+        ThrowIfLoadedModuleBlocksUpdate(request, targetWouldWrite, familyActions);
 
-        var install = await _installService.InstallAsync(
-            new ManagedModuleInstallRequest
-            {
-                Repository = request.Repository,
-                Name = request.Name,
-                Version = targetVersion,
-                MinimumVersion = null,
-                MaximumVersion = null,
-                VersionPolicy = null,
-                IncludePrerelease = request.IncludePrerelease,
-                Scope = request.Scope,
-                ShellEdition = request.ShellEdition,
-                ModuleRoot = request.ModuleRoot,
-                PackageCacheDirectory = request.PackageCacheDirectory,
-                Credential = request.Credential,
-                Force = true,
-                AllowClobber = request.AllowClobber,
-                AcceptLicense = request.AcceptLicense,
-                SkipDependencyCheck = request.SkipDependencyCheck
-            },
-            cancellationToken).ConfigureAwait(false);
-        if (install.Status == ManagedModuleInstallStatus.Installed)
+        var modulePath = targetWouldWrite
+            ? Path.Combine(moduleRoot, request.Name.Trim(), targetVersion)
+            : Path.Combine(moduleRoot, request.Name.Trim(), currentVersion!);
+        var install = targetWouldWrite
+            ? await InstallSelectedVersionAsync(request, request.Name, targetVersion, cancellationToken).ConfigureAwait(false)
+            : null;
+        if (install is not null && install.Status == ManagedModuleInstallStatus.Installed)
             _receiptStore.WriteReceipt(request.Repository, install, currentVersion, "Update");
+        var familyResults = await ApplyFamilyActionsAsync(request, familyActions, cancellationToken).ConfigureAwait(false);
 
         return new ManagedModuleUpdateResult
         {
             Name = request.Name.Trim(),
             TargetVersion = targetVersion,
             PreviousVersion = currentVersion,
-            Status = currentVersion is null ? ManagedModuleUpdateStatus.InstalledMissing : ManagedModuleUpdateStatus.Updated,
+            Status = targetWouldWrite
+                ? currentVersion is null ? ManagedModuleUpdateStatus.InstalledMissing : ManagedModuleUpdateStatus.Updated
+                : ManagedModuleUpdateStatus.UpToDate,
             RepositoryName = request.Repository.Name,
             RepositorySource = request.Repository.Source,
             RequestedVersion = request.Version,
@@ -111,8 +102,9 @@ public sealed class ManagedModuleUpdateService
             ModulePath = modulePath,
             Elapsed = stopwatch.Elapsed,
             InstallResult = install,
-            Receipt = install.Receipt,
-            ReceiptPath = install.ReceiptPath
+            Receipt = install?.Receipt,
+            ReceiptPath = install?.ReceiptPath,
+            FamilyResults = familyResults
         };
     }
 
@@ -133,6 +125,7 @@ public sealed class ManagedModuleUpdateService
         var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
         var currentVersion = installedVersions.LastOrDefault();
         var action = ResolvePlanAction(currentVersion, targetVersion, request.Force);
+        var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, cancellationToken).ConfigureAwait(false);
         var selectedPathVersion = action == ManagedModuleUpdatePlanAction.SkipUpToDate && currentVersion is not null
             ? currentVersion
             : targetVersion;
@@ -148,26 +141,172 @@ public sealed class ManagedModuleUpdateService
             RepositorySource = request.Repository.Source,
             ModuleRoot = moduleRoot,
             ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), selectedPathVersion),
-            WouldWriteFiles = action != ManagedModuleUpdatePlanAction.SkipUpToDate,
+            WouldWriteFiles = action != ManagedModuleUpdatePlanAction.SkipUpToDate ||
+                              familyActions.Any(static familyAction => familyAction.WouldWriteFiles),
             RequestedVersion = request.Version,
             MinimumVersion = request.MinimumVersion,
             MaximumVersion = request.MaximumVersion,
-            VersionPolicy = request.VersionPolicy
+            VersionPolicy = request.VersionPolicy,
+            FamilyActions = familyActions
         };
     }
 
-    private static void ThrowIfLoadedModuleBlocksUpdate(ManagedModuleUpdateRequest request)
+    private async Task<ManagedModuleInstallResult> InstallSelectedVersionAsync(
+        ManagedModuleUpdateRequest request,
+        string moduleName,
+        string targetVersion,
+        CancellationToken cancellationToken)
+        => await _installService.InstallAsync(
+            new ManagedModuleInstallRequest
+            {
+                Repository = request.Repository,
+                Name = moduleName,
+                Version = targetVersion,
+                MinimumVersion = null,
+                MaximumVersion = null,
+                VersionPolicy = null,
+                IncludePrerelease = request.IncludePrerelease || ContainsPrereleaseLabel(targetVersion),
+                Scope = request.Scope,
+                ShellEdition = request.ShellEdition,
+                ModuleRoot = request.ModuleRoot,
+                PackageCacheDirectory = request.PackageCacheDirectory,
+                Credential = request.Credential,
+                Force = true,
+                AllowClobber = request.AllowClobber,
+                AcceptLicense = request.AcceptLicense,
+                SkipDependencyCheck = request.SkipDependencyCheck
+            },
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task<IReadOnlyList<ManagedModuleFamilyUpdateResult>> ApplyFamilyActionsAsync(
+        ManagedModuleUpdateRequest request,
+        IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> familyActions,
+        CancellationToken cancellationToken)
+    {
+        if (familyActions.Count == 0)
+            return Array.Empty<ManagedModuleFamilyUpdateResult>();
+
+        var results = new List<ManagedModuleFamilyUpdateResult>(familyActions.Count);
+        foreach (var action in familyActions)
+        {
+            if (!action.WouldWriteFiles)
+            {
+                results.Add(MapFamilyResult(action));
+                continue;
+            }
+
+            var install = await InstallSelectedVersionAsync(request, action.Name, action.TargetVersion, cancellationToken).ConfigureAwait(false);
+            if (install.Status == ManagedModuleInstallStatus.Installed)
+                _receiptStore.WriteReceipt(request.Repository, install, action.PreviousVersion, "Update");
+            results.Add(MapFamilyResult(action, install));
+        }
+
+        return results;
+    }
+
+    private async Task<IReadOnlyList<ManagedModuleFamilyUpdatePlanItem>> PlanFamilyActionsAsync(
+        string moduleRoot,
+        ManagedModuleUpdateRequest request,
+        string targetVersion,
+        CancellationToken cancellationToken)
+    {
+        var policy = request.FamilyPolicy;
+        if (policy is null || !policy.RequireSameVersion)
+            return Array.Empty<ManagedModuleFamilyUpdatePlanItem>();
+
+        var familyNames = GetInstalledFamilyModuleNames(moduleRoot, policy)
+            .Where(name => !name.Equals(request.Name.Trim(), StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (familyNames.Length == 0)
+            return Array.Empty<ManagedModuleFamilyUpdatePlanItem>();
+
+        var actions = new List<ManagedModuleFamilyUpdatePlanItem>(familyNames.Length);
+        foreach (var familyName in familyNames)
+        {
+            var installedVersions = GetInstalledVersions(moduleRoot, familyName);
+            var currentVersion = installedVersions.LastOrDefault();
+            if (currentVersion is null)
+                continue;
+
+            var repositoryVersionAvailable = await RepositoryContainsVersionAsync(
+                request,
+                familyName,
+                targetVersion,
+                cancellationToken).ConfigureAwait(false);
+            var action = ResolveFamilyPlanAction(currentVersion, targetVersion, request.Force, repositoryVersionAvailable);
+            var selectedPathVersion = action is ManagedModuleFamilyUpdatePlanAction.Update or ManagedModuleFamilyUpdatePlanAction.Reinstall
+                ? targetVersion
+                : currentVersion;
+
+            actions.Add(new ManagedModuleFamilyUpdatePlanItem
+            {
+                Name = familyName,
+                FamilyName = ResolveFamilyName(policy),
+                TargetVersion = targetVersion,
+                PreviousVersion = currentVersion,
+                InstalledVersions = installedVersions,
+                Action = action,
+                ModulePath = Path.Combine(moduleRoot, familyName, selectedPathVersion),
+                RepositoryVersionAvailable = repositoryVersionAvailable,
+                WouldWriteFiles = action is ManagedModuleFamilyUpdatePlanAction.Update or ManagedModuleFamilyUpdatePlanAction.Reinstall,
+                ConflictReason = ResolveFamilyConflictReason(familyName, currentVersion, targetVersion, action)
+            });
+        }
+
+        return actions;
+    }
+
+    private async Task<bool> RepositoryContainsVersionAsync(
+        ManagedModuleUpdateRequest request,
+        string moduleName,
+        string targetVersion,
+        CancellationToken cancellationToken)
+    {
+        var versions = await _repositoryClient.GetVersionsAsync(
+            request.Repository,
+            moduleName,
+            request.IncludePrerelease || ContainsPrereleaseLabel(targetVersion),
+            request.Credential,
+            cancellationToken).ConfigureAwait(false);
+        return versions.Any(version => version.Version.Equals(targetVersion, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void ThrowIfLoadedModuleBlocksUpdate(
+        ManagedModuleUpdateRequest request,
+        bool targetWouldWrite,
+        IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> familyActions)
     {
         if (request.AllowLoadedModuleUpdate)
             return;
 
-        var loaded = SelectLoadedModules(request).ToArray();
+        var updatedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (targetWouldWrite)
+            updatedNames.Add(request.Name.Trim());
+        foreach (var action in familyActions.Where(static action => action.WouldWriteFiles))
+            updatedNames.Add(action.Name);
+
+        if (updatedNames.Count == 0)
+            return;
+
+        var loaded = SelectLoadedModules(request, updatedNames).ToArray();
         if (loaded.Length == 0)
             return;
 
         var details = string.Join(", ", loaded.Select(FormatLoadedModule));
         throw new InvalidOperationException(
-            $"Module '{request.Name}' is already loaded and cannot be safely updated by the managed engine: {details}. Close the PowerShell session, unload the module, or set AllowLoadedModuleUpdate when you accept the risk.");
+            $"One or more modules selected for managed update are already loaded and cannot be safely updated: {details}. Close the PowerShell session, unload the module, or set AllowLoadedModuleUpdate when you accept the risk.");
+    }
+
+    private static void ThrowIfFamilyPlanBlocked(IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> familyActions)
+    {
+        var blocked = familyActions
+            .Where(static action => action.Action is ManagedModuleFamilyUpdatePlanAction.MissingRepositoryVersion or ManagedModuleFamilyUpdatePlanAction.DowngradeBlocked)
+            .ToArray();
+        if (blocked.Length == 0)
+            return;
+
+        var details = string.Join("; ", blocked.Select(static action => action.ConflictReason ?? $"{action.Name}: {action.Action}"));
+        throw new InvalidOperationException($"Managed module family update cannot be applied safely: {details}.");
     }
 
     private async Task<string> ResolveSelectedVersionAsync(ManagedModuleUpdateRequest request, CancellationToken cancellationToken)
@@ -221,10 +360,66 @@ public sealed class ManagedModuleUpdateService
         return ManagedModuleUpdatePlanAction.Update;
     }
 
-    private static IEnumerable<ManagedModuleLoadedModule> SelectLoadedModules(ManagedModuleUpdateRequest request)
+    private static ManagedModuleFamilyUpdatePlanAction ResolveFamilyPlanAction(
+        string currentVersion,
+        string targetVersion,
+        bool force,
+        bool repositoryVersionAvailable)
+    {
+        if (!repositoryVersionAvailable)
+            return ManagedModuleFamilyUpdatePlanAction.MissingRepositoryVersion;
+
+        var comparison = ManagedModuleVersionComparer.Instance.Compare(currentVersion, targetVersion);
+        if (comparison == 0)
+            return force ? ManagedModuleFamilyUpdatePlanAction.Reinstall : ManagedModuleFamilyUpdatePlanAction.SkipUpToDate;
+        if (comparison < 0)
+            return ManagedModuleFamilyUpdatePlanAction.Update;
+
+        return ManagedModuleFamilyUpdatePlanAction.DowngradeBlocked;
+    }
+
+    private static string? ResolveFamilyConflictReason(
+        string moduleName,
+        string currentVersion,
+        string targetVersion,
+        ManagedModuleFamilyUpdatePlanAction action)
+        => action switch
+        {
+            ManagedModuleFamilyUpdatePlanAction.MissingRepositoryVersion
+                => $"Repository does not contain '{moduleName}' version {targetVersion}.",
+            ManagedModuleFamilyUpdatePlanAction.DowngradeBlocked
+                => $"'{moduleName}' has version {currentVersion}, which is newer than selected family target {targetVersion}.",
+            _ => null
+        };
+
+    private static IReadOnlyList<ManagedModuleFamilyUpdateResult> MapFamilyResults(
+        IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> familyActions)
+        => familyActions.Count == 0
+            ? Array.Empty<ManagedModuleFamilyUpdateResult>()
+            : familyActions.Select(static action => MapFamilyResult(action)).ToArray();
+
+    private static ManagedModuleFamilyUpdateResult MapFamilyResult(
+        ManagedModuleFamilyUpdatePlanItem action,
+        ManagedModuleInstallResult? install = null)
+        => new()
+        {
+            Name = action.Name,
+            FamilyName = action.FamilyName,
+            TargetVersion = action.TargetVersion,
+            PreviousVersion = action.PreviousVersion,
+            Action = action.Action,
+            ModulePath = install?.ModulePath ?? action.ModulePath,
+            InstallResult = install,
+            Receipt = install?.Receipt,
+            ReceiptPath = install?.ReceiptPath
+        };
+
+    private static IEnumerable<ManagedModuleLoadedModule> SelectLoadedModules(
+        ManagedModuleUpdateRequest request,
+        HashSet<string> updatedNames)
         => (request.LoadedModules ?? Array.Empty<ManagedModuleLoadedModule>())
             .Where(module => module is not null &&
-                             module.Name.Equals(request.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+                             updatedNames.Contains(module.Name));
 
     private static string FormatLoadedModule(ManagedModuleLoadedModule module)
     {
@@ -237,6 +432,41 @@ public sealed class ManagedModuleUpdateService
 
     private static string? FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+
+    private static IEnumerable<string> GetInstalledFamilyModuleNames(string moduleRoot, ManagedModuleFamilyPolicy policy)
+    {
+        if (!Directory.Exists(moduleRoot))
+            return Array.Empty<string>();
+
+        var configuredNames = new HashSet<string>(
+            policy.ModuleNames?.Where(static name => !string.IsNullOrWhiteSpace(name)).Select(static name => name.Trim()) ??
+            Array.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
+        var installedNames = Directory.EnumerateDirectories(moduleRoot)
+            .Select(Path.GetFileName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name!)
+            .Where(name => configuredNames.Contains(name) || MatchesFamilyPrefix(name, policy.ModuleNamePrefix))
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase);
+
+        return installedNames.ToArray();
+    }
+
+    private static bool MatchesFamilyPrefix(string moduleName, string? prefix)
+        => !string.IsNullOrWhiteSpace(prefix) &&
+           moduleName.StartsWith(prefix!.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveFamilyName(ManagedModuleFamilyPolicy policy)
+    {
+        if (!string.IsNullOrWhiteSpace(policy.Name))
+            return policy.Name!.Trim();
+        if (!string.IsNullOrWhiteSpace(policy.ModuleNamePrefix))
+            return policy.ModuleNamePrefix!.Trim();
+        return "ManagedModuleFamily";
+    }
+
+    private static bool ContainsPrereleaseLabel(string version)
+        => version.IndexOf("-", StringComparison.Ordinal) >= 0;
 
     private static void Validate(ManagedModuleUpdateRequest request)
     {
@@ -256,6 +486,11 @@ public sealed class ManagedModuleUpdateService
             throw new ArgumentException("VersionPolicy cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
         if (request.Scope == ManagedModuleInstallScope.Custom && string.IsNullOrWhiteSpace(request.ModuleRoot))
             throw new ArgumentException("ModuleRoot is required when Scope is Custom.", nameof(request));
+        if (request.FamilyPolicy is not null &&
+            request.FamilyPolicy.RequireSameVersion &&
+            string.IsNullOrWhiteSpace(request.FamilyPolicy.ModuleNamePrefix) &&
+            !(request.FamilyPolicy.ModuleNames?.Any(static name => !string.IsNullOrWhiteSpace(name)) == true))
+            throw new ArgumentException("FamilyPolicy requires ModuleNamePrefix or ModuleNames when RequireSameVersion is enabled.", nameof(request));
     }
 
     private static ManagedModuleVersionRange ResolveVersionRange(string? versionPolicy, string? minimumVersion, string? maximumVersion)
