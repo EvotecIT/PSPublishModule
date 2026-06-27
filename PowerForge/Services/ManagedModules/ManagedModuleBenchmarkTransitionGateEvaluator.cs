@@ -95,7 +95,12 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
         if (failedCompatibility.Any(IsDefaultIsolationBlock))
             reasons.Add("Compatibility install/update baseline requires an explicit disposable-host runner for native module cmdlets.");
         else if (failedCompatibility.Length > 0)
+        {
             reasons.Add("One or more compatibility benchmark runs failed.");
+            reasons.AddRange(failedCompatibility
+                .GroupBy(static run => string.IsNullOrWhiteSpace(run.Engine) ? "Unknown" : run.Engine!)
+                .Select(static group => FormatCompatibilityFailureReason(group.Key, group.First())));
+        }
 
         if (operation is ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update &&
             compatibilityRuns.Count == 0)
@@ -157,6 +162,31 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
     private static bool HasFailedImportValidation(ManagedModuleBenchmarkRunResult run)
         => (run.ImportValidations ?? Array.Empty<ManagedModuleImportValidationResult>())
             .Any(static validation => !validation.Succeeded);
+
+    private static string FormatCompatibilityFailureReason(string engine, ManagedModuleBenchmarkRunResult run)
+    {
+        var message = NormalizeFailureMessage(run.ErrorMessage);
+        return string.IsNullOrWhiteSpace(message)
+            ? "Compatibility baseline failed for " + engine + "."
+            : "Compatibility baseline failed for " + engine + ": " + message;
+    }
+
+    private static string? NormalizeFailureMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return null;
+
+        var safeMessage = message!;
+        var normalized = string.Join(
+            " ",
+            safeMessage.Split(new[] { '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(static part => part.Trim())
+                .Where(static part => part.Length > 0));
+        const int maxLength = 220;
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized.Substring(0, maxLength) + "...";
+    }
 
     private static bool IsDefaultIsolationBlock(ManagedModuleBenchmarkRunResult run)
         => !run.Succeeded &&
