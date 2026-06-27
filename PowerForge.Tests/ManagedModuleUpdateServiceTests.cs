@@ -272,6 +272,106 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
     }
 
+    [Fact]
+    public async Task UpdateAsync_blocks_when_target_module_is_loaded_and_update_would_write()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        var loadedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(loadedPath);
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.LoadedModules = new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Tools",
+                Version = "1.0.0",
+                ModuleBase = loadedPath
+            }
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(request));
+
+        Assert.Contains("already loaded", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AllowLoadedModuleUpdate", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_allows_loaded_module_evidence_when_update_is_noop()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var loadedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(loadedPath);
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.LoadedModules = new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Tools",
+                Version = "1.0.0",
+                ModuleBase = loadedPath
+            }
+        };
+
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.UpToDate, result.Status);
+        Assert.Null(result.InstallResult);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_can_override_loaded_module_safety()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.AllowLoadedModuleUpdate = true;
+        request.LoadedModules = new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Tools",
+                Version = "1.0.0"
+            }
+        };
+
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+    }
+
     private static ManagedModuleUpdateRequest CreateRequest(string feedPath, string moduleRoot)
         => new()
         {

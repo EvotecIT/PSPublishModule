@@ -37,6 +37,20 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.True(command.Parameters.ContainsKey("SkipModuleManifestValidate"));
     }
 
+    [Fact]
+    public void UpdateManagedModule_exposes_loaded_module_safety_parameters()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument("Update-ManagedModule");
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(command.Parameters.ContainsKey("LoadedModule"));
+        Assert.True(command.Parameters.ContainsKey("AllowLoadedModuleUpdate"));
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();

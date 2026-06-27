@@ -185,14 +185,14 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement prerelease update.
 - [x] Implement scoped update.
 - [ ] Implement family-aware update.
-- [ ] Implement loaded-module safety checks.
+- [x] Implement loaded-module safety checks.
 - [x] Implement receipt updates after successful update.
 - [x] Emit typed update result objects.
 - [ ] Add Spectre.Console summary output.
 - [x] Add tests for no-op update.
 - [x] Add tests for update with dependencies.
 - [x] Add tests for scoped missing-copy fallback to install.
-- [ ] Add tests for loaded-module conflict blocking.
+- [x] Add tests for loaded-module conflict blocking.
 - [ ] Benchmark against `Update-Module` and `Update-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.
 - [ ] Validate on PowerShell 7+.
