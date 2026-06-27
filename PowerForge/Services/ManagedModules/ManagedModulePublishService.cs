@@ -7,6 +7,7 @@ public sealed class ManagedModulePublishService
 {
     private readonly ManagedModulePackService _packService;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
+    private readonly ManagedModulePackageReader _packageReader;
 
     /// <summary>
     /// Creates a managed module publish service.
@@ -17,6 +18,7 @@ public sealed class ManagedModulePublishService
     {
         _packService = new ManagedModulePackService();
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(logger ?? new NullLogger());
+        _packageReader = new ManagedModulePackageReader();
     }
 
     /// <summary>
@@ -44,8 +46,11 @@ public sealed class ManagedModulePublishService
             Description = request.Description,
             ProjectUrl = request.ProjectUrl,
             Tags = request.Tags,
+            SkipModuleManifestValidate = request.SkipModuleManifestValidate,
             Force = request.Force
         });
+        var metadata = _packageReader.ReadMetadata(package.PackagePath);
+        await VerifyDependenciesAsync(request, metadata, cancellationToken).ConfigureAwait(false);
 
         var publish = await _repositoryClient.PublishPackageAsync(
             request.Repository,
@@ -70,6 +75,61 @@ public sealed class ManagedModulePublishService
             Duplicate = publish.Duplicate,
             Message = publish.Message
         };
+    }
+
+    private async Task VerifyDependenciesAsync(
+        ManagedModulePublishRequest request,
+        ManagedModulePackageMetadata metadata,
+        CancellationToken cancellationToken)
+    {
+        if (request.SkipDependenciesCheck || metadata.ManifestDependencies.Count == 0)
+            return;
+
+        var missing = new List<string>();
+        foreach (var dependency in metadata.ManifestDependencies)
+        {
+            var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+            if (!await RepositoryHasDependencyAsync(request, dependency, range, cancellationToken).ConfigureAwait(false))
+                missing.Add(FormatDependency(dependency, range));
+        }
+
+        if (missing.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"Required module dependency check failed for repository '{request.Repository.Name}'. Missing or incompatible: {string.Join(", ", missing)}. Use SkipDependenciesCheck to bypass this check.");
+    }
+
+    private static string FormatDependency(ManagedModuleDependencyInfo dependency, ManagedModuleVersionRange range)
+        => range == ManagedModuleVersionRange.Any
+            ? dependency.Id
+            : $"{dependency.Id} {range}";
+
+    private async Task<bool> RepositoryHasDependencyAsync(
+        ManagedModulePublishRequest request,
+        ManagedModuleDependencyInfo dependency,
+        ManagedModuleVersionRange range,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var versions = await _repositoryClient.GetVersionsAsync(
+                request.Repository,
+                dependency.Id,
+                range.AllowsPrerelease,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false);
+
+            return versions.Any(version => range.IsSatisfiedBy(version.Version));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private static string ResolveOutputDirectory(ManagedModulePublishRequest request)

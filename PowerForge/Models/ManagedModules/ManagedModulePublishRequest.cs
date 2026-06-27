@@ -61,6 +61,16 @@ public sealed class ManagedModulePublishRequest
     public IReadOnlyList<string>? Tags { get; set; }
 
     /// <summary>
+    /// Skip checking manifest RequiredModules against the target repository.
+    /// </summary>
+    public bool SkipDependenciesCheck { get; set; }
+
+    /// <summary>
+    /// Skip managed manifest metadata validation before packaging.
+    /// </summary>
+    public bool SkipModuleManifestValidate { get; set; }
+
+    /// <summary>
     /// Overwrite an existing local package file.
     /// </summary>
     public bool Force { get; set; }

@@ -23,6 +23,20 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.Equal(commandName, command.Definition);
     }
 
+    [Fact]
+    public void PublishManagedModule_exposes_publish_compatibility_switches()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument("Publish-ManagedModule");
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(command.Parameters.ContainsKey("SkipDependenciesCheck"));
+        Assert.True(command.Parameters.ContainsKey("SkipModuleManifestValidate"));
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();

@@ -51,8 +51,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-Path` for save/publish workflows.
 - [x] Support `-ApiKey`.
 - [x] Support `-NuGetApiKey` as an alias where it helps migration.
-- [ ] Support `-SkipDependenciesCheck` for publish compatibility.
-- [ ] Support `-SkipModuleManifestValidate` for publish compatibility.
+- [x] Support `-SkipDependenciesCheck` for publish compatibility.
+- [x] Support `-SkipModuleManifestValidate` for publish compatibility.
 - [x] Support `-WhatIf` and `-Confirm` on mutating cmdlets.
 - [x] Return typed result objects with enough data to audit source, target path, version policy, resolved version, dependency actions, elapsed time, and receipt state.
 
@@ -207,8 +207,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement private-feed publish with API key.
 - [x] Implement private-feed publish with credentials where supported.
 - [x] Implement duplicate detection.
-- [ ] Implement `-SkipDependenciesCheck`.
-- [ ] Implement `-SkipModuleManifestValidate`.
+- [x] Implement `-SkipDependenciesCheck`.
+- [x] Implement `-SkipModuleManifestValidate`.
 - [ ] Integrate with existing `ModulePublisher`.
 - [ ] Integrate with required-module mirroring.
 - [x] Emit typed publish result objects.
