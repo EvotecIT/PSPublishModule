@@ -317,7 +317,8 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: `Measure-ManagedModule` command-surface contract tests installed a synthetic heavy package payload with 65 extracted files and more than 250 KB of extracted bytes, recording extraction timing, file count, and final disk size.
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Publish` command-surface contract tests published a binary-root module package and verified the `.dll` payload was preserved in the generated `.nupkg`.
 - [x] 2026-06-27: Managed repair/conflict contract tests cover source repair, scoped missing-copy repair, and command-surface loaded-module update blocking without relying on PowerShellGet, PSResourceGet, or external executables.
-- [ ] Public-feed, private-feed install/save, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: Managed path audit found external PowerShell runner usage only in explicit compatibility benchmark engines and import-validation hosts; managed install, save, update, publish, and ModuleState managed delivery stay in C# services.
+- [ ] Public-feed, private-feed install/save, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 
@@ -346,8 +347,8 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [ ] Make managed transport the default for `Update-PrivateModule` after update parity is proven.
 - [x] Route required-module mirroring through the managed engine after save/publish parity is proven.
 - [ ] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
-- [ ] Remove embedded PowerShell scripts from the managed path.
-- [ ] Remove external tool assumptions from managed tests.
+- [x] Remove embedded PowerShell scripts from the managed path.
+- [x] Remove external tool assumptions from managed tests.
 - [x] Update generated command docs from source metadata.
 - [x] Update README examples.
 - [x] Update private gallery docs.
@@ -355,11 +356,11 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 
 ## Done Criteria
 
-- [ ] Managed install/save/update/publish works without PowerShellGet, PSResourceGet, PackageManagement, `nuget.exe`, `dotnet.exe`, `powershell.exe`, `pwsh`, or embedded `.ps1` scripts in the core path.
+- [x] Managed install/save/update/publish works without PowerShellGet, PSResourceGet, PackageManagement, `nuget.exe`, `dotnet.exe`, `powershell.exe`, `pwsh`, or embedded `.ps1` scripts in the core path.
 - [x] Common PowerShellGet workflows have a documented managed equivalent.
 - [x] Common PSResourceGet workflows have a documented managed equivalent.
 - [ ] Existing private-gallery workflows continue to work through wrappers.
-- [ ] ModuleState can maintain installed modules through the managed engine.
+- [x] ModuleState can maintain installed modules through the managed engine.
 - [ ] Benchmarks prove correctness and performance on Windows PowerShell 5.1 and PowerShell 7+.
 - [ ] Compatibility fallback remains only where provider support is explicitly incomplete.
 - [x] Public docs stay vendor-neutral and avoid naming community comparison projects.
