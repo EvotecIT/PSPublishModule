@@ -9,7 +9,7 @@ namespace PowerForge;
 /// <summary>
 /// Publishes built modules to repositories or GitHub releases based on publish configuration.
 /// </summary>
-public sealed class ModulePublisher
+public sealed partial class ModulePublisher
 {
     private readonly ILogger _logger;
     private readonly RepositoryPublisher _repositoryPublisher;
@@ -178,7 +178,12 @@ public sealed class ModulePublisher
         if (isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey))
             throw new InvalidOperationException("Publish API key is required for repository publishing to PSGallery.");
 
-        if (!isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey) && !hasCredential && !hasRuntimeCredentialProvider)
+        var managedRepository = publish.Tool == PublishTool.ManagedModule
+            ? CreateManagedPublishRepository(repositoryName, repoConfig)
+            : null;
+        var managedLocalFolder = managedRepository?.Kind == ManagedModuleRepositoryKind.LocalFolder;
+
+        if (!isPsGallery && !managedLocalFolder && string.IsNullOrWhiteSpace(publish.ApiKey) && !hasCredential && !hasRuntimeCredentialProvider)
             throw new InvalidOperationException("Publish API key or credential is required for repository publishing.");
 
         var tool = publish.Tool;
@@ -212,8 +217,17 @@ public sealed class ModulePublisher
                 "PublishRequiredModules requires PSResourceGet because dependency mirroring saves and republishes dependency graphs before publishing the main module. Use Tool = PSResourceGet or disable PublishRequiredModules.");
         }
 
-        var credential = _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
+        if (publish.PublishRequiredModules && tool == PublishTool.ManagedModule)
+        {
+            throw new InvalidOperationException(
+                "PublishRequiredModules is not yet available with the managed module publish engine. Use Tool = PSResourceGet until managed required-module mirroring is enabled.");
+        }
+
+        var credential = tool == PublishTool.ManagedModule
+            ? ResolveManagedPublishCredential(publish, repoConfig)
+            : _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
         string? temporaryPublishPath = null;
+        string? temporaryPackagePath = null;
         var repositoryCreated = false;
         PublishRepositoryConfiguration? repositoryForPublish = repoConfig is null
             ? null
@@ -229,18 +243,49 @@ public sealed class ModulePublisher
                 delivery: plan.Delivery,
                 includeScriptFolders: includeScriptFolders);
 
-            if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
+            if (tool != PublishTool.ManagedModule && repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
                 repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
                 repositoryForPublish = CloneRegisteredRepository(repoConfig, credential);
             }
 
             if (!publish.Force)
-                EnsureVersionIsGreaterThanRepository(tool, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repositoryName, credential);
+            {
+                if (tool == PublishTool.ManagedModule)
+                {
+                    EnsureManagedVersionIsGreaterThanRepository(
+                        CreateManagedPublishRepository(repositoryName, repoConfig),
+                        plan.ModuleName,
+                        plan.ResolvedVersion,
+                        plan.PreRelease,
+                        credential);
+                }
+                else
+                {
+                    EnsureVersionIsGreaterThanRepository(tool, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repositoryName, credential);
+                }
+            }
 
             _logger.Info($"Publishing {plan.ModuleName} {versionText} to repository '{repositoryName}' using {tool}");
 
             var modulePath = Path.GetFullPath(temporaryPublishPath);
+
+            if (tool == PublishTool.ManagedModule)
+            {
+                temporaryPackagePath = Path.Combine(Path.GetTempPath(), "PowerForge", "managed-publish", Guid.NewGuid().ToString("N"));
+                PublishToRepositoryWithManagedModule(
+                    publish,
+                    plan,
+                    modulePath,
+                    repositoryName,
+                    repoConfig,
+                    credential,
+                    versionText,
+                    temporaryPackagePath);
+                CleanupTemporaryPublishPath(temporaryPublishPath);
+                temporaryPublishPath = null;
+                return CreateRepositoryPublishResult(repositoryName, versionText);
+            }
 
             if (tool != PublishTool.PowerShellGet)
             {
@@ -288,8 +333,15 @@ public sealed class ModulePublisher
 
             if (!string.IsNullOrWhiteSpace(temporaryPublishPath))
                 CleanupTemporaryPublishPath(temporaryPublishPath);
+            if (!string.IsNullOrWhiteSpace(temporaryPackagePath))
+                CleanupTemporaryPublishPath(temporaryPackagePath);
         }
 
+        return CreateRepositoryPublishResult(repositoryName, versionText);
+    }
+
+    private static ModulePublishResult CreateRepositoryPublishResult(string repositoryName, string versionText)
+    {
         return new ModulePublishResult(
             destination: PublishDestination.PowerShellGallery,
             repositoryName: repositoryName,
