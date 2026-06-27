@@ -50,6 +50,47 @@ public sealed class ManagedModulePackageReaderTests
     }
 
     [Fact]
+    public void ReadMetadata_reads_module_manifest_metadata_and_required_modules()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.2.0-preview1.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.2.0-preview1",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.2.0'
+                        RequiredModules = @(
+                            @{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0' },
+                            @{ ModuleName = 'Company.Shared'; ModuleVersion = '2.0.0'; MaximumVersion = '2.9.9' }
+                        )
+                        PrivateData = @{
+                            PSData = @{
+                                Prerelease = 'preview1'
+                            }
+                        }
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Equal("Company.Tools.psd1", metadata.ModuleManifestPath);
+        Assert.Equal("1.2.0", metadata.ModuleManifestVersion);
+        Assert.Equal("preview1", metadata.ModuleManifestPrerelease);
+        Assert.Equal(2, metadata.ManifestDependencies.Count);
+        Assert.Contains(metadata.Dependencies, dependency =>
+            dependency.Id == "Company.Core" &&
+            dependency.VersionRange == "[1.0.0]");
+        Assert.Contains(metadata.Dependencies, dependency =>
+            dependency.Id == "Company.Shared" &&
+            dependency.VersionRange == "[2.0.0,2.9.9]");
+    }
+
+    [Fact]
     public void ReadMetadata_rejects_unsafe_archive_paths()
     {
         using var temp = new TemporaryDirectory();

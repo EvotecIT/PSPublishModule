@@ -103,10 +103,10 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - [x] Implement `.nupkg` identity reading in C#.
 - [x] Implement nuspec metadata reading in C#.
-- [ ] Implement PowerShell module manifest discovery inside `.nupkg` files.
-- [ ] Implement module version and prerelease extraction from manifest metadata.
+- [x] Implement PowerShell module manifest discovery inside `.nupkg` files.
+- [x] Implement module version and prerelease extraction from manifest metadata.
 - [x] Implement dependency extraction from nuspec metadata.
-- [ ] Implement dependency extraction from module manifest `RequiredModules`.
+- [x] Implement dependency extraction from module manifest `RequiredModules`.
 - [ ] Implement file list and size accounting.
 - [x] Implement safe path normalization for archive entries.
 - [x] Reject path traversal entries.
