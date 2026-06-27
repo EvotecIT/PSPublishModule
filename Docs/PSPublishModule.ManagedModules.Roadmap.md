@@ -97,7 +97,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for local folder feeds.
 - [x] Add tests for private-feed credential application.
 - [x] Add tests for package search.
-- [ ] Add tests for missing package, missing version, and malformed feed responses.
+- [x] Add tests for missing package, missing version, and malformed feed responses.
 
 ## Phase 3: Managed Package Reader
 

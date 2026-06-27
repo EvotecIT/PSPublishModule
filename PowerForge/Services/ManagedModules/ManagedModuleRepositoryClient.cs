@@ -150,8 +150,10 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Managed module version query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for {packageId} from {repository.Name}.");
 
-        using var stream = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var document = await ReadJsonDocumentAsync(
+            response.Content,
+            $"Managed module version query for '{packageId}' from repository '{repository.Name}'",
+            cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("versions", out var versions) || versions.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException($"Repository '{repository.Name}' did not return a versions array for {packageId}.");
 
@@ -254,8 +256,10 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Managed module search failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{query}' from {repository.Name}.");
 
-        using var stream = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var document = await ReadJsonDocumentAsync(
+            response.Content,
+            $"Managed module search for '{query}' from repository '{repository.Name}'",
+            cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException($"Repository '{repository.Name}' did not return a search data array.");
 
@@ -357,8 +361,10 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
 
-        using var stream = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var document = await ReadJsonDocumentAsync(
+            response.Content,
+            $"NuGet service index query for repository '{repository.Name}'",
+            cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException($"Repository '{repository.Name}' service index did not include a resources array.");
 
@@ -399,8 +405,10 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
 
-        using var stream = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var document = await ReadJsonDocumentAsync(
+            response.Content,
+            $"NuGet search service discovery for repository '{repository.Name}'",
+            cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException($"Repository '{repository.Name}' service index did not include a resources array.");
 
@@ -592,4 +600,20 @@ public sealed partial class ManagedModuleRepositoryClient
 #else
         => content.ReadAsStreamAsync(cancellationToken);
 #endif
+
+    private static async Task<JsonDocument> ReadJsonDocumentAsync(
+        HttpContent content,
+        string context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var stream = await ReadContentStreamAsync(content, cancellationToken).ConfigureAwait(false);
+            return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(context + " returned malformed JSON.", ex);
+        }
+    }
 }
