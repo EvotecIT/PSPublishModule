@@ -316,6 +316,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         var repositoryUri = RepositoryUri;
         var repositorySourceUri = RepositorySourceUri;
         var repositoryPublishUri = RepositoryPublishUri;
+        var requiredModuleSourceRepository = RequiredModuleSourceRepository;
+        var requiredModuleSourceRepositoryUri = RequiredModuleSourceRepositoryUri;
 
         if (ParameterSetName == "JFrog")
         {
@@ -370,6 +372,19 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             }
         }
 
+        if (string.IsNullOrWhiteSpace(requiredModuleSourceRepositoryUri) &&
+            !string.IsNullOrWhiteSpace(requiredModuleSourceRepository))
+        {
+            var sourceProfile = ModuleRepositoryProfileCommandSupport.TryResolve(requiredModuleSourceRepository);
+            if (sourceProfile is not null)
+            {
+                requiredModuleSourceRepository = sourceProfile.RepositoryName;
+                requiredModuleSourceRepositoryUri = !string.IsNullOrWhiteSpace(sourceProfile.RepositoryUri)
+                    ? sourceProfile.RepositoryUri
+                    : sourceProfile.RepositorySourceUri;
+            }
+        }
+
         var settings = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
         {
             ParameterSetName = parameterSetName,
@@ -414,8 +429,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
             UseAsDependencyVersionSource = UseAsDependencyVersionSource.IsPresent,
             PublishRequiredModules = PublishRequiredModules.IsPresent,
-            RequiredModuleSourceRepository = RequiredModuleSourceRepository,
-            RequiredModuleSourceRepositoryUri = RequiredModuleSourceRepositoryUri,
+            RequiredModuleSourceRepository = requiredModuleSourceRepository,
+            RequiredModuleSourceRepositoryUri = requiredModuleSourceRepositoryUri,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
         });
 

@@ -190,6 +190,38 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
     }
 
+    [Fact]
+    public void NewConfigurationPublish_resolves_required_module_source_profile()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "InternalUpstream",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyUpstream",
+            RepositoryUri = "https://packages.example.test/nuget/v3/index.json",
+            RepositorySourceUri = "https://packages.example.test/nuget/v2",
+            RepositoryPublishUri = "https://packages.example.test/nuget/v2"
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationPublish")
+            .AddParameter("Type", PublishDestination.PowerShellGallery)
+            .AddParameter("ApiKey", "token")
+            .AddParameter("RepositoryName", "CompanyTarget")
+            .AddParameter("Tool", PublishTool.ManagedModule)
+            .AddParameter("PublishRequiredModules")
+            .AddParameter("RequiredModuleSourceRepository", "InternalUpstream")
+            .AddParameter("Enabled");
+
+        var segment = Assert.IsType<ConfigurationPublishSegment>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("CompanyUpstream", segment.Configuration.RequiredModuleSourceRepository);
+        Assert.Equal("https://packages.example.test/nuget/v3/index.json", segment.Configuration.RequiredModuleSourceRepositoryUri);
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();

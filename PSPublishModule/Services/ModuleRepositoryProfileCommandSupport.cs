@@ -12,6 +12,23 @@ internal static class ModuleRepositoryProfileCommandSupport
         ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.All)
         => ResolveRequiredWithStore(profileName, scope).Profile;
 
+    internal static ModuleRepositoryProfile? TryResolve(
+        string? profileName,
+        ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.All)
+    {
+        if (string.IsNullOrWhiteSpace(profileName))
+            return null;
+
+        foreach (var store in ModuleRepositoryProfileStore.GetStores(scope))
+        {
+            var profile = store.GetProfile(profileName!);
+            if (profile is not null)
+                return profile;
+        }
+
+        return null;
+    }
+
     internal static ResolvedModuleRepositoryProfile ResolveRequiredWithStore(
         string profileName,
         ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.All)
