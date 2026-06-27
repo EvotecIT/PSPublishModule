@@ -203,6 +203,38 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_infers_prerelease_from_version_policy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0-preview.2.nupkg"),
+            "Company.Tools",
+            "1.1.0-preview.2",
+            files: CreateModuleFiles("1.1.0-preview.2"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0-preview.10.nupkg"),
+            "Company.Tools",
+            "1.1.0-preview.10",
+            files: CreateModuleFiles("1.1.0-preview.10"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.VersionPolicy = "[1.1.0-preview.1,1.1.0)";
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.Equal("1.1.0-preview.10", result.TargetVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0-preview.10", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_installs_dependencies_for_selected_update()
     {
         using var feed = new TemporaryDirectory();

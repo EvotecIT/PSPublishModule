@@ -24,12 +24,12 @@ internal sealed class ManagedModuleVersionComparer : IComparer<string>
     private sealed class ManagedModuleVersionParts : IComparable<ManagedModuleVersionParts>
     {
         private readonly int[] _numbers;
-        private readonly string? _prerelease;
+        private readonly string[] _prereleaseIdentifiers;
 
-        private ManagedModuleVersionParts(int[] numbers, string? prerelease)
+        private ManagedModuleVersionParts(int[] numbers, string[] prereleaseIdentifiers)
         {
             _numbers = numbers;
-            _prerelease = prerelease;
+            _prereleaseIdentifiers = prereleaseIdentifiers;
         }
 
         public static ManagedModuleVersionParts Parse(string version)
@@ -39,11 +39,12 @@ internal sealed class ManagedModuleVersionComparer : IComparer<string>
             if (plusIndex >= 0)
                 trimmed = trimmed.Substring(0, plusIndex);
 
-            string? prerelease = null;
+            var prereleaseIdentifiers = Array.Empty<string>();
             var dashIndex = trimmed.IndexOf('-');
             if (dashIndex >= 0)
             {
-                prerelease = trimmed.Substring(dashIndex + 1);
+                prereleaseIdentifiers = trimmed.Substring(dashIndex + 1)
+                    .Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
                 trimmed = trimmed.Substring(0, dashIndex);
             }
 
@@ -55,7 +56,7 @@ internal sealed class ManagedModuleVersionComparer : IComparer<string>
             if (numbers.Length == 0)
                 numbers = new[] { 0 };
 
-            return new ManagedModuleVersionParts(numbers, string.IsNullOrWhiteSpace(prerelease) ? null : prerelease);
+            return new ManagedModuleVersionParts(numbers, prereleaseIdentifiers);
         }
 
         public int CompareTo(ManagedModuleVersionParts? other)
@@ -73,14 +74,56 @@ internal sealed class ManagedModuleVersionComparer : IComparer<string>
                     return numberComparison;
             }
 
-            if (_prerelease is null && other._prerelease is null)
+            if (_prereleaseIdentifiers.Length == 0 && other._prereleaseIdentifiers.Length == 0)
                 return 0;
-            if (_prerelease is null)
+            if (_prereleaseIdentifiers.Length == 0)
                 return 1;
-            if (other._prerelease is null)
+            if (other._prereleaseIdentifiers.Length == 0)
                 return -1;
 
-            return StringComparer.OrdinalIgnoreCase.Compare(_prerelease, other._prerelease);
+            var prereleaseLength = Math.Min(_prereleaseIdentifiers.Length, other._prereleaseIdentifiers.Length);
+            for (var index = 0; index < prereleaseLength; index++)
+            {
+                var prereleaseComparison = ComparePrereleaseIdentifier(
+                    _prereleaseIdentifiers[index],
+                    other._prereleaseIdentifiers[index]);
+                if (prereleaseComparison != 0)
+                    return prereleaseComparison;
+            }
+
+            return _prereleaseIdentifiers.Length.CompareTo(other._prereleaseIdentifiers.Length);
+        }
+
+        private static int ComparePrereleaseIdentifier(string left, string right)
+        {
+            var leftNumeric = IsNumericIdentifier(left);
+            var rightNumeric = IsNumericIdentifier(right);
+            if (leftNumeric && rightNumeric)
+                return CompareNumericIdentifier(left, right);
+            if (leftNumeric)
+                return -1;
+            if (rightNumeric)
+                return 1;
+
+            return StringComparer.OrdinalIgnoreCase.Compare(left, right);
+        }
+
+        private static bool IsNumericIdentifier(string value)
+            => value.Length > 0 && value.All(static character => character >= '0' && character <= '9');
+
+        private static int CompareNumericIdentifier(string left, string right)
+        {
+            var normalizedLeft = left.TrimStart('0');
+            var normalizedRight = right.TrimStart('0');
+            if (normalizedLeft.Length == 0)
+                normalizedLeft = "0";
+            if (normalizedRight.Length == 0)
+                normalizedRight = "0";
+
+            var lengthComparison = normalizedLeft.Length.CompareTo(normalizedRight.Length);
+            return lengthComparison != 0
+                ? lengthComparison
+                : StringComparer.Ordinal.Compare(normalizedLeft, normalizedRight);
         }
     }
 }

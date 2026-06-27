@@ -117,11 +117,11 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 4: Managed Resolver
 
-- [ ] Implement semantic version parsing and comparison shared across module state and managed installs.
+- [x] Implement semantic version parsing and comparison shared across module state and managed installs.
 - [x] Implement PowerShellGet-style minimum/maximum/required version policies.
 - [x] Implement PSResourceGet/NuGet range policies.
 - [x] Implement `-VersionPolicy` as the canonical internal representation.
-- [ ] Implement prerelease inclusion rules.
+- [x] Implement prerelease inclusion rules.
 - [x] Implement dependency graph resolution.
 - [x] Implement cycle detection.
 - [ ] Implement repository source preference rules.
@@ -129,7 +129,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Implement conflict diagnostics for incompatible loaded modules.
 - [ ] Implement conflict diagnostics for mixed scopes and side-by-side versions.
 - [x] Add tests for exact/min/max/range policies.
-- [ ] Add tests for prerelease resolution.
+- [x] Add tests for prerelease resolution.
 - [x] Add tests for dependency closure.
 - [ ] Add tests for source preference and family conflict cases.
 
