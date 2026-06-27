@@ -57,7 +57,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 1: Design And Contracts
 
-- [ ] Create managed engine design notes under `Docs`.
+- [x] Create managed engine design notes under `Docs`.
 - [ ] Define compatibility matrix for PowerShellGet v2 commands.
 - [ ] Define compatibility matrix for PSResourceGet commands.
 - [ ] Define the managed command parameter matrix.
@@ -74,35 +74,35 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 2: Managed Repository Client
 
-- [ ] Implement NuGet v3 service index discovery in C#.
-- [ ] Implement package metadata lookup in C#.
-- [ ] Implement package version listing in C#.
+- [x] Implement NuGet v3 service index discovery in C#.
+- [x] Implement package metadata lookup in C#.
+- [x] Implement package version listing in C#.
 - [ ] Implement package search in C#.
-- [ ] Implement package flat-container download URI resolution in C#.
-- [ ] Implement local folder feed enumeration in C#.
-- [ ] Implement repository credentials in C# without relying on registered PowerShell repositories.
+- [x] Implement package flat-container download URI resolution in C#.
+- [x] Implement local folder feed enumeration in C#.
+- [x] Implement repository credentials in C# without relying on registered PowerShell repositories.
 - [ ] Implement retry, timeout, proxy, and cancellation behavior.
 - [ ] Implement provider-neutral errors with actionable remediation messages.
 - [ ] Add tests for PSGallery metadata lookup.
-- [ ] Add tests for local folder feeds.
-- [ ] Add tests for private-feed credential application.
+- [x] Add tests for local folder feeds.
+- [x] Add tests for private-feed credential application.
 - [ ] Add tests for missing package, missing version, and malformed feed responses.
 
 ## Phase 3: Managed Package Reader
 
-- [ ] Implement `.nupkg` identity reading in C#.
-- [ ] Implement nuspec metadata reading in C#.
+- [x] Implement `.nupkg` identity reading in C#.
+- [x] Implement nuspec metadata reading in C#.
 - [ ] Implement PowerShell module manifest discovery inside `.nupkg` files.
 - [ ] Implement module version and prerelease extraction from manifest metadata.
-- [ ] Implement dependency extraction from nuspec metadata.
+- [x] Implement dependency extraction from nuspec metadata.
 - [ ] Implement dependency extraction from module manifest `RequiredModules`.
 - [ ] Implement file list and size accounting.
-- [ ] Implement safe path normalization for archive entries.
-- [ ] Reject path traversal entries.
-- [ ] Reject absolute-path archive entries.
-- [ ] Add tests for normal packages.
-- [ ] Add tests for prerelease packages.
-- [ ] Add tests for malicious archive paths.
+- [x] Implement safe path normalization for archive entries.
+- [x] Reject path traversal entries.
+- [x] Reject absolute-path archive entries.
+- [x] Add tests for normal packages.
+- [x] Add tests for prerelease packages.
+- [x] Add tests for malicious archive paths.
 - [ ] Add tests for packages with manifest/nuspec disagreement.
 
 ## Phase 4: Managed Resolver

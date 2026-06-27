@@ -1,0 +1,71 @@
+using System.IO.Compression;
+using PowerForge;
+
+namespace PowerForge.Tests;
+
+public sealed class ManagedModulePackageReaderTests
+{
+    [Fact]
+    public void ReadMetadata_reads_nuspec_metadata_and_dependencies()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.2.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.2.0",
+            dependencies: new[]
+            {
+                new TestDependency("Company.Core", "[1.0.0,2.0.0)", "net472"),
+                new TestDependency("Company.Shared", "1.5.0", null)
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Equal("Company.Tools", metadata.Id);
+        Assert.Equal("1.2.0", metadata.Version);
+        Assert.Equal("expression:MIT", metadata.License);
+        Assert.Equal(new[] { "automation", "company", "powershell" }, metadata.Tags);
+        Assert.Equal(2, metadata.Dependencies.Count);
+        Assert.Contains(metadata.Dependencies, dependency =>
+            dependency.Id == "Company.Core" &&
+            dependency.VersionRange == "[1.0.0,2.0.0)" &&
+            dependency.TargetFramework == "net472");
+        Assert.Contains(metadata.Dependencies, dependency =>
+            dependency.Id == "Company.Shared" &&
+            dependency.VersionRange == "1.5.0" &&
+            dependency.TargetFramework is null);
+    }
+
+    [Fact]
+    public void ReadMetadata_marks_prerelease_versions()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.2.0.0-beta1.nupkg");
+        TestPackageFactory.Create(packagePath, "Company.Tools", "2.0.0-beta1");
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.True(metadata.IsPrerelease);
+    }
+
+    [Fact]
+    public void ReadMetadata_rejects_unsafe_archive_paths()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+        {
+            var nuspec = archive.CreateEntry("Company.Tools.nuspec");
+            using (var writer = new StreamWriter(nuspec.Open()))
+            {
+                writer.Write(TestPackageFactory.CreateNuspec("Company.Tools", "1.0.0"));
+            }
+
+            archive.CreateEntry("../escape.ps1");
+        }
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ManagedModulePackageReader().ReadMetadata(packagePath));
+        Assert.Contains("unsafe path", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+}
