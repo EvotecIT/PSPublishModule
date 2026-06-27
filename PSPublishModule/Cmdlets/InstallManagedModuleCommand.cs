@@ -128,6 +128,10 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Plan { get; set; }
 
+    /// <summary>Write a compact Spectre.Console summary for each plan or result.</summary>
+    [Parameter]
+    public SwitchParameter ShowSummary { get; set; }
+
     /// <summary>Installs the requested modules.</summary>
     protected override void ProcessRecord()
     {
@@ -161,7 +165,10 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
 
             if (Plan.IsPresent)
             {
-                WriteObject(service.PlanInstallAsync(request).GetAwaiter().GetResult());
+                var plan = service.PlanInstallAsync(request).GetAwaiter().GetResult();
+                WriteObject(plan);
+                if (ShowSummary.IsPresent)
+                    ManagedModuleSummaryWriter.Write(plan);
                 continue;
             }
 
@@ -171,6 +178,8 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
             var result = service.InstallAsync(request).GetAwaiter().GetResult();
 
             WriteObject(result);
+            if (ShowSummary.IsPresent)
+                ManagedModuleSummaryWriter.Write(result);
         }
     }
 

@@ -102,6 +102,10 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter SkipModuleManifestValidate { get; set; }
 
+    /// <summary>Write a compact Spectre.Console summary for the publish result.</summary>
+    [Parameter]
+    public SwitchParameter ShowSummary { get; set; }
+
     /// <summary>Creates and publishes the package to the selected destination.</summary>
     protected override void ProcessRecord()
     {
@@ -137,6 +141,8 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
             .GetResult();
 
         WriteObject(result);
+        if (ShowSummary.IsPresent)
+            ManagedModuleSummaryWriter.Write(result);
     }
 
     private ManagedModuleRepository ResolveRepository()
