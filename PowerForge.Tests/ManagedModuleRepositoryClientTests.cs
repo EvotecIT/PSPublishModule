@@ -29,6 +29,29 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_resolves_powershellgallery_service_metadata()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "PSGallery",
+            "https://www.powershellgallery.com/api/v3/index.json");
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Pester", includePrerelease: false);
+
+        Assert.Equal(new[] { "5.6.1", "5.7.0" }, versions.Select(version => version.Version));
+        Assert.All(versions, version =>
+        {
+            Assert.Equal("PSGallery", version.RepositoryName);
+            Assert.Equal(repository.Source, version.RepositorySource);
+            Assert.StartsWith("https://psgallery.test/packages/pester/", version.PackageSource, StringComparison.OrdinalIgnoreCase);
+        });
+        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://psgallery.test/packages/pester/index.json");
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_applies_basic_credentials_to_repository_requests()
     {
         var requests = new List<RecordedRequest>();
@@ -411,8 +434,17 @@ public sealed class ManagedModuleRepositoryClientTests
                             "]}");
             }
 
+            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v3/index.json")
+                return Json("{\"resources\":[" +
+                            "{\"@id\":\"https://psgallery.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
+                            "{\"@id\":\"https://psgallery.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                            "]}");
+
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0-beta1\",\"1.1.0\"]}");
+
+            if (uri.AbsoluteUri == "https://psgallery.test/packages/pester/index.json")
+                return Json("{\"versions\":[\"5.6.1\",\"5.7.0-preview1\",\"5.7.0\"]}");
 
             if (uri.AbsoluteUri == "https://example.test/packages/malformed.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\"");
