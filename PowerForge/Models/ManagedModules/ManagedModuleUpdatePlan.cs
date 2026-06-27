@@ -76,6 +76,21 @@ public sealed class ManagedModuleUpdatePlan
     public string? VersionPolicy { get; set; }
 
     /// <summary>
+    /// True when installed source evidence satisfies the requested source policy.
+    /// </summary>
+    public bool SourcePolicySatisfied { get; set; } = true;
+
+    /// <summary>
+    /// Diagnostic reason when source evidence does not satisfy policy.
+    /// </summary>
+    public string? SourcePolicyReason { get; set; }
+
+    /// <summary>
+    /// Managed receipt discovered for the installed version, when available.
+    /// </summary>
+    public ManagedModuleReceipt? InstalledReceipt { get; set; }
+
+    /// <summary>
     /// Planned actions for related installed modules covered by the family policy.
     /// </summary>
     public IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> FamilyActions { get; set; } = Array.Empty<ManagedModuleFamilyUpdatePlanItem>();

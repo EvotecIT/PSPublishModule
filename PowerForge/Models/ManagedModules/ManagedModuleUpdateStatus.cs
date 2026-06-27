@@ -16,6 +16,11 @@ public enum ManagedModuleUpdateStatus
     Updated,
 
     /// <summary>
+    /// The requested module version was reinstalled because source evidence did not satisfy policy.
+    /// </summary>
+    SourceRepaired,
+
+    /// <summary>
     /// The requested module was not present in the selected scope and was installed.
     /// </summary>
     InstalledMissing

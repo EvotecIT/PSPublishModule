@@ -48,6 +48,22 @@ internal sealed class ManagedModuleReceiptStore
         return receiptPath;
     }
 
+    public ManagedModuleReceipt? TryReadReceipt(string modulePath)
+    {
+        var receiptPath = GetReceiptPath(modulePath);
+        if (!File.Exists(receiptPath))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<ManagedModuleReceipt>(File.ReadAllText(receiptPath));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public static string GetReceiptPath(string modulePath)
     {
         var normalized = ReceiptRelativePath.Replace('/', Path.DirectorySeparatorChar);

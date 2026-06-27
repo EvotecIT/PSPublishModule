@@ -477,6 +477,57 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "2.0.0")));
     }
 
+    [Fact]
+    public async Task UpdateAsync_repairs_source_mismatch_by_reinstalling_selected_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        WriteReceipt(installedPath, "OtherRepository", "C:\\OtherFeed");
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.SourcePolicy = new ManagedModuleSourcePolicy();
+
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.SourceRepaired, result.Status);
+        Assert.False(result.SourcePolicySatisfied);
+        Assert.Equal("OtherRepository", result.InstalledReceipt?.RepositoryName);
+        Assert.NotNull(result.InstallResult);
+        AssertReceipt(result.ReceiptPath, "Update", "Company.Tools", "1.0.0", "1.0.0");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_blocks_source_repair_without_downgrading_newer_installed_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '2.0.0' }");
+        WriteReceipt(installedPath, "OtherRepository", "C:\\OtherFeed");
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.SourcePolicy = new ManagedModuleSourcePolicy();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(request));
+
+        Assert.Contains("without an explicit downgrade", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
     private static ManagedModuleUpdateRequest CreateRequest(string feedPath, string moduleRoot)
         => CreateRequest(feedPath, moduleRoot, "Company.Tools");
 
@@ -519,5 +570,14 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.Equal(version, receipt.Version);
         Assert.Equal(previousVersion, receipt.PreviousVersion);
         Assert.Equal(64, receipt.PackageSha256.Length);
+    }
+
+    private static void WriteReceipt(string modulePath, string repositoryName, string repositorySource)
+    {
+        var receiptDirectory = Path.Combine(modulePath, ".powerforge");
+        Directory.CreateDirectory(receiptDirectory);
+        File.WriteAllText(
+            Path.Combine(receiptDirectory, "managed-module-receipt.json"),
+            "{\"RepositoryName\":\"" + repositoryName + "\",\"RepositorySource\":\"" + repositorySource.Replace("\\", "\\\\", StringComparison.Ordinal) + "\"}");
     }
 }

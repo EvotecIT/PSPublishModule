@@ -21,6 +21,16 @@ public enum ManagedModuleUpdatePlanAction
     Reinstall,
 
     /// <summary>
+    /// The installed version matches the selected version but source evidence requires repair.
+    /// </summary>
+    RepairSource,
+
+    /// <summary>
+    /// Source evidence does not satisfy policy, but repair would require an implicit downgrade.
+    /// </summary>
+    SourceMismatchBlocked,
+
+    /// <summary>
     /// The installed copy already satisfies the selected version.
     /// </summary>
     SkipUpToDate

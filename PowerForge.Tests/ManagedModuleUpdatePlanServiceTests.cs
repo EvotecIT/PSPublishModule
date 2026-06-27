@@ -202,6 +202,56 @@ public sealed class ManagedModuleUpdatePlanServiceTests
         Assert.Contains("Repository does not contain", familyAction.ConflictReason, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task PlanUpdateAsync_repairs_source_mismatch_for_current_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        WriteReceipt(installedPath, "OtherRepository", "C:\\OtherFeed");
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.SourcePolicy = new ManagedModuleSourcePolicy();
+
+        var plan = await service.PlanUpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdatePlanAction.RepairSource, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+        Assert.False(plan.SourcePolicySatisfied);
+        Assert.NotNull(plan.InstalledReceipt);
+        Assert.Contains("repository name", plan.SourcePolicyReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PlanUpdateAsync_blocks_source_repair_when_installed_version_is_newer_than_target()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0");
+        Directory.CreateDirectory(installedPath);
+        WriteReceipt(installedPath, "OtherRepository", "C:\\OtherFeed");
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.SourcePolicy = new ManagedModuleSourcePolicy();
+
+        var plan = await service.PlanUpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdatePlanAction.SourceMismatchBlocked, plan.Action);
+        Assert.False(plan.WouldWriteFiles);
+        Assert.False(plan.SourcePolicySatisfied);
+    }
+
     private static ManagedModuleUpdateRequest CreateRequest(string feedPath, string moduleRoot)
         => CreateRequest(feedPath, moduleRoot, "Company.Tools");
 
@@ -222,4 +272,13 @@ public sealed class ManagedModuleUpdatePlanServiceTests
         {
             [moduleName + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static void WriteReceipt(string modulePath, string repositoryName, string repositorySource)
+    {
+        var receiptDirectory = Path.Combine(modulePath, ".powerforge");
+        Directory.CreateDirectory(receiptDirectory);
+        File.WriteAllText(
+            Path.Combine(receiptDirectory, "managed-module-receipt.json"),
+            "{\"RepositoryName\":\"" + repositoryName + "\",\"RepositorySource\":\"" + repositorySource.Replace("\\", "\\\\", StringComparison.Ordinal) + "\"}");
+    }
 }

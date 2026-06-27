@@ -148,6 +148,14 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[] FamilyModuleName { get; set; } = Array.Empty<string>();
 
+    /// <summary>Typed source policy used to require managed receipt evidence from the requested repository.</summary>
+    [Parameter]
+    public ManagedModuleSourcePolicy? SourcePolicy { get; set; }
+
+    /// <summary>Require installed source evidence to match the requested repository before reporting up to date.</summary>
+    [Parameter]
+    public SwitchParameter RequireSourceMatch { get; set; }
+
     /// <summary>Allow updating even when matching loaded module evidence is supplied.</summary>
     [Parameter]
     public SwitchParameter AllowLoadedModuleUpdate { get; set; }
@@ -187,6 +195,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                 SkipDependencyCheck = SkipDependencyCheck.IsPresent,
                 LoadedModules = LoadedModule,
                 FamilyPolicy = ResolveFamilyPolicy(),
+                SourcePolicy = ResolveSourcePolicy(),
                 AllowLoadedModuleUpdate = AllowLoadedModuleUpdate.IsPresent
             };
 
@@ -221,5 +230,13 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
             ModuleNamePrefix = FamilyModuleNamePrefix,
             ModuleNames = FamilyModuleName
         };
+    }
+
+    private ManagedModuleSourcePolicy? ResolveSourcePolicy()
+    {
+        if (SourcePolicy is not null)
+            return SourcePolicy;
+
+        return RequireSourceMatch.IsPresent ? new ManagedModuleSourcePolicy() : null;
     }
 }

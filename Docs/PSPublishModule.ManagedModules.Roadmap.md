@@ -126,14 +126,14 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement prerelease inclusion rules.
 - [x] Implement dependency graph resolution.
 - [x] Implement cycle detection.
-- [ ] Implement repository source preference rules.
+- [x] Implement repository source preference rules.
 - [x] Implement family coherence policies for related module families.
 - [x] Implement conflict diagnostics for incompatible loaded modules.
 - [ ] Implement conflict diagnostics for mixed scopes and side-by-side versions.
 - [x] Add tests for exact/min/max/range policies.
 - [x] Add tests for prerelease resolution.
 - [x] Add tests for dependency closure.
-- [ ] Add tests for source preference cases.
+- [x] Add tests for source preference cases.
 - [x] Add tests for family conflict cases.
 
 ## Phase 5: Managed Save
@@ -186,6 +186,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement prerelease update.
 - [x] Implement scoped update.
 - [x] Implement family-aware update.
+- [x] Implement source repair when installed receipt evidence does not match the requested repository.
 - [x] Implement loaded-module safety checks.
 - [x] Implement receipt updates after successful update.
 - [x] Emit typed update result objects.
@@ -195,6 +196,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for scoped missing-copy fallback to install.
 - [x] Add tests for loaded-module conflict blocking.
 - [x] Add tests for family-aware update and blocked family alignment.
+- [x] Add tests for source repair and blocked source mismatch.
 - [ ] Benchmark against `Update-Module` and `Update-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.
 - [ ] Validate on PowerShell 7+.
