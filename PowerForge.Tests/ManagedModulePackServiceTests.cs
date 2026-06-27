@@ -75,6 +75,50 @@ public sealed class ManagedModulePackServiceTests
         Assert.True(File.Exists(Path.Combine(installRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psm1")));
     }
 
+    [Fact]
+    public async Task Publish_classifies_local_feed_duplicate_without_force()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        var destinationPath = Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllText(destinationPath, "existing");
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Local", feed.Path)
+        });
+
+        Assert.False(result.Published);
+        Assert.True(result.Duplicate);
+        Assert.Equal("existing", File.ReadAllText(destinationPath));
+        Assert.Contains("already exists", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Publish_overwrites_local_feed_duplicate_with_force()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        var destinationPath = Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllText(destinationPath, "existing");
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Force = true
+        });
+
+        Assert.True(result.Published);
+        Assert.False(result.Duplicate);
+        Assert.NotEqual("existing", File.ReadAllText(destinationPath));
+    }
+
     private static void CreateModule(string root, string name, string version, string? prerelease)
     {
         Directory.CreateDirectory(root);

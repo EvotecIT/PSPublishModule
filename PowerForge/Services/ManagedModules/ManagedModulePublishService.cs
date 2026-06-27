@@ -50,6 +50,7 @@ public sealed class ManagedModulePublishService
             request.Repository,
             package.PackagePath,
             request.Credential,
+            request.Force,
             cancellationToken).ConfigureAwait(false);
 
         return new ManagedModulePublishResult
@@ -63,7 +64,9 @@ public sealed class ManagedModulePublishService
             RepositorySource = request.Repository.Source,
             PublishSource = publish.PublishSource,
             StatusCode = publish.StatusCode,
-            Published = publish.Published
+            Published = publish.Published,
+            Duplicate = publish.Duplicate,
+            Message = publish.Message
         };
     }
 
@@ -71,9 +74,6 @@ public sealed class ManagedModulePublishService
     {
         if (!string.IsNullOrWhiteSpace(request.OutputDirectory))
             return Path.GetFullPath(request.OutputDirectory!.Trim().Trim('"'));
-        if (request.Repository.Kind == ManagedModuleRepositoryKind.LocalFolder)
-            return Path.GetFullPath(request.Repository.Source.Trim().Trim('"'));
-
         return Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules.Publish", Guid.NewGuid().ToString("N"));
     }
 

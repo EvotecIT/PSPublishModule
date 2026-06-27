@@ -54,4 +54,14 @@ public sealed class ManagedModulePublishResult
     /// True when the package was delivered to the target repository.
     /// </summary>
     public bool Published { get; set; }
+
+    /// <summary>
+    /// True when the repository reported or already contained the same package.
+    /// </summary>
+    public bool Duplicate { get; set; }
+
+    /// <summary>
+    /// Additional status information for skipped or classified publish outcomes.
+    /// </summary>
+    public string? Message { get; set; }
 }
