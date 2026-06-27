@@ -153,7 +153,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 6: Managed Install
 
-- [ ] Implement install planning without mutating disk.
+- [x] Implement install planning without mutating disk.
 - [x] Implement safe extraction with `System.IO.Compression` compatible with `net472`.
 - [x] Implement atomic staging and final move.
 - [x] Implement per-module install locks.
