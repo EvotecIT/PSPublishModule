@@ -86,9 +86,49 @@ public sealed class ManagedModuleBenchmarkRunResult
     public int DependencyCount { get; set; }
 
     /// <summary>
+    /// Number of packages delivered by the operation, including dependencies and family members.
+    /// </summary>
+    public int PackageCount { get; set; }
+
+    /// <summary>
+    /// Package bytes delivered by the operation, including dependencies and family members.
+    /// </summary>
+    public long TotalPackageBytes { get; set; }
+
+    /// <summary>
+    /// Extracted bytes delivered by the operation, including dependencies and family members.
+    /// </summary>
+    public long TotalExtractedBytes { get; set; }
+
+    /// <summary>
+    /// Extracted file count delivered by the operation, including dependencies and family members.
+    /// </summary>
+    public int TotalFileCount { get; set; }
+
+    /// <summary>
+    /// Final disk size of the selected module directory after the operation.
+    /// </summary>
+    public long FinalDiskBytes { get; set; }
+
+    /// <summary>
     /// True when the package came from the package cache.
     /// </summary>
     public bool FromCache { get; set; }
+
+    /// <summary>
+    /// Version read back from the installed module directory, when validation could inspect it.
+    /// </summary>
+    public string? ValidatedVersion { get; set; }
+
+    /// <summary>
+    /// True when the installed module directory reports the expected version.
+    /// </summary>
+    public bool? VersionValidationSucceeded { get; set; }
+
+    /// <summary>
+    /// Human-readable version validation evidence.
+    /// </summary>
+    public string? VersionValidationMessage { get; set; }
 
     /// <summary>
     /// Failure message when the operation failed.

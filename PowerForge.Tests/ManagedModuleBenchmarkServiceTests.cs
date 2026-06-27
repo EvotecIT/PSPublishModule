@@ -46,6 +46,14 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.True(run.PackageBytes > 0);
         Assert.True(run.ExtractedBytes > 0);
         Assert.Equal(1, run.FileCount);
+        Assert.Equal(1, run.PackageCount);
+        Assert.True(run.TotalPackageBytes >= run.PackageBytes);
+        Assert.True(run.TotalExtractedBytes >= run.ExtractedBytes);
+        Assert.True(run.TotalFileCount >= run.FileCount);
+        Assert.True(run.FinalDiskBytes > 0);
+        Assert.Equal("1.0.0", run.ValidatedVersion);
+        Assert.True(run.VersionValidationSucceeded);
+        Assert.Contains("Validated manifest version", run.VersionValidationMessage, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
@@ -82,6 +90,9 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Equal(ManagedModuleBenchmarkOperation.Save, run.Operation);
         Assert.Equal("Installed", run.Status);
         Assert.Equal(saveRoot.Path, run.ModuleRoot);
+        Assert.Equal("1.0.0", run.ValidatedVersion);
+        Assert.True(run.VersionValidationSucceeded);
+        Assert.True(run.FinalDiskBytes > 0);
         Assert.True(File.Exists(Path.Combine(saveRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
@@ -127,7 +138,54 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Equal("1.0.0", run.PreviousVersion);
         Assert.Equal("1.1.0", run.Version);
         Assert.True(run.PackageBytes > 0);
+        Assert.Equal("1.1.0", run.ValidatedVersion);
+        Assert.True(run.VersionValidationSucceeded);
+        Assert.True(run.FinalDiskBytes > 0);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsDependencyTotalsForManagedInstall()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Dependency.2.0.0.nupkg"),
+            "Company.Dependency",
+            "2.0.0",
+            files: CreateDependencyModuleFiles("2.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Dependency", "[2.0.0]", null) },
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleBenchmarkService(new NullLogger());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "install-with-dependency",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    Scope = ManagedModuleInstallScope.Custom,
+                    ModuleRoot = moduleRoot.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal(1, run.DependencyCount);
+        Assert.Equal(2, run.PackageCount);
+        Assert.True(run.TotalPackageBytes > run.PackageBytes);
+        Assert.True(run.TotalExtractedBytes > run.ExtractedBytes);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Dependency", "2.0.0", "Company.Dependency.psd1")));
     }
 
     [Fact]
@@ -245,5 +303,11 @@ public sealed class ManagedModuleBenchmarkServiceTests
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+        };
+
+    private static IReadOnlyDictionary<string, string> CreateDependencyModuleFiles(string version)
+        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Dependency.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
 }

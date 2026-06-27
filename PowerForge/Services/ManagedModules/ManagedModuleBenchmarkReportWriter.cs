@@ -67,8 +67,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine($"Succeeded: `{successful}`");
         markdown.AppendLine($"Failed: `{failed}`");
         markdown.AppendLine();
-        markdown.AppendLine("| Scenario | Engine | Operation | Iteration | Status | Version | Previous | Elapsed ms | Package bytes | Extracted bytes | Files | Error |");
-        markdown.AppendLine("| --- | --- | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | --- |");
+        markdown.AppendLine("| Scenario | Engine | Operation | Iteration | Status | Version | Previous | Elapsed ms | Packages | Package bytes | Extracted bytes | Files | Disk bytes | Version check | Error |");
+        markdown.AppendLine("| --- | --- | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |");
 
         foreach (var run in runs)
         {
@@ -89,11 +89,17 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(" | ")
                 .Append(run.Elapsed.TotalMilliseconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))
                 .Append(" | ")
-                .Append(run.PackageBytes)
+                .Append(run.PackageCount)
                 .Append(" | ")
-                .Append(run.ExtractedBytes)
+                .Append(ResolveTotal(run.TotalPackageBytes, run.PackageBytes))
                 .Append(" | ")
-                .Append(run.FileCount)
+                .Append(ResolveTotal(run.TotalExtractedBytes, run.ExtractedBytes))
+                .Append(" | ")
+                .Append(ResolveTotal(run.TotalFileCount, run.FileCount))
+                .Append(" | ")
+                .Append(run.FinalDiskBytes)
+                .Append(" | ")
+                .Append(FormatVersionValidation(run))
                 .Append(" | ")
                 .Append(Escape(run.ErrorMessage))
                 .AppendLine(" |");
@@ -115,5 +121,22 @@ public sealed class ManagedModuleBenchmarkReportWriter
             return string.Empty;
 
         return value!.Replace("|", "\\|").Replace(Environment.NewLine, " ");
+    }
+
+    private static long ResolveTotal(long total, long fallback)
+        => total > 0 ? total : fallback;
+
+    private static int ResolveTotal(int total, int fallback)
+        => total > 0 ? total : fallback;
+
+    private static string FormatVersionValidation(ManagedModuleBenchmarkRunResult run)
+    {
+        if (run.VersionValidationSucceeded is null)
+            return Escape(run.VersionValidationMessage);
+
+        var status = run.VersionValidationSucceeded.Value ? "ok" : "failed";
+        return string.IsNullOrWhiteSpace(run.ValidatedVersion)
+            ? status
+            : status + " " + Escape(run.ValidatedVersion);
     }
 }
