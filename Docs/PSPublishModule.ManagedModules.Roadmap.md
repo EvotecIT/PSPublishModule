@@ -297,6 +297,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Validate installed module directory version after install/update.
 - [x] Add optional benchmark import validation evidence for PowerShell host checks.
 - [x] Add typed transition-gate evidence to benchmark JSON and Markdown reports.
+- [x] Add `Measure-ManagedModule -RequireTransitionReady` for CI/default-switch gating.
 - [x] Validate imported module version after install in PS 5.1 and PS 7+ benchmark runners.
 - [x] Validate receipts after install/update.
 - [x] Validate benchmark install/import behavior on Windows PowerShell 5.1.
@@ -334,6 +335,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `Microsoft.Graph` 2.38.0 from the public PowerShell Gallery NuGet v2 endpoint into temp roots with `Measure-ManagedModule -Operation Install -AcceptLicense`, recording 40 packages, 77 dependency entries, 41 installed module directories, 402 total files, and about 1.05 GB extracted bytes.
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Publish -Engine Managed,PowerShellGet,PSResourceGet` published the same simple module to isolated temp local feeds on PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655, recording successful publish status, version 1.0.0 evidence, and per-engine publish timings.
 - [x] 2026-06-28: `Measure-ManagedModule` benchmark results now include typed transition gates that classify install/save/update/publish evidence as ready, incomplete, or blocked before managed transport can replace compatibility defaults.
+- [x] 2026-06-28: `Measure-ManagedModule -RequireTransitionReady` now fails the command when transition gates are incomplete or blocked, while still writing requested benchmark reports for CI evidence.
 
 ## Benchmark Scenarios
 

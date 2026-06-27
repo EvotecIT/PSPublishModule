@@ -158,6 +158,10 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter StopOnError { get; set; }
 
+    /// <summary>Fail the command when benchmark transition gates are not ready for managed transport defaults.</summary>
+    [Parameter]
+    public SwitchParameter RequireTransitionReady { get; set; }
+
     /// <summary>Import the delivered module in out-of-process PowerShell hosts and record version evidence.</summary>
     [Parameter]
     public SwitchParameter ValidateImport { get; set; }
@@ -217,7 +221,39 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             new ManagedModuleImportValidationService().Validate(result, ImportHost);
 
         WriteReports(result, reportPath, markdownReportPath);
+        if (RequireTransitionReady.IsPresent)
+            AssertTransitionReady(result);
+
         WriteObject(result);
+    }
+
+    private void AssertTransitionReady(ManagedModuleBenchmarkResult result)
+    {
+        var gates = result.TransitionGates ?? Array.Empty<ManagedModuleBenchmarkTransitionGateResult>();
+        if (gates.Count == 0)
+        {
+            ThrowTerminatingError(new ErrorRecord(
+                new InvalidOperationException("No transition gates were evaluated. Measure install, save, update, or publish before requiring transition readiness."),
+                "ManagedModuleTransitionGateMissing",
+                ErrorCategory.InvalidResult,
+                result));
+            return;
+        }
+
+        var blocked = gates
+            .Where(static gate => !gate.ReadyForDefaultManagedTransport)
+            .ToArray();
+        if (blocked.Length == 0)
+            return;
+
+        var details = string.Join(
+            "; ",
+            blocked.Select(static gate => gate.Operation + "=" + gate.Status + " (" + string.Join("; ", gate.Reasons ?? Array.Empty<string>()) + ")"));
+        ThrowTerminatingError(new ErrorRecord(
+            new InvalidOperationException("Managed module transition gate is not ready. " + details),
+            "ManagedModuleTransitionGateNotReady",
+            ErrorCategory.InvalidResult,
+            result));
     }
 
     private void WriteReports(ManagedModuleBenchmarkResult result, string? reportPath, string? markdownReportPath)
