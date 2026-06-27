@@ -94,10 +94,56 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public string? JFrogRepository { get; set; }
 
-    /// <summary>Optional repository name override when Azure Artifacts details are supplied.</summary>
+    /// <summary>Optional repository name override when repository details are supplied.</summary>
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
+    [ValidateNotNullOrEmpty]
     public string? RepositoryName { get; set; }
+
+    /// <summary>Delivery engine used for module installation.</summary>
+    [Parameter]
+    public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
+
+    /// <summary>Exact package version to install. When omitted, the latest repository version is used.</summary>
+    [Parameter]
+    [Alias("RequiredVersion")]
+    [ValidateNotNullOrEmpty]
+    public string? Version { get; set; }
+
+    /// <summary>Minimum package version to install when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? MinimumVersion { get; set; }
+
+    /// <summary>Maximum package version to install when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? MaximumVersion { get; set; }
+
+    /// <summary>NuGet-style version range policy used by the managed transport when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? VersionPolicy { get; set; }
+
+    /// <summary>Install scope used by managed delivery, or by compatibility delivery when explicitly supplied.</summary>
+    [Parameter]
+    public ManagedModuleInstallScope Scope { get; set; } = ManagedModuleInstallScope.CurrentUser;
+
+    /// <summary>PowerShell path family used when managed delivery resolves default module roots.</summary>
+    [Parameter]
+    public ManagedModuleShellEdition ShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
+
+    /// <summary>Explicit module root used by managed delivery.</summary>
+    [Parameter]
+    [Alias("Path")]
+    [ValidateNotNullOrEmpty]
+    public string? ModuleRoot { get; set; }
+
+    /// <summary>Optional managed package cache directory.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? PackageCacheDirectory { get; set; }
 
     /// <summary>Registration strategy used when Azure Artifacts details are supplied. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
@@ -161,6 +207,19 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Force { get; set; }
 
+    /// <summary>Allow command exports to overlap with other modules in the managed target root.</summary>
+    [Parameter]
+    public SwitchParameter AllowClobber { get; set; }
+
+    /// <summary>Accept package licenses when packages declare license acceptance is required.</summary>
+    [Parameter]
+    public SwitchParameter AcceptLicense { get; set; }
+
+    /// <summary>Skip installing dependencies declared by the package when managed delivery is used.</summary>
+    [Parameter]
+    [Alias("SkipDependenciesCheck")]
+    public SwitchParameter SkipDependencyCheck { get; set; }
+
     /// <summary>Executes the install workflow.</summary>
     protected override void ProcessRecord()
     {
@@ -172,7 +231,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
         var feed = AzureArtifactsFeed;
         var repositoryName = ParameterSetName == ParameterSetAzureArtifacts || ParameterSetName == ParameterSetMicrosoftArtifactRegistry
             ? (RepositoryName ?? string.Empty)
-            : Repository;
+            : RepositoryName ?? Repository;
         var tool = Tool;
         var bootstrapMode = BootstrapMode;
         var trusted = Trusted;
@@ -211,6 +270,10 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
             {
                 Operation = PrivateModuleWorkflowOperation.Install,
                 ModuleNames = Name,
+                RequiredVersions = PrivateModuleCommandSupport.CreateVersionMap(Name, Version),
+                MinimumVersions = PrivateModuleCommandSupport.CreateVersionMap(Name, MinimumVersion),
+                MaximumVersions = PrivateModuleCommandSupport.CreateVersionMap(Name, MaximumVersion),
+                InstallScope = MyInvocation.BoundParameters.ContainsKey(nameof(Scope)) ? Scope.ToString() : null,
                 UseAzureArtifacts = useAzureArtifacts,
                 UseMicrosoftArtifactRegistry = useMicrosoftArtifactRegistry,
                 ProfileName = ParameterSetName == ParameterSetProfile ? ProfileName : null,
@@ -235,7 +298,19 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
                 PromptForCredential = PromptForCredential,
                 InstallPrerequisites = InstallPrerequisites,
                 Prerelease = Prerelease,
-                Force = Force
+                Force = Force,
+                DeliveryTransport = Transport,
+                VersionPolicy = VersionPolicy,
+                ManagedScope = Scope,
+                ManagedShellEdition = ShellEdition,
+                ManagedModuleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
+                ManagedPackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                ManagedRepositorySource = Transport == ModuleStateDeliveryTransport.ManagedModule && ParameterSetName == ParameterSetRepository
+                    ? PrivateModuleCommandSupport.ResolveManagedRepositorySource(this, Repository)
+                    : null,
+                ManagedAllowClobber = AllowClobber,
+                ManagedAcceptLicense = AcceptLicense,
+                ManagedSkipDependencyCheck = SkipDependencyCheck
             },
             (target, action) => ShouldProcess(target, action));
 

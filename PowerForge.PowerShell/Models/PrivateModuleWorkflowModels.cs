@@ -44,6 +44,18 @@ internal sealed class PrivateModuleWorkflowRequest
     internal bool InstallPrerequisites { get; set; }
     internal bool Prerelease { get; set; }
     internal bool Force { get; set; }
+    internal ModuleStateDeliveryTransport DeliveryTransport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
+    internal string? VersionPolicy { get; set; }
+    internal ManagedModuleInstallScope ManagedScope { get; set; } = ManagedModuleInstallScope.CurrentUser;
+    internal ManagedModuleShellEdition ManagedShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
+    internal string? ManagedModuleRoot { get; set; }
+    internal string? ManagedPackageCacheDirectory { get; set; }
+    internal string? ManagedRepositorySource { get; set; }
+    internal bool ManagedAllowClobber { get; set; }
+    internal bool ManagedAcceptLicense { get; set; }
+    internal bool ManagedSkipDependencyCheck { get; set; }
+    internal bool ManagedRequireSourceMatch { get; set; }
+    internal bool ManagedAllowLoadedModuleUpdate { get; set; }
 }
 
 internal sealed class PrivateModuleWorkflowResult
