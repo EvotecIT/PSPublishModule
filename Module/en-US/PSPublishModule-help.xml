@@ -26953,6 +26953,22 @@ engine directly and returns typed benchmark run data that can be compared with c
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ImportHost</maml:name>
+          <maml:description>
+            <maml:para>PowerShell hosts used when ValidateImport is enabled.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleImportValidationHost[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">PowerShell7</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">WindowsPowerShell</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ManagedModuleImportValidationHost[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Iterations</maml:name>
           <maml:description>
@@ -27160,6 +27176,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ValidateImport</maml:name>
+          <maml:description>
+            <maml:para>Import the delivered module in out-of-process PowerShell hosts and record version evidence.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredVersion">
           <maml:name>Version</maml:name>
           <maml:description>
@@ -27284,6 +27312,22 @@ engine directly and returns typed benchmark run data that can be compared with c
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ImportHost</maml:name>
+        <maml:description>
+          <maml:para>PowerShell hosts used when ValidateImport is enabled.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleImportValidationHost[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">PowerShell7</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">WindowsPowerShell</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ManagedModuleImportValidationHost[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27487,6 +27531,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         <maml:name>StopOnError</maml:name>
         <maml:description>
           <maml:para>Stop at the first scenario failure instead of recording failed runs and continuing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ValidateImport</maml:name>
+        <maml:description>
+          <maml:para>Import the delivered module in out-of-process PowerShell hosts and record version evidence.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

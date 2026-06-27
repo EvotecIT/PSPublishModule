@@ -38,6 +38,7 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Equal("install-small", run.ScenarioId);
         Assert.Equal(ManagedModuleBenchmarkOperation.Install, run.Operation);
         Assert.Equal("Managed", run.Engine);
+        Assert.Equal("Company.Tools", run.ModuleName);
         Assert.True(run.Succeeded);
         Assert.Equal("Installed", run.Status);
         Assert.Equal("1.0.0", run.Version);
