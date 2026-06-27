@@ -171,6 +171,38 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_honors_version_policy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.5.0.nupkg"),
+            "Company.Tools",
+            "1.5.0",
+            files: CreateModuleFiles("1.5.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.0.0.nupkg"),
+            "Company.Tools",
+            "2.0.0",
+            files: CreateModuleFiles("2.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.VersionPolicy = "(1.0.0,2.0.0)";
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.Equal("1.5.0", result.TargetVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.5.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_installs_dependencies_for_selected_update()
     {
         using var feed = new TemporaryDirectory();

@@ -117,11 +117,11 @@ public sealed class ManagedModuleInstallService
         if (!string.IsNullOrWhiteSpace(request.Version))
             return request.Version!.Trim();
 
-        var range = ManagedModuleVersionRange.FromBounds(request.MinimumVersion, request.MaximumVersion);
+        var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
         var versions = await _repositoryClient.GetVersionsAsync(
             request.Repository,
             request.Name,
-            request.IncludePrerelease,
+            request.IncludePrerelease || range.AllowsPrerelease,
             request.Credential,
             cancellationToken).ConfigureAwait(false);
 
@@ -161,6 +161,7 @@ public sealed class ManagedModuleInstallService
                     Repository = request.Repository,
                     Name = dependency.Id,
                     Version = dependencyVersion,
+                    VersionPolicy = null,
                     IncludePrerelease = request.IncludePrerelease || range.AllowsPrerelease,
                     Scope = request.Scope,
                     ShellEdition = request.ShellEdition,
@@ -229,11 +230,21 @@ public sealed class ManagedModuleInstallService
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Module name is required.", nameof(request));
         if (!string.IsNullOrWhiteSpace(request.Version) &&
+            (!string.IsNullOrWhiteSpace(request.MinimumVersion) ||
+             !string.IsNullOrWhiteSpace(request.MaximumVersion) ||
+             !string.IsNullOrWhiteSpace(request.VersionPolicy)))
+            throw new ArgumentException("Version cannot be combined with MinimumVersion, MaximumVersion, or VersionPolicy.", nameof(request));
+        if (!string.IsNullOrWhiteSpace(request.VersionPolicy) &&
             (!string.IsNullOrWhiteSpace(request.MinimumVersion) || !string.IsNullOrWhiteSpace(request.MaximumVersion)))
-            throw new ArgumentException("Version cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
+            throw new ArgumentException("VersionPolicy cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
         if (request.Scope == ManagedModuleInstallScope.Custom && string.IsNullOrWhiteSpace(request.ModuleRoot))
             throw new ArgumentException("ModuleRoot is required when Scope is Custom.", nameof(request));
     }
+
+    private static ManagedModuleVersionRange ResolveVersionRange(string? versionPolicy, string? minimumVersion, string? maximumVersion)
+        => string.IsNullOrWhiteSpace(versionPolicy)
+            ? ManagedModuleVersionRange.FromBounds(minimumVersion, maximumVersion)
+            : ManagedModuleVersionRange.Parse(versionPolicy);
 
     private static void CleanupEmptyStage(string stageRoot)
     {
