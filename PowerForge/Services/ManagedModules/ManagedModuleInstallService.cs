@@ -8,6 +8,7 @@ public sealed class ManagedModuleInstallService
     private readonly ILogger _logger;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
     private readonly ManagedModuleArchiveExtractor _extractor;
+    private readonly ManagedModuleReceiptStore _receiptStore;
 
     /// <summary>
     /// Creates a managed module install service.
@@ -19,6 +20,7 @@ public sealed class ManagedModuleInstallService
         _logger = logger ?? new NullLogger();
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(_logger);
         _extractor = new ManagedModuleArchiveExtractor();
+        _receiptStore = new ManagedModuleReceiptStore();
     }
 
     /// <summary>
@@ -39,20 +41,6 @@ public sealed class ManagedModuleInstallService
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
 
-        if (Directory.Exists(modulePath) && !request.Force)
-        {
-            _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
-            return new ManagedModuleInstallResult
-            {
-                Name = request.Name.Trim(),
-                Version = version,
-                Status = ManagedModuleInstallStatus.AlreadyInstalled,
-                RepositoryName = request.Repository.Name,
-                ModuleRoot = moduleRoot,
-                ModulePath = modulePath
-            };
-        }
-
         var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
         var cacheDirectory = ownsCache
             ? Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules", Guid.NewGuid().ToString("N"))
@@ -62,6 +50,21 @@ public sealed class ManagedModuleInstallService
 
         try
         {
+            using var installLock = ManagedModuleInstallLock.Acquire(moduleRoot, request.Name, cancellationToken);
+            if (Directory.Exists(modulePath) && !request.Force)
+            {
+                _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
+                return new ManagedModuleInstallResult
+                {
+                    Name = request.Name.Trim(),
+                    Version = version,
+                    Status = ManagedModuleInstallStatus.AlreadyInstalled,
+                    RepositoryName = request.Repository.Name,
+                    ModuleRoot = moduleRoot,
+                    ModulePath = modulePath
+                };
+            }
+
             var download = await _repositoryClient.DownloadPackageAsync(
                 request.Repository,
                 request.Name,
@@ -73,13 +76,10 @@ public sealed class ManagedModuleInstallService
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
 
-            if (Directory.Exists(modulePath))
-                Directory.Delete(modulePath, recursive: true);
-
-            Directory.Move(stageModulePath, modulePath);
+            PromoteStagedModule(stageModulePath, modulePath);
             CleanupEmptyStage(stageRoot);
 
-            return new ManagedModuleInstallResult
+            var result = new ManagedModuleInstallResult
             {
                 Name = request.Name.Trim(),
                 Version = version,
@@ -91,6 +91,8 @@ public sealed class ManagedModuleInstallService
                 FileCount = extraction.FileCount,
                 ExtractedBytes = extraction.BytesWritten
             };
+            _receiptStore.WriteReceipt(request.Repository, result);
+            return result;
         }
         finally
         {
@@ -140,5 +142,39 @@ public sealed class ManagedModuleInstallService
             if (!Directory.EnumerateFileSystemEntries(directory).Any())
                 Directory.Delete(directory);
         }
+    }
+
+    private static void PromoteStagedModule(string stageModulePath, string modulePath)
+    {
+        var backupPath = default(string);
+        try
+        {
+            if (Directory.Exists(modulePath))
+            {
+                backupPath = Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules.Backup", Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
+                Directory.Move(modulePath, backupPath);
+            }
+
+            Directory.Move(stageModulePath, modulePath);
+            if (backupPath is not null && Directory.Exists(backupPath))
+                Directory.Delete(backupPath, recursive: true);
+        }
+        catch
+        {
+            RestoreBackup(modulePath, backupPath);
+            throw;
+        }
+    }
+
+    private static void RestoreBackup(string modulePath, string? backupPath)
+    {
+        if (backupPath is null || !Directory.Exists(backupPath))
+            return;
+
+        if (Directory.Exists(modulePath))
+            Directory.Delete(modulePath, recursive: true);
+
+        Directory.Move(backupPath, modulePath);
     }
 }

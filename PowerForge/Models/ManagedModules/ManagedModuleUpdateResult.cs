@@ -44,4 +44,14 @@ public sealed class ManagedModuleUpdateResult
     /// Install result when the operation wrote files.
     /// </summary>
     public ManagedModuleInstallResult? InstallResult { get; set; }
+
+    /// <summary>
+    /// Receipt written after successful delivery, when the operation changed disk state.
+    /// </summary>
+    public ManagedModuleReceipt? Receipt { get; set; }
+
+    /// <summary>
+    /// Full path to the receipt written after successful delivery.
+    /// </summary>
+    public string? ReceiptPath { get; set; }
 }

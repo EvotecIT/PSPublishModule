@@ -49,4 +49,14 @@ public sealed class ManagedModuleInstallResult
     /// Number of extracted package bytes.
     /// </summary>
     public long ExtractedBytes { get; set; }
+
+    /// <summary>
+    /// Receipt written after successful delivery, when the operation changed disk state.
+    /// </summary>
+    public ManagedModuleReceipt? Receipt { get; set; }
+
+    /// <summary>
+    /// Full path to the receipt written after successful delivery.
+    /// </summary>
+    public string? ReceiptPath { get; set; }
 }
