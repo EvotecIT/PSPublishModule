@@ -77,6 +77,29 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_uses_nuget_v2_search_endpoint()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var versions = await repositoryClient.SearchPackagesAsync(repository, "Company.*", includePrerelease: false, take: 10);
+
+        Assert.Equal(new[] { "Company.Core", "Company.Tools" }, versions.Select(version => version.Name));
+        Assert.Equal(new[] { "2.0.0", "1.1.0" }, versions.Select(version => version.Version));
+        Assert.All(versions, version =>
+        {
+            Assert.Equal("Gallery", version.RepositoryName);
+            Assert.Equal(repository.Source, version.RepositorySource);
+            Assert.False(version.IsPrerelease);
+        });
+        Assert.Contains(
+            requests,
+            request => request.Url == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsLatestVersion&$top=10");
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_applies_basic_credentials_to_repository_requests()
     {
         var requests = new List<RecordedRequest>();
@@ -537,6 +560,16 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0-beta1</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsLatestVersion&$top=10")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
+                    "<entry><content><m:properties><d:Id>Company.Tools</d:Id><d:Version>1.1.0-beta1</d:Version></m:properties></content></entry>" +
+                    "<entry><content><m:properties><d:Id>Company.Tools</d:Id><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
+                    "<entry><content><m:properties><d:Id>Company.Core</d:Id><d:Version>2.0.0</d:Version></m:properties></content></entry>" +
+                    "<entry><content><m:properties><d:Id>Other.Module</d:Id><d:Version>9.0.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://example.test/packages/malformed.tools/index.json")

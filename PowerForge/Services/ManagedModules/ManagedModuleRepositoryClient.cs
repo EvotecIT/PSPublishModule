@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -102,7 +101,7 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take),
             ManagedModuleRepositoryKind.NuGetV3 => await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
-            ManagedModuleRepositoryKind.NuGetV2 => throw new NotSupportedException("NuGet v2 managed repositories do not support managed search yet. Use an exact package name and Version."),
+            ManagedModuleRepositoryKind.NuGetV2 => await SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -285,52 +284,6 @@ public sealed partial class ManagedModuleRepositoryClient
             .ToArray();
     }
 
-    private async Task<IReadOnlyList<ManagedModuleVersionInfo>> GetNuGetV2VersionsAsync(
-        ManagedModuleRepository repository,
-        string packageId,
-        bool includePrerelease,
-        RepositoryCredential? credential,
-        CancellationToken cancellationToken)
-    {
-        var uri = BuildNuGetV2FindPackagesByIdUri(repository.Source, packageId);
-        using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, uri, credential, "application/xml"),
-            cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            throw CreateRepositoryHttpException(repository, "VersionQuery", response.StatusCode, $"Unable to query versions for package '{packageId}'.");
-
-        XDocument document;
-        try
-        {
-            using var stream = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
-            document = XDocument.Load(stream);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException || ex is System.Xml.XmlException)
-        {
-            throw CreateRepositoryContractException(repository, "VersionQuery", $"Managed module NuGet v2 version query for package '{packageId}' returned malformed XML.");
-        }
-
-        XNamespace data = "http://schemas.microsoft.com/ado/2007/08/dataservices";
-        return document
-            .Descendants(data + "Version")
-            .Select(static version => version.Value)
-            .Where(version => !string.IsNullOrWhiteSpace(version))
-            .Select(version => version.Trim())
-            .Where(version => includePrerelease || !ManagedModuleVersionComparer.IsPrerelease(version))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(version => version, ManagedModuleVersionComparer.Instance)
-            .Select(version => new ManagedModuleVersionInfo
-            {
-                Name = packageId,
-                Version = version,
-                RepositoryName = repository.Name,
-                RepositorySource = repository.Source,
-                PackageSource = BuildNuGetV2PackageUri(repository.Source, packageId, version).ToString(),
-                IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version)
-            })
-            .ToArray();
-    }
-
     private IReadOnlyList<ManagedModuleVersionInfo> SearchLocalPackages(
         ManagedModuleRepository repository,
         string query,
@@ -397,43 +350,6 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         var packageBase = await ResolvePackageBaseAddressAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var packageUri = BuildPackageUri(packageBase, packageId, version);
-        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
-        using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
-            cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            throw CreateRepositoryHttpException(repository, "Download", response.StatusCode, $"Unable to download package '{packageId}' version '{version}'.");
-
-        long bytesWritten;
-        using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
-        using (var destination = File.Create(destinationPath))
-        {
-            await source.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
-            bytesWritten = destination.Length;
-        }
-
-        return new ManagedModuleDownloadResult
-        {
-            Name = packageId,
-            Version = version,
-            RepositoryName = repository.Name,
-            Source = packageUri.ToString(),
-            PackagePath = destinationPath,
-            BytesWritten = bytesWritten,
-            PackageSha256 = ComputeSha256(destinationPath),
-            Metadata = _packageReader.ReadMetadata(destinationPath)
-        };
-    }
-
-    private async Task<ManagedModuleDownloadResult> DownloadNuGetV2PackageAsync(
-        ManagedModuleRepository repository,
-        string packageId,
-        string version,
-        string destinationDirectory,
-        RepositoryCredential? credential,
-        CancellationToken cancellationToken)
-    {
-        var packageUri = BuildNuGetV2PackageUri(repository.Source, packageId, version);
         var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
         using var response = await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
@@ -730,17 +646,6 @@ public sealed partial class ManagedModuleRepositoryClient
         return new Uri(
             new Uri(EnsureTrailingSlash(packageBase)),
             $"{Uri.EscapeDataString(lowerId)}/{Uri.EscapeDataString(lowerVersion)}/{Uri.EscapeDataString(lowerId)}.{Uri.EscapeDataString(lowerVersion)}.nupkg");
-    }
-
-    private static Uri BuildNuGetV2PackageUri(string source, string packageId, string version)
-        => new(
-            new Uri(EnsureTrailingSlash(source)),
-            $"package/{Uri.EscapeDataString(packageId.Trim())}/{Uri.EscapeDataString(version.Trim())}");
-
-    private static Uri BuildNuGetV2FindPackagesByIdUri(string source, string packageId)
-    {
-        var escapedId = Uri.EscapeDataString(packageId.Trim().Replace("'", "''"));
-        return new Uri(new Uri(EnsureTrailingSlash(source)), $"FindPackagesById()?id='{escapedId}'");
     }
 
     private static string BuildDestinationPath(string destinationDirectory, string packageId, string version)

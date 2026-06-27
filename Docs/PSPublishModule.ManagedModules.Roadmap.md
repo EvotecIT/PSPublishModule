@@ -76,6 +76,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Define receipt schema and where receipts are stored.
 - [x] Define which existing cmdlets become wrappers and which remain independent.
 - [x] Support exact-version NuGet v2 package downloads for public gallery endpoints that do not expose a reachable NuGet v3 service index from the current host.
+- [x] Support NuGet v2 version lookup and package-id wildcard search for public gallery endpoints.
 
 ## Current Receipt And Rollback Contract
 
@@ -323,6 +324,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `ThreadJob` 2.1.0 from the public PowerShell Gallery NuGet v2 endpoint into temp module roots with `Measure-ManagedModule -Operation Install`, validated manifest version 2.1.0, and recorded package bytes, extracted bytes, file count, and repository request count.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `PSScriptAnalyzer` 1.25.0 from the public PowerShell Gallery NuGet v2 endpoint, validating a medium public package with 14.6 MB downloaded, 299 MB extracted, and 48 files.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `Microsoft.Graph.Users` 2.38.0 with `-AcceptLicense`, resolving and installing its related dependency package through the managed engine and recording 2 packages, 65 total files, and 71 MB total extracted bytes.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Find-ManagedModule -Name PSScript*` against the public PowerShell Gallery NuGet v2 endpoint, returning package-id wildcard results with `PSScriptAnalyzer` 1.25.0 first.
 - [ ] Large many-dependency public-feed, mixed-version family, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
