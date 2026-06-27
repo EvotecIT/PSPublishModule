@@ -240,7 +240,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for ModuleState managed install.
 - [x] Add tests for ModuleState managed update.
 - [x] Add tests for ModuleState managed source repair.
-- [ ] Add tests for ModuleState source/scope/family repairs through the managed engine.
+- [x] Add tests for ModuleState source/scope/family repairs through the managed engine.
 
 ## Phase 10: Benchmarks And Proof
 
