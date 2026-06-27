@@ -114,7 +114,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for normal packages.
 - [x] Add tests for prerelease packages.
 - [x] Add tests for malicious archive paths.
-- [ ] Add tests for packages with manifest/nuspec disagreement.
+- [x] Add tests for packages with manifest/nuspec disagreement.
 
 ## Phase 4: Managed Resolver
 

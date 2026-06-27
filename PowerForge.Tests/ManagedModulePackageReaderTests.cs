@@ -94,6 +94,78 @@ public sealed class ManagedModulePackageReaderTests
     }
 
     [Fact]
+    public void ReadMetadata_rejects_manifest_name_that_disagrees_with_nuspec_id()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Other.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.0.0'
+                    }
+                    """
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ManagedModulePackageReader().ReadMetadata(packagePath));
+        Assert.Contains("does not match module manifest", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Company.Tools", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Other.Tools.psd1", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadMetadata_rejects_manifest_version_that_disagrees_with_nuspec_version()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '2.0.0'
+                    }
+                    """
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ManagedModulePackageReader().ReadMetadata(packagePath));
+        Assert.Contains("does not match module manifest version", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1.0.0", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("2.0.0", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadMetadata_accepts_semantically_equivalent_manifest_version()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.2.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.2",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.2.0'
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Equal("1.2", metadata.Version);
+        Assert.Equal("1.2.0", metadata.ModuleManifestVersion);
+    }
+
+    [Fact]
     public void ReadMetadata_rejects_unsafe_archive_paths()
     {
         using var temp = new TemporaryDirectory();
