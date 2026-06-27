@@ -5,6 +5,23 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleRepositoryClient
 {
+    internal static HttpMessageHandler CreateDefaultHttpMessageHandler(ManagedModuleRepositoryClientOptions options)
+    {
+        var handler = new HttpClientHandler
+        {
+            UseProxy = options.UseProxy
+        };
+        if (!options.UseProxy || options.ProxyAddress is null)
+            return handler;
+
+        var proxy = new WebProxy(options.ProxyAddress, options.BypassProxyOnLocal);
+        if (options.ProxyCredential is not null)
+            proxy.Credentials = ToNetworkCredential(options.ProxyCredential);
+
+        handler.Proxy = proxy;
+        return handler;
+    }
+
     private async Task<HttpResponseMessage> SendWithPolicyAsync(
         Func<HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)
@@ -64,4 +81,12 @@ public sealed partial class ManagedModuleRepositoryClient
         => statusCode == HttpStatusCode.RequestTimeout ||
            statusCode == (HttpStatusCode)429 ||
            (int)statusCode >= 500;
+
+    private static NetworkCredential? ToNetworkCredential(RepositoryCredential credential)
+    {
+        if (string.IsNullOrWhiteSpace(credential.UserName) && string.IsNullOrWhiteSpace(credential.Secret))
+            return null;
+
+        return new NetworkCredential(credential.UserName ?? string.Empty, credential.Secret ?? string.Empty);
+    }
 }

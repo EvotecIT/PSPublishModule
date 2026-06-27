@@ -19,4 +19,24 @@ public sealed class ManagedModuleRepositoryClientOptions
     /// Optional timeout applied to each HTTP request attempt.
     /// </summary>
     public TimeSpan? RequestTimeout { get; set; } = TimeSpan.FromSeconds(100);
+
+    /// <summary>
+    /// True when HTTP requests should use proxy configuration.
+    /// </summary>
+    public bool UseProxy { get; set; } = true;
+
+    /// <summary>
+    /// Optional explicit proxy address used by the managed repository client when it owns the HTTP handler.
+    /// </summary>
+    public Uri? ProxyAddress { get; set; }
+
+    /// <summary>
+    /// Optional proxy credential for explicit proxy connections.
+    /// </summary>
+    public RepositoryCredential? ProxyCredential { get; set; }
+
+    /// <summary>
+    /// True when the explicit proxy should be bypassed for local addresses.
+    /// </summary>
+    public bool BypassProxyOnLocal { get; set; } = true;
 }

@@ -92,7 +92,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement local folder feed enumeration in C#.
 - [x] Implement repository credentials in C# without relying on registered PowerShell repositories.
 - [x] Implement retry, timeout, and cancellation behavior.
-- [ ] Implement proxy behavior.
+- [x] Implement proxy behavior.
 - [ ] Implement provider-neutral errors with actionable remediation messages.
 - [ ] Add tests for PSGallery metadata lookup.
 - [x] Add tests for local folder feeds.

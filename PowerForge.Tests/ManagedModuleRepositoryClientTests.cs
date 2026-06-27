@@ -120,6 +120,43 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public void CreateDefaultHttpMessageHandler_applies_explicit_proxy_options()
+    {
+        var proxyAddress = new Uri("http://proxy.example.test:8080");
+        var handler = Assert.IsType<HttpClientHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
+            new ManagedModuleRepositoryClientOptions
+            {
+                ProxyAddress = proxyAddress,
+                BypassProxyOnLocal = false,
+                ProxyCredential = new RepositoryCredential
+                {
+                    UserName = "proxy-user",
+                    Secret = "proxy-secret"
+                }
+            }));
+
+        Assert.True(handler.UseProxy);
+        Assert.NotNull(handler.Proxy);
+        Assert.Equal(proxyAddress, handler.Proxy!.GetProxy(new Uri("https://example.test/v3/index.json")));
+        var credential = Assert.IsType<NetworkCredential>(handler.Proxy.Credentials);
+        Assert.Equal("proxy-user", credential.UserName);
+        Assert.Equal("proxy-secret", credential.Password);
+    }
+
+    [Fact]
+    public void CreateDefaultHttpMessageHandler_can_disable_proxy()
+    {
+        var handler = Assert.IsType<HttpClientHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
+            new ManagedModuleRepositoryClientOptions
+            {
+                UseProxy = false,
+                ProxyAddress = new Uri("http://proxy.example.test:8080")
+            }));
+
+        Assert.False(handler.UseProxy);
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_writes_package_from_nuget_v3_feed()
     {
         var requests = new List<RecordedRequest>();
