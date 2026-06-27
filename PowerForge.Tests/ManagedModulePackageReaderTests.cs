@@ -26,6 +26,9 @@ public sealed class ManagedModulePackageReaderTests
         Assert.Equal("1.2.0", metadata.Version);
         Assert.Equal("expression:MIT", metadata.License);
         Assert.Equal(new[] { "automation", "company", "powershell" }, metadata.Tags);
+        Assert.True(metadata.FileCount >= 1);
+        Assert.True(metadata.PackageBytes > 0);
+        Assert.True(metadata.UncompressedBytes > 0);
         Assert.Equal(2, metadata.Dependencies.Count);
         Assert.Contains(metadata.Dependencies, dependency =>
             dependency.Id == "Company.Core" &&

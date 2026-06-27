@@ -107,7 +107,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement module version and prerelease extraction from manifest metadata.
 - [x] Implement dependency extraction from nuspec metadata.
 - [x] Implement dependency extraction from module manifest `RequiredModules`.
-- [ ] Implement file list and size accounting.
+- [x] Implement file list and size accounting.
 - [x] Implement safe path normalization for archive entries.
 - [x] Reject path traversal entries.
 - [x] Reject absolute-path archive entries.
