@@ -273,6 +273,106 @@ public sealed class InvokeModuleStateCommandTests
         Assert.Contains(modules, static module => (string)module["Name"]! == "Company.Tools" && (string)module["Scope"]! == "AllUsers");
     }
 
+    [Fact]
+    public void InvokeModuleStatePlan_ManagedTransport_InstallsToCustomModuleRoot()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var plan = new ModuleStatePlanResult
+        {
+            Actions = new[]
+            {
+                new ModuleStatePlanActionResult
+                {
+                    Kind = "Install",
+                    ModuleName = "Company.Tools",
+                    VersionPolicy = "=1.0.0",
+                    Reason = "missing"
+                }
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Invoke-ModuleStatePlan")
+            .AddParameter("Plan", plan)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Execute");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<PSPublishModule.ModuleStateApplyResult>(Assert.Single(results).BaseObject);
+        Assert.True(result.ExecutionRequested);
+        var execution = Assert.Single(result.ExecutionResults);
+        Assert.Equal("Install", execution.Operation);
+        Assert.True(execution.OperationPerformed);
+        var dependency = Assert.Single(execution.DependencyResults);
+        Assert.Equal("ManagedModule", dependency.Installer);
+        Assert.Equal("Installed", dependency.Status);
+        Assert.Equal("1.0.0", dependency.ResolvedVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public void InvokeModuleStatePlan_ManagedTransport_UpdatesToCustomModuleRoot()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        var plan = new ModuleStatePlanResult
+        {
+            Actions = new[]
+            {
+                new ModuleStatePlanActionResult
+                {
+                    Kind = "Update",
+                    ModuleName = "Company.Tools",
+                    InstalledVersion = "1.0.0",
+                    VersionPolicy = "*",
+                    Reason = "latest requested"
+                }
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Invoke-ModuleStatePlan")
+            .AddParameter("Plan", plan)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Execute");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<PSPublishModule.ModuleStateApplyResult>(Assert.Single(results).BaseObject);
+        var execution = Assert.Single(result.ExecutionResults);
+        Assert.Equal("Update", execution.Operation);
+        Assert.True(execution.OperationPerformed);
+        var dependency = Assert.Single(execution.DependencyResults);
+        Assert.Equal("ManagedModule", dependency.Installer);
+        Assert.Equal("Updated", dependency.Status);
+        Assert.Equal("1.0.0", dependency.InstalledVersion);
+        Assert.Equal("1.1.0", dependency.ResolvedVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+    }
+
     private static object? InvokeResolveDesiredState(
         InvokeModuleStateCommand command,
         ModuleStateInventoryResult inventory)
@@ -337,5 +437,29 @@ public sealed class InvokeModuleStateCommandTests
         Assert.NotNull(method);
 
         return Assert.IsType<bool>(method!.Invoke(null, new object[] { executionResults }));
+    }
+
+    private static PowerShell CreatePowerShellWithModuleImported()
+    {
+        var ps = PowerShell.Create();
+        ps.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(InstallManagedModuleCommand).Assembly.Location)
+            .AddParameter("Force");
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+        return ps;
+    }
+
+    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
+        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+        };
+
+    private static void AssertNoPowerShellErrors(PowerShell ps)
+    {
+        if (ps.HadErrors)
+            throw new InvalidOperationException(string.Join(Environment.NewLine, ps.Streams.Error.Select(error => error.ToString())));
     }
 }
