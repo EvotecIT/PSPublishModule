@@ -1,5 +1,6 @@
 using PSPublishModule;
 using System.Reflection;
+using System.Management.Automation;
 
 namespace PowerForge.Tests;
 
@@ -126,6 +127,18 @@ public sealed class ModuleStateInventoryCommandSupportTests
         Assert.True(module.IsLoaded);
         Assert.True(module.IsEffectiveImportCandidate);
         Assert.Equal(@"C:\Modules\Company.Tools\1.2.0", module.Path);
+    }
+
+    [Fact]
+    public void ResolveLoadedModuleVersion_AppendsPrereleaseLabel()
+    {
+        var item = new PSObject();
+        item.Properties.Add(new PSNoteProperty("Version", new Version(1, 2, 0)));
+        item.Properties.Add(new PSNoteProperty("Prerelease", "preview1"));
+
+        var version = ModuleStateInventoryCommandSupport.ResolveLoadedModuleVersion(item);
+
+        Assert.Equal("1.2.0-preview1", version);
     }
 
     private static string? InvokeInferScope(string path)

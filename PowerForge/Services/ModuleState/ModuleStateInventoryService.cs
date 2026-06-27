@@ -324,18 +324,16 @@ internal sealed class ModuleStateInventoryService
 
     private static IEnumerable<DirectoryInfo> EnumerateDirectoriesSafe(string path)
     {
-        IEnumerable<DirectoryInfo> directories;
         try
         {
-            directories = new DirectoryInfo(path).EnumerateDirectories("*", SearchOption.TopDirectoryOnly);
+            return new DirectoryInfo(path)
+                .EnumerateDirectories("*", SearchOption.TopDirectoryOnly)
+                .ToArray();
         }
         catch
         {
-            yield break;
+            return Array.Empty<DirectoryInfo>();
         }
-
-        foreach (var directory in directories)
-            yield return directory;
     }
 
     private readonly struct DiscoveredModule

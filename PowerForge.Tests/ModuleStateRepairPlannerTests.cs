@@ -243,6 +243,73 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
+    public void CreateRepairActions_TargetsFamilyRepairAtMismatchedScope()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.36.0", scope: "CurrentUser", isEffectiveImportCandidate: true),
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.38.0", scope: "AllUsers"),
+            new ModuleStateInstalledModule("Microsoft.Graph.Users", "2.38.0", scope: "AllUsers", isEffectiveImportCandidate: true)
+        });
+        var familyPolicies = new[]
+        {
+            new ModuleStateFamilyPolicy(
+                "MicrosoftGraph",
+                new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Users" })
+        };
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            Array.Empty<ModuleStateMaintenanceReceipt>(),
+            Array.Empty<ModuleStatePlanAction>(),
+            familyPolicies));
+
+        Assert.Equal(ModuleStatePlanActionKind.Update, action.Kind);
+        Assert.Equal("Microsoft.Graph.Authentication", action.ModuleName);
+        Assert.Equal("2.36.0", action.InstalledVersion);
+        Assert.Equal("=2.38.0", action.VersionPolicy);
+        Assert.Equal("CurrentUser", action.TargetScope);
+        Assert.True(action.IsRepair);
+    }
+
+    [Fact]
+    public void CreateRepairActions_PreservesCoveredActionRepositoryForFamilyRepair()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Microsoft.Graph.Authentication", "2.36.0", scope: "CurrentUser", isEffectiveImportCandidate: true),
+            new ModuleStateInstalledModule("Microsoft.Graph.Users", "2.38.0", scope: "CurrentUser", isEffectiveImportCandidate: true)
+        });
+        var existingActions = new[]
+        {
+            new ModuleStatePlanAction(
+                ModuleStatePlanActionKind.NoAction,
+                "Microsoft.Graph.Authentication",
+                "2.36.0",
+                ">=2.36.0",
+                "satisfied",
+                targetScope: "CurrentUser",
+                targetRepository: "CompanyModules")
+        };
+        var familyPolicies = new[]
+        {
+            new ModuleStateFamilyPolicy(
+                "MicrosoftGraph",
+                new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Users" })
+        };
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            Array.Empty<ModuleStateMaintenanceReceipt>(),
+            existingActions,
+            familyPolicies));
+
+        Assert.Equal("Microsoft.Graph.Authentication", action.ModuleName);
+        Assert.Equal("CurrentUser", action.TargetScope);
+        Assert.Equal("CompanyModules", action.TargetRepository);
+    }
+
+    [Fact]
     public void CreateRepairActions_DoesNotInstallMissingFamilyPresetModules()
     {
         var inventory = new ModuleStateInventory(new[]

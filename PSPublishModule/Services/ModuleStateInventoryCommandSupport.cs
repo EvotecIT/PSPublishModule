@@ -66,14 +66,32 @@ internal static class ModuleStateInventoryCommandSupport
             throw new ArgumentNullException(nameof(cmdlet));
 
         return cmdlet.InvokeCommand
-            .InvokeScript("Get-Module | Select-Object -Property Name, Version, Path")
+            .InvokeScript("Get-Module | Select-Object -Property Name, Version, Path, @{ Name = 'Prerelease'; Expression = { $_.PrivateData.PSData.Prerelease } }")
             .OfType<PSObject>()
             .Select(static item => new ModuleStateLoadedModuleEvidence(
                 item.Properties["Name"]?.Value as string,
-                item.Properties["Version"]?.Value?.ToString(),
+                ResolveLoadedModuleVersion(item),
                 item.Properties["Path"]?.Value as string))
             .Where(static item => !string.IsNullOrWhiteSpace(item.Name) && !string.IsNullOrWhiteSpace(item.Version))
             .ToArray();
+    }
+
+    internal static string? ResolveLoadedModuleVersion(PSObject item)
+    {
+        if (item is null)
+            return null;
+
+        var version = item.Properties["Version"]?.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(version))
+            return version;
+
+        if (ModuleStateVersion.TryParse(version!, out var parsed) && parsed.IsPrerelease)
+            return version;
+
+        var prerelease = item.Properties["Prerelease"]?.Value?.ToString()?.Trim();
+        return string.IsNullOrWhiteSpace(prerelease)
+            ? version
+            : version + "-" + prerelease!.TrimStart('-');
     }
 
     internal static string[] ResolveEnvironmentModulePaths()

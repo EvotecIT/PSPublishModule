@@ -90,4 +90,43 @@ public sealed class ModuleStateApplyResultMapperTests
         Assert.Contains(modules, static module => module.Name == "Company.Tools" && module.Version == "1.4.0" && module.SourceRepository == "ExecutionRepo");
         Assert.Contains(modules, static module => module.Name == "Company.Other" && module.Version == "2.0.0" && module.Scope == "CurrentUser");
     }
+
+    [Fact]
+    public void MaintenanceEvidenceMapper_PrefersPostApplyInventoryForSameModule()
+    {
+        var execution = new[]
+        {
+            new ModuleStateDeliveryExecutionResult
+            {
+                RepositoryName = "ExecutionRepo",
+                DependencyResults = new[]
+                {
+                    new ModuleStateDependencyResult
+                    {
+                        Name = "Company.Tools",
+                        ResolvedVersion = "1.2.0"
+                    }
+                }
+            }
+        };
+        var postInventory = new ModuleStateInventoryResult
+        {
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.2.0-preview1",
+                    Scope = "CurrentUser"
+                }
+            }
+        };
+
+        var module = Assert.Single(ModuleStateMaintenanceEvidenceMapper.ToObservedModules(execution, postInventory, "Company"));
+
+        Assert.Equal("Company.Tools", module.Name);
+        Assert.Equal("1.2.0-preview1", module.Version);
+        Assert.Equal("Company", module.SourceRepository);
+        Assert.Equal("CurrentUser", module.Scope);
+    }
 }
