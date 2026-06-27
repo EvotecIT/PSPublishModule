@@ -67,8 +67,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine($"Succeeded: `{successful}`");
         markdown.AppendLine($"Failed: `{failed}`");
         markdown.AppendLine();
-        markdown.AppendLine("| Scenario | Engine | Operation | Iteration | Status | Version | Previous | Elapsed ms | Packages | Package bytes | Extracted bytes | Files | Disk bytes | Version check | Error |");
-        markdown.AppendLine("| --- | --- | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |");
+        markdown.AppendLine("| Scenario | Engine | Operation | Iteration | Status | Version | Previous | Elapsed ms | Requests | Packages | Package bytes | Extracted bytes | Extraction ms | Files | Disk bytes | Version check | Error |");
+        markdown.AppendLine("| --- | --- | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |");
 
         foreach (var run in runs)
         {
@@ -89,11 +89,15 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(" | ")
                 .Append(run.Elapsed.TotalMilliseconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))
                 .Append(" | ")
+                .Append(run.RepositoryRequestCount)
+                .Append(" | ")
                 .Append(run.PackageCount)
                 .Append(" | ")
                 .Append(ResolveTotal(run.TotalPackageBytes, run.PackageBytes))
                 .Append(" | ")
                 .Append(ResolveTotal(run.TotalExtractedBytes, run.ExtractedBytes))
+                .Append(" | ")
+                .Append(FormatMilliseconds(ResolveTotal(run.TotalExtractionElapsed, run.ExtractionElapsed)))
                 .Append(" | ")
                 .Append(ResolveTotal(run.TotalFileCount, run.FileCount))
                 .Append(" | ")
@@ -128,6 +132,14 @@ public sealed class ManagedModuleBenchmarkReportWriter
 
     private static int ResolveTotal(int total, int fallback)
         => total > 0 ? total : fallback;
+
+    private static TimeSpan? ResolveTotal(TimeSpan? total, TimeSpan? fallback)
+        => total is { Ticks: > 0 } ? total : fallback;
+
+    private static string FormatMilliseconds(TimeSpan? value)
+        => value is null
+            ? string.Empty
+            : value.Value.TotalMilliseconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string FormatVersionValidation(ManagedModuleBenchmarkRunResult run)
     {

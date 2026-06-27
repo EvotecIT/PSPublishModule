@@ -18,6 +18,7 @@ public sealed partial class ManagedModuleRepositoryClient
     private readonly Dictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _packagePublishAddressCache = new(StringComparer.OrdinalIgnoreCase);
+    private long _requestCount;
 
     /// <summary>
     /// Creates a repository client.
@@ -37,6 +38,11 @@ public sealed partial class ManagedModuleRepositoryClient
         _httpClient = httpClient ?? new HttpClient(CreateDefaultHttpMessageHandler(_options));
         _packageReader = packageReader ?? new ManagedModulePackageReader();
     }
+
+    /// <summary>
+    /// Number of HTTP request attempts sent by this repository client instance.
+    /// </summary>
+    public long RequestCount => System.Threading.Interlocked.Read(ref _requestCount);
 
     /// <summary>
     /// Lists package versions from the repository.

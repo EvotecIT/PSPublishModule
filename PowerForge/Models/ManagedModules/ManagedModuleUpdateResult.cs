@@ -71,6 +71,11 @@ public sealed class ManagedModuleUpdateResult
     public TimeSpan Elapsed { get; set; }
 
     /// <summary>
+    /// Repository HTTP request attempts observed during this update operation.
+    /// </summary>
+    public long RepositoryRequestCount { get; set; }
+
+    /// <summary>
     /// Install result when the operation wrote files.
     /// </summary>
     public ManagedModuleInstallResult? InstallResult { get; set; }

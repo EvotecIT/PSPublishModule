@@ -51,6 +51,7 @@ internal static class ManagedModuleBenchmarkEvidence
             TotalPackageBytes = downloads.Sum(static download => download.BytesWritten),
             TotalExtractedBytes = installs.Sum(static install => install.ExtractedBytes),
             TotalFileCount = installs.Sum(static install => install.FileCount),
+            TotalExtractionElapsed = SumExtractionElapsed(installs),
             FinalDiskBytes = MeasureDirectoryBytes(modulePath),
             ValidatedVersion = validation.ValidatedVersion,
             VersionValidationSucceeded = validation.Succeeded,
@@ -61,6 +62,12 @@ internal static class ManagedModuleBenchmarkEvidence
     private static int CountDependencies(ManagedModuleInstallResult result)
         => (result.DependencyResults ?? Array.Empty<ManagedModuleInstallResult>())
             .Sum(static dependency => 1 + CountDependencies(dependency));
+
+    private static TimeSpan SumExtractionElapsed(IEnumerable<ManagedModuleInstallResult> installs)
+    {
+        var ticks = installs.Sum(static install => install.ExtractionElapsed.Ticks);
+        return TimeSpan.FromTicks(ticks);
+    }
 
     private static IEnumerable<ManagedModuleInstallResult> FlattenInstallResults(ManagedModuleInstallResult result)
     {
@@ -188,6 +195,8 @@ internal sealed class ManagedModuleBenchmarkRunEvidence
     internal long TotalExtractedBytes { get; set; }
 
     internal int TotalFileCount { get; set; }
+
+    internal TimeSpan TotalExtractionElapsed { get; set; }
 
     internal long FinalDiskBytes { get; set; }
 
