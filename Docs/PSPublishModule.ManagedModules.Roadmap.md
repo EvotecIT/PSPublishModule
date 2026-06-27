@@ -179,7 +179,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 7: Managed Update
 
-- [ ] Implement update planning from installed inventory and repository metadata.
+- [x] Implement update planning from installed inventory and repository metadata.
 - [x] Implement latest update.
 - [x] Implement constrained update.
 - [x] Implement prerelease update.

@@ -114,6 +114,46 @@ public sealed class ManagedModuleUpdateService
         };
     }
 
+    /// <summary>
+    /// Creates a non-mutating update plan for the requested module.
+    /// </summary>
+    /// <param name="request">Update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Update plan.</returns>
+    public async Task<ManagedModuleUpdatePlan> PlanUpdateAsync(
+        ManagedModuleUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        Validate(request);
+
+        var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
+        var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
+        var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
+        var currentVersion = installedVersions.LastOrDefault();
+        var action = ResolvePlanAction(currentVersion, targetVersion, request.Force);
+        var selectedPathVersion = action == ManagedModuleUpdatePlanAction.SkipUpToDate && currentVersion is not null
+            ? currentVersion
+            : targetVersion;
+
+        return new ManagedModuleUpdatePlan
+        {
+            Name = request.Name.Trim(),
+            TargetVersion = targetVersion,
+            PreviousVersion = currentVersion,
+            InstalledVersions = installedVersions,
+            Action = action,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            ModuleRoot = moduleRoot,
+            ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), selectedPathVersion),
+            WouldWriteFiles = action != ManagedModuleUpdatePlanAction.SkipUpToDate,
+            RequestedVersion = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy
+        };
+    }
+
     private async Task<string> ResolveSelectedVersionAsync(ManagedModuleUpdateRequest request, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(request.Version))
@@ -148,6 +188,21 @@ public sealed class ManagedModuleUpdateService
             .Select(static version => version!)
             .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
             .ToArray();
+    }
+
+    private static ManagedModuleUpdatePlanAction ResolvePlanAction(
+        string? currentVersion,
+        string targetVersion,
+        bool force)
+    {
+        if (currentVersion is null)
+            return ManagedModuleUpdatePlanAction.InstallMissing;
+
+        var comparison = ManagedModuleVersionComparer.Instance.Compare(currentVersion, targetVersion);
+        if (comparison >= 0)
+            return force ? ManagedModuleUpdatePlanAction.Reinstall : ManagedModuleUpdatePlanAction.SkipUpToDate;
+
+        return ManagedModuleUpdatePlanAction.Update;
     }
 
     private static void Validate(ManagedModuleUpdateRequest request)
