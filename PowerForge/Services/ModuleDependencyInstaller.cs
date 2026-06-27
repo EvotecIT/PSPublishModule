@@ -377,20 +377,14 @@ public sealed partial class ModuleDependencyInstaller
             return new Decision(needsInstall: true, requestedVersion: dep.RequiredVersion ?? dep.MinimumVersion, versionArgument: arg, reason: "Not installed");
         }
 
-        if (!TryParseVersion(installedVersion, out var installed))
-        {
-            var arg = BuildVersionArgument(dep);
-            return new Decision(needsInstall: true, requestedVersion: dep.RequiredVersion ?? dep.MinimumVersion, versionArgument: arg, reason: $"Unable to parse installed version '{installedVersion}'");
-        }
-
         if (!string.IsNullOrWhiteSpace(dep.RequiredVersion))
         {
-            if (!TryParseVersion(dep.RequiredVersion, out var required))
+            if (!TryCompareModuleVersions(installedVersion, dep.RequiredVersion, out var comparison))
             {
                 return new Decision(needsInstall: true, requestedVersion: dep.RequiredVersion, versionArgument: dep.RequiredVersion, reason: $"Unable to parse RequiredVersion '{dep.RequiredVersion}'");
             }
 
-            if (installed != required)
+            if (comparison != 0)
                 return new Decision(needsInstall: true, requestedVersion: dep.RequiredVersion, versionArgument: dep.RequiredVersion, reason: $"Exact version required: {dep.RequiredVersion} (installed: {installedVersion})");
 
             return new Decision(needsInstall: false, requestedVersion: dep.RequiredVersion, versionArgument: dep.RequiredVersion, reason: "Exact version already installed");
@@ -398,13 +392,13 @@ public sealed partial class ModuleDependencyInstaller
 
         if (!string.IsNullOrWhiteSpace(dep.MinimumVersion))
         {
-            if (!TryParseVersion(dep.MinimumVersion, out var min))
+            if (!TryCompareModuleVersions(installedVersion, dep.MinimumVersion, out var minimumComparison))
             {
                 var arg = BuildVersionArgument(dep);
                 return new Decision(needsInstall: true, requestedVersion: dep.MinimumVersion, versionArgument: arg, reason: $"Unable to parse MinimumVersion '{dep.MinimumVersion}'");
             }
 
-            if (installed < min || (installed == min && !dep.MinimumVersionInclusive))
+            if (minimumComparison < 0 || (minimumComparison == 0 && !dep.MinimumVersionInclusive))
             {
                 var arg = BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
                 return new Decision(needsInstall: true, requestedVersion: dep.MinimumVersion, versionArgument: arg, reason: $"Below minimum version: {dep.MinimumVersion} (installed: {installedVersion})");
@@ -413,10 +407,13 @@ public sealed partial class ModuleDependencyInstaller
 
         if (!string.IsNullOrWhiteSpace(dep.MaximumVersion))
         {
-            if (TryParseVersion(dep.MaximumVersion, out var max))
+            if (TryCompareModuleVersions(installedVersion, dep.MaximumVersion, out var maximumComparison))
             {
-                if (installed > max || (installed == max && !dep.MaximumVersionInclusive))
-                    return new Decision(needsInstall: false, requestedVersion: null, versionArgument: null, reason: $"Above maximum version: {dep.MaximumVersion} (installed: {installedVersion}) - keeping newer");
+                if (maximumComparison > 0 || (maximumComparison == 0 && !dep.MaximumVersionInclusive))
+                {
+                    var arg = BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
+                    return new Decision(needsInstall: true, requestedVersion: dep.MaximumVersion, versionArgument: arg, reason: $"Above maximum version: {dep.MaximumVersion} (installed: {installedVersion})");
+                }
             }
         }
 
@@ -790,6 +787,9 @@ public sealed partial class ModuleDependencyInstaller
         if (string.Equals(left, right, StringComparison.OrdinalIgnoreCase))
             return true;
 
+        if (TryCompareSemanticVersions(left, right, out var semanticComparison))
+            return semanticComparison == 0;
+
         if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
             return parsedLeft == parsedRight;
 
@@ -808,6 +808,21 @@ public sealed partial class ModuleDependencyInstaller
             return parsedLeft.CompareTo(parsedRight);
 
         return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryCompareModuleVersions(string? left, string? right, out int comparison)
+    {
+        if (TryCompareSemanticVersions(left, right, out comparison))
+            return true;
+
+        if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
+        {
+            comparison = parsedLeft.CompareTo(parsedRight);
+            return true;
+        }
+
+        comparison = 0;
+        return false;
     }
 
     private static bool TryCompareSemanticVersions(string? left, string? right, out int comparison)

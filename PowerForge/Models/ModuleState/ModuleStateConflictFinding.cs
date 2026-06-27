@@ -8,7 +8,9 @@ internal sealed class ModuleStateConflictFinding
         string message,
         string familyName,
         string[] moduleNames,
-        string[] versions)
+        string[] versions,
+        string? scope = null,
+        string? sourceRepository = null)
     {
         Severity = severity;
         Code = code;
@@ -16,6 +18,8 @@ internal sealed class ModuleStateConflictFinding
         FamilyName = familyName;
         ModuleNames = moduleNames;
         Versions = versions;
+        Scope = string.IsNullOrWhiteSpace(scope) ? null : scope!.Trim();
+        SourceRepository = string.IsNullOrWhiteSpace(sourceRepository) ? null : sourceRepository!.Trim();
     }
 
     internal ModuleStateConflictSeverity Severity { get; }
@@ -29,6 +33,10 @@ internal sealed class ModuleStateConflictFinding
     internal string[] ModuleNames { get; }
 
     internal string[] Versions { get; }
+
+    internal string? Scope { get; }
+
+    internal string? SourceRepository { get; }
 }
 
 internal enum ModuleStateConflictSeverity

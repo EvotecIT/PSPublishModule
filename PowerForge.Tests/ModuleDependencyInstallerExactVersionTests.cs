@@ -251,6 +251,34 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     }
 
     [Fact]
+    public void EnsureInstalled_InstallsConstrainedVersion_WhenExclusiveMaximumIsViolated()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "2.0.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    maximumVersion: "2.0.0",
+                    maximumVersionInclusive: false)
+            },
+            repository: "Company");
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("(, 2.0.0)", runner.LastInstallArguments![1]);
+    }
+
+    [Fact]
     public void EnsureInstalled_InstallsWhenOnlyAnotherScopeSatisfiesAnyVersionPolicy()
     {
         var runner = new StubPowerShellRunner(
@@ -338,6 +366,35 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         Assert.NotNull(runner.LastInstallArguments);
         Assert.Equal("[1.2.0-preview1, 1.2.0)", runner.LastInstallArguments![1]);
         Assert.Equal("AllUsers", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_TreatsInstalledPrereleaseAsSatisfied_WhenRangeAllowsIt()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "1.2.0-preview1"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    minimumVersion: "1.2.0-preview1",
+                    maximumVersion: "1.2.0",
+                    maximumVersionInclusive: false)
+            },
+            repository: "Company",
+            prerelease: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Satisfied, result.Status);
+        Assert.Equal("1.2.0-preview1", result.InstalledVersion);
+        Assert.Equal(0, runner.InstallCalls);
     }
 
     [Fact]

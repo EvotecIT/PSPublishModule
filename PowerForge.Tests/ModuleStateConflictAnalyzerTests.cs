@@ -191,6 +191,26 @@ public sealed class ModuleStateConflictAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_BlocksDowngradePolicyWhenLoadedVersionSatisfiesButEffectiveDiskCopyDoesNot()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.0.0", isLoaded: true),
+            new ModuleStateInstalledModule("Company.Tools", "3.0.0", isEffectiveImportCandidate: true)
+        });
+        var desired = new[]
+        {
+            new ModuleStateDesiredModule("Company.Tools", "<2.0.0")
+        };
+
+        var finding = Assert.Single(new ModuleStateConflictAnalyzer().Analyze(inventory, desired));
+
+        Assert.Equal(ModuleStateConflictSeverity.Error, finding.Severity);
+        Assert.Equal("ModuleState.DowngradeRequiresCleanup", finding.Code);
+        Assert.Equal(new[] { "3.0.0" }, finding.Versions);
+    }
+
+    [Fact]
     public void Analyze_FlagsLoadedModuleThatDoesNotSatisfyDesiredPolicy()
     {
         var inventory = new ModuleStateInventory(new[]

@@ -69,6 +69,30 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_KeepsSourceMismatchError_WhenOnlyAnotherScopeHasDeliveryAction()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.3.0", scope: "CurrentUser", sourceRepository: "PublicGallery", isEffectiveImportCandidate: true),
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "AllUsers", sourceRepository: "CompanyModules")
+            }),
+            new[]
+            {
+                new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", new[] { "CompanyModules", "InternalModules" }, scope: "CurrentUser"),
+                new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", new[] { "CompanyModules" }, scope: "AllUsers")
+            });
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+
+        Assert.Contains(plan.Actions, static action =>
+            action.Kind == ModuleStatePlanActionKind.Update &&
+            action.TargetScope == "AllUsers");
+        var finding = Assert.Single(plan.Findings, static finding => finding.Code == "ModuleState.SourcePreferenceMismatch");
+        Assert.Equal(ModuleStateConflictSeverity.Error, finding.Severity);
+    }
+
+    [Fact]
     public void CreatePlan_UsesHighestInstalledVersionForDecision()
     {
         var request = new ModuleStatePlanRequest(
@@ -183,7 +207,7 @@ public sealed class ModuleStatePlannerTests
         Assert.Contains(plan.Findings, static finding => finding.Code == "ModuleState.LoadedVersionMismatch");
         Assert.Contains(plan.Findings, static finding =>
             finding.Code == "ModuleState.SourcePreferenceMismatch" &&
-            finding.Severity == ModuleStateConflictSeverity.Warning);
+            finding.Severity == ModuleStateConflictSeverity.Error);
     }
 
     [Fact]
