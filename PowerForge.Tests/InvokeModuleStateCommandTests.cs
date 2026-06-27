@@ -62,6 +62,28 @@ public sealed class InvokeModuleStateCommandTests
     }
 
     [Fact]
+    public void ResolveDesiredState_IncludesSavePathForConvenienceModules()
+    {
+        var command = new InvokeModuleStateCommand
+        {
+            ModuleName = new[] { "Company.Tools" },
+            SavePath = @"C:\OfflineModules"
+        };
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Test",
+            InstalledModules = Array.Empty<ModuleStateInstalledModuleResult>()
+        };
+
+        var desired = Assert.IsType<Hashtable>(InvokeResolveDesiredState(command, inventory));
+        var modules = Assert.IsAssignableFrom<IEnumerable>(desired["Modules"]);
+        var module = Assert.IsType<Hashtable>(modules.Cast<object>().Single());
+
+        Assert.Equal(@"C:\OfflineModules", module["Path"]);
+    }
+
+
+    [Fact]
     public void ApplyLatestUpdateIntent_ConvertsNoActionToUpdate()
     {
         var command = new InvokeModuleStateCommand
@@ -371,6 +393,51 @@ public sealed class InvokeModuleStateCommandTests
         Assert.Equal("1.0.0", dependency.InstalledVersion);
         Assert.Equal("1.1.0", dependency.ResolvedVersion);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public void InvokeModuleStatePlan_ManagedTransport_SavesToTargetPath()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var plan = new ModuleStatePlanResult
+        {
+            Actions = new[]
+            {
+                new ModuleStatePlanActionResult
+                {
+                    Kind = "Save",
+                    ModuleName = "Company.Tools",
+                    VersionPolicy = "=1.0.0",
+                    Reason = "missing saved copy",
+                    TargetPath = moduleRoot.Path
+                }
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Invoke-ModuleStatePlan")
+            .AddParameter("Plan", plan)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("Execute");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<PSPublishModule.ModuleStateApplyResult>(Assert.Single(results).BaseObject);
+        var execution = Assert.Single(result.ExecutionResults);
+        Assert.Equal("Save", execution.Operation);
+        Assert.True(execution.OperationPerformed);
+        var dependency = Assert.Single(execution.DependencyResults);
+        Assert.Equal("ManagedModule", dependency.Installer);
+        Assert.Equal("Installed", dependency.Status);
+        Assert.Equal("1.0.0", dependency.ResolvedVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
     [Fact]

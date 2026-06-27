@@ -18,6 +18,26 @@ internal static class ManagedModuleCommandSupport
         return new ManagedModuleRepository(name, source);
     }
 
+    internal static ManagedModuleRepository CreateRepository(
+        PSCmdlet cmdlet,
+        string repositoryName,
+        string repository,
+        string? profileName,
+        bool repositoryWasBound)
+    {
+        if (string.IsNullOrWhiteSpace(profileName))
+            return CreateRepository(cmdlet, repositoryName, repository);
+
+        if (repositoryWasBound)
+            throw new InvalidOperationException("Specify either ProfileName or Repository, not both.");
+
+        var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
+        var source = FirstNonEmpty(profile.RepositorySourceUri, profile.RepositoryUri, profile.Repository, profile.RepositoryName, profileName)
+            ?? throw new InvalidOperationException($"Profile '{profileName}' does not define a repository source.");
+        var name = FirstNonEmpty(profile.RepositoryName, profileName) ?? profileName!;
+        return new ManagedModuleRepository(name, ResolveRepositorySource(cmdlet, source));
+    }
+
     internal static string ResolveRepositoryName(string repositoryName, string repository)
     {
         if (!string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase))
@@ -74,4 +94,15 @@ internal static class ManagedModuleCommandSupport
 
     private static ManagedModuleRepositoryKind GetRepositoryKind(string repository)
         => new ManagedModuleRepository("Repository", repository).Kind;
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
+    }
 }

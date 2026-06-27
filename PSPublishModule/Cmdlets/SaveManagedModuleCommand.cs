@@ -52,6 +52,11 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string RepositoryName { get; set; } = ManagedModuleCommandSupport.DefaultRepositoryName;
 
+    /// <summary>Saved repository profile name.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ProfileName { get; set; }
+
     /// <summary>Exact package version to save. When omitted, the latest repository version is used.</summary>
     [Parameter]
     [Alias("RequiredVersion")]
@@ -136,7 +141,12 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, Path)!;
-        var repository = ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository);
+        var repository = ManagedModuleCommandSupport.CreateRepository(
+            this,
+            RepositoryName,
+            Repository,
+            ProfileName,
+            MyInvocation.BoundParameters.ContainsKey("Repository"));
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var service = new ManagedModuleInstallService(logger);

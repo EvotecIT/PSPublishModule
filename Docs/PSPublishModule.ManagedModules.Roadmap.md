@@ -226,8 +226,9 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 9: ModuleState Integration
 
-- [ ] Teach `Invoke-ModuleState` to use the managed engine for install/update/save operations.
+- [x] Teach `Invoke-ModuleState` to use the managed engine for install/update/save operations.
 - [x] Teach `Invoke-ModuleState` and `Invoke-ModuleStatePlan` to use the managed engine for install/update delivery when requested.
+- [x] Teach `Invoke-ModuleState` and `Invoke-ModuleStatePlan` to use the managed engine for save delivery when requested.
 - [ ] Keep `Get-ModuleState` inventory object-first.
 - [ ] Keep `Get-ModuleStatePlan` as an inspectable plan surface.
 - [ ] Keep `Test-ModuleState` as a validation surface.
@@ -239,6 +240,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for ModuleState managed delivery command shaping.
 - [x] Add tests for ModuleState managed install.
 - [x] Add tests for ModuleState managed update.
+- [x] Add tests for ModuleState managed save.
 - [x] Add tests for ModuleState managed source repair.
 - [x] Add tests for ModuleState source/scope/family repairs through the managed engine.
 
@@ -306,7 +308,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
 - [ ] Remove embedded PowerShell scripts from the managed path.
 - [ ] Remove external tool assumptions from managed tests.
-- [ ] Update generated command docs from source metadata.
+- [x] Update generated command docs from source metadata.
 - [ ] Update README examples.
 - [ ] Update private gallery docs.
 - [ ] Update ModuleState docs.

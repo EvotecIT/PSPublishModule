@@ -72,6 +72,60 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void Prepare_CreatesManagedSaveDeliveryCommand()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Save,
+                    "Company.Tools",
+                    null,
+                    "=1.2.0",
+                    "missing",
+                    targetPath: @"C:\OfflineModules",
+                    targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(
+                installPrerequisites: true,
+                prerelease: true,
+                force: true,
+                transport: ModuleStateDeliveryTransport.ManagedModule));
+
+        Assert.True(result.Receipt.CanApply);
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal("Save-ManagedModule", command.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Path", @"C:\OfflineModules", "-Repository", "CompanyModules", "-Prerelease", "-Force" }, command.Arguments);
+    }
+
+    [Fact]
+    public void Prepare_BlocksSaveDeliveryForPrivateTransport()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Save,
+                    "Company.Tools",
+                    null,
+                    ">=1.2.0",
+                    "missing",
+                    targetPath: @"C:\OfflineModules",
+                    targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions());
+
+        Assert.False(result.Receipt.CanApply);
+        Assert.Contains("managed module transport", result.Receipt.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Prepare_BlocksWhenPlanHasErrorFindings()
     {
         var plan = new ModuleStatePlan(

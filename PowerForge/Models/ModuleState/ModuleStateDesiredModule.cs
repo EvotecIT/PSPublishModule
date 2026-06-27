@@ -10,7 +10,8 @@ internal sealed class ModuleStateDesiredModule
         string name,
         string? versionPolicy = null,
         IEnumerable<string>? allowedSources = null,
-        string? scope = null)
+        string? scope = null,
+        string? targetPath = null)
     {
         Name = string.IsNullOrWhiteSpace(name)
             ? throw new ArgumentException("Desired module name is required.", nameof(name))
@@ -22,6 +23,7 @@ internal sealed class ModuleStateDesiredModule
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         Scope = string.IsNullOrWhiteSpace(scope) ? null : scope!.Trim();
+        TargetPath = string.IsNullOrWhiteSpace(targetPath) ? null : targetPath!.Trim();
     }
 
     internal string Name { get; }
@@ -31,4 +33,6 @@ internal sealed class ModuleStateDesiredModule
     internal string[] AllowedSources { get; }
 
     internal string? Scope { get; }
+
+    internal string? TargetPath { get; }
 }
