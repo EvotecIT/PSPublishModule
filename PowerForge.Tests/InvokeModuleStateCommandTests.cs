@@ -343,6 +343,45 @@ public sealed class InvokeModuleStateCommandTests
     }
 
     [Fact]
+    public void InvokeModuleStatePlan_ManagedTransport_RejectsExpectedPackageSha256Mismatch()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var plan = new ModuleStatePlanResult
+        {
+            Actions = new[]
+            {
+                new ModuleStatePlanActionResult
+                {
+                    Kind = "Install",
+                    ModuleName = "Company.Tools",
+                    VersionPolicy = "=1.0.0",
+                    Reason = "missing",
+                    ExpectedPackageSha256 = new string('0', 64)
+                }
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Invoke-ModuleStatePlan")
+            .AddParameter("Plan", plan)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Execute");
+
+        var exception = Assert.Throws<System.Management.Automation.CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.IsType<ManagedModulePackageIntegrityException>(exception.InnerException);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
+    }
+
+    [Fact]
     public void InvokeModuleStatePlan_ManagedTransport_UpdatesToCustomModuleRoot()
     {
         using var feed = new TemporaryDirectory();

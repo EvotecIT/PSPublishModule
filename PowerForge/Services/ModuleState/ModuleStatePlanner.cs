@@ -52,7 +52,8 @@ internal sealed class ModuleStatePlanner
                         : "Module is not installed in desired scope.",
                     targetScope: desiredModule.Scope,
                     targetPath: desiredModule.TargetPath,
-                    targetRepository: targetRepository));
+                    targetRepository: targetRepository,
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
                 continue;
             }
 
@@ -66,7 +67,8 @@ internal sealed class ModuleStatePlanner
                     "Installed module version does not satisfy desired policy.",
                     targetScope: desiredModule.Scope,
                     targetPath: desiredModule.TargetPath,
-                    targetRepository: targetRepository));
+                    targetRepository: targetRepository,
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
                 continue;
             }
 
@@ -81,7 +83,8 @@ internal sealed class ModuleStatePlanner
                     force: true,
                     targetScope: desiredModule.Scope,
                     targetPath: desiredModule.TargetPath,
-                    targetRepository: targetRepository));
+                    targetRepository: targetRepository,
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
                 continue;
             }
 
@@ -93,7 +96,8 @@ internal sealed class ModuleStatePlanner
                 "Installed module version satisfies desired policy.",
                 targetScope: desiredModule.Scope,
                 targetPath: desiredModule.TargetPath,
-                targetRepository: targetRepository));
+                targetRepository: targetRepository,
+                expectedPackageSha256: desiredModule.ExpectedPackageSha256));
         }
 
         var plannedActions = request.Repair

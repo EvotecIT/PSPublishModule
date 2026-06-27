@@ -11,7 +11,8 @@ internal sealed class ModuleStateDesiredModule
         string? versionPolicy = null,
         IEnumerable<string>? allowedSources = null,
         string? scope = null,
-        string? targetPath = null)
+        string? targetPath = null,
+        string? expectedPackageSha256 = null)
     {
         Name = string.IsNullOrWhiteSpace(name)
             ? throw new ArgumentException("Desired module name is required.", nameof(name))
@@ -24,6 +25,7 @@ internal sealed class ModuleStateDesiredModule
             .ToArray();
         Scope = string.IsNullOrWhiteSpace(scope) ? null : scope!.Trim();
         TargetPath = string.IsNullOrWhiteSpace(targetPath) ? null : targetPath!.Trim();
+        ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(expectedPackageSha256);
     }
 
     internal string Name { get; }
@@ -35,4 +37,6 @@ internal sealed class ModuleStateDesiredModule
     internal string? Scope { get; }
 
     internal string? TargetPath { get; }
+
+    internal string? ExpectedPackageSha256 { get; }
 }

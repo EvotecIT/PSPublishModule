@@ -90,6 +90,11 @@ public sealed class ModuleStatePlanActionResult
     /// Gets or sets the repository targeted by this action when applicable.
     /// </summary>
     public string? TargetRepository { get; set; }
+
+    /// <summary>
+    /// Gets or sets the expected SHA256 hash for the root package when package integrity is required.
+    /// </summary>
+    public string? ExpectedPackageSha256 { get; set; }
 }
 
 /// <summary>

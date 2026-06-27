@@ -55,8 +55,12 @@ internal static class ModuleStateObjectAdapter
             GetString(value, "Path") ??
             GetString(value, "ModuleRoot") ??
             GetString(value, "DestinationPath");
+        var expectedPackageSha256 =
+            GetString(value, "ExpectedPackageSha256") ??
+            GetString(value, "PackageSha256") ??
+            GetString(value, "Sha256");
 
-        return new ModuleStateDesiredModule(moduleName, versionPolicy, sources, scope, targetPath);
+        return new ModuleStateDesiredModule(moduleName, versionPolicy, sources, scope, targetPath, expectedPackageSha256);
     }
 
     private static ModuleStateFamilyPolicy ToFamilyPolicy(object input)

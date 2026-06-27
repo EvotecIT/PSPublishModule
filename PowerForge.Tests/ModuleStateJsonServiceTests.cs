@@ -71,7 +71,14 @@ public sealed class ModuleStateJsonServiceTests
         var desiredState = new ModuleStateJsonService().ReadDesiredState("""
 {
   "modules": [
-    { "name": "Company.Tools", "versionPolicy": ">=1.2.0", "allowedSources": [ "CompanyModules" ], "scope": "AllUsers", "targetPath": "C:/OfflineModules" }
+    {
+      "name": "Company.Tools",
+      "versionPolicy": ">=1.2.0",
+      "allowedSources": [ "CompanyModules" ],
+      "scope": "AllUsers",
+      "targetPath": "C:/OfflineModules",
+      "expectedPackageSha256": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
   ],
   "families": [
     {
@@ -92,6 +99,7 @@ public sealed class ModuleStateJsonServiceTests
         Assert.Equal(new[] { "CompanyModules" }, module.AllowedSources);
         Assert.Equal("AllUsers", module.Scope);
         Assert.Equal("C:/OfflineModules", module.TargetPath);
+        Assert.Equal(new string('a', 64), module.ExpectedPackageSha256);
 
         var family = Assert.Single(desiredState.FamilyPolicies);
         Assert.Equal("Graph", family.Name);
