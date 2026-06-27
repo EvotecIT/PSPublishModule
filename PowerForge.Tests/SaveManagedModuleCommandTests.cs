@@ -75,6 +75,34 @@ public sealed class SaveManagedModuleCommandTests
         Assert.True(File.Exists(Path.Combine(destination.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
+    [Fact]
+    public void SaveManagedModule_reuses_package_cache_when_exact_version_is_requested()
+    {
+        using var feed = new TemporaryDirectory();
+        using var cache = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(cache.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("PackageCacheDirectory", cache.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.True(result.Download?.FromCache);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();

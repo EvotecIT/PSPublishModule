@@ -119,6 +119,10 @@ public sealed partial class ManagedModuleRepositoryClient
             throw new ArgumentException("Destination directory is required.", nameof(destinationDirectory));
 
         Directory.CreateDirectory(destinationDirectory);
+        var cached = TryUseCachedPackage(repository, packageId, version, destinationDirectory);
+        if (cached is not null)
+            return cached;
+
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => await CopyLocalPackageAsync(repository, packageId, version, destinationDirectory, cancellationToken).ConfigureAwait(false),
@@ -134,6 +138,48 @@ public sealed partial class ManagedModuleRepositoryClient
     /// <returns>Package metadata.</returns>
     public ManagedModulePackageMetadata ReadPackageMetadata(string packagePath)
         => _packageReader.ReadMetadata(packagePath);
+
+    private ManagedModuleDownloadResult? TryUseCachedPackage(
+        ManagedModuleRepository repository,
+        string packageId,
+        string version,
+        string destinationDirectory)
+    {
+        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
+        if (!File.Exists(destinationPath))
+            return null;
+
+        try
+        {
+            var metadata = _packageReader.ReadMetadata(destinationPath);
+            if (!metadata.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase) ||
+                ManagedModuleVersionComparer.Instance.Compare(metadata.Version, version) != 0)
+            {
+                return null;
+            }
+
+            return new ManagedModuleDownloadResult
+            {
+                Name = packageId,
+                Version = version,
+                RepositoryName = repository.Name,
+                Source = destinationPath,
+                PackagePath = destinationPath,
+                BytesWritten = 0,
+                FromCache = true,
+                PackageSha256 = ComputeSha256(destinationPath),
+                Metadata = metadata
+            };
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
 
     private async Task<IReadOnlyList<ManagedModuleVersionInfo>> GetNuGetVersionsAsync(
         ManagedModuleRepository repository,

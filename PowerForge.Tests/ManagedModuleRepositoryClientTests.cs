@@ -100,6 +100,24 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task DownloadPackageAsync_reuses_matching_cache_without_repository_request()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        TestPackageFactory.Create(Path.Combine(temp.Path, "Company.Tools.1.1.0.nupkg"), "Company.Tools", "1.1.0");
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var result = await repositoryClient.DownloadPackageAsync(repository, "Company.Tools", "1.1.0", temp.Path);
+
+        Assert.True(result.FromCache);
+        Assert.Equal(0, result.BytesWritten);
+        Assert.Equal("Company.Tools", result.Metadata!.Id);
+        Assert.Empty(requests);
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_missing_local_version_reports_package_and_repository()
     {
         using var source = new TemporaryDirectory();

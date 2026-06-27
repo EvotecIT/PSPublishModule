@@ -36,6 +36,11 @@ public sealed class ManagedModuleDownloadResult
     public long BytesWritten { get; set; }
 
     /// <summary>
+    /// True when the package was reused from the destination cache without repository transfer.
+    /// </summary>
+    public bool FromCache { get; set; }
+
+    /// <summary>
     /// SHA256 hash of the downloaded or copied package, encoded as lowercase hexadecimal.
     /// </summary>
     public string PackageSha256 { get; set; } = string.Empty;
