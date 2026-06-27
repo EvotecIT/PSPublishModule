@@ -26,6 +26,31 @@ public sealed class ManagedModuleInstallResult
     public string RepositoryName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Repository source used by the operation.
+    /// </summary>
+    public string RepositorySource { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Exact version requested by the caller, when supplied.
+    /// </summary>
+    public string? RequestedVersion { get; set; }
+
+    /// <summary>
+    /// Minimum version requested by the caller, when supplied.
+    /// </summary>
+    public string? MinimumVersion { get; set; }
+
+    /// <summary>
+    /// Maximum version requested by the caller, when supplied.
+    /// </summary>
+    public string? MaximumVersion { get; set; }
+
+    /// <summary>
+    /// NuGet-style version policy requested by the caller, when supplied.
+    /// </summary>
+    public string? VersionPolicy { get; set; }
+
+    /// <summary>
     /// Module root that contains module folders.
     /// </summary>
     public string ModuleRoot { get; set; } = string.Empty;
