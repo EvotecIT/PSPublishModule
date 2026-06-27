@@ -290,7 +290,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Measure publish to local folder feed.
 - [x] Measure large dependency graph resolution.
 - [ ] Measure heavy module extraction.
-- [ ] Measure private feed metadata lookup.
+- [x] Measure private feed metadata lookup.
 - [x] Record elapsed time, HTTP request count, package count, direct/total package bytes, direct/total extracted bytes, extraction timing, file count, and final disk size.
 - [x] Validate installed module directory version after install/update.
 - [x] Add optional benchmark import validation evidence for PowerShell host checks.
@@ -313,7 +313,8 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran cold and warm cache install measurements against a local folder feed; the cold install returned `Installed` with `FromCache = false`, and the warm install into a fresh root returned `Installed` with `FromCache = true`.
 - [x] 2026-06-27: `Measure-ManagedModule` command-surface contract tests installed a local package graph with one root module and six transitive dependency packages, recorded dependency/package totals, and validated the deepest dependency path.
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Publish` command-surface contract tests published a module that declared `RequiredModules`, verified the dependency was present in the target local feed, and confirmed the generated package nuspec preserved dependency metadata.
-- [ ] Public-feed, private-feed, heavy-module, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: `Measure-ManagedModule -Operation Find` service contract tests queried a private NuGet v3 metadata endpoint with Basic credentials, recorded request-count evidence, and selected the latest stable version without downloading or extracting packages.
+- [ ] Public-feed, private-feed install/save, heavy-module, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 

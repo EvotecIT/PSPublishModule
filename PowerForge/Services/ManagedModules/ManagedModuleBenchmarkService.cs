@@ -11,6 +11,7 @@ public sealed class ManagedModuleBenchmarkService
     private readonly ManagedModuleInstallService _installService;
     private readonly ManagedModuleUpdateService _updateService;
     private readonly ManagedModulePublishService _publishService;
+    private readonly ManagedModuleRepositoryClient _repositoryClient;
     private readonly IPowerShellRunner _compatibilityPowerShellRunner;
     private readonly Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? _compatibilityRunner;
 
@@ -23,19 +24,22 @@ public sealed class ManagedModuleBenchmarkService
     /// <param name="publishService">Optional publish service override.</param>
     /// <param name="compatibilityRunner">Optional compatibility benchmark runner override.</param>
     /// <param name="compatibilityPowerShellRunner">Optional PowerShell runner used by compatibility benchmark engines.</param>
+    /// <param name="repositoryClient">Optional managed repository client used by metadata lookup benchmarks.</param>
     public ManagedModuleBenchmarkService(
         ILogger logger,
         ManagedModuleInstallService? installService = null,
         ManagedModuleUpdateService? updateService = null,
         ManagedModulePublishService? publishService = null,
         Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? compatibilityRunner = null,
-        IPowerShellRunner? compatibilityPowerShellRunner = null)
+        IPowerShellRunner? compatibilityPowerShellRunner = null,
+        ManagedModuleRepositoryClient? repositoryClient = null)
     {
         var safeLogger = logger ?? new NullLogger();
         _logger = safeLogger;
         _installService = installService ?? new ManagedModuleInstallService(safeLogger);
         _updateService = updateService ?? new ManagedModuleUpdateService(safeLogger);
         _publishService = publishService ?? new ManagedModulePublishService(safeLogger);
+        _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(safeLogger);
         _compatibilityPowerShellRunner = compatibilityPowerShellRunner ?? new PowerShellRunner();
         _compatibilityRunner = compatibilityRunner;
     }
@@ -106,6 +110,8 @@ public sealed class ManagedModuleBenchmarkService
         CancellationToken cancellationToken)
         => scenario.Operation switch
         {
+            ManagedModuleBenchmarkOperation.Find => await RunManagedFindScenarioAsync(scenario, iteration, cancellationToken)
+                .ConfigureAwait(false),
             ManagedModuleBenchmarkOperation.Install => MapInstall(
                 scenario,
                 iteration,
@@ -128,6 +134,48 @@ public sealed class ManagedModuleBenchmarkService
                     .ConfigureAwait(false)),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario.Operation, "Unsupported benchmark operation.")
         };
+
+    private async Task<ManagedModuleBenchmarkRunResult> RunManagedFindScenarioAsync(
+        ManagedModuleBenchmarkScenario scenario,
+        int iteration,
+        CancellationToken cancellationToken)
+    {
+        var startedRequests = _repositoryClient.RequestCount;
+        var stopwatch = Stopwatch.StartNew();
+        var versions = ManagedModuleSearchMatcher.HasWildcard(scenario.Name)
+            ? await _repositoryClient.SearchPackagesAsync(
+                    scenario.Repository,
+                    scenario.Name,
+                    scenario.IncludePrerelease,
+                    scenario.Credential,
+                    take: 100,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : await _repositoryClient.GetVersionsAsync(
+                    scenario.Repository,
+                    scenario.Name,
+                    scenario.IncludePrerelease,
+                    scenario.Credential,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        stopwatch.Stop();
+
+        var selected = SelectFindVersion(versions);
+        return new ManagedModuleBenchmarkRunResult
+        {
+            ScenarioId = ResolveScenarioId(scenario),
+            Operation = scenario.Operation,
+            Engine = ManagedModuleBenchmarkEngine.Managed.ToString(),
+            Iteration = iteration,
+            Succeeded = versions.Count > 0,
+            Status = versions.Count > 0 ? "Found" : "NotFound",
+            ModuleName = selected?.Name ?? scenario.Name,
+            Version = selected?.Version,
+            ServiceElapsed = stopwatch.Elapsed,
+            PackageCount = versions.Count,
+            RepositoryRequestCount = _repositoryClient.RequestCount - startedRequests
+        };
+    }
 
     private ManagedModuleBenchmarkRunResult RunCompatibilityScenario(
         ManagedModuleBenchmarkScenario scenario,
@@ -466,6 +514,12 @@ public sealed class ManagedModuleBenchmarkService
         => (items ?? Array.Empty<PSResourceInfo>())
             .FirstOrDefault(item => string.Equals(item.Name, moduleName, StringComparison.OrdinalIgnoreCase))
            ?? (items ?? Array.Empty<PSResourceInfo>()).FirstOrDefault();
+
+    private static ManagedModuleVersionInfo? SelectFindVersion(IReadOnlyList<ManagedModuleVersionInfo> versions)
+        => (versions ?? Array.Empty<ManagedModuleVersionInfo>())
+            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
+            .LastOrDefault();
 
     private static string? ResolveCompatibilityRepositoryName(ManagedModuleBenchmarkScenario scenario)
     {

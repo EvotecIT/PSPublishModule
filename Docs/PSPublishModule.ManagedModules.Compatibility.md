@@ -44,6 +44,12 @@ Find-ManagedModule -Name Company.Tools -Repository 'https://packages.company.tes
 Find-ManagedModule -Name Company.* -ProfileName CompanyModules -AllVersions
 ```
 
+### Benchmark Repository Metadata
+
+```powershell
+Measure-ManagedModule -Name Company.Tools -Operation Find -ProfileName CompanyModules -Engine Managed
+```
+
 ### Save
 
 ```powershell
