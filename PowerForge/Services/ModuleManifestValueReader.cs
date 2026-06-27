@@ -49,6 +49,11 @@ internal static class ModuleManifestValueReader
         if (!TryReadManifestText(manifestPath, out var manifestText))
             return Array.Empty<string>();
 
+        return ReadPsDataStringOrArrayFromText(manifestText, key);
+    }
+
+    internal static string[] ReadPsDataStringOrArrayFromText(string manifestText, string key)
+    {
         if (ModuleManifestTextParser.TryReadPsDataAssignedExpression(manifestText, key, out var expression) &&
             !string.IsNullOrWhiteSpace(expression))
         {

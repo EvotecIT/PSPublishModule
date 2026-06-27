@@ -92,8 +92,42 @@ public sealed class ManagedModulePackageReader
             throw new InvalidOperationException($"Package '{fullPath}' nuspec does not contain an id.");
         if (string.IsNullOrWhiteSpace(result.Version))
             throw new InvalidOperationException($"Package '{fullPath}' nuspec does not contain a version.");
+        ValidateManifestAgreement(result, fullPath);
 
         return result;
+    }
+
+    private static void ValidateManifestAgreement(ManagedModulePackageMetadata metadata, string packagePath)
+    {
+        if (string.IsNullOrWhiteSpace(metadata.ModuleManifestPath))
+            return;
+
+        var manifestName = Path.GetFileNameWithoutExtension(metadata.ModuleManifestPath!.Replace('/', Path.DirectorySeparatorChar));
+        if (!string.IsNullOrWhiteSpace(manifestName) &&
+            !manifestName.Equals(metadata.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Package '{packagePath}' nuspec id '{metadata.Id}' does not match module manifest '{metadata.ModuleManifestPath}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(metadata.ModuleManifestVersion))
+            return;
+
+        var manifestVersion = CombineManifestVersion(metadata.ModuleManifestVersion!, metadata.ModuleManifestPrerelease);
+        if (ManagedModuleVersionComparer.Instance.Compare(manifestVersion, metadata.Version) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Package '{packagePath}' nuspec version '{metadata.Version}' does not match module manifest version '{manifestVersion}'.");
+        }
+    }
+
+    private static string CombineManifestVersion(string version, string? prerelease)
+    {
+        var trimmedVersion = version.Trim();
+        if (string.IsNullOrWhiteSpace(prerelease) || trimmedVersion.IndexOf('-') >= 0)
+            return trimmedVersion;
+
+        return trimmedVersion + "-" + prerelease!.Trim();
     }
 
     private static ManifestMetadata ReadManifestMetadata(ZipArchive archive, string packageId, string packagePath)
@@ -110,7 +144,7 @@ public sealed class ManagedModulePackageReader
         var version = ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, "ModuleVersion", out var manifestVersion)
             ? manifestVersion
             : null;
-        var prerelease = ReadPsDataStringOrArray(manifestText, "Prerelease").FirstOrDefault();
+        var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "Prerelease").FirstOrDefault();
         var dependencies = ReadManifestDependencies(manifestText);
 
         return new ManifestMetadata(
@@ -250,25 +284,6 @@ public sealed class ManagedModulePackageReader
             .ThenBy(static dependency => dependency.TargetFramework, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-    }
-
-    private static IReadOnlyList<string> ReadPsDataStringOrArray(string manifestText, string key)
-    {
-        if (ModuleManifestTextParser.TryReadPsDataAssignedExpression(manifestText, key, out var expression) &&
-            !string.IsNullOrWhiteSpace(expression))
-        {
-            if (ModuleManifestTextParser.TryParseStringArrayExpression(expression!, out var values) && values is not null)
-                return values;
-            if (ModuleManifestTextParser.TryParseQuotedStringExpression(expression!, out var value) && !string.IsNullOrWhiteSpace(value))
-                return new[] { value! };
-        }
-
-        if (ModuleManifestTextParser.TryGetPsDataStringArrayValue(manifestText, key, out var legacyValues) && legacyValues is not null)
-            return legacyValues;
-        if (ModuleManifestTextParser.TryGetPsDataStringValue(manifestText, key, out var legacyValue) && !string.IsNullOrWhiteSpace(legacyValue))
-            return new[] { legacyValue! };
-
-        return Array.Empty<string>();
     }
 
     private static void AddDependency(List<ManagedModuleDependencyInfo> dependencies, XElement dependency, string? targetFramework)
