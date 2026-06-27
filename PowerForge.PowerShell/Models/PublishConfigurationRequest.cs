@@ -135,6 +135,9 @@ internal sealed class PublishConfigurationRequest
     /// <summary>Repository used as the source for publishing missing RequiredModules.</summary>
     public string? RequiredModuleSourceRepository { get; set; }
 
+    /// <summary>Repository URL or local feed path used as the managed source for publishing missing RequiredModules.</summary>
+    public string? RequiredModuleSourceRepositoryUri { get; set; }
+
     /// <summary>Whether verbose logging was requested by the cmdlet invocation.</summary>
     public bool Verbose { get; set; }
 }

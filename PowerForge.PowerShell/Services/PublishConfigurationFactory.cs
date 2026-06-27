@@ -258,6 +258,9 @@ internal sealed class PublishConfigurationFactory
                 RequiredModuleSourceRepository = string.IsNullOrWhiteSpace(request.RequiredModuleSourceRepository)
                     ? "PSGallery"
                     : request.RequiredModuleSourceRepository!.Trim(),
+                RequiredModuleSourceRepositoryUri = string.IsNullOrWhiteSpace(request.RequiredModuleSourceRepositoryUri)
+                    ? null
+                    : request.RequiredModuleSourceRepositoryUri!.Trim(),
                 Verbose = request.Verbose
             }
         };

@@ -103,8 +103,9 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - Hosted build dependency preflight does not install PowerShellGet or PSResourceGet when repository publishing explicitly uses `PublishTool.ManagedModule`.
 - Managed publishing rejects external runtime credential providers; callers must provide an API key or static repository credential until managed provider support exists.
 - Managed required-module mirroring can publish missing manifest `RequiredModules` from PSGallery, a direct NuGet v3 URL, a local feed path, or the target repository name.
+- Managed publish configuration can name a private required-module upstream and provide `RequiredModuleSourceRepositoryUri` for the managed source.
 - Managed required-module mirroring publishes package dependency metadata transitively before the package that requires it.
-- Named private upstream profiles beyond the target repository still require a direct URL/path until repository profile resolution is added to publish configuration.
+- Named private upstream profiles beyond the target repository still require an explicit source URI until repository profile resolution is added to publish configuration.
 
 ## Phase 2: Managed Repository Client
 
