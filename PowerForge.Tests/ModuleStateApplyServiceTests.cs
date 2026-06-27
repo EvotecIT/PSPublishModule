@@ -21,6 +21,7 @@ public sealed class ModuleStateApplyServiceTests
 
         Assert.True(result.Receipt.CanApply);
         Assert.Null(result.Receipt.BlockedReason);
+        Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, result.Receipt.Transport);
         Assert.Equal(2, result.Receipt.Commands.Length);
 
         var update = result.Receipt.Commands[0];
@@ -64,6 +65,7 @@ public sealed class ModuleStateApplyServiceTests
 
         Assert.True(result.Receipt.CanApply);
         Assert.Null(result.Receipt.BlockedReason);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.Receipt.Transport);
         Assert.Equal(2, result.Receipt.Commands.Length);
 
         var update = result.Receipt.Commands[0];
@@ -314,6 +316,8 @@ public sealed class ModuleStateApplyServiceTests
         var receipt = service.CreateMaintenanceReceipt(result, source: "ModuleStatePlan", sourceRepository: "Company");
 
         Assert.Equal("ModuleStatePlan", receipt.Source);
+        Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, receipt.DeliveryTransport);
+        Assert.Equal("PrivateModule", receipt.Engine);
         Assert.Equal(2, receipt.Modules.Length);
         Assert.Contains(receipt.Modules, static module => module.Name == "Company.Tools" && module.Version == "1.3.0");
         Assert.Contains(receipt.Modules, static module => module.Name == "Company.Exact" && module.Version == "1.2.0");
@@ -489,10 +493,43 @@ public sealed class ModuleStateApplyServiceTests
 
             var receipt = new ModuleStateJsonService().LoadMaintenanceReceipt(receiptPath);
             Assert.Equal("ModuleStatePlan", receipt.Source);
+            Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, receipt.DeliveryTransport);
+            Assert.Equal("PrivateModule", receipt.Engine);
             var module = Assert.Single(receipt.Modules);
             Assert.Equal("Company.Tools", module.Name);
             Assert.Equal("1.3.0", module.Version);
             Assert.Null(module.SourceRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void WriteMaintenanceReceipt_WritesManagedTransportEvidence()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var receiptPath = Path.Combine(root.FullName, "module-state.maintenance.json");
+            var plan = new ModuleStatePlan(
+                new[] { new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, "=1.3.0", "missing", targetRepository: "Company") },
+                Array.Empty<ModuleStateConflictFinding>());
+            var service = new ModuleStateApplyService();
+            var result = service.Prepare(
+                plan,
+                new ModuleStateDeliveryOptions(repository: "Company", transport: ModuleStateDeliveryTransport.ManagedModule));
+
+            service.WriteMaintenanceReceipt(result, receiptPath, "ModuleStatePlan", "Company");
+
+            using var document = JsonDocument.Parse(File.ReadAllText(receiptPath));
+            Assert.Equal("ManagedModule", document.RootElement.GetProperty("deliveryTransport").GetString());
+            Assert.Equal("ManagedModule", document.RootElement.GetProperty("engine").GetString());
+
+            var receipt = new ModuleStateJsonService().LoadMaintenanceReceipt(receiptPath);
+            Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, receipt.DeliveryTransport);
+            Assert.Equal("ManagedModule", receipt.Engine);
         }
         finally
         {
@@ -552,6 +589,7 @@ public sealed class ModuleStateApplyServiceTests
 
             using var document = JsonDocument.Parse(File.ReadAllText(receiptPath));
             Assert.True(document.RootElement.GetProperty("CanApply").GetBoolean());
+            Assert.Equal("PrivateModule", document.RootElement.GetProperty("Transport").GetString());
             Assert.Equal("Install-PrivateModule", document.RootElement.GetProperty("Commands")[0].GetProperty("CommandName").GetString());
         }
         finally

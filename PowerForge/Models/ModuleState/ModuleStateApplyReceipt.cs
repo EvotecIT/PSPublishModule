@@ -10,6 +10,7 @@ internal sealed class ModuleStateApplyReceipt
         string? blockedReason,
         int actionCount,
         int findingCount,
+        ModuleStateDeliveryTransport transport,
         ModuleStateDeliveryCommand[] commands)
     {
         CreatedAtUtc = createdAtUtc;
@@ -17,6 +18,7 @@ internal sealed class ModuleStateApplyReceipt
         BlockedReason = blockedReason;
         ActionCount = actionCount;
         FindingCount = findingCount;
+        Transport = transport;
         Commands = commands;
     }
 
@@ -29,6 +31,8 @@ internal sealed class ModuleStateApplyReceipt
     internal int ActionCount { get; }
 
     internal int FindingCount { get; }
+
+    internal ModuleStateDeliveryTransport Transport { get; }
 
     internal ModuleStateDeliveryCommand[] Commands { get; }
 }

@@ -143,10 +143,35 @@ public sealed class ModuleStateJsonServiceTests
 """);
 
         Assert.Equal("Company baseline", receipt.Source);
+        Assert.Null(receipt.DeliveryTransport);
+        Assert.Null(receipt.Engine);
         var module = Assert.Single(receipt.Modules);
         Assert.Equal("Company.Tools", module.Name);
         Assert.Equal("1.2.0", module.Version);
         Assert.Equal("CompanyModules", module.SourceRepository);
         Assert.Equal("AllUsers", module.Scope);
+    }
+
+    [Fact]
+    public void ReadMaintenanceReceipt_LoadsManagedTransportEvidenceFromJson()
+    {
+        var receipt = new ModuleStateJsonService().ReadMaintenanceReceipt("""
+{
+  "source": "Company baseline",
+  "deliveryTransport": "ManagedModule",
+  "engine": "ManagedModule",
+  "maintainedModules": [
+    {
+      "name": "Company.Tools",
+      "version": "1.2.0"
+    }
+  ]
+}
+""");
+
+        Assert.Equal("Company baseline", receipt.Source);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, receipt.DeliveryTransport);
+        Assert.Equal("ManagedModule", receipt.Engine);
+        Assert.Equal("Company.Tools", Assert.Single(receipt.Modules).Name);
     }
 }
