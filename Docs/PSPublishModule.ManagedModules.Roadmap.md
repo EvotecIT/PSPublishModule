@@ -221,8 +221,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add tests for duplicate publish classification.
 - [x] Add tests for private-feed publish request shaping.
 - [ ] Benchmark against `Publish-Module` and `Publish-PSResource`.
-- [ ] Validate on Windows PowerShell 5.1.
-- [ ] Validate on PowerShell 7+.
+- [x] Validate local-feed publish smoke on Windows PowerShell 5.1.
+- [x] Validate local-feed publish smoke on PowerShell 7+.
 
 ## Phase 9: ModuleState Integration
 
@@ -274,7 +274,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] 2026-06-27: Windows PowerShell 5.1.26100.8655 imported `PSPublishModule` from the local `net472` build, ran the same managed benchmark scenario, and confirmed out-of-process imports in PowerShell 7 and Windows PowerShell returned version 1.0.0.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save` against the same local folder feed, saved `Company.Tools` 1.0.0 into empty custom roots, validated the saved manifest version, and confirmed out-of-process imports in both hosts returned version 1.0.0.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both seeded `Company.Tools` 1.0.0 with `Install-ManagedModule`, ran `Measure-ManagedModule -Operation Update` against a local folder feed containing 1.1.0, validated the updated manifest version, and confirmed out-of-process imports in both hosts returned version 1.1.0.
-- [ ] Publish, public-feed, private-feed, heavy-module, warm-cache, no-op update, and compatibility-engine benchmark evidence still need separate proof.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Publish-ManagedModule` against local folder feeds, produced `.nupkg` packages for simple source modules, and installed the published packages back through `Install-ManagedModule`.
+- [ ] Public-feed, private-feed, heavy-module, warm-cache, no-op update, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 
@@ -285,7 +286,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Large cloud administration module family.
 - [ ] Private repository install with credentials.
 - [ ] Private repository save for offline use.
-- [ ] Publish a simple module.
+- [x] Publish a simple module.
 - [ ] Publish a binary module.
 - [ ] Publish a module with dependencies.
 - [ ] Update already-current modules.
