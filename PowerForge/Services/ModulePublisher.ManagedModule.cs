@@ -13,7 +13,8 @@ public sealed partial class ModulePublisher
         PublishRepositoryConfiguration? repoConfig,
         RepositoryCredential? credential,
         string versionText,
-        string temporaryPackagePath)
+        string temporaryPackagePath,
+        bool skipDependenciesCheck)
     {
         var managedResult = new ManagedModulePublishService(_logger).PublishAsync(
                 new ManagedModulePublishRequest
@@ -22,7 +23,7 @@ public sealed partial class ModulePublisher
                     Repository = CreateManagedPublishRepository(repositoryName, repoConfig),
                     OutputDirectory = temporaryPackagePath,
                     Credential = credential,
-                    SkipDependenciesCheck = false,
+                    SkipDependenciesCheck = skipDependenciesCheck,
                     SkipModuleManifestValidate = false,
                     Force = publish.Force
                 })
