@@ -19,8 +19,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Public Command Shape
 
-- [ ] Introduce `Find-ManagedModule`.
-- [ ] Introduce `Save-ManagedModule`.
+- [x] Introduce `Find-ManagedModule`.
+- [x] Introduce `Save-ManagedModule`.
 - [x] Introduce `Install-ManagedModule`.
 - [ ] Introduce `Update-ManagedModule`.
 - [ ] Introduce `Publish-ManagedModule`.
@@ -47,7 +47,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Support `-SkipDependencyCheck`.
 - [ ] Support `-AllowClobber`.
 - [x] Support `-Force`.
-- [ ] Support `-Path` for save/publish workflows.
+- [x] Support `-Path` for save/publish workflows.
 - [ ] Support `-ApiKey`.
 - [ ] Support `-NuGetApiKey` as an alias where it helps migration.
 - [ ] Support `-SkipDependenciesCheck` for publish compatibility.
@@ -125,9 +125,9 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Phase 5: Managed Save
 
-- [ ] Implement `Save-ManagedModule` using the managed repository client.
+- [x] Implement `Save-ManagedModule` using the managed repository client.
 - [ ] Save resolved packages and dependency closure to a target path.
-- [ ] Preserve package structure expected by PowerShell module import conventions.
+- [x] Preserve package structure expected by PowerShell module import conventions.
 - [ ] Support warm cache reuse.
 - [ ] Support offline bundle output metadata.
 - [ ] Support `-SkipDependencyCheck`.
