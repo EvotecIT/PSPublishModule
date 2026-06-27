@@ -21,7 +21,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - [ ] Introduce `Find-ManagedModule`.
 - [ ] Introduce `Save-ManagedModule`.
-- [ ] Introduce `Install-ManagedModule`.
+- [x] Introduce `Install-ManagedModule`.
 - [ ] Introduce `Update-ManagedModule`.
 - [ ] Introduce `Publish-ManagedModule`.
 - [ ] Decide whether `Get-ManagedModule` is needed or whether `Get-ModuleState` remains the inventory surface.
@@ -32,27 +32,27 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 ## Compatibility Parameters
 
-- [ ] Support `-Name`.
-- [ ] Support `-Repository`.
+- [x] Support `-Name`.
+- [x] Support `-Repository`.
 - [ ] Support `-Credential`.
-- [ ] Support `-Scope CurrentUser|AllUsers`.
-- [ ] Support `-RequiredVersion`.
+- [x] Support `-Scope CurrentUser|AllUsers`.
+- [x] Support `-RequiredVersion`.
 - [ ] Support `-MinimumVersion`.
 - [ ] Support `-MaximumVersion`.
-- [ ] Support `-Version`.
+- [x] Support `-Version`.
 - [ ] Support `-VersionPolicy`.
-- [ ] Support `-Prerelease`.
-- [ ] Support `-AllowPrerelease` as an alias where it helps migration.
+- [x] Support `-Prerelease`.
+- [x] Support `-AllowPrerelease` as an alias where it helps migration.
 - [ ] Support `-AcceptLicense`.
 - [ ] Support `-SkipDependencyCheck`.
 - [ ] Support `-AllowClobber`.
-- [ ] Support `-Force`.
+- [x] Support `-Force`.
 - [ ] Support `-Path` for save/publish workflows.
 - [ ] Support `-ApiKey`.
 - [ ] Support `-NuGetApiKey` as an alias where it helps migration.
 - [ ] Support `-SkipDependenciesCheck` for publish compatibility.
 - [ ] Support `-SkipModuleManifestValidate` for publish compatibility.
-- [ ] Support `-WhatIf` and `-Confirm` on mutating cmdlets.
+- [x] Support `-WhatIf` and `-Confirm` on mutating cmdlets.
 - [ ] Return typed result objects with enough data to audit source, target path, version policy, resolved version, dependency actions, elapsed time, and receipt state.
 
 ## Phase 1: Design And Contracts
