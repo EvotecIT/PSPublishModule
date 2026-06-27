@@ -424,6 +424,111 @@ public sealed class InvokeModuleStateCommandTests
         Assert.Equal("1.0.0", dependency.ResolvedVersion);
     }
 
+    [Fact]
+    public void InvokeModuleStatePlan_ManagedTransport_RepairsScopedMissingCopy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var plan = new ModuleStatePlanResult
+        {
+            Actions = new[]
+            {
+                new ModuleStatePlanActionResult
+                {
+                    Kind = "Install",
+                    ModuleName = "Company.Tools",
+                    InstalledVersion = "1.0.0",
+                    VersionPolicy = "=1.0.0",
+                    Reason = "scope repair",
+                    IsRepair = true,
+                    TargetScope = "AllUsers",
+                    TargetPath = moduleRoot.Path
+                }
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Invoke-ModuleStatePlan")
+            .AddParameter("Plan", plan)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("Execute");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<PSPublishModule.ModuleStateApplyResult>(Assert.Single(results).BaseObject);
+        var execution = Assert.Single(result.ExecutionResults);
+        Assert.Equal("Install", execution.Operation);
+        Assert.True(execution.OperationPerformed);
+        var dependency = Assert.Single(execution.DependencyResults);
+        Assert.Equal("ManagedModule", dependency.Installer);
+        Assert.Equal("Installed", dependency.Status);
+        Assert.Equal("1.0.0", dependency.ResolvedVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public void InvokeModuleStatePlan_ManagedTransport_RepairsFamilyVersionMismatch()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Microsoft.Graph.Authentication.2.38.0.nupkg"),
+            "Microsoft.Graph.Authentication",
+            "2.38.0",
+            files: CreateModuleFiles("Microsoft.Graph.Authentication", "2.38.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Microsoft.Graph.Authentication", "2.36.0"));
+        File.WriteAllText(
+            Path.Combine(moduleRoot.Path, "Microsoft.Graph.Authentication", "2.36.0", "Microsoft.Graph.Authentication.psd1"),
+            "@{ ModuleVersion = '2.36.0' }");
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Microsoft.Graph.Users", "2.38.0"));
+        File.WriteAllText(
+            Path.Combine(moduleRoot.Path, "Microsoft.Graph.Users", "2.38.0", "Microsoft.Graph.Users.psd1"),
+            "@{ ModuleVersion = '2.38.0' }");
+        var plan = new ModuleStatePlanResult
+        {
+            Actions = new[]
+            {
+                new ModuleStatePlanActionResult
+                {
+                    Kind = "Update",
+                    ModuleName = "Microsoft.Graph.Authentication",
+                    InstalledVersion = "2.36.0",
+                    VersionPolicy = "=2.38.0",
+                    Reason = "family repair",
+                    IsRepair = true,
+                    TargetScope = "CurrentUser",
+                    TargetPath = moduleRoot.Path
+                }
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Invoke-ModuleStatePlan")
+            .AddParameter("Plan", plan)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
+            .AddParameter("Execute");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<PSPublishModule.ModuleStateApplyResult>(Assert.Single(results).BaseObject);
+        var execution = Assert.Single(result.ExecutionResults);
+        Assert.Equal("Update", execution.Operation);
+        Assert.True(execution.OperationPerformed);
+        var dependency = Assert.Single(execution.DependencyResults);
+        Assert.Equal("ManagedModule", dependency.Installer);
+        Assert.Equal("Updated", dependency.Status);
+        Assert.Equal("2.36.0", dependency.InstalledVersion);
+        Assert.Equal("2.38.0", dependency.ResolvedVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Microsoft.Graph.Authentication", "2.38.0", "Microsoft.Graph.Authentication.psd1")));
+    }
+
     private static object? InvokeResolveDesiredState(
         InvokeModuleStateCommand command,
         ModuleStateInventoryResult inventory)
@@ -503,9 +608,12 @@ public sealed class InvokeModuleStateCommandTests
     }
 
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
+        => CreateModuleFiles("Company.Tools", version);
+
+    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string moduleName, string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+            [moduleName + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
 
     private static void WriteManagedReceipt(string modulePath, string repositoryName, string repositorySource)
