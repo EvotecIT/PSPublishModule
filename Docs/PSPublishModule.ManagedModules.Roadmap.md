@@ -102,7 +102,9 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - The managed publisher uses repository URI/source configuration directly and does not require PowerShell repository registration.
 - Hosted build dependency preflight does not install PowerShellGet or PSResourceGet when repository publishing explicitly uses `PublishTool.ManagedModule`.
 - Managed publishing rejects external runtime credential providers; callers must provide an API key or static repository credential until managed provider support exists.
-- Required-module mirroring remains on the compatibility path until managed save/publish mirroring is implemented.
+- Managed required-module mirroring can publish missing manifest `RequiredModules` from PSGallery, a direct NuGet v3 URL, a local feed path, or the target repository name.
+- Managed required-module mirroring publishes package dependency metadata transitively before the package that requires it.
+- Named private upstream profiles beyond the target repository still require a direct URL/path until repository profile resolution is added to publish configuration.
 
 ## Phase 2: Managed Repository Client
 
@@ -236,7 +238,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement `-SkipDependenciesCheck`.
 - [x] Implement `-SkipModuleManifestValidate`.
 - [x] Integrate with existing `ModulePublisher`.
-- [ ] Integrate with required-module mirroring.
+- [x] Integrate with required-module mirroring.
 - [x] Emit typed publish result objects.
 - [x] Add Spectre.Console summary output.
 - [x] Add tests for package creation.
@@ -326,7 +328,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add opt-in `Update-PrivateModule -Transport ManagedModule` routing.
 - [ ] Make managed transport the default for `Install-PrivateModule` after install parity is proven.
 - [ ] Make managed transport the default for `Update-PrivateModule` after update parity is proven.
-- [ ] Route required-module mirroring through the managed engine after save/publish parity is proven.
+- [x] Route required-module mirroring through the managed engine after save/publish parity is proven.
 - [ ] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
 - [ ] Remove embedded PowerShell scripts from the managed path.
 - [ ] Remove external tool assumptions from managed tests.

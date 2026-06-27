@@ -19,6 +19,7 @@ public sealed partial class ModulePublisher
     private readonly PowerShellGalleryVersionFeedClient _powerShellGalleryFeed;
     private readonly RequiredModuleRepositoryPublisher _requiredModuleRepositoryPublisher;
     private readonly RequiredModuleRepositoryValidator _requiredModuleRepositoryValidator;
+    private readonly ManagedRequiredModuleRepositoryValidator _managedRequiredModuleRepositoryValidator;
 
     /// <summary>
     /// Creates a new publisher using the provided logger and the default out-of-process PowerShell runner.
@@ -46,6 +47,7 @@ public sealed partial class ModulePublisher
         _psResourceGet = new PSResourceGetClient(runner, _logger);
         _requiredModuleRepositoryPublisher = new RequiredModuleRepositoryPublisher(_logger, _psResourceGet, _repositoryPublisher);
         _requiredModuleRepositoryValidator = new RequiredModuleRepositoryValidator(_logger, _psResourceGet, _requiredModuleRepositoryPublisher);
+        _managedRequiredModuleRepositoryValidator = new ManagedRequiredModuleRepositoryValidator(_logger);
         _powerShellGet = new PowerShellGetClient(runner, _logger);
         _gitHub = new GitHubReleasePublisher(_logger);
         _powerShellGalleryFeed = new PowerShellGalleryVersionFeedClient(_logger, client);
@@ -217,12 +219,6 @@ public sealed partial class ModulePublisher
                 "PublishRequiredModules requires PSResourceGet because dependency mirroring saves and republishes dependency graphs before publishing the main module. Use Tool = PSResourceGet or disable PublishRequiredModules.");
         }
 
-        if (publish.PublishRequiredModules && tool == PublishTool.ManagedModule)
-        {
-            throw new InvalidOperationException(
-                "PublishRequiredModules is not yet available with the managed module publish engine. Use Tool = PSResourceGet until managed required-module mirroring is enabled.");
-        }
-
         var credential = tool == PublishTool.ManagedModule
             ? ResolveManagedPublishCredential(publish, repoConfig)
             : _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
@@ -272,6 +268,13 @@ public sealed partial class ModulePublisher
 
             if (tool == PublishTool.ManagedModule)
             {
+                _managedRequiredModuleRepositoryValidator.Validate(
+                    publish,
+                    CreateManagedPublishRepository(repositoryName, repoConfig),
+                    credential,
+                    plan,
+                    buildResult);
+
                 temporaryPackagePath = Path.Combine(Path.GetTempPath(), "PowerForge", "managed-publish", Guid.NewGuid().ToString("N"));
                 PublishToRepositoryWithManagedModule(
                     publish,
@@ -281,7 +284,8 @@ public sealed partial class ModulePublisher
                     repoConfig,
                     credential,
                     versionText,
-                    temporaryPackagePath);
+                    temporaryPackagePath,
+                    skipDependenciesCheck: true);
                 CleanupTemporaryPublishPath(temporaryPublishPath);
                 temporaryPublishPath = null;
                 return CreateRepositoryPublishResult(repositoryName, versionText);
