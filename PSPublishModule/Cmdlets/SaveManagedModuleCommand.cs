@@ -103,6 +103,10 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Force { get; set; }
 
+    /// <summary>Allow command exports to overlap with other modules in the destination root.</summary>
+    [Parameter]
+    public SwitchParameter AllowClobber { get; set; }
+
     /// <summary>Skip installing dependencies declared by the package.</summary>
     [Parameter]
     [Alias("SkipDependenciesCheck")]
@@ -137,6 +141,7 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
                         PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
                         Credential = credential,
                         Force = Force.IsPresent,
+                        AllowClobber = AllowClobber.IsPresent,
                         SkipDependencyCheck = SkipDependencyCheck.IsPresent
                     })
                 .GetAwaiter()

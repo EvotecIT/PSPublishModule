@@ -78,6 +78,7 @@ public sealed class ManagedModuleUpdateService
                 PackageCacheDirectory = request.PackageCacheDirectory,
                 Credential = request.Credential,
                 Force = true,
+                AllowClobber = request.AllowClobber,
                 SkipDependencyCheck = request.SkipDependencyCheck
             },
             cancellationToken).ConfigureAwait(false);
