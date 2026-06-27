@@ -1,0 +1,166 @@
+using PowerForge;
+
+namespace PowerForge.Tests;
+
+public sealed class ManagedModuleBenchmarkServiceTests
+{
+    [Fact]
+    public async Task RunAsync_MeasuresManagedInstallScenario()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleBenchmarkService(new NullLogger());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "install-small",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    Scope = ManagedModuleInstallScope.Custom,
+                    ModuleRoot = moduleRoot.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(result.CompletedAtUtc >= result.StartedAtUtc);
+        Assert.Equal("install-small", run.ScenarioId);
+        Assert.Equal(ManagedModuleBenchmarkOperation.Install, run.Operation);
+        Assert.Equal("Managed", run.Engine);
+        Assert.True(run.Succeeded);
+        Assert.Equal("Installed", run.Status);
+        Assert.Equal("1.0.0", run.Version);
+        Assert.True(run.Elapsed > TimeSpan.Zero);
+        Assert.True(run.ServiceElapsed > TimeSpan.Zero);
+        Assert.True(run.PackageBytes > 0);
+        Assert.True(run.ExtractedBytes > 0);
+        Assert.Equal(1, run.FileCount);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public async Task RunAsync_MeasuresManagedSaveScenario()
+    {
+        using var feed = new TemporaryDirectory();
+        using var saveRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleBenchmarkService(new NullLogger());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "save-small",
+                    Operation = ManagedModuleBenchmarkOperation.Save,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    ModuleRoot = saveRoot.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal(ManagedModuleBenchmarkOperation.Save, run.Operation);
+        Assert.Equal("Installed", run.Status);
+        Assert.Equal(saveRoot.Path, run.ModuleRoot);
+        Assert.True(File.Exists(Path.Combine(saveRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public async Task RunAsync_MeasuresManagedUpdateScenario()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        var service = new ManagedModuleBenchmarkService(new NullLogger());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "update-small",
+                    Operation = ManagedModuleBenchmarkOperation.Update,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    Scope = ManagedModuleInstallScope.Custom,
+                    ModuleRoot = moduleRoot.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal("Updated", run.Status);
+        Assert.Equal("1.0.0", run.PreviousVersion);
+        Assert.Equal("1.1.0", run.Version);
+        Assert.True(run.PackageBytes > 0);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsFailuresWhenContinueOnErrorIsEnabled()
+    {
+        using var feed = new TemporaryDirectory();
+        var service = new ManagedModuleBenchmarkService(new NullLogger());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            ContinueOnError = true,
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "missing-save-root",
+                    Operation = ManagedModuleBenchmarkOperation.Save,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    ModuleRoot = Path.Combine(feed.Path, "saved")
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.False(run.Succeeded);
+        Assert.Equal("Failed", run.Status);
+        Assert.Contains("No versions of 'Company.Tools'", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
+        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+        };
+}
