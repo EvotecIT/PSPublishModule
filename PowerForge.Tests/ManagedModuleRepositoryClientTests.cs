@@ -156,6 +156,63 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task PublishPackageAsync_classifies_local_duplicate_without_force()
+    {
+        using var source = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(source.Path, "Company.Tools.1.0.0.nupkg");
+        var destinationPath = Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        File.WriteAllText(destinationPath, "existing");
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger());
+        var repository = new ManagedModuleRepository("Local", destination.Path);
+
+        var result = await repositoryClient.PublishPackageAsync(repository, packagePath);
+
+        Assert.False(result.Published);
+        Assert.True(result.Duplicate);
+        Assert.Equal("existing", File.ReadAllText(destinationPath));
+        Assert.Contains("already exists", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PublishPackageAsync_overwrites_local_duplicate_with_force()
+    {
+        using var source = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(source.Path, "Company.Tools.1.0.0.nupkg");
+        var destinationPath = Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        File.WriteAllText(destinationPath, "existing");
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger());
+        var repository = new ManagedModuleRepository("Local", destination.Path);
+
+        var result = await repositoryClient.PublishPackageAsync(repository, packagePath, force: true);
+
+        Assert.True(result.Published);
+        Assert.False(result.Duplicate);
+        Assert.NotEqual("existing", File.ReadAllText(destinationPath));
+    }
+
+    [Fact]
+    public async Task PublishPackageAsync_classifies_remote_conflict_as_duplicate()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Duplicate.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Duplicate", "1.0.0"));
+        using var client = new HttpClient(new ManagedModuleHandler(new List<RecordedRequest>(), conflictPublishes: true));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var result = await repositoryClient.PublishPackageAsync(repository, packagePath);
+
+        Assert.False(result.Published);
+        Assert.True(result.Duplicate);
+        Assert.Equal(409, result.StatusCode);
+        Assert.Contains("already exists", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_reads_local_folder_feed_and_filters_prerelease()
     {
         using var temp = new TemporaryDirectory();
@@ -225,10 +282,12 @@ public sealed class ManagedModuleRepositoryClientTests
     private sealed class ManagedModuleHandler : HttpMessageHandler
     {
         private readonly List<RecordedRequest> _requests;
+        private readonly bool _conflictPublishes;
 
-        public ManagedModuleHandler(List<RecordedRequest> requests)
+        public ManagedModuleHandler(List<RecordedRequest> requests, bool conflictPublishes = false)
         {
             _requests = requests;
+            _conflictPublishes = conflictPublishes;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -269,7 +328,12 @@ public sealed class ManagedModuleRepositoryClientTests
                             "]}");
 
             if (uri.AbsoluteUri == "https://example.test/publish/" && request.Method == HttpMethod.Put)
+            {
+                if (_conflictPublishes)
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict));
+
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
+            }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }

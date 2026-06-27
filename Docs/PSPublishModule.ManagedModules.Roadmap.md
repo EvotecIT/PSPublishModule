@@ -205,7 +205,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Implement PSGallery publish.
 - [x] Implement private-feed publish with API key.
 - [x] Implement private-feed publish with credentials where supported.
-- [ ] Implement duplicate detection.
+- [x] Implement duplicate detection.
 - [ ] Implement `-SkipDependenciesCheck`.
 - [ ] Implement `-SkipModuleManifestValidate`.
 - [ ] Integrate with existing `ModulePublisher`.
@@ -213,7 +213,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Emit typed publish result objects.
 - [ ] Add Spectre.Console summary output.
 - [x] Add tests for package creation.
-- [ ] Add tests for duplicate publish classification.
+- [x] Add tests for duplicate publish classification.
 - [x] Add tests for private-feed publish request shaping.
 - [ ] Benchmark against `Publish-Module` and `Publish-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.
