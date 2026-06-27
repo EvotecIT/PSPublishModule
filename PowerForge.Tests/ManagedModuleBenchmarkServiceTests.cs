@@ -45,11 +45,14 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.True(run.ServiceElapsed > TimeSpan.Zero);
         Assert.True(run.PackageBytes > 0);
         Assert.True(run.ExtractedBytes > 0);
+        Assert.True(run.ExtractionElapsed.GetValueOrDefault() > TimeSpan.Zero);
         Assert.Equal(1, run.FileCount);
         Assert.Equal(1, run.PackageCount);
+        Assert.Equal(0, run.RepositoryRequestCount);
         Assert.True(run.TotalPackageBytes >= run.PackageBytes);
         Assert.True(run.TotalExtractedBytes >= run.ExtractedBytes);
         Assert.True(run.TotalFileCount >= run.FileCount);
+        Assert.True(run.TotalExtractionElapsed.GetValueOrDefault() > TimeSpan.Zero);
         Assert.True(run.FinalDiskBytes > 0);
         Assert.Equal("1.0.0", run.ValidatedVersion);
         Assert.True(run.VersionValidationSucceeded);
@@ -185,6 +188,7 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Equal(2, run.PackageCount);
         Assert.True(run.TotalPackageBytes > run.PackageBytes);
         Assert.True(run.TotalExtractedBytes > run.ExtractedBytes);
+        Assert.True(run.TotalExtractionElapsed.GetValueOrDefault() > run.ExtractionElapsed.GetValueOrDefault());
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Dependency", "2.0.0", "Company.Dependency.psd1")));
     }
 

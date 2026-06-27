@@ -81,6 +81,16 @@ public sealed class ManagedModuleInstallResult
     public long ExtractedBytes { get; set; }
 
     /// <summary>
+    /// Elapsed time spent extracting the package archive.
+    /// </summary>
+    public TimeSpan ExtractionElapsed { get; set; }
+
+    /// <summary>
+    /// Repository HTTP request attempts observed during this install operation, including dependencies.
+    /// </summary>
+    public long RepositoryRequestCount { get; set; }
+
+    /// <summary>
     /// Receipt written after successful delivery, when the operation changed disk state.
     /// </summary>
     public ManagedModuleReceipt? Receipt { get; set; }

@@ -26,6 +26,7 @@ public sealed class ManagedModuleRepositoryClientTests
         });
         Assert.Contains(requests, request => request.Url == "https://example.test/v3/index.json");
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/index.json");
+        Assert.Equal(2, repositoryClient.RequestCount);
     }
 
     [Fact]
@@ -123,6 +124,7 @@ public sealed class ManagedModuleRepositoryClientTests
 
         Assert.Equal(new[] { "1.0.0", "1.1.0" }, versions.Select(version => version.Version));
         Assert.Equal(2, requests.Count(request => request.Url == "https://example.test/v3/index.json"));
+        Assert.Equal(3, repositoryClient.RequestCount);
     }
 
     [Fact]
@@ -213,6 +215,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal(0, result.BytesWritten);
         Assert.Equal("Company.Tools", result.Metadata!.Id);
         Assert.Empty(requests);
+        Assert.Equal(0, repositoryClient.RequestCount);
     }
 
     [Fact]

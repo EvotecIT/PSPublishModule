@@ -259,8 +259,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Measure large dependency graph resolution.
 - [ ] Measure heavy module extraction.
 - [ ] Measure private feed metadata lookup.
-- [x] Record elapsed time, package count, direct/total package bytes, direct/total extracted bytes, file count, and final disk size.
-- [ ] Record HTTP request count and extraction time breakdown.
+- [x] Record elapsed time, HTTP request count, package count, direct/total package bytes, direct/total extracted bytes, extraction timing, file count, and final disk size.
 - [x] Validate installed module directory version after install/update.
 - [ ] Validate imported module version after install in PS 5.1 and PS 7+ benchmark runners.
 - [x] Validate receipts after install/update.

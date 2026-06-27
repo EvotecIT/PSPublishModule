@@ -18,6 +18,7 @@ internal sealed class ManagedModuleArchiveExtractor
         var destinationRoot = Path.GetFullPath(destinationPath);
         var fileCount = 0;
         long bytesWritten = 0;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         using var archive = ZipFile.OpenRead(packagePath);
         foreach (var entry in archive.Entries)
@@ -46,7 +47,8 @@ internal sealed class ManagedModuleArchiveExtractor
             bytesWritten += destination.Length;
         }
 
-        return new ManagedModuleArchiveExtractionResult(fileCount, bytesWritten);
+        stopwatch.Stop();
+        return new ManagedModuleArchiveExtractionResult(fileCount, bytesWritten, stopwatch.Elapsed);
     }
 
     private static string Normalize(string path)
@@ -81,13 +83,16 @@ internal sealed class ManagedModuleArchiveExtractor
 
 internal sealed class ManagedModuleArchiveExtractionResult
 {
-    public ManagedModuleArchiveExtractionResult(int fileCount, long bytesWritten)
+    public ManagedModuleArchiveExtractionResult(int fileCount, long bytesWritten, TimeSpan elapsed)
     {
         FileCount = fileCount;
         BytesWritten = bytesWritten;
+        Elapsed = elapsed;
     }
 
     public int FileCount { get; }
 
     public long BytesWritten { get; }
+
+    public TimeSpan Elapsed { get; }
 }

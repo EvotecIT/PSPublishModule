@@ -61,6 +61,7 @@ public sealed partial class ManagedModuleRepositoryClient
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
+        System.Threading.Interlocked.Increment(ref _requestCount);
         if (_options.RequestTimeout is null)
             return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 

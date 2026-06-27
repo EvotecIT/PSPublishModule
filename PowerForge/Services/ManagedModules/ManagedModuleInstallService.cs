@@ -79,6 +79,7 @@ public sealed class ManagedModuleInstallService
     {
         Validate(request);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var requestCountBefore = _repositoryClient.RequestCount;
 
         var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
@@ -111,7 +112,8 @@ public sealed class ManagedModuleInstallService
                     VersionPolicy = request.VersionPolicy,
                     ModuleRoot = moduleRoot,
                     ModulePath = modulePath,
-                    Elapsed = stopwatch.Elapsed
+                    Elapsed = stopwatch.Elapsed,
+                    RepositoryRequestCount = _repositoryClient.RequestCount - requestCountBefore
                 };
             }
 
@@ -153,6 +155,8 @@ public sealed class ManagedModuleInstallService
                 Download = download,
                 FileCount = extraction.FileCount,
                 ExtractedBytes = extraction.BytesWritten,
+                ExtractionElapsed = extraction.Elapsed,
+                RepositoryRequestCount = _repositoryClient.RequestCount - requestCountBefore,
                 DependencyResults = dependencyResults
             };
             _receiptStore.WriteReceipt(request.Repository, result);

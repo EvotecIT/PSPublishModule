@@ -76,6 +76,11 @@ public sealed class ManagedModuleBenchmarkRunResult
     public long ExtractedBytes { get; set; }
 
     /// <summary>
+    /// Elapsed time spent extracting the direct package archive.
+    /// </summary>
+    public TimeSpan? ExtractionElapsed { get; set; }
+
+    /// <summary>
     /// Number of files extracted into the module directory.
     /// </summary>
     public int FileCount { get; set; }
@@ -104,6 +109,16 @@ public sealed class ManagedModuleBenchmarkRunResult
     /// Extracted file count delivered by the operation, including dependencies and family members.
     /// </summary>
     public int TotalFileCount { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent extracting packages, including dependencies and family members.
+    /// </summary>
+    public TimeSpan? TotalExtractionElapsed { get; set; }
+
+    /// <summary>
+    /// Repository HTTP request attempts observed during the run.
+    /// </summary>
+    public long RepositoryRequestCount { get; set; }
 
     /// <summary>
     /// Final disk size of the selected module directory after the operation.

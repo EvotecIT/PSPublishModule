@@ -40,14 +40,18 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.Equal("Installed", run.Status);
         Assert.Equal("1.0.0", run.Version);
         Assert.True(run.PackageBytes > 0);
+        Assert.True(run.ExtractionElapsed.GetValueOrDefault() > TimeSpan.Zero);
+        Assert.Equal(0, run.RepositoryRequestCount);
         Assert.Equal("1.0.0", run.ValidatedVersion);
         Assert.True(run.VersionValidationSucceeded);
         Assert.True(run.FinalDiskBytes > 0);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
         Assert.Contains("\"ScenarioId\": \"Install:Company.Tools\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"FinalDiskBytes\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
+        Assert.Contains("\"RepositoryRequestCount\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("# Managed Module Benchmark Report", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Disk bytes", File.ReadAllText(markdownPath), StringComparison.Ordinal);
+        Assert.Contains("Requests", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Install:Company.Tools", File.ReadAllText(markdownPath), StringComparison.Ordinal);
     }
 
