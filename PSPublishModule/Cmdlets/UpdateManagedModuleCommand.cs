@@ -164,6 +164,10 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Plan { get; set; }
 
+    /// <summary>Write a compact Spectre.Console summary for each plan or result.</summary>
+    [Parameter]
+    public SwitchParameter ShowSummary { get; set; }
+
     /// <summary>Updates requested modules.</summary>
     protected override void ProcessRecord()
     {
@@ -201,7 +205,10 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
 
             if (Plan.IsPresent)
             {
-                WriteObject(service.PlanUpdateAsync(request).GetAwaiter().GetResult());
+                var plan = service.PlanUpdateAsync(request).GetAwaiter().GetResult();
+                WriteObject(plan);
+                if (ShowSummary.IsPresent)
+                    ManagedModuleSummaryWriter.Write(plan);
                 continue;
             }
 
@@ -211,6 +218,8 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
             var result = service.UpdateAsync(request).GetAwaiter().GetResult();
 
             WriteObject(result);
+            if (ShowSummary.IsPresent)
+                ManagedModuleSummaryWriter.Write(result);
         }
     }
 

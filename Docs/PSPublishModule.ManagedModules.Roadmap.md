@@ -147,7 +147,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-AcceptLicense`.
 - [x] Emit typed save result objects.
 - [x] Add `ShouldProcess` and dry-run planning.
-- [ ] Add Spectre.Console summary output.
+- [x] Add Spectre.Console summary output.
 - [ ] Benchmark against `Save-Module` and `Save-PSResource`.
 - [ ] Validate on Windows PowerShell 5.1.
 - [ ] Validate on PowerShell 7+.
@@ -168,7 +168,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement dependency installation order.
 - [x] Implement receipt creation after successful install.
 - [x] Emit typed install result objects.
-- [ ] Add Spectre.Console summary output.
+- [x] Add Spectre.Console summary output.
 - [x] Add tests for normal install.
 - [x] Add tests for scoped install.
 - [x] Add tests for exact side-by-side install.
@@ -190,7 +190,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement loaded-module safety checks.
 - [x] Implement receipt updates after successful update.
 - [x] Emit typed update result objects.
-- [ ] Add Spectre.Console summary output.
+- [x] Add Spectre.Console summary output.
 - [x] Add tests for no-op update.
 - [x] Add tests for update with dependencies.
 - [x] Add tests for scoped missing-copy fallback to install.
@@ -216,7 +216,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Integrate with existing `ModulePublisher`.
 - [ ] Integrate with required-module mirroring.
 - [x] Emit typed publish result objects.
-- [ ] Add Spectre.Console summary output.
+- [x] Add Spectre.Console summary output.
 - [x] Add tests for package creation.
 - [x] Add tests for duplicate publish classification.
 - [x] Add tests for private-feed publish request shaping.
