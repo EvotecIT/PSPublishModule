@@ -46,6 +46,26 @@ public sealed class ManagedModulePackageMetadata
     public IReadOnlyList<ManagedModuleDependencyInfo> Dependencies { get; set; } = Array.Empty<ManagedModuleDependencyInfo>();
 
     /// <summary>
+    /// Relative module manifest path inside the package when one is discovered.
+    /// </summary>
+    public string? ModuleManifestPath { get; set; }
+
+    /// <summary>
+    /// ModuleVersion value read from the module manifest when available.
+    /// </summary>
+    public string? ModuleManifestVersion { get; set; }
+
+    /// <summary>
+    /// Prerelease label read from PrivateData.PSData.Prerelease when available.
+    /// </summary>
+    public string? ModuleManifestPrerelease { get; set; }
+
+    /// <summary>
+    /// Dependencies declared by the module manifest RequiredModules entry.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleDependencyInfo> ManifestDependencies { get; set; } = Array.Empty<ManagedModuleDependencyInfo>();
+
+    /// <summary>
     /// Full path to the package that was read.
     /// </summary>
     public string? PackagePath { get; set; }
