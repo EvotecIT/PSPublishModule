@@ -54,7 +54,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Support `-SkipDependenciesCheck` for publish compatibility.
 - [ ] Support `-SkipModuleManifestValidate` for publish compatibility.
 - [x] Support `-WhatIf` and `-Confirm` on mutating cmdlets.
-- [ ] Return typed result objects with enough data to audit source, target path, version policy, resolved version, dependency actions, elapsed time, and receipt state.
+- [x] Return typed result objects with enough data to audit source, target path, version policy, resolved version, dependency actions, elapsed time, and receipt state.
 
 ## Phase 1: Design And Contracts
 

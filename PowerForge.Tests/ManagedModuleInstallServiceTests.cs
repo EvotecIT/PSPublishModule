@@ -119,6 +119,9 @@ public sealed class ManagedModuleInstallServiceTests
         });
 
         Assert.Equal("1.5.0", result.Version);
+        Assert.Equal(feed.Path, result.RepositorySource);
+        Assert.Equal("1.1.0", result.MinimumVersion);
+        Assert.Equal("1.9.9", result.MaximumVersion);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.5.0", "Company.Tools.psd1")));
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0")));
     }
@@ -155,6 +158,7 @@ public sealed class ManagedModuleInstallServiceTests
         });
 
         Assert.Equal("1.5.0", result.Version);
+        Assert.Equal("(1.0.0,2.0.0)", result.VersionPolicy);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.5.0", "Company.Tools.psd1")));
     }
 
