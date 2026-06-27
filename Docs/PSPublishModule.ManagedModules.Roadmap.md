@@ -94,7 +94,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement retry, timeout, and cancellation behavior.
 - [x] Implement proxy behavior.
 - [ ] Implement provider-neutral errors with actionable remediation messages.
-- [ ] Add tests for PSGallery metadata lookup.
+- [x] Add tests for PSGallery metadata lookup.
 - [x] Add tests for local folder feeds.
 - [x] Add tests for private-feed credential application.
 - [x] Add tests for package search.
