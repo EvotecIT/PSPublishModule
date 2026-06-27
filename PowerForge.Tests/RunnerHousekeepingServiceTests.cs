@@ -461,6 +461,28 @@ public sealed class RunnerHousekeepingServiceTests
         Assert.Equal(expected, Assert.IsType<string>(value));
     }
 
+    [Fact]
+    public void IsRunnerStepFailureFatal_TreatsFilesystemCleanupFailuresAsWarningsOnlyAfterFreeSpaceTargetIsMet()
+    {
+        var lockedWorkspaceFailure = new RunnerHousekeepingStepResult
+        {
+            Id = "workspaces",
+            Success = false,
+            Message = "Deleted 0 item(s); failed 1 item(s)."
+        };
+        var commandFailure = new RunnerHousekeepingStepResult
+        {
+            Id = "dotnet-cache",
+            Success = false,
+            Command = "dotnet nuget locals all --clear",
+            ExitCode = 1
+        };
+
+        Assert.False(RunnerHousekeepingService.IsRunnerStepFailureFatal(lockedWorkspaceFailure, freeRequirementMet: true));
+        Assert.True(RunnerHousekeepingService.IsRunnerStepFailureFatal(lockedWorkspaceFailure, freeRequirementMet: false));
+        Assert.True(RunnerHousekeepingService.IsRunnerStepFailureFatal(commandFailure, freeRequirementMet: true));
+    }
+
     private static string CreateSandbox()
     {
         var path = Path.Combine(Path.GetTempPath(), "PowerForge.RunnerHousekeepingTests", Guid.NewGuid().ToString("N"));

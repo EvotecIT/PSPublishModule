@@ -54,3 +54,33 @@ jobs:
       report_artifact_name: runner-housekeeping-${{ matrix.runner.name }}
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup-windows-runner:
+    if: ${{ github.repository == 'EvotecIT/PSPublishModule' || github.event.repository.private }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - name: GITHUB-RUNNER-W
+            labels: '["self-hosted","windows","runner-github-runner-w"]'
+          - name: GITHUBRUNNERX1
+            labels: '["self-hosted","windows","runner-githubrunnerx1"]'
+          - name: GITHUBRUNNERX2
+            labels: '["self-hosted","windows","runner-githubrunnerx2"]'
+          - name: GITHUBRUNNERX3
+            labels: '["self-hosted","windows","runner-githubrunnerx3"]'
+          - name: GITHUBRUNNERX4
+            labels: '["self-hosted","windows","runner-githubrunnerx4"]'
+          - name: GITHUBRUNNERX5
+            labels: '["self-hosted","windows","runner-githubrunnerx5"]'
+    name: ${{ matrix.runner.name }}
+    uses: ./.github/workflows/powerforge-github-runner-housekeeping.yml
+    with:
+      config_path: ./.powerforge/runner-housekeeping.json
+      apply: ${{ github.event_name != 'workflow_dispatch' || inputs.apply == 'true' }}
+      powerforge_ref: ${{ github.sha }}
+      runner_labels_json: ${{ matrix.runner.labels }}
+      runner_min_free_gb: ${{ github.event_name == 'workflow_dispatch' && (inputs.min_free_gb != '' && inputs.min_free_gb || '15') || (vars.POWERFORGE_RUNNER_HOUSEKEEPING_MIN_FREE_GB != '' && vars.POWERFORGE_RUNNER_HOUSEKEEPING_MIN_FREE_GB || '') }}
+      report_artifact_name: runner-housekeeping-${{ matrix.runner.name }}
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
