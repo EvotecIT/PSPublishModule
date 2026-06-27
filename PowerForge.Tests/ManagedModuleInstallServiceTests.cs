@@ -264,6 +264,82 @@ public sealed class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_installs_nested_dependency_closure()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Base.1.0.0.nupkg"),
+            "Company.Base",
+            "1.0.0",
+            files: CreateBaseFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Base", "[1.0.0]", null) },
+            files: CreateDependencyFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        var directDependency = Assert.Single(result.DependencyResults);
+        var nestedDependency = Assert.Single(directDependency.DependencyResults);
+        Assert.Equal("Company.Core", directDependency.Name);
+        Assert.Equal("Company.Base", nestedDependency.Name);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Base", "1.0.0", "Company.Base.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_rejects_dependency_cycles()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Tools", "[1.0.0]", null) },
+            files: CreateDependencyFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("dependency cycle", exception.Message, StringComparison.OrdinalIgnoreCase);
+        var modulePath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Assert.False(Directory.Exists(modulePath));
+        Assert.False(File.Exists(Path.Combine(modulePath, ".powerforge", "managed-module-receipt.json")));
+    }
+
+    [Fact]
     public async Task InstallAsync_skip_dependency_check_installs_only_parent()
     {
         using var feed = new TemporaryDirectory();
@@ -332,6 +408,12 @@ public sealed class ManagedModuleInstallServiceTests
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Company.Core.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+        };
+
+    private static IReadOnlyDictionary<string, string> CreateBaseFiles(string version)
+        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Base.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
 
     private static void AssertReceipt(
