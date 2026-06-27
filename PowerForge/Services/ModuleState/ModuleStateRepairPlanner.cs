@@ -33,7 +33,7 @@ internal sealed class ModuleStateRepairPlanner
             }
         }
 
-        foreach (var repairAction in CreateFamilyRepairActions(inventory, familyPolicies))
+        foreach (var repairAction in CreateFamilyRepairActions(inventory, familyPolicies, actionsByModule.Values))
         {
             actionsByModule.Remove(CreateBaseActionKey(repairAction));
             actionsByModule[CreateActionKey(repairAction)] = repairAction;
@@ -58,8 +58,13 @@ internal sealed class ModuleStateRepairPlanner
 
     private static IEnumerable<ModuleStatePlanAction> CreateFamilyRepairActions(
         ModuleStateInventory inventory,
-        IEnumerable<ModuleStateFamilyPolicy>? familyPolicies)
+        IEnumerable<ModuleStateFamilyPolicy>? familyPolicies,
+        IEnumerable<ModuleStatePlanAction> existingActions)
     {
+        var existing = (existingActions ?? Array.Empty<ModuleStatePlanAction>())
+            .Where(static action => action is not null)
+            .ToArray();
+
         foreach (var policy in familyPolicies ?? Array.Empty<ModuleStateFamilyPolicy>())
         {
             if (policy.CoherenceRule != ModuleStateFamilyCoherenceRule.SameVersion)
@@ -96,16 +101,27 @@ internal sealed class ModuleStateRepairPlanner
                     continue;
                 }
 
+                var targetRepository = FindCoveredAction(existing, moduleName, selectedModule.Scope)?.TargetRepository;
                 yield return new ModuleStatePlanAction(
                     ModuleStatePlanActionKind.Update,
                     moduleName,
                     selectedModule.Version,
                     "=" + ModuleStateVersion.NormalizeOrOriginal(targetModule.Version),
                     $"Family repair: align '{policy.Name}' modules to the highest installed family version.",
-                    isRepair: true);
+                    isRepair: true,
+                    targetScope: selectedModule.Scope,
+                    targetRepository: targetRepository);
             }
         }
     }
+
+    private static ModuleStatePlanAction? FindCoveredAction(
+        IEnumerable<ModuleStatePlanAction> existingActions,
+        string moduleName,
+        string? targetScope)
+        => existingActions.FirstOrDefault(action =>
+            string.Equals(action.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(action.TargetScope ?? string.Empty, targetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 
     private static ModuleStatePlanAction? CreateRepairAction(
         ModuleStateInventory inventory,

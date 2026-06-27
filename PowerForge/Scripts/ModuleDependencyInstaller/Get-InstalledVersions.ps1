@@ -14,6 +14,16 @@ function Enc([string]$s) {
   return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$s)))
 }
 
+function Get-SemanticModuleVersion($Module) {
+  if (-not $Module -or -not $Module.Version) { return '' }
+  $version = [string]$Module.Version
+  $prerelease = [string]$Module.PrivateData.PSData.Prerelease
+  if (-not [string]::IsNullOrWhiteSpace($prerelease) -and $version -notmatch '-') {
+    return $version + '-' + $prerelease.Trim().TrimStart('-')
+  }
+  return $version
+}
+
 try {
   $names = DecodeLines $NamesB64
   foreach ($n in $names) {
@@ -21,7 +31,7 @@ try {
     $ver = ''
     if ($mods) {
       $latest = ($mods | Sort-Object Version -Descending | Select-Object -First 1)
-      if ($latest -and $latest.Version) { $ver = [string]$latest.Version }
+      if ($latest -and $latest.Version) { $ver = Get-SemanticModuleVersion $latest }
     }
     Write-Output ('PFMOD::ITEM::' + (Enc $n) + '::' + (Enc $ver))
   }
@@ -32,4 +42,3 @@ try {
   Write-Output ('PFMOD::ERROR::' + $b64)
   exit 1
 }
-
