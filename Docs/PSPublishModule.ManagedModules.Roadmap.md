@@ -288,7 +288,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Measure update no-op.
 - [x] Measure update with one newer version.
 - [x] Measure publish to local folder feed.
-- [ ] Measure large dependency graph resolution.
+- [x] Measure large dependency graph resolution.
 - [ ] Measure heavy module extraction.
 - [ ] Measure private feed metadata lookup.
 - [x] Record elapsed time, HTTP request count, package count, direct/total package bytes, direct/total extracted bytes, extraction timing, file count, and final disk size.
@@ -311,6 +311,8 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran `Measure-ManagedModule -Operation Save` twice against the same local folder feed and destination root; the first save returned `Installed`, and the warm-path save returned `AlreadyInstalled`.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both seeded `Company.Tools` 1.0.0 with `Measure-ManagedModule -Operation Install`, then ran `Measure-ManagedModule -Operation Update -Version 1.0.0`; the update returned `UpToDate` with previous and target version 1.0.0.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both ran cold and warm cache install measurements against a local folder feed; the cold install returned `Installed` with `FromCache = false`, and the warm install into a fresh root returned `Installed` with `FromCache = true`.
+- [x] 2026-06-27: `Measure-ManagedModule` command-surface contract tests installed a local package graph with one root module and six transitive dependency packages, recorded dependency/package totals, and validated the deepest dependency path.
+- [x] 2026-06-27: `Measure-ManagedModule -Operation Publish` command-surface contract tests published a module that declared `RequiredModules`, verified the dependency was present in the target local feed, and confirmed the generated package nuspec preserved dependency metadata.
 - [ ] Public-feed, private-feed, heavy-module, compatibility-engine benchmark, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
@@ -324,7 +326,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [ ] Private repository save for offline use.
 - [x] Publish a simple module.
 - [ ] Publish a binary module.
-- [ ] Publish a module with dependencies.
+- [x] Publish a module with dependencies.
 - [x] Update already-current modules.
 - [x] Update stale modules.
 - [ ] Repair source mismatch.
