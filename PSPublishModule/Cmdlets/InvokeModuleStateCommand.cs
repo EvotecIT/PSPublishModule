@@ -209,6 +209,14 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
     public string? ModuleRoot { get; set; }
 
     /// <summary>
+    /// Gets or sets a target module root for save-style managed module delivery.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModules)]
+    [Parameter(ParameterSetName = ParameterSetInstalled)]
+    [ValidateNotNullOrEmpty]
+    public string? SavePath { get; set; }
+
+    /// <summary>
     /// Gets or sets whether prepared private-module commands include Prerelease.
     /// </summary>
     [Parameter]
@@ -399,6 +407,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
 
         var explicitPolicy = ResolveExplicitVersionPolicy();
         var desiredRepository = ResolveRepositoryName();
+        var savePath = ResolveOptionalTargetPath(SavePath);
         var modules = new ArrayList();
         foreach (var name in ModuleName)
         {
@@ -413,6 +422,8 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
                 module["Repository"] = desiredRepository!;
             if (!string.IsNullOrWhiteSpace(Scope))
                 module["Scope"] = Scope!;
+            if (!string.IsNullOrWhiteSpace(savePath))
+                module["Path"] = savePath!;
 
             modules.Add(module);
         }
@@ -426,6 +437,7 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
     private object CreateDesiredStateForInstalledModules(ModuleStateInventoryResult inventory)
     {
         var desiredRepository = ResolveRepositoryName();
+        var savePath = ResolveOptionalTargetPath(SavePath);
         var modules = new ArrayList();
         foreach (var selected in SelectInstalledBaselineModules(inventory)
             .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
@@ -442,6 +454,8 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
                 module["Scope"] = Scope!;
             else if (!string.IsNullOrWhiteSpace(selected.Scope))
                 module["Scope"] = selected.Scope!;
+            if (!string.IsNullOrWhiteSpace(savePath))
+                module["Path"] = savePath!;
 
             modules.Add(module);
         }
@@ -591,6 +605,25 @@ public sealed class InvokeModuleStateCommand : PSCmdlet
         => string.IsNullOrWhiteSpace(path)
             ? null
             : SessionState.Path.GetUnresolvedProviderPathFromPSPath(path);
+
+    private string? ResolveOptionalTargetPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            return SessionState.Path.GetUnresolvedProviderPathFromPSPath(path);
+        }
+        catch (InvalidOperationException)
+        {
+            return path!.Trim();
+        }
+        catch (NullReferenceException)
+        {
+            return path!.Trim();
+        }
+    }
 
     private static ModuleStateCleanupMode ParseCleanupMode(string? cleanup)
         => string.Equals(cleanup, "OldVersions", StringComparison.OrdinalIgnoreCase)

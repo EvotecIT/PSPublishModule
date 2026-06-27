@@ -74,7 +74,8 @@ internal sealed class ModuleStateJsonService
                 module.Name ?? string.Empty,
                 module.VersionPolicy ?? module.Version ?? module.RequiredVersion,
                 module.AllowedSources ?? module.Repositories ?? ToArray(module.Repository),
-                module.Scope));
+                module.Scope,
+                module.TargetPath ?? module.Path ?? module.ModuleRoot ?? module.DestinationPath));
         }
 
         var families = new List<ModuleStateFamilyPolicy>();
@@ -157,6 +158,14 @@ internal sealed class ModuleStateJsonService
         public string? Repository { get; set; }
 
         public string? Scope { get; set; }
+
+        public string? TargetPath { get; set; }
+
+        public string? Path { get; set; }
+
+        public string? ModuleRoot { get; set; }
+
+        public string? DestinationPath { get; set; }
     }
 
     private static string[]? ToArray(string? value)

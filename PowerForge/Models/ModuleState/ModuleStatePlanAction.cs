@@ -52,5 +52,6 @@ internal enum ModuleStatePlanActionKind
     NoAction,
     Install,
     Update,
+    Save,
     Remove
 }

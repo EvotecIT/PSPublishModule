@@ -11,12 +11,12 @@ Runs the one-stop module-state management workflow.
 ## SYNTAX
 ### Modules (Default)
 ```powershell
-Invoke-ModuleState [-ModuleName] <string[]> [-Latest] [-RequiredVersion <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Repair] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-InventoryOutputPath <string>] [-PlanOutputPath <string>] [-ReceiptPath <string>] [-MaintenanceReceiptOutputPath <string>] [-InstallPrerequisites] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-Execute] [-PostApplyModulePath <string[]>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-AllowConflict] [-ShowSummary] [-AsJson] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-ModuleState [-ModuleName] <string[]> [-Latest] [-RequiredVersion <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Repair] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-InventoryOutputPath <string>] [-PlanOutputPath <string>] [-ReceiptPath <string>] [-MaintenanceReceiptOutputPath <string>] [-InstallPrerequisites] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-SavePath <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-Execute] [-PostApplyModulePath <string[]>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-AllowConflict] [-ShowSummary] [-AsJson] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Installed
 ```powershell
-Invoke-ModuleState -Installed [-Latest] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Repair] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-InventoryOutputPath <string>] [-PlanOutputPath <string>] [-ReceiptPath <string>] [-MaintenanceReceiptOutputPath <string>] [-InstallPrerequisites] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-Execute] [-PostApplyModulePath <string[]>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-AllowConflict] [-ShowSummary] [-AsJson] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-ModuleState -Installed [-Latest] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Repair] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-InventoryOutputPath <string>] [-PlanOutputPath <string>] [-ReceiptPath <string>] [-MaintenanceReceiptOutputPath <string>] [-InstallPrerequisites] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-SavePath <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-Execute] [-PostApplyModulePath <string[]>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-AllowConflict] [-ShowSummary] [-AsJson] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### DesiredState
@@ -583,6 +583,22 @@ Gets or sets an optional exact required version used with -ModuleName.
 ```yaml
 Type: String
 Parameter Sets: Modules
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SavePath
+Gets or sets a target module root for save-style managed module delivery.
+
+```yaml
+Type: String
+Parameter Sets: Modules, Installed
 Aliases: None
 Possible values:
 

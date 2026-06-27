@@ -23,7 +23,7 @@ internal sealed class ModuleStateManagedDeliveryService
             throw new ArgumentNullException(nameof(options));
 
         var actions = applyResult.Plan.Actions
-            .Where(static action => action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update)
+            .Where(static action => action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save)
             .ToArray();
         if (actions.Length == 0)
             return Array.Empty<ModuleStateDeliveryExecutionResult>();
@@ -36,9 +36,12 @@ internal sealed class ModuleStateManagedDeliveryService
 
         foreach (var action in actions)
         {
-            results.Add(action.Kind == ModuleStatePlanActionKind.Update
-                ? ExecuteUpdate(updateService, repository, action, options)
-                : ExecuteInstall(installService, repository, action, options));
+            results.Add(action.Kind switch
+            {
+                ModuleStatePlanActionKind.Update => ExecuteUpdate(updateService, repository, action, options),
+                ModuleStatePlanActionKind.Save => ExecuteSave(installService, repository, action, options),
+                _ => ExecuteInstall(installService, repository, action, options)
+            });
         }
 
         return results.ToArray();
@@ -108,6 +111,38 @@ internal sealed class ModuleStateManagedDeliveryService
         };
     }
 
+    private ModuleStateDeliveryExecutionResult ExecuteSave(
+        ManagedModuleInstallService service,
+        ManagedModuleRepository repository,
+        ModuleStatePlanAction action,
+        ModuleStateManagedDeliveryOptions options)
+    {
+        var request = CreateSaveRequest(repository, action, options);
+        if (!_cmdlet.ShouldProcess(action.ModuleName, $"Save managed module from repository '{repository.Name}'"))
+            return CreateSkippedResult("Save", repository.Name, action);
+
+        var result = service.InstallAsync(request).GetAwaiter().GetResult();
+        return new ModuleStateDeliveryExecutionResult
+        {
+            Operation = "Save",
+            OperationPerformed = result.Status == ManagedModuleInstallStatus.Installed,
+            RepositoryName = repository.Name,
+            DependencyResults = new[]
+            {
+                new ModuleStateDependencyResult
+                {
+                    Name = result.Name,
+                    InstalledVersion = action.InstalledVersion,
+                    ResolvedVersion = result.Version,
+                    RequestedVersion = action.VersionPolicy,
+                    Status = result.Status.ToString(),
+                    Installer = "ManagedModule",
+                    Message = result.ModulePath
+                }
+            }
+        };
+    }
+
     private ManagedModuleInstallRequest CreateInstallRequest(
         ManagedModuleRepository repository,
         ModuleStatePlanAction action,
@@ -150,6 +185,30 @@ internal sealed class ModuleStateManagedDeliveryService
             AllowClobber = options.AllowClobber,
             AcceptLicense = options.AcceptLicense,
             SourcePolicy = action.IsRepair ? new ManagedModuleSourcePolicy() : null
+        };
+    }
+
+    private ManagedModuleInstallRequest CreateSaveRequest(
+        ManagedModuleRepository repository,
+        ModuleStatePlanAction action,
+        ModuleStateManagedDeliveryOptions options)
+    {
+        var versionPolicy = ResolveVersionPolicy(action.VersionPolicy);
+        var moduleRoot = ResolveModuleRoot(action, options)
+            ?? throw new InvalidOperationException("Managed module save delivery requires an action target path.");
+        return new ManagedModuleInstallRequest
+        {
+            Repository = repository,
+            Name = action.ModuleName,
+            Version = versionPolicy.ExactVersion,
+            VersionPolicy = versionPolicy.RangePolicy,
+            IncludePrerelease = options.Prerelease,
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot,
+            Credential = options.Credential,
+            Force = options.Force || action.Force,
+            AllowClobber = options.AllowClobber,
+            AcceptLicense = options.AcceptLicense
         };
     }
 

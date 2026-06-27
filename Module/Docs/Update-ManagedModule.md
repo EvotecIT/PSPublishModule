@@ -11,7 +11,7 @@ Updates installed PowerShell modules through the managed C# module engine.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Update-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-FamilyPolicy <ManagedModuleFamilyPolicy>] [-FamilyName <string>] [-FamilyModuleNamePrefix <string>] [-FamilyModuleName <string[]>] [-SourcePolicy <ManagedModuleSourcePolicy>] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-FamilyPolicy <ManagedModuleFamilyPolicy>] [-FamilyName <string>] [-FamilyModuleNamePrefix <string>] [-FamilyModuleName <string[]>] [-SourcePolicy <ManagedModuleSourcePolicy>] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -345,6 +345,22 @@ Include prerelease versions when resolving the latest version.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: AllowPrerelease
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProfileName
+Saved repository profile name.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False

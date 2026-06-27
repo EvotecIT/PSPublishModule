@@ -145,6 +145,40 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_PlansSaveForMissingDesiredTargetPath()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(Array.Empty<ModuleStateInstalledModule>()),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", targetPath: @"C:\OfflineModules") });
+
+        var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Save, action.Kind);
+        Assert.Equal("Company.Tools", action.ModuleName);
+        Assert.Equal(@">=1.2.0", action.VersionPolicy);
+        Assert.Equal(@"C:\OfflineModules", action.TargetPath);
+        Assert.Equal("Module is not saved in desired target path.", action.Reason);
+    }
+
+    [Fact]
+    public void CreatePlan_UsesTargetPathCopyForSaveDecision()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.4.0", path: @"C:\UserModules\Company.Tools\1.4.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.1.0", path: @"C:\OfflineModules\Company.Tools\1.1.0")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", targetPath: @"C:\OfflineModules") });
+
+        var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Save, action.Kind);
+        Assert.Equal("1.1.0", action.InstalledVersion);
+        Assert.Equal(@"C:\OfflineModules", action.TargetPath);
+    }
+
+    [Fact]
     public void CreatePlan_UsesDesiredScopeVersionForDecision()
     {
         var request = new ModuleStatePlanRequest(
@@ -374,6 +408,26 @@ public sealed class ModuleStatePlannerTests
 
         Assert.Equal("1.3.0", updateAction.InstalledVersion);
         Assert.Equal("1.0.0", cleanupAction.InstalledVersion);
+    }
+
+    [Fact]
+    public void CreatePlan_WithCleanupAndSaveTarget_DoesNotRemoveCopiesOutsideTargetPath()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", path: @"C:\UserModules\Company.Tools\1.0.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", path: @"C:\OfflineModules\Company.Tools\1.0.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.1.0", path: @"C:\OfflineModules\Company.Tools\1.1.0")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.1.0", targetPath: @"C:\OfflineModules") },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var cleanupAction = Assert.Single(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
+
+        Assert.Equal("1.0.0", cleanupAction.InstalledVersion);
+        Assert.Equal(@"C:\OfflineModules\Company.Tools\1.0.0", cleanupAction.TargetPath);
     }
 
     [Fact]

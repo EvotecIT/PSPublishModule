@@ -16,6 +16,7 @@ internal sealed class ModuleStateConflictAnalyzer
         {
             var installedModules = inventory.InstalledModules
                 .Where(module => string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase))
+                .Where(module => string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!))
                 .ToArray();
             var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
 
@@ -219,4 +220,20 @@ internal sealed class ModuleStateConflictAnalyzer
             .ThenByDescending(static module => module.IsLoaded)
             .FirstOrDefault();
     }
+
+    private static bool IsUnderTargetPath(string? modulePath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            return false;
+
+        var normalizedModulePath = NormalizePath(modulePath!);
+        var normalizedTargetPath = NormalizePath(targetPath);
+        return string.Equals(normalizedModulePath, normalizedTargetPath, StringComparison.OrdinalIgnoreCase) ||
+               normalizedModulePath.StartsWith(normalizedTargetPath + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+        => path.Trim()
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+            .Replace('\\', '/');
 }
