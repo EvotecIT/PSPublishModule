@@ -54,6 +54,29 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_uses_nuget_v2_find_packages_by_id()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Company.Tools", includePrerelease: false);
+
+        Assert.Equal(ManagedModuleRepositoryKind.NuGetV2, repository.Kind);
+        Assert.Equal(new[] { "1.0.0", "1.1.0" }, versions.Select(version => version.Version));
+        Assert.All(versions, version =>
+        {
+            Assert.Equal("Gallery", version.RepositoryName);
+            Assert.Equal(repository.Source, version.RepositorySource);
+            Assert.StartsWith("https://example.test/api/v2/package/Company.Tools/", version.PackageSource, StringComparison.OrdinalIgnoreCase);
+            Assert.False(version.IsPrerelease);
+        });
+        Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'");
+        Assert.All(requests, request => Assert.Contains("PowerForge-ManagedModule/1.0", request.UserAgent, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_applies_basic_credentials_to_repository_requests()
     {
         var requests = new List<RecordedRequest>();
@@ -507,6 +530,15 @@ public sealed class ManagedModuleRepositoryClientTests
             if (uri.AbsoluteUri == "https://psgallery.test/packages/pester/index.json")
                 return Json("{\"versions\":[\"5.6.1\",\"5.7.0-preview1\",\"5.7.0\"]}");
 
+            if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0-beta1</d:Version></m:properties></content></entry>" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
             if (uri.AbsoluteUri == "https://example.test/packages/malformed.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\"");
 
@@ -562,6 +594,12 @@ public sealed class ManagedModuleRepositoryClientTests
             => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
+
+        private static Task<HttpResponseMessage> Xml(string xml)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(xml, Encoding.UTF8, "application/xml")
             });
     }
 

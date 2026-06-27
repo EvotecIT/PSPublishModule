@@ -320,16 +320,18 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: Managed repair/conflict contract tests cover source repair, scoped missing-copy repair, and command-surface loaded-module update blocking without relying on PowerShellGet, PSResourceGet, or external executables.
 - [x] 2026-06-27: Managed path audit found external PowerShell runner usage only in explicit compatibility benchmark engines and import-validation hosts; managed install, save, update, publish, and ModuleState managed delivery stay in C# services.
 - [x] 2026-06-27: Managed benchmark service tests installed and saved a module from a private NuGet v3-style feed with Basic credentials, validating metadata, package download, extraction, request counts, and final manifest version.
-- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed `ThreadJob` 2.1.0 from the public PowerShell Gallery NuGet v2 endpoint into temp module roots with `Measure-ManagedModule -Operation Install`, validated manifest version 2.1.0, and recorded package bytes, extracted bytes, file count, and repository request count.
-- [ ] Medium/large public-feed and publish comparison evidence still need separate proof.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `ThreadJob` 2.1.0 from the public PowerShell Gallery NuGet v2 endpoint into temp module roots with `Measure-ManagedModule -Operation Install`, validated manifest version 2.1.0, and recorded package bytes, extracted bytes, file count, and repository request count.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `PSScriptAnalyzer` 1.25.0 from the public PowerShell Gallery NuGet v2 endpoint, validating a medium public package with 14.6 MB downloaded, 299 MB extracted, and 48 files.
+- [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `Microsoft.Graph.Users` 2.38.0 with `-AcceptLicense`, resolving and installing its related dependency package through the managed engine and recording 2 packages, 65 total files, and 71 MB total extracted bytes.
+- [ ] Large many-dependency public-feed, mixed-version family, and publish comparison evidence still need separate proof.
 
 ## Benchmark Scenarios
 
 - [x] Small public module install.
-- [ ] Medium public module install.
+- [x] Medium public module install.
 - [ ] Large public module with many dependencies.
 - [ ] Related module family with mixed versions.
-- [ ] Large cloud administration module family.
+- [x] Large cloud administration module family.
 - [x] Private repository install with credentials.
 - [x] Private repository save for offline use.
 - [x] Publish a simple module.
