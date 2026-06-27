@@ -40,7 +40,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-MinimumVersion`.
 - [x] Support `-MaximumVersion`.
 - [x] Support `-Version`.
-- [ ] Support `-VersionPolicy`.
+- [x] Support `-VersionPolicy`.
 - [x] Support `-Prerelease`.
 - [x] Support `-AllowPrerelease` as an alias where it helps migration.
 - [ ] Support `-AcceptLicense`.
@@ -119,8 +119,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - [ ] Implement semantic version parsing and comparison shared across module state and managed installs.
 - [x] Implement PowerShellGet-style minimum/maximum/required version policies.
-- [ ] Implement PSResourceGet/NuGet range policies.
-- [ ] Implement `-VersionPolicy` as the canonical internal representation.
+- [x] Implement PSResourceGet/NuGet range policies.
+- [x] Implement `-VersionPolicy` as the canonical internal representation.
 - [ ] Implement prerelease inclusion rules.
 - [ ] Implement dependency graph resolution.
 - [ ] Implement cycle detection.

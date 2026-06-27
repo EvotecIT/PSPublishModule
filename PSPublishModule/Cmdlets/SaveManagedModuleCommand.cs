@@ -64,6 +64,11 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? MaximumVersion { get; set; }
 
+    /// <summary>NuGet-style version range policy used when Version is omitted.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? VersionPolicy { get; set; }
+
     /// <summary>Include prerelease versions when resolving the latest version.</summary>
     [Parameter]
     [Alias("AllowPrerelease")]
@@ -124,6 +129,7 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
                         Version = Version,
                         MinimumVersion = MinimumVersion,
                         MaximumVersion = MaximumVersion,
+                        VersionPolicy = VersionPolicy,
                         IncludePrerelease = Prerelease.IsPresent,
                         Scope = ManagedModuleInstallScope.Custom,
                         ModuleRoot = moduleRoot,

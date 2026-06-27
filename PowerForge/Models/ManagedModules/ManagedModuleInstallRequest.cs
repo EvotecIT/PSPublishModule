@@ -31,6 +31,11 @@ public sealed class ManagedModuleInstallRequest
     public string? MaximumVersion { get; set; }
 
     /// <summary>
+    /// NuGet-style version range policy used when <see cref="Version" /> is omitted.
+    /// </summary>
+    public string? VersionPolicy { get; set; }
+
+    /// <summary>
     /// Include prerelease versions when resolving latest.
     /// </summary>
     public bool IncludePrerelease { get; set; }
