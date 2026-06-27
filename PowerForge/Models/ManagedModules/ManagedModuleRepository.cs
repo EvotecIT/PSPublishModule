@@ -70,6 +70,9 @@ public sealed class ManagedModuleRepository
         if (Path.IsPathRooted(source) || source.StartsWith(".", StringComparison.Ordinal))
             return ManagedModuleRepositoryKind.LocalFolder;
 
+        if (source.IndexOf("/api/v2", StringComparison.OrdinalIgnoreCase) >= 0)
+            return ManagedModuleRepositoryKind.NuGetV2;
+
         return ManagedModuleRepositoryKind.NuGetV3;
     }
 }

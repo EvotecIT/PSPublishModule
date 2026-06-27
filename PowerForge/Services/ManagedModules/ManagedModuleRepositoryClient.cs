@@ -69,6 +69,7 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             ManagedModuleRepositoryKind.LocalFolder => GetLocalVersions(repository, packageId, includePrerelease),
             ManagedModuleRepositoryKind.NuGetV3 => await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => throw new NotSupportedException("NuGet v2 managed repositories require an exact Version. Version listing is not supported yet."),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -100,6 +101,7 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take),
             ManagedModuleRepositoryKind.NuGetV3 => await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => throw new NotSupportedException("NuGet v2 managed repositories do not support managed search yet. Use an exact package name and Version."),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -140,6 +142,7 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             ManagedModuleRepositoryKind.LocalFolder => await CopyLocalPackageAsync(repository, packageId, version, destinationDirectory, cancellationToken).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV3 => await DownloadNuGetPackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => await DownloadNuGetV2PackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -375,6 +378,43 @@ public sealed partial class ManagedModuleRepositoryClient
         };
     }
 
+    private async Task<ManagedModuleDownloadResult> DownloadNuGetV2PackageAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        string version,
+        string destinationDirectory,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var packageUri = BuildNuGetV2PackageUri(repository.Source, packageId, version);
+        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
+            cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw CreateRepositoryHttpException(repository, "Download", response.StatusCode, $"Unable to download package '{packageId}' version '{version}'.");
+
+        long bytesWritten;
+        using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
+        using (var destination = File.Create(destinationPath))
+        {
+            await source.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
+            bytesWritten = destination.Length;
+        }
+
+        return new ManagedModuleDownloadResult
+        {
+            Name = packageId,
+            Version = version,
+            RepositoryName = repository.Name,
+            Source = packageUri.ToString(),
+            PackagePath = destinationPath,
+            BytesWritten = bytesWritten,
+            PackageSha256 = ComputeSha256(destinationPath),
+            Metadata = _packageReader.ReadMetadata(destinationPath)
+        };
+    }
+
     private async Task<ManagedModuleDownloadResult> CopyLocalPackageAsync(
         ManagedModuleRepository repository,
         string packageId,
@@ -505,6 +545,7 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         var request = new HttpRequestMessage(method, uri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
+        request.Headers.UserAgent.ParseAdd("PowerForge-ManagedModule/1.0");
         ApplyCredential(request, credential);
         return request;
     }
@@ -643,6 +684,11 @@ public sealed partial class ManagedModuleRepositoryClient
             new Uri(EnsureTrailingSlash(packageBase)),
             $"{Uri.EscapeDataString(lowerId)}/{Uri.EscapeDataString(lowerVersion)}/{Uri.EscapeDataString(lowerId)}.{Uri.EscapeDataString(lowerVersion)}.nupkg");
     }
+
+    private static Uri BuildNuGetV2PackageUri(string source, string packageId, string version)
+        => new(
+            new Uri(EnsureTrailingSlash(source)),
+            $"package/{Uri.EscapeDataString(packageId.Trim())}/{Uri.EscapeDataString(version.Trim())}");
 
     private static string BuildDestinationPath(string destinationDirectory, string packageId, string version)
         => Path.Combine(Path.GetFullPath(destinationDirectory), $"{packageId.Trim().ToLowerInvariant()}.{version.Trim().ToLowerInvariant()}.nupkg");

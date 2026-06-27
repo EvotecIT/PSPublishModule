@@ -16,6 +16,11 @@ public enum ManagedModuleRepositoryKind
     NuGetV3,
 
     /// <summary>
+    /// NuGet v2 package endpoint source. Exact-version package download is supported.
+    /// </summary>
+    NuGetV2,
+
+    /// <summary>
     /// Local folder containing NuGet packages.
     /// </summary>
     LocalFolder
