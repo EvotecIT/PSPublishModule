@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
 
@@ -26,6 +27,8 @@ namespace PSPublishModule;
 [OutputType(typeof(ManagedModuleInstallResult), typeof(ManagedModuleInstallPlan))]
 public sealed class SaveManagedModuleCommand : PSCmdlet
 {
+    private readonly List<ManagedModuleInstallResult> _results = new();
+
     /// <summary>Module names to save.</summary>
     [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
@@ -120,6 +123,11 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Plan { get; set; }
 
+    /// <summary>Optional path for offline bundle metadata written after successful saves.</summary>
+    [Parameter]
+    [Alias("MetadataPath", "OfflineBundleMetadataPath")]
+    public string? BundleMetadataPath { get; set; }
+
     /// <summary>Saves requested modules.</summary>
     protected override void ProcessRecord()
     {
@@ -160,8 +168,22 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
                 continue;
 
             var result = service.InstallAsync(request).GetAwaiter().GetResult();
+            _results.Add(result);
 
             WriteObject(result);
         }
+    }
+
+    /// <summary>Writes optional offline bundle metadata after all save results are available.</summary>
+    protected override void EndProcessing()
+    {
+        if (Plan.IsPresent || string.IsNullOrWhiteSpace(BundleMetadataPath) || _results.Count == 0)
+            return;
+
+        var metadataPath = ManagedModuleCommandSupport.ResolveProviderPath(this, BundleMetadataPath);
+        if (!ShouldProcess(metadataPath, "Write managed module bundle metadata"))
+            return;
+
+        new ManagedModuleBundleMetadataWriter().Write(metadataPath!, _results);
     }
 }
