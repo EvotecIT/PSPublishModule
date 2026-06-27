@@ -13,5 +13,10 @@ public enum ModuleStateDeliveryTransport
     /// <summary>
     /// Use the managed C# install/update module engine.
     /// </summary>
-    ManagedModule
+    ManagedModule,
+
+    /// <summary>
+    /// Prefer the managed C# engine when a repository source URI or path is available, otherwise use compatibility transport.
+    /// </summary>
+    Auto
 }

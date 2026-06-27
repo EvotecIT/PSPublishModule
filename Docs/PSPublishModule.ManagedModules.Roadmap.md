@@ -336,6 +336,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: `Measure-ManagedModule -Operation Publish -Engine Managed,PowerShellGet,PSResourceGet` published the same simple module to isolated temp local feeds on PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655, recording successful publish status, version 1.0.0 evidence, and per-engine publish timings.
 - [x] 2026-06-28: `Measure-ManagedModule` benchmark results now include typed transition gates that classify install/save/update/publish evidence as ready, incomplete, or blocked before managed transport can replace compatibility defaults.
 - [x] 2026-06-28: `Measure-ManagedModule -RequireTransitionReady` now fails the command when transition gates are incomplete or blocked, while still writing requested benchmark reports for CI evidence.
+- [x] 2026-06-28: `Install-PrivateModule` and `Update-PrivateModule` now default to Auto transport, which uses managed delivery for local/URI repository sources and repository profiles with source endpoints, while falling back to compatibility transport for bare registered repository names.
 
 ## Benchmark Scenarios
 
@@ -360,8 +361,8 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] Keep current PowerShellGet/PSResourceGet wrappers while managed parity is incomplete.
 - [x] Add opt-in `Install-PrivateModule -Transport ManagedModule` routing.
 - [x] Add opt-in `Update-PrivateModule -Transport ManagedModule` routing.
-- [ ] Make managed transport the default for `Install-PrivateModule` after install parity is proven.
-- [ ] Make managed transport the default for `Update-PrivateModule` after update parity is proven.
+- [x] Make `Install-PrivateModule` prefer managed transport by default when a repository source URI/path is available, while preserving compatibility transport for bare registered repository names.
+- [x] Make `Update-PrivateModule` prefer managed transport by default when a repository source URI/path is available, while preserving compatibility transport for bare registered repository names.
 - [x] Route required-module mirroring through the managed engine after save/publish parity is proven.
 - [ ] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
 - [x] Remove embedded PowerShell scripts from the managed path.

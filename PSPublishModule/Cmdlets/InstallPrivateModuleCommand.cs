@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -21,10 +19,6 @@ namespace PSPublishModule;
 /// <code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'</code>
 /// </example>
 /// <example>
-/// <summary>Install an exact module version</summary>
-/// <code>Install-PrivateModule -Name 'ModuleA' -Repository 'Company' -RequiredVersion '1.2.0'</code>
-/// </example>
-/// <example>
 /// <summary>Install modules from a saved Azure Artifacts profile</summary>
 /// <code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -ProfileName 'Company' -InstallPrerequisites</code>
 /// </example>
@@ -42,21 +36,6 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
-
-    /// <summary>Exact module version to install for every requested module name.</summary>
-    [Parameter]
-    [ValidateNotNullOrEmpty]
-    public string? RequiredVersion { get; set; }
-
-    /// <summary>Version policy to install, for example <c>&gt;=1.2.0 &lt;2.0.0</c>.</summary>
-    [Parameter]
-    [ValidateNotNullOrEmpty]
-    public string? VersionPolicy { get; set; }
-
-    /// <summary>PowerShell module installation scope.</summary>
-    [Parameter]
-    [ValidateSet("CurrentUser", "AllUsers")]
-    public string Scope { get; set; } = "CurrentUser";
 
     /// <summary>Name of an already registered repository, or provider repository/feed id when a private-gallery provider is selected.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetRepository)]
@@ -124,7 +103,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
 
     /// <summary>Delivery engine used for module installation.</summary>
     [Parameter]
-    public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
+    public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.Auto;
 
     /// <summary>Exact package version to install. When omitted, the latest repository version is used.</summary>
     [Parameter]
@@ -291,12 +270,10 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
             {
                 Operation = PrivateModuleWorkflowOperation.Install,
                 ModuleNames = Name,
-                RequiredVersions = PrivateModuleVersionPolicySupport.BuildRequiredVersions(Name, RequiredVersion, VersionPolicy),
-                MinimumVersions = PrivateModuleVersionPolicySupport.BuildMinimumVersions(Name, VersionPolicy),
-                MinimumVersionInclusivity = PrivateModuleVersionPolicySupport.BuildMinimumVersionInclusivity(Name, VersionPolicy),
-                MaximumVersions = PrivateModuleVersionPolicySupport.BuildMaximumVersions(Name, VersionPolicy),
-                MaximumVersionInclusivity = PrivateModuleVersionPolicySupport.BuildMaximumVersionInclusivity(Name, VersionPolicy),
-                InstallScope = Scope,
+                RequiredVersions = PrivateModuleCommandSupport.CreateVersionMap(Name, Version),
+                MinimumVersions = PrivateModuleCommandSupport.CreateVersionMap(Name, MinimumVersion),
+                MaximumVersions = PrivateModuleCommandSupport.CreateVersionMap(Name, MaximumVersion),
+                InstallScope = MyInvocation.BoundParameters.ContainsKey(nameof(Scope)) ? Scope.ToString() : null,
                 UseAzureArtifacts = useAzureArtifacts,
                 UseMicrosoftArtifactRegistry = useMicrosoftArtifactRegistry,
                 ProfileName = ParameterSetName == ParameterSetProfile ? ProfileName : null,
@@ -328,9 +305,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
                 ManagedShellEdition = ShellEdition,
                 ManagedModuleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
                 ManagedPackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
-                ManagedRepositorySource = Transport == ModuleStateDeliveryTransport.ManagedModule && ParameterSetName == ParameterSetRepository
-                    ? PrivateModuleCommandSupport.ResolveManagedRepositorySource(this, Repository)
-                    : null,
+                ManagedRepositorySource = ResolveManagedRepositorySource(),
                 ManagedAllowClobber = AllowClobber,
                 ManagedAcceptLicense = AcceptLicense,
                 ManagedSkipDependencyCheck = SkipDependencyCheck
@@ -343,4 +318,18 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
         WriteObject(result.DependencyResults, enumerateCollection: true);
     }
 
+    private string? ResolveManagedRepositorySource()
+    {
+        if (ParameterSetName != ParameterSetRepository)
+            return null;
+        if (Transport == ModuleStateDeliveryTransport.ManagedModule)
+            return PrivateModuleCommandSupport.ResolveManagedRepositorySource(this, Repository);
+        if (Transport == ModuleStateDeliveryTransport.Auto &&
+            PrivateModuleCommandSupport.TryResolveManagedRepositorySource(this, Repository, out var source))
+        {
+            return source;
+        }
+
+        return null;
+    }
 }

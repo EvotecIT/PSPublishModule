@@ -24,21 +24,42 @@ internal static class PrivateModuleCommandSupport
 
     internal static string ResolveManagedRepositorySource(PSCmdlet cmdlet, string repository)
     {
+        if (TryResolveManagedRepositorySource(cmdlet, repository, out var source))
+            return source!;
+
         if (string.IsNullOrWhiteSpace(repository))
             throw new InvalidOperationException("Managed private module delivery requires a repository URL or local feed path.");
 
-        var trimmed = repository.Trim().Trim('"');
+        throw new InvalidOperationException(
+            $"Repository '{repository}' looks like a registered PowerShell repository name. Managed private module delivery needs a repository URL or existing local feed path; use the default PrivateModule transport for registered repository names.");
+    }
+
+    internal static bool TryResolveManagedRepositorySource(PSCmdlet cmdlet, string? repository, out string? source)
+    {
+        source = null;
+        if (string.IsNullOrWhiteSpace(repository))
+            return false;
+
+        var trimmed = repository!.Trim().Trim('"');
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) && !uri.IsFile)
-            return trimmed;
+        {
+            source = trimmed;
+            return true;
+        }
 
         var providerPath = ManagedModuleCommandSupport.ResolveProviderPath(cmdlet, trimmed);
         if (!string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath))
-            return providerPath!;
+        {
+            source = providerPath!;
+            return true;
+        }
 
         if (Path.IsPathRooted(trimmed) || trimmed.StartsWith(".", StringComparison.Ordinal))
-            return providerPath ?? trimmed;
+        {
+            source = providerPath ?? trimmed;
+            return true;
+        }
 
-        throw new InvalidOperationException(
-            $"Repository '{repository}' looks like a registered PowerShell repository name. Managed private module delivery needs a repository URL or existing local feed path; use the default PrivateModule transport for registered repository names.");
+        return false;
     }
 }
