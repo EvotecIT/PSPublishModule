@@ -249,7 +249,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add tests for package creation.
 - [x] Add tests for duplicate publish classification.
 - [x] Add tests for private-feed publish request shaping.
-- [ ] Benchmark against `Publish-Module` and `Publish-PSResource`.
+- [x] Benchmark against `Publish-Module` and `Publish-PSResource`.
 - [x] Validate local-feed publish smoke on Windows PowerShell 5.1.
 - [x] Validate local-feed publish smoke on PowerShell 7+.
 
@@ -331,7 +331,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-27: `Update-ManagedModule` command-surface tests repair an installed `Microsoft.Graph.*` family mismatch, aligning `Microsoft.Graph.Authentication` 2.36.0 to the requested `Microsoft.Graph.Users` 2.38.0 target through `-FamilyModuleNamePrefix`.
 - [x] 2026-06-27: Managed NuGet v2 version discovery now follows paged `FindPackagesById` next links; PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both confirmed `Microsoft.Graph` version discovery reaches 2.38.0 instead of stopping at the stale 2.34.0 first page.
 - [x] 2026-06-27: PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 both installed latest `Microsoft.Graph` 2.38.0 from the public PowerShell Gallery NuGet v2 endpoint into temp roots with `Measure-ManagedModule -Operation Install -AcceptLicense`, recording 40 packages, 77 dependency entries, 41 installed module directories, 402 total files, and about 1.05 GB extracted bytes.
-- [ ] Publish comparison evidence still needs separate proof.
+- [x] 2026-06-27: `Measure-ManagedModule -Operation Publish -Engine Managed,PowerShellGet,PSResourceGet` published the same simple module to isolated temp local feeds on PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655, recording successful publish status, version 1.0.0 evidence, and per-engine publish timings.
 
 ## Benchmark Scenarios
 
