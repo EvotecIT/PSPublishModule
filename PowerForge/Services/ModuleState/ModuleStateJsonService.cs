@@ -106,7 +106,11 @@ internal sealed class ModuleStateJsonService
                 module.Scope));
         }
 
-        return new ModuleStateMaintenanceReceipt(dto.Source ?? dto.Profile ?? dto.Name, modules);
+        return new ModuleStateMaintenanceReceipt(
+            dto.Source ?? dto.Profile ?? dto.Name,
+            modules,
+            ParseDeliveryTransport(dto.DeliveryTransport ?? dto.Transport),
+            dto.Engine ?? dto.ManagedEngine);
     }
 
     private sealed class InventoryDto
@@ -178,6 +182,16 @@ internal sealed class ModuleStateJsonService
     private static string[]? ToArray(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : new[] { value!.Trim() };
 
+    private static ModuleStateDeliveryTransport? ParseDeliveryTransport(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return Enum.TryParse<ModuleStateDeliveryTransport>(value!.Trim(), ignoreCase: true, out var transport)
+            ? transport
+            : null;
+    }
+
     private sealed class FamilyPolicyDto
     {
         public string? Name { get; set; }
@@ -194,6 +208,14 @@ internal sealed class ModuleStateJsonService
         public string? Source { get; set; }
 
         public string? Profile { get; set; }
+
+        public string? DeliveryTransport { get; set; }
+
+        public string? Transport { get; set; }
+
+        public string? Engine { get; set; }
+
+        public string? ManagedEngine { get; set; }
 
         public MaintenanceReceiptModuleDto[]? Modules { get; set; }
 

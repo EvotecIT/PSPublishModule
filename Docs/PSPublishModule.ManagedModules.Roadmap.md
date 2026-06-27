@@ -256,14 +256,14 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Teach `Invoke-ModuleState` to use the managed engine for install/update/save operations.
 - [x] Teach `Invoke-ModuleState` and `Invoke-ModuleStatePlan` to use the managed engine for install/update delivery when requested.
 - [x] Teach `Invoke-ModuleState` and `Invoke-ModuleStatePlan` to use the managed engine for save delivery when requested.
-- [ ] Keep `Get-ModuleState` inventory object-first.
-- [ ] Keep `Get-ModuleStatePlan` as an inspectable plan surface.
-- [ ] Keep `Test-ModuleState` as a validation surface.
-- [ ] Keep `Invoke-ModuleStatePlan` as the low-level apply surface.
+- [x] Keep `Get-ModuleState` inventory object-first.
+- [x] Keep `Get-ModuleStatePlan` as an inspectable plan surface.
+- [x] Keep `Test-ModuleState` as a validation surface.
+- [x] Keep `Invoke-ModuleStatePlan` as the low-level apply surface.
 - [x] Add `-Transport ManagedModule` to ModuleState apply flows as a transition switch.
-- [ ] Keep compatibility transport available until managed parity is proven.
-- [ ] Ensure maintenance receipts contain managed-engine evidence.
-- [ ] Ensure summaries explain what changed, what was skipped, and why.
+- [x] Keep compatibility transport available until managed parity is proven.
+- [x] Ensure maintenance receipts contain managed-engine evidence.
+- [x] Ensure summaries explain what changed, what was skipped, and why.
 - [x] Add tests for ModuleState managed delivery command shaping.
 - [x] Add tests for ModuleState managed install.
 - [x] Add tests for ModuleState managed update.

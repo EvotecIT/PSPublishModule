@@ -32,6 +32,7 @@ internal sealed class ModuleStateApplyService
             blockedReason,
             actionCount,
             plan.Findings.Length,
+            deliveryOptions.Transport,
             commands);
 
         return new ModuleStateApplyResult(receipt, plan);
@@ -57,6 +58,7 @@ internal sealed class ModuleStateApplyService
             receipt.BlockedReason,
             receipt.ActionCount,
             receipt.FindingCount,
+            Transport = receipt.Transport.ToString(),
             Commands = receipt.Commands.Select(static command => new
             {
                 ActionKind = command.ActionKind.ToString(),
@@ -99,7 +101,7 @@ internal sealed class ModuleStateApplyService
             .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return new ModuleStateMaintenanceReceipt(source, modules);
+        return new ModuleStateMaintenanceReceipt(source, modules, result.Receipt.Transport, ResolveMaintenanceReceiptEngine(result.Receipt.Transport));
     }
 
     internal void WriteMaintenanceReceipt(
@@ -127,6 +129,8 @@ internal sealed class ModuleStateApplyService
         var dto = new
         {
             source = receipt.Source,
+            deliveryTransport = receipt.DeliveryTransport?.ToString(),
+            engine = receipt.Engine,
             maintainedModules = receipt.Modules.Select(static module => new
             {
                 name = module.Name,
@@ -317,6 +321,11 @@ internal sealed class ModuleStateApplyService
 
     private static bool IsDeliveryAction(ModuleStatePlanActionKind kind)
         => kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save;
+
+    private static string ResolveMaintenanceReceiptEngine(ModuleStateDeliveryTransport transport)
+        => transport == ModuleStateDeliveryTransport.ManagedModule
+            ? "ManagedModule"
+            : "PrivateModule";
 
     private static ModuleStateInstalledModule? SelectObservedModule(
         ModuleStatePlanAction action,
