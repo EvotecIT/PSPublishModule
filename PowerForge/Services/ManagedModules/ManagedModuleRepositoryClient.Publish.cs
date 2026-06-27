@@ -68,14 +68,16 @@ public sealed partial class ManagedModuleRepositoryClient
             () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
+            throw CreateRepositoryHttpException(repository, "PublishServiceDiscovery", response.StatusCode, $"Unable to query NuGet service index '{repository.Source}'.");
 
         using var document = await ReadJsonDocumentAsync(
             response.Content,
-            $"NuGet package publish service discovery for repository '{repository.Name}'",
+            repository,
+            "PublishServiceDiscovery",
+            "NuGet package publish service discovery returned malformed JSON.",
             cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
-            throw new InvalidOperationException($"Repository '{repository.Name}' service index did not include a resources array.");
+            throw CreateRepositoryContractException(repository, "PublishServiceDiscovery", "NuGet service index did not include a resources array.");
 
         foreach (var resource in resources.EnumerateArray())
         {
@@ -90,7 +92,7 @@ public sealed partial class ManagedModuleRepositoryClient
             }
         }
 
-        throw new InvalidOperationException($"Repository '{repository.Name}' service index did not expose PackagePublish.");
+        throw CreateRepositoryContractException(repository, "PublishServiceDiscovery", "NuGet service index did not expose PackagePublish.");
     }
 
     private async Task<ManagedModulePackagePublishResult> PublishNuGetPackageAsync(
@@ -127,7 +129,7 @@ public sealed partial class ManagedModuleRepositoryClient
         }
 
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Managed module package publish failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{package}'.");
+            throw CreateRepositoryHttpException(repository, "Publish", response.StatusCode, $"Unable to publish package '{package}'.");
 
         return new ManagedModulePackagePublishResult
         {

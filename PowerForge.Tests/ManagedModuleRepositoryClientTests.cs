@@ -81,13 +81,17 @@ public sealed class ManagedModuleRepositoryClientTests
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() =>
             repositoryClient.GetVersionsAsync(repository, "Missing.Tools"));
 
-        Assert.Contains("version query failed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("VersionQuery", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("404", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Missing.Tools", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Gallery", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("VersionQuery", exception.Operation);
+        Assert.Equal("Gallery", exception.RepositoryName);
+        Assert.Equal(404, exception.StatusCode);
+        Assert.Contains("Verify the repository URL", exception.Remediation, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -97,12 +101,16 @@ public sealed class ManagedModuleRepositoryClientTests
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() =>
             repositoryClient.GetVersionsAsync(repository, "Malformed.Tools"));
 
         Assert.Contains("malformed JSON", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Malformed.Tools", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Gallery", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("VersionQuery", exception.Operation);
+        Assert.Equal("Gallery", exception.RepositoryName);
+        Assert.Null(exception.StatusCode);
+        Assert.Contains("valid NuGet v3 JSON", exception.Remediation, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -227,12 +235,15 @@ public sealed class ManagedModuleRepositoryClientTests
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger());
         var repository = new ManagedModuleRepository("Local", source.Path);
 
-        var exception = await Assert.ThrowsAsync<FileNotFoundException>(() =>
+        var exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() =>
             repositoryClient.DownloadPackageAsync(repository, "Company.Tools", "9.9.9", destination.Path));
 
         Assert.Contains("Company.Tools", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("9.9.9", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Local", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Download", exception.Operation);
+        Assert.Equal("Local", exception.RepositoryName);
+        Assert.Contains(".nupkg", exception.Remediation, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

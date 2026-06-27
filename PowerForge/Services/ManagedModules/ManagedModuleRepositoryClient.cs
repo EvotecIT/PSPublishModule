@@ -208,14 +208,16 @@ public sealed partial class ManagedModuleRepositoryClient
             () => CreateRequest(HttpMethod.Get, indexUri, credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Managed module version query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for {packageId} from {repository.Name}.");
+            throw CreateRepositoryHttpException(repository, "VersionQuery", response.StatusCode, $"Unable to query versions for package '{packageId}'.");
 
         using var document = await ReadJsonDocumentAsync(
             response.Content,
-            $"Managed module version query for '{packageId}' from repository '{repository.Name}'",
+            repository,
+            "VersionQuery",
+            $"Managed module version query for package '{packageId}' returned malformed JSON.",
             cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("versions", out var versions) || versions.ValueKind != JsonValueKind.Array)
-            throw new InvalidOperationException($"Repository '{repository.Name}' did not return a versions array for {packageId}.");
+            throw CreateRepositoryContractException(repository, "VersionQuery", $"Repository response did not include a versions array for package '{packageId}'.");
 
         return versions.EnumerateArray()
             .Select(static version => version.GetString())
@@ -242,7 +244,7 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         var root = ResolveLocalFolder(repository.Source);
         if (!Directory.Exists(root))
-            throw new DirectoryNotFoundException($"Managed module repository folder was not found: {root}");
+            throw CreateLocalRepositoryException(repository, "VersionQuery", $"Local repository folder was not found: {root}");
 
         var versions = new List<ManagedModuleVersionInfo>();
         foreach (var file in Directory.EnumerateFiles(root, "*.nupkg", SearchOption.AllDirectories))
@@ -287,7 +289,7 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         var root = ResolveLocalFolder(repository.Source);
         if (!Directory.Exists(root))
-            throw new DirectoryNotFoundException($"Managed module repository folder was not found: {root}");
+            throw CreateLocalRepositoryException(repository, "Search", $"Local repository folder was not found: {root}");
 
         return ReadLocalPackageVersions(repository, root, includePrerelease)
             .Where(version => ManagedModuleSearchMatcher.IsMatch(query, version.Name))
@@ -315,14 +317,16 @@ public sealed partial class ManagedModuleRepositoryClient
             () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Managed module search failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{query}' from {repository.Name}.");
+            throw CreateRepositoryHttpException(repository, "Search", response.StatusCode, $"Unable to search for '{query}'.");
 
         using var document = await ReadJsonDocumentAsync(
             response.Content,
-            $"Managed module search for '{query}' from repository '{repository.Name}'",
+            repository,
+            "Search",
+            $"Managed module search for '{query}' returned malformed JSON.",
             cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            throw new InvalidOperationException($"Repository '{repository.Name}' did not return a search data array.");
+            throw CreateRepositoryContractException(repository, "Search", "Repository response did not include a search data array.");
 
         return data.EnumerateArray()
             .Select(item => ReadSearchResult(repository, item))
@@ -348,7 +352,7 @@ public sealed partial class ManagedModuleRepositoryClient
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Managed module package download failed ({(int)response.StatusCode} {response.ReasonPhrase}) for {packageId} {version}.");
+            throw CreateRepositoryHttpException(repository, "Download", response.StatusCode, $"Unable to download package '{packageId}' version '{version}'.");
 
         long bytesWritten;
         using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
@@ -381,7 +385,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var match = GetLocalVersions(repository, packageId, includePrerelease: true)
             .FirstOrDefault(item => item.Version.Equals(version, StringComparison.OrdinalIgnoreCase));
         if (match?.PackageSource is null)
-            throw new FileNotFoundException($"Package {packageId} {version} was not found in local repository '{repository.Name}'.");
+            throw CreateLocalRepositoryException(repository, "Download", $"Package '{packageId}' version '{version}' was not found in local repository '{repository.Name}'.");
 
         var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
         using (var source = File.OpenRead(match.PackageSource))
@@ -422,14 +426,16 @@ public sealed partial class ManagedModuleRepositoryClient
             () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
+            throw CreateRepositoryHttpException(repository, "ServiceIndex", response.StatusCode, $"Unable to query NuGet service index '{repository.Source}'.");
 
         using var document = await ReadJsonDocumentAsync(
             response.Content,
-            $"NuGet service index query for repository '{repository.Name}'",
+            repository,
+            "ServiceIndex",
+            "NuGet service index query returned malformed JSON.",
             cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
-            throw new InvalidOperationException($"Repository '{repository.Name}' service index did not include a resources array.");
+            throw CreateRepositoryContractException(repository, "ServiceIndex", "NuGet service index did not include a resources array.");
 
         foreach (var resource in resources.EnumerateArray())
         {
@@ -445,7 +451,7 @@ public sealed partial class ManagedModuleRepositoryClient
             }
         }
 
-        throw new InvalidOperationException($"Repository '{repository.Name}' service index did not expose PackageBaseAddress.");
+        throw CreateRepositoryContractException(repository, "ServiceIndex", "NuGet service index did not expose PackageBaseAddress.");
     }
 
     private async Task<string> ResolveSearchQueryServiceAsync(
@@ -467,14 +473,16 @@ public sealed partial class ManagedModuleRepositoryClient
             () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"NuGet service index query failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{repository.Source}'.");
+            throw CreateRepositoryHttpException(repository, "SearchServiceDiscovery", response.StatusCode, $"Unable to query NuGet service index '{repository.Source}'.");
 
         using var document = await ReadJsonDocumentAsync(
             response.Content,
-            $"NuGet search service discovery for repository '{repository.Name}'",
+            repository,
+            "SearchServiceDiscovery",
+            "NuGet search service discovery returned malformed JSON.",
             cancellationToken).ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
-            throw new InvalidOperationException($"Repository '{repository.Name}' service index did not include a resources array.");
+            throw CreateRepositoryContractException(repository, "SearchServiceDiscovery", "NuGet service index did not include a resources array.");
 
         foreach (var resource in resources.EnumerateArray())
         {
@@ -490,7 +498,7 @@ public sealed partial class ManagedModuleRepositoryClient
             }
         }
 
-        throw new InvalidOperationException($"Repository '{repository.Name}' service index did not expose SearchQueryService.");
+        throw CreateRepositoryContractException(repository, "SearchServiceDiscovery", "NuGet service index did not expose SearchQueryService.");
     }
 
     private static HttpRequestMessage CreateRequest(HttpMethod method, Uri uri, RepositoryCredential? credential, string accept)
@@ -667,7 +675,9 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static async Task<JsonDocument> ReadJsonDocumentAsync(
         HttpContent content,
-        string context,
+        ManagedModuleRepository repository,
+        string operation,
+        string detail,
         CancellationToken cancellationToken)
     {
         try
@@ -677,7 +687,7 @@ public sealed partial class ManagedModuleRepositoryClient
         }
         catch (JsonException ex)
         {
-            throw new InvalidOperationException(context + " returned malformed JSON.", ex);
+            throw CreateRepositoryJsonException(repository, operation, detail, ex);
         }
     }
 }
