@@ -32,10 +32,36 @@ internal static class ManagedModuleCommandSupport
             throw new InvalidOperationException("Specify either ProfileName or Repository, not both.");
 
         var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
-        var source = FirstNonEmpty(profile.RepositorySourceUri, profile.RepositoryUri, profile.Repository, profile.RepositoryName, profileName)
-            ?? throw new InvalidOperationException($"Profile '{profileName}' does not define a repository source.");
-        var name = FirstNonEmpty(profile.RepositoryName, profileName) ?? profileName!;
-        return new ManagedModuleRepository(name, ResolveRepositorySource(cmdlet, source));
+        var source = ResolveProfileSource(profile, profileName!, publish: false);
+        return new ManagedModuleRepository(ResolveProfileRepositoryName(profile, profileName!), ResolveRepositorySource(cmdlet, source));
+    }
+
+    internal static ManagedModuleRepository CreatePublishRepository(
+        PSCmdlet cmdlet,
+        string repositoryName,
+        string? repository,
+        string? outputDirectory,
+        string? profileName,
+        bool repositoryWasBound,
+        bool outputDirectoryWasBound)
+    {
+        if (!string.IsNullOrWhiteSpace(profileName))
+        {
+            if (repositoryWasBound || outputDirectoryWasBound)
+                throw new InvalidOperationException("Specify either ProfileName, Repository, or OutputDirectory.");
+
+            var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
+            var source = ResolveProfileSource(profile, profileName!, publish: true);
+            return new ManagedModuleRepository(ResolveProfileRepositoryName(profile, profileName!), ResolveRepositorySource(cmdlet, source));
+        }
+
+        if (!string.IsNullOrWhiteSpace(repository))
+            return CreateRepository(cmdlet, repositoryName, repository!);
+
+        if (!string.IsNullOrWhiteSpace(outputDirectory))
+            return new ManagedModuleRepository("Local", ResolveProviderPath(cmdlet, outputDirectory)!);
+
+        throw new ArgumentException("Specify Repository, OutputDirectory, or ProfileName.");
     }
 
     internal static string ResolveRepositoryName(string repositoryName, string repository)
@@ -94,6 +120,19 @@ internal static class ManagedModuleCommandSupport
 
     private static ManagedModuleRepositoryKind GetRepositoryKind(string repository)
         => new ManagedModuleRepository("Repository", repository).Kind;
+
+    private static string ResolveProfileSource(ModuleRepositoryProfile profile, string profileName, bool publish)
+    {
+        var source = publish
+            ? FirstNonEmpty(profile.RepositoryPublishUri, profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository, profile.RepositoryName, profileName)
+            : FirstNonEmpty(profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository, profile.RepositoryName, profileName);
+
+        return source
+            ?? throw new InvalidOperationException($"Profile '{profileName}' does not define a repository source.");
+    }
+
+    private static string ResolveProfileRepositoryName(ModuleRepositoryProfile profile, string profileName)
+        => FirstNonEmpty(profile.RepositoryName, profileName) ?? profileName;
 
     private static string? FirstNonEmpty(params string?[] values)
     {

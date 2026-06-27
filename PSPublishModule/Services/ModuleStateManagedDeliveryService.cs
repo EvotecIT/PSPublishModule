@@ -230,9 +230,13 @@ internal sealed class ModuleStateManagedDeliveryService
 
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
         {
-            var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(options.ProfileName!);
-            return FirstNonEmpty(profile.RepositorySourceUri, profile.RepositoryUri, profile.Repository, profile.RepositoryName, options.ProfileName)
-                ?? throw new InvalidOperationException($"Profile '{options.ProfileName}' does not define a repository source for managed module delivery.");
+            var profileRepository = ManagedModuleCommandSupport.CreateRepository(
+                _cmdlet,
+                ManagedModuleCommandSupport.DefaultRepositoryName,
+                ManagedModuleCommandSupport.DefaultRepositorySource,
+                options.ProfileName,
+                repositoryWasBound: false);
+            return profileRepository.Source;
         }
 
         var actionRepository = actions
@@ -244,13 +248,21 @@ internal sealed class ModuleStateManagedDeliveryService
         throw new InvalidOperationException("Managed module delivery requires Repository, ProfileName, or action target repository.");
     }
 
-    private static string ResolveRepositoryName(
+    private string ResolveRepositoryName(
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStateManagedDeliveryOptions options,
         string source)
     {
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
-            return options.ProfileName!;
+        {
+            var profileRepository = ManagedModuleCommandSupport.CreateRepository(
+                _cmdlet,
+                ManagedModuleCommandSupport.DefaultRepositoryName,
+                ManagedModuleCommandSupport.DefaultRepositorySource,
+                options.ProfileName,
+                repositoryWasBound: false);
+            return profileRepository.Name;
+        }
 
         var actionRepository = actions
             .Select(static action => action.TargetRepository)

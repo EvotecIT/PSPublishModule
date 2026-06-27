@@ -2463,6 +2463,18 @@ PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session ca
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved module repository profile to use instead of Repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="Source,RepositoryUri">
           <maml:name>Repository</maml:name>
           <maml:description>
@@ -2582,6 +2594,18 @@ PATs, passwords, Entra tokens, or Azure Artifacts Credential Provider session ca
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved module repository profile to use instead of Repository.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27143,6 +27167,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved module repository profile to use instead of Repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ReportPath</maml:name>
           <maml:description>
             <maml:para>Optional JSON report path for benchmark evidence.</maml:para>
@@ -27501,6 +27537,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved module repository profile to use instead of Repository.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -53323,6 +53371,18 @@ or NuGet-compatible package publish endpoint.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved module repository profile to use instead of Repository or OutputDirectory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ProjectUrl</maml:name>
           <maml:description>
             <maml:para>Optional project URL override.</maml:para>
@@ -53535,6 +53595,18 @@ or NuGet-compatible package publish endpoint.</maml:para>
           <maml:para>Module folder to package.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved module repository profile to use instead of Repository or OutputDirectory.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />

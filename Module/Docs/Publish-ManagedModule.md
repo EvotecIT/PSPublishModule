@@ -11,7 +11,7 @@ Publishes a PowerShell module package through the managed C# module engine.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Publish-ManagedModule [-Path] <string> [[-Repository] <string>] [-RepositoryName <string>] [-OutputDirectory <string>] [-ManifestPath <string>] [-Name <string>] [-Version <string>] [-Authors <string>] [-Description <string>] [-ProjectUrl <string>] [-Tags <string[]>] [-Credential <pscredential>] [-ApiKey <string>] [-ApiKeyFilePath <string>] [-Force] [-SkipDependenciesCheck] [-SkipModuleManifestValidate] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Publish-ManagedModule [-Path] <string> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-OutputDirectory <string>] [-ManifestPath <string>] [-Name <string>] [-Version <string>] [-Authors <string>] [-Description <string>] [-ProjectUrl <string>] [-Tags <string[]>] [-Credential <pscredential>] [-ApiKey <string>] [-ApiKeyFilePath <string>] [-Force] [-SkipDependenciesCheck] [-SkipModuleManifestValidate] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -183,6 +183,22 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProfileName
+Saved module repository profile to use instead of Repository or OutputDirectory.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True

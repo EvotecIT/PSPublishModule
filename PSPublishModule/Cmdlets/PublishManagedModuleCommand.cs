@@ -39,6 +39,11 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string RepositoryName { get; set; } = ManagedModuleCommandSupport.DefaultRepositoryName;
 
+    /// <summary>Saved module repository profile to use instead of Repository or OutputDirectory.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ProfileName { get; set; }
+
     /// <summary>Output directory used when Repository is omitted.</summary>
     [Parameter]
     [Alias("DestinationPath", "OutputPath")]
@@ -146,13 +151,12 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     }
 
     private ManagedModuleRepository ResolveRepository()
-    {
-        if (!string.IsNullOrWhiteSpace(Repository))
-            return ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository!);
-
-        if (!string.IsNullOrWhiteSpace(OutputDirectory))
-            return new ManagedModuleRepository("Local", ManagedModuleCommandSupport.ResolveProviderPath(this, OutputDirectory)!);
-
-        throw new ArgumentException("Specify Repository or OutputDirectory.");
-    }
+        => ManagedModuleCommandSupport.CreatePublishRepository(
+            this,
+            RepositoryName,
+            Repository,
+            OutputDirectory,
+            ProfileName,
+            MyInvocation.BoundParameters.ContainsKey(nameof(Repository)),
+            MyInvocation.BoundParameters.ContainsKey(nameof(OutputDirectory)));
 }

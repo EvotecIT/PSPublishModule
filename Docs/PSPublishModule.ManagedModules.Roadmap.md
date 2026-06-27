@@ -35,6 +35,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - [x] Support `-Name`.
 - [x] Support `-Repository`.
+- [x] Support `-ProfileName` across managed find, install, save, update, publish, and benchmark workflows.
 - [x] Support `-Credential`.
 - [x] Support `-Scope CurrentUser|AllUsers`.
 - [x] Support `-RequiredVersion`.

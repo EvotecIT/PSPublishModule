@@ -47,6 +47,11 @@ public sealed class FindManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string RepositoryName { get; set; } = ManagedModuleCommandSupport.DefaultRepositoryName;
 
+    /// <summary>Saved module repository profile to use instead of Repository.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ProfileName { get; set; }
+
     /// <summary>Return all matching versions instead of only the latest selected version.</summary>
     [Parameter]
     public SwitchParameter AllVersions { get; set; }
@@ -83,7 +88,12 @@ public sealed class FindManagedModuleCommand : PSCmdlet
     /// <summary>Finds matching module versions.</summary>
     protected override void ProcessRecord()
     {
-        var repository = ManagedModuleCommandSupport.CreateRepository(this, RepositoryName, Repository);
+        var repository = ManagedModuleCommandSupport.CreateRepository(
+            this,
+            RepositoryName,
+            Repository,
+            ProfileName,
+            MyInvocation.BoundParameters.ContainsKey(nameof(Repository)));
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var client = new ManagedModuleRepositoryClient(logger);
