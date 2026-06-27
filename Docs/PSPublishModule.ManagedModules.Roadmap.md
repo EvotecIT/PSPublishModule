@@ -246,6 +246,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - [ ] Build a benchmark harness that runs the same scenario through managed, PowerShellGet, and PSResourceGet paths.
 - [x] Build the managed C# benchmark core for install, save, update, and failure-evidence scenarios.
+- [x] Expose a thin `Measure-ManagedModule` surface over the managed benchmark core.
 - [ ] Measure cold cache install.
 - [ ] Measure warm cache install.
 - [ ] Measure save to empty path.
