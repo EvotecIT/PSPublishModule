@@ -136,13 +136,13 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 ## Phase 5: Managed Save
 
 - [x] Implement `Save-ManagedModule` using the managed repository client.
-- [ ] Save resolved packages and dependency closure to a target path.
+- [x] Save resolved packages and dependency closure to a target path.
 - [x] Preserve package structure expected by PowerShell module import conventions.
 - [ ] Support warm cache reuse.
 - [ ] Support offline bundle output metadata.
-- [ ] Support `-SkipDependencyCheck`.
+- [x] Support `-SkipDependencyCheck`.
 - [ ] Support `-AcceptLicense`.
-- [ ] Emit typed save result objects.
+- [x] Emit typed save result objects.
 - [ ] Add `ShouldProcess` and dry-run planning.
 - [ ] Add Spectre.Console summary output.
 - [ ] Benchmark against `Save-Module` and `Save-PSResource`.
