@@ -61,6 +61,31 @@ public sealed class ManagedModuleBenchmarkRunResult
     public string? ModulePath { get; set; }
 
     /// <summary>
+    /// Package path created by publish scenarios.
+    /// </summary>
+    public string? PackagePath { get; set; }
+
+    /// <summary>
+    /// Repository destination used by publish scenarios.
+    /// </summary>
+    public string? PublishSource { get; set; }
+
+    /// <summary>
+    /// HTTP status code returned by publish scenarios when available.
+    /// </summary>
+    public int? StatusCode { get; set; }
+
+    /// <summary>
+    /// True when a publish scenario delivered a package.
+    /// </summary>
+    public bool Published { get; set; }
+
+    /// <summary>
+    /// True when a publish scenario found an existing package.
+    /// </summary>
+    public bool Duplicate { get; set; }
+
+    /// <summary>
     /// Outer benchmark elapsed time.
     /// </summary>
     public TimeSpan Elapsed { get; set; }

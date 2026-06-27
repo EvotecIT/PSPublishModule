@@ -9,6 +9,7 @@ public sealed class ManagedModuleBenchmarkService
 {
     private readonly ManagedModuleInstallService _installService;
     private readonly ManagedModuleUpdateService _updateService;
+    private readonly ManagedModulePublishService _publishService;
     private readonly Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? _compatibilityRunner;
 
     /// <summary>
@@ -17,16 +18,19 @@ public sealed class ManagedModuleBenchmarkService
     /// <param name="logger">Logger used by managed module services.</param>
     /// <param name="installService">Optional install service override.</param>
     /// <param name="updateService">Optional update service override.</param>
+    /// <param name="publishService">Optional publish service override.</param>
     /// <param name="compatibilityRunner">Optional compatibility benchmark runner override.</param>
     public ManagedModuleBenchmarkService(
         ILogger logger,
         ManagedModuleInstallService? installService = null,
         ManagedModuleUpdateService? updateService = null,
+        ManagedModulePublishService? publishService = null,
         Func<ManagedModuleBenchmarkScenario, ManagedModuleBenchmarkEngine, ModuleDependencyInstallResult>? compatibilityRunner = null)
     {
         var safeLogger = logger ?? new NullLogger();
         _installService = installService ?? new ManagedModuleInstallService(safeLogger);
         _updateService = updateService ?? new ManagedModuleUpdateService(safeLogger);
+        _publishService = publishService ?? new ManagedModulePublishService(safeLogger);
         _compatibilityRunner = compatibilityRunner;
     }
 
@@ -111,6 +115,11 @@ public sealed class ManagedModuleBenchmarkService
                 iteration,
                 await _updateService.UpdateAsync(CreateUpdateRequest(scenario), cancellationToken)
                     .ConfigureAwait(false)),
+            ManagedModuleBenchmarkOperation.Publish => MapPublish(
+                scenario,
+                iteration,
+                await _publishService.PublishAsync(CreatePublishRequest(scenario), cancellationToken)
+                    .ConfigureAwait(false)),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario.Operation, "Unsupported benchmark operation.")
         };
 
@@ -119,8 +128,9 @@ public sealed class ManagedModuleBenchmarkService
         ManagedModuleBenchmarkEngine engine,
         int iteration)
     {
-        if (scenario.Operation == ManagedModuleBenchmarkOperation.Save)
-            throw new InvalidOperationException("Compatibility benchmark engines support Install and Update operations. Use the managed engine for Save measurements.");
+        if (scenario.Operation == ManagedModuleBenchmarkOperation.Save ||
+            scenario.Operation == ManagedModuleBenchmarkOperation.Publish)
+            throw new InvalidOperationException("Compatibility benchmark engines support Install and Update operations. Use the managed engine for Save and Publish measurements.");
         if (!string.IsNullOrWhiteSpace(scenario.VersionPolicy))
             throw new InvalidOperationException("Compatibility benchmark engines support Version, MinimumVersion, and MaximumVersion. Use the managed engine for VersionPolicy measurements.");
 
@@ -222,6 +232,20 @@ public sealed class ManagedModuleBenchmarkService
         };
     }
 
+    private static ManagedModulePublishRequest CreatePublishRequest(ManagedModuleBenchmarkScenario scenario)
+        => new()
+        {
+            ModulePath = NormalizeOptional(scenario.ModulePath) ?? throw new InvalidOperationException("Publish benchmark scenarios require ModulePath."),
+            ManifestPath = NormalizeOptional(scenario.ManifestPath),
+            Name = NormalizeOptional(scenario.Name),
+            Version = NormalizeOptional(scenario.Version),
+            Repository = scenario.Repository,
+            OutputDirectory = NormalizeOptional(scenario.PackageOutputDirectory),
+            Credential = scenario.Credential,
+            SkipDependenciesCheck = scenario.SkipDependencyCheck,
+            Force = scenario.Force
+        };
+
     private static ManagedModuleBenchmarkRunResult MapInstall(
         ManagedModuleBenchmarkScenario scenario,
         int iteration,
@@ -258,6 +282,51 @@ public sealed class ManagedModuleBenchmarkService
             VersionValidationSucceeded = evidence.VersionValidationSucceeded,
             VersionValidationMessage = evidence.VersionValidationMessage
         };
+    }
+
+    private static ManagedModuleBenchmarkRunResult MapPublish(
+        ManagedModuleBenchmarkScenario scenario,
+        int iteration,
+        ManagedModulePublishResult result)
+        => new()
+        {
+            ScenarioId = ResolveScenarioId(scenario),
+            Operation = scenario.Operation,
+            Engine = ManagedModuleBenchmarkEngine.Managed.ToString(),
+            Iteration = iteration,
+            Succeeded = result.Published || result.Duplicate,
+            Status = result.Duplicate ? "Duplicate" : result.Published ? "Published" : "Skipped",
+            ModuleName = result.Name,
+            Version = result.Version,
+            ModulePath = scenario.ModulePath,
+            PackagePath = result.PackagePath,
+            PublishSource = result.PublishSource,
+            StatusCode = result.StatusCode,
+            Published = result.Published,
+            Duplicate = result.Duplicate,
+            ServiceElapsed = result.Elapsed,
+            PackageBytes = result.PackageBytes,
+            FileCount = result.FileCount,
+            PackageCount = string.IsNullOrWhiteSpace(result.PackagePath) ? 0 : 1,
+            TotalPackageBytes = result.PackageBytes,
+            TotalFileCount = result.FileCount,
+            FinalDiskBytes = MeasureFileBytes(result.PublishSource),
+            ErrorMessage = result.Message
+        };
+
+    private static long MeasureFileBytes(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return 0;
+
+        try
+        {
+            return File.Exists(path) ? new FileInfo(path).Length : 0;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     private static ManagedModuleBenchmarkRunResult MapUpdate(
@@ -367,6 +436,9 @@ public sealed class ManagedModuleBenchmarkService
         if (scenario.Operation == ManagedModuleBenchmarkOperation.Save &&
             string.IsNullOrWhiteSpace(scenario.ModuleRoot))
             throw new ArgumentException("Save benchmark scenarios require ModuleRoot.");
+        if (scenario.Operation == ManagedModuleBenchmarkOperation.Publish &&
+            string.IsNullOrWhiteSpace(scenario.ModulePath))
+            throw new ArgumentException("Publish benchmark scenarios require ModulePath.");
         if (scenario.Iterations < 1)
             throw new ArgumentException("Benchmark scenario iterations must be greater than zero.");
     }

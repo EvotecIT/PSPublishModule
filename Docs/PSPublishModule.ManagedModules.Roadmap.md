@@ -277,12 +277,14 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Write managed benchmark JSON and Markdown evidence reports.
 - [x] Add `Measure-ManagedModule -Engine Managed,PSResourceGet,PowerShellGet` selection.
 - [x] Record compatibility baseline success/failure/status/version evidence through the existing compatibility installer path.
+- [x] Add managed publish benchmark operation and publish evidence fields.
 - [ ] Measure cold cache install.
 - [ ] Measure warm cache install.
 - [x] Measure save to empty path.
 - [ ] Measure save to warm path.
 - [ ] Measure update no-op.
 - [x] Measure update with one newer version.
+- [x] Measure publish to local folder feed.
 - [ ] Measure large dependency graph resolution.
 - [ ] Measure heavy module extraction.
 - [ ] Measure private feed metadata lookup.

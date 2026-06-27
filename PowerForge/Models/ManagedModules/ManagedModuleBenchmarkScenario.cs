@@ -66,9 +66,24 @@ public sealed class ManagedModuleBenchmarkScenario
     public string? ModuleRoot { get; set; }
 
     /// <summary>
+    /// Module source folder used by publish benchmark scenarios.
+    /// </summary>
+    public string? ModulePath { get; set; }
+
+    /// <summary>
+    /// Optional module manifest path used by publish benchmark scenarios.
+    /// </summary>
+    public string? ManifestPath { get; set; }
+
+    /// <summary>
     /// Optional package cache directory.
     /// </summary>
     public string? PackageCacheDirectory { get; set; }
+
+    /// <summary>
+    /// Optional package output directory used by publish benchmark scenarios.
+    /// </summary>
+    public string? PackageOutputDirectory { get; set; }
 
     /// <summary>
     /// Optional repository credential.

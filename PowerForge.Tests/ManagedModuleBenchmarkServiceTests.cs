@@ -149,6 +149,46 @@ public sealed class ManagedModuleBenchmarkServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_MeasuresManagedPublishScenario()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var packageOutput = new TemporaryDirectory();
+        WritePublishModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var service = new ManagedModuleBenchmarkService(new NullLogger());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "publish-small",
+                    Operation = ManagedModuleBenchmarkOperation.Publish,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    ModulePath = moduleRoot.Path,
+                    PackageOutputDirectory = packageOutput.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal(ManagedModuleBenchmarkOperation.Publish, run.Operation);
+        Assert.Equal("Published", run.Status);
+        Assert.Equal("Company.Tools", run.ModuleName);
+        Assert.Equal("1.0.0", run.Version);
+        Assert.True(run.Published);
+        Assert.False(run.Duplicate);
+        Assert.True(run.PackageBytes > 0);
+        Assert.True(run.FileCount > 0);
+        Assert.True(run.PackageCount > 0);
+        Assert.True(File.Exists(run.PackagePath));
+        Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
+    }
+
+    [Fact]
     public async Task RunAsync_RecordsDependencyTotalsForManagedInstall()
     {
         using var feed = new TemporaryDirectory();
@@ -304,6 +344,35 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Contains("support Install and Update", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task RunAsync_RecordsUnsupportedCompatibilityPublishAsFailure()
+    {
+        using var root = new TemporaryDirectory();
+        var service = new ManagedModuleBenchmarkService(new NullLogger());
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            ContinueOnError = true,
+            Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "compat-publish",
+                    Operation = ManagedModuleBenchmarkOperation.Publish,
+                    Repository = new ManagedModuleRepository("Local", "https://example.test/index.json"),
+                    Name = "Company.Tools",
+                    ModulePath = root.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.False(run.Succeeded);
+        Assert.Equal("PSResourceGet", run.Engine);
+        Assert.Contains("Save and Publish", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -315,4 +384,25 @@ public sealed class ManagedModuleBenchmarkServiceTests
         {
             ["Company.Dependency.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static void WritePublishModule(string moduleRoot, string moduleName, string version)
+    {
+        Directory.CreateDirectory(moduleRoot);
+        File.WriteAllText(Path.Combine(moduleRoot, moduleName + ".psm1"), string.Empty);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, moduleName + ".psd1"),
+            string.Join(Environment.NewLine, new[]
+            {
+                "@{",
+                $"    RootModule = '{moduleName}.psm1'",
+                $"    ModuleVersion = '{version}'",
+                "    GUID = '11111111-1111-1111-1111-111111111111'",
+                "    Author = 'Evotec'",
+                "    Description = 'Benchmark publish module.'",
+                "    FunctionsToExport = @()",
+                "    CmdletsToExport = @()",
+                "    AliasesToExport = @()",
+                "}"
+            }));
+    }
 }
