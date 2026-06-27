@@ -122,15 +122,15 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Implement PSResourceGet/NuGet range policies.
 - [x] Implement `-VersionPolicy` as the canonical internal representation.
 - [ ] Implement prerelease inclusion rules.
-- [ ] Implement dependency graph resolution.
-- [ ] Implement cycle detection.
+- [x] Implement dependency graph resolution.
+- [x] Implement cycle detection.
 - [ ] Implement repository source preference rules.
 - [ ] Implement family coherence policies for related module families.
 - [ ] Implement conflict diagnostics for incompatible loaded modules.
 - [ ] Implement conflict diagnostics for mixed scopes and side-by-side versions.
 - [x] Add tests for exact/min/max/range policies.
 - [ ] Add tests for prerelease resolution.
-- [ ] Add tests for dependency closure.
+- [x] Add tests for dependency closure.
 - [ ] Add tests for source preference and family conflict cases.
 
 ## Phase 5: Managed Save
