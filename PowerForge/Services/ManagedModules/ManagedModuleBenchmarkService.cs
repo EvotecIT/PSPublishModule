@@ -236,6 +236,7 @@ public sealed class ManagedModuleBenchmarkService
             Iteration = iteration,
             Succeeded = true,
             Status = result.Status.ToString(),
+            ModuleName = scenario.Name,
             Version = result.Version,
             ModuleRoot = result.ModuleRoot,
             ModulePath = result.ModulePath,
@@ -273,6 +274,7 @@ public sealed class ManagedModuleBenchmarkService
             Iteration = iteration,
             Succeeded = true,
             Status = result.Status.ToString(),
+            ModuleName = scenario.Name,
             Version = result.TargetVersion,
             PreviousVersion = result.PreviousVersion,
             ModuleRoot = result.ModuleRoot,
@@ -310,6 +312,7 @@ public sealed class ManagedModuleBenchmarkService
             Iteration = iteration,
             Succeeded = result.Status != ModuleDependencyInstallStatus.Failed,
             Status = result.Status.ToString(),
+            ModuleName = scenario.Name,
             Version = result.ResolvedVersion,
             PreviousVersion = result.InstalledVersion,
             ModuleRoot = scenario.ModuleRoot,
@@ -335,6 +338,7 @@ public sealed class ManagedModuleBenchmarkService
             Iteration = iteration,
             Succeeded = false,
             Status = "Failed",
+            ModuleName = scenario.Name,
             Elapsed = elapsed,
             ErrorMessage = exception.GetBaseException().Message
         };

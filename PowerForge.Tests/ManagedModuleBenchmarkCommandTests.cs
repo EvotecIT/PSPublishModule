@@ -51,6 +51,7 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.Contains("\"RepositoryRequestCount\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("# Managed Module Benchmark Report", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Disk bytes", File.ReadAllText(markdownPath), StringComparison.Ordinal);
+        Assert.Contains("Import check", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Requests", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Install:Company.Tools", File.ReadAllText(markdownPath), StringComparison.Ordinal);
     }
@@ -66,6 +67,8 @@ public sealed class ManagedModuleBenchmarkCommandTests
 
         AssertNoPowerShellErrors(ps);
         Assert.True(command.Parameters.ContainsKey("Engine"));
+        Assert.True(command.Parameters.ContainsKey("ValidateImport"));
+        Assert.True(command.Parameters.ContainsKey("ImportHost"));
     }
 
     private static PowerShell CreatePowerShellWithModuleImported()

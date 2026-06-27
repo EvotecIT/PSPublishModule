@@ -261,6 +261,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Measure private feed metadata lookup.
 - [x] Record elapsed time, HTTP request count, package count, direct/total package bytes, direct/total extracted bytes, extraction timing, file count, and final disk size.
 - [x] Validate installed module directory version after install/update.
+- [x] Add optional benchmark import validation evidence for PowerShell host checks.
 - [ ] Validate imported module version after install in PS 5.1 and PS 7+ benchmark runners.
 - [x] Validate receipts after install/update.
 - [ ] Validate behavior on Windows PowerShell 5.1.

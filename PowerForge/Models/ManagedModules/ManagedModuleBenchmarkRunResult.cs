@@ -36,6 +36,11 @@ public sealed class ManagedModuleBenchmarkRunResult
     public string Status { get; set; } = string.Empty;
 
     /// <summary>
+    /// Module or package id measured by the scenario.
+    /// </summary>
+    public string ModuleName { get; set; } = string.Empty;
+
+    /// <summary>
     /// Selected or installed version.
     /// </summary>
     public string? Version { get; set; }
@@ -144,6 +149,11 @@ public sealed class ManagedModuleBenchmarkRunResult
     /// Human-readable version validation evidence.
     /// </summary>
     public string? VersionValidationMessage { get; set; }
+
+    /// <summary>
+    /// Optional out-of-process import validation results for this run.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleImportValidationResult> ImportValidations { get; set; } = Array.Empty<ManagedModuleImportValidationResult>();
 
     /// <summary>
     /// Failure message when the operation failed.

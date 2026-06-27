@@ -67,13 +67,15 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine($"Succeeded: `{successful}`");
         markdown.AppendLine($"Failed: `{failed}`");
         markdown.AppendLine();
-        markdown.AppendLine("| Scenario | Engine | Operation | Iteration | Status | Version | Previous | Elapsed ms | Requests | Packages | Package bytes | Extracted bytes | Extraction ms | Files | Disk bytes | Version check | Error |");
-        markdown.AppendLine("| --- | --- | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |");
+        markdown.AppendLine("| Scenario | Module | Engine | Operation | Iteration | Status | Version | Previous | Elapsed ms | Requests | Packages | Package bytes | Extracted bytes | Extraction ms | Files | Disk bytes | Version check | Import check | Error |");
+        markdown.AppendLine("| --- | --- | --- | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |");
 
         foreach (var run in runs)
         {
             markdown.Append("| ")
                 .Append(Escape(run.ScenarioId))
+                .Append(" | ")
+                .Append(Escape(run.ModuleName))
                 .Append(" | ")
                 .Append(Escape(run.Engine))
                 .Append(" | ")
@@ -104,6 +106,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(run.FinalDiskBytes)
                 .Append(" | ")
                 .Append(FormatVersionValidation(run))
+                .Append(" | ")
+                .Append(FormatImportValidation(run))
                 .Append(" | ")
                 .Append(Escape(run.ErrorMessage))
                 .AppendLine(" |");
@@ -150,5 +154,23 @@ public sealed class ManagedModuleBenchmarkReportWriter
         return string.IsNullOrWhiteSpace(run.ValidatedVersion)
             ? status
             : status + " " + Escape(run.ValidatedVersion);
+    }
+
+    private static string FormatImportValidation(ManagedModuleBenchmarkRunResult run)
+    {
+        var validations = run.ImportValidations ?? Array.Empty<ManagedModuleImportValidationResult>();
+        if (validations.Count == 0)
+            return string.Empty;
+
+        return string.Join(
+            ", ",
+            validations.Select(validation =>
+            {
+                var status = validation.Succeeded ? "ok" : "failed";
+                var version = string.IsNullOrWhiteSpace(validation.ImportedVersion)
+                    ? string.Empty
+                    : " " + validation.ImportedVersion;
+                return validation.Host + ":" + status + Escape(version);
+            }));
     }
 }

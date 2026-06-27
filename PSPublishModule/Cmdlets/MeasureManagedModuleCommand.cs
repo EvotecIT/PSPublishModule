@@ -138,6 +138,15 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter StopOnError { get; set; }
 
+    /// <summary>Import the delivered module in out-of-process PowerShell hosts and record version evidence.</summary>
+    [Parameter]
+    public SwitchParameter ValidateImport { get; set; }
+
+    /// <summary>PowerShell hosts used when ValidateImport is enabled.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public ManagedModuleImportValidationHost[] ImportHost { get; set; } = Array.Empty<ManagedModuleImportValidationHost>();
+
     /// <summary>Optional JSON report path for benchmark evidence.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
@@ -175,6 +184,9 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
                 Engines = Engine,
                 ContinueOnError = !StopOnError.IsPresent
             }).GetAwaiter().GetResult();
+
+        if (ValidateImport.IsPresent)
+            new ManagedModuleImportValidationService().Validate(result, ImportHost);
 
         WriteReports(result, reportPath, markdownReportPath);
         WriteObject(result);
