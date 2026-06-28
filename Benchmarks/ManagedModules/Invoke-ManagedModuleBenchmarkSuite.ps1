@@ -34,6 +34,10 @@ param(
 
     [switch] $RotateEngineOrder,
 
+    [int] $ManagedMaxRank = 0,
+
+    [double] $ManagedMaxVsFastest = 0,
+
     [switch] $ListScenarios
 )
 
@@ -45,6 +49,8 @@ $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('Suite-{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
 $validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'All')
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
+
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
 
 function Resolve-TokenList {
     param(
@@ -373,11 +379,16 @@ foreach ($hostLabel in $HostName) {
 $summaryPath = Join-Path $suiteRoot 'suite-summary.csv'
 $summaryJsonPath = Join-Path $suiteRoot 'suite-summary.json'
 $hostsPath = Join-Path $suiteRoot 'suite-hosts.csv'
+$gatePath = Join-Path $suiteRoot 'suite-gate.csv'
 $metadataPath = Join-Path $suiteRoot 'metadata.json'
+$gateViolations = @(Get-ManagedPerformanceGateViolation -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest)
 
 $summaryRows | Export-Csv -LiteralPath $summaryPath -NoTypeInformation
 $summaryRows | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryJsonPath -Encoding UTF8
 $hostRows | Export-Csv -LiteralPath $hostsPath -NoTypeInformation
+if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
+    $gateViolations | Export-Csv -LiteralPath $gatePath -NoTypeInformation
+}
 
 $metadata = [ordered]@{
     Suites = $Suite
@@ -393,9 +404,15 @@ $metadata = [ordered]@{
     ValidateImport = $ValidateImport.IsPresent
     ImportTimeoutSeconds = $ImportTimeoutSeconds
     RotateEngineOrder = $RotateEngineOrder.IsPresent
+    ManagedMaxRank = $ManagedMaxRank
+    ManagedMaxVsFastest = $ManagedMaxVsFastest
+    ManagedPerformanceGatePassed = $gateViolations.Count -eq 0
     OutputDirectory = $suiteRoot
 }
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
 $summaryRows
 Write-Host "Benchmark suite output: $suiteRoot"
+if ($gateViolations.Count -gt 0) {
+    throw "Managed performance gate failed for $($gateViolations.Count) suite row(s). See '$gatePath'."
+}
