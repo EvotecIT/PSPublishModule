@@ -183,7 +183,6 @@ Executes a repository-wide .NET build/release pipeline from a JSON configuration
 ### [Invoke-ProjectRelease](Invoke-ProjectRelease.md)
 Executes a PowerShell-authored project release object through the unified PowerForge release engine.
 
-### [Measure-ManagedModule](Measure-ManagedModule.md)
 Measures managed module lifecycle scenarios through the managed C# module engine.
 
 ### [New-AppleAppArchive](New-AppleAppArchive.md)
