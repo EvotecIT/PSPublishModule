@@ -89,7 +89,7 @@ public sealed class ManagedModuleInstallService
         Validate(request);
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var requestCountBefore = _repositoryClient.RequestCount;
+        using var requestScope = _repositoryClient.BeginRequestScope();
 
         var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
@@ -119,18 +119,25 @@ public sealed class ManagedModuleInstallService
                         modulePath,
                         stopwatch.Elapsed,
                         versionResolutionStopwatch.Elapsed,
-                        _repositoryClient.RequestCount - requestCountBefore);
+                        requestScope.Count);
                 }
             }
 
             var downloadStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var download = await _repositoryClient.DownloadPackageAsync(
-                request.Repository,
-                request.Name,
-                version,
-                cacheDirectory,
-                request.Credential,
-                cancellationToken).ConfigureAwait(false);
+            ManagedModuleDownloadResult download;
+            long packageRepositoryRequestCount;
+            using (var packageRequestScope = _repositoryClient.BeginRequestScope())
+            {
+                download = await _repositoryClient.DownloadPackageAsync(
+                    request.Repository,
+                    request.Name,
+                    version,
+                    cacheDirectory,
+                    request.Credential,
+                    cancellationToken).ConfigureAwait(false);
+                packageRepositoryRequestCount = packageRequestScope.Count;
+            }
+
             downloadStopwatch.Stop();
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
@@ -163,7 +170,7 @@ public sealed class ManagedModuleInstallService
                         modulePath,
                         stopwatch.Elapsed,
                         versionResolutionStopwatch.Elapsed,
-                        _repositoryClient.RequestCount - requestCountBefore);
+                        requestScope.Count);
                 }
 
                 PromoteStagedModule(stageModulePath, modulePath);
@@ -198,7 +205,8 @@ public sealed class ManagedModuleInstallService
                 ExtractionElapsed = extraction.Elapsed,
                 DependencyElapsed = dependencyStopwatch.Elapsed,
                 PromotionElapsed = promotionStopwatch.Elapsed,
-                RepositoryRequestCount = _repositoryClient.RequestCount - requestCountBefore,
+                RepositoryRequestCount = requestScope.Count,
+                PackageRepositoryRequestCount = packageRepositoryRequestCount,
                 DependencyResults = dependencyResults
             };
             _receiptStore.WriteReceipt(request.Repository, result);

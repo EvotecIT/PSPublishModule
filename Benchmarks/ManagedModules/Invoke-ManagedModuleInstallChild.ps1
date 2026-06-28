@@ -93,6 +93,19 @@ function ConvertTo-Milliseconds {
     [math]::Round($TimeSpan.TotalMilliseconds, 2)
 }
 
+function Get-NumericPropertyValue {
+    param(
+        [object] $InputObject,
+        [string] $Name
+    )
+
+    if ($null -eq $InputObject -or -not $InputObject.PSObject.Properties[$Name]) {
+        return 0
+    }
+
+    $InputObject.$Name
+}
+
 function Add-ManagedInstallDetail {
     param(
         [Parameter(Mandatory)]
@@ -120,6 +133,7 @@ function Add-ManagedInstallDetail {
         DependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
         PromotionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.PromotionElapsed
         RepositoryRequestCount = [long] $Result.RepositoryRequestCount
+        PackageRepositoryRequestCount = [long] (Get-NumericPropertyValue -InputObject $Result -Name 'PackageRepositoryRequestCount')
         FileCount = [int] $Result.FileCount
         ExtractedBytes = [long] $Result.ExtractedBytes
         DownloadBytes = if ($download) { [long] $download.BytesWritten } else { 0L }
@@ -155,6 +169,7 @@ function Write-ManagedInstallDetail {
         TotalExtractionMilliseconds = [math]::Round((($packages | Measure-Object ExtractionMilliseconds -Sum).Sum), 2)
         TotalPromotionMilliseconds = [math]::Round((($packages | Measure-Object PromotionMilliseconds -Sum).Sum), 2)
         TotalRepositoryRequestCount = [long] $Result.RepositoryRequestCount
+        TotalPackageRepositoryRequestCount = [long] (($packages | Measure-Object PackageRepositoryRequestCount -Sum).Sum)
         TotalDownloadBytes = [long] (($packages | Measure-Object DownloadBytes -Sum).Sum)
         CacheHitCount = @($packages | Where-Object DownloadFromCache).Count
     }

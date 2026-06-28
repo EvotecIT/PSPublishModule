@@ -152,7 +152,7 @@ Every run writes:
 - `managed-module-results.csv`: raw per-run rows, including repair scenario and optional import validation columns.
 - `managed-module-results.json`: raw per-run rows as JSON.
 - `managed-module-summary.csv`: grouped median/min/max rows by operation, scenario, and engine, including output size and managed detail medians when detail artifacts are present.
-- `managed-module-comparison.csv`: fastest successful engine per operation and scenario, plus managed rank, ratio, and managed package/request/download/extract/promotion medians.
+- `managed-module-comparison.csv`: fastest successful engine per operation and scenario, plus managed rank, ratio, and managed package/request/download/extract/promotion medians. `ManagedRepositoryRequests` is the whole managed operation request total; `ManagedPackageRepositoryRequests` is the package-delivery subset and excludes dependency version-resolution requests.
 - `metadata.json`: runtime, selected engines, module, version, repository, and output paths.
 - `managed-install-details-<n>.json`: managed install package tree details, written under the benchmark run folder for install runs. It includes package/dependency counts, per-package elapsed/download/extraction/promotion timings, request counts, cache hits, and byte counts.
 
@@ -200,6 +200,8 @@ Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's Pow
 - Managed-only `RepairPlan -RepairScenario LoadedModuleSafety` smoke evidence with synthetic `ThreadJob` 1.0.0 and 2.0.0 plus loaded 1.0.0 evidence: PowerShell 7 planned in 685.50 ms and Windows PowerShell 5.1 planned in 666.29 ms. The detail artifacts recorded one maintenance action plus `ModuleState.LoadedVersionMismatch`, side-by-side, and source-unknown findings without applying changes.
 - Managed-only `RepairPlan -RepairScenario CleanupPlanning` smoke evidence with synthetic `ThreadJob` 1.0.0 and 2.0.0: PowerShell 7 planned in 670.21 ms and Windows PowerShell 5.1 planned in 671.26 ms. The detail artifacts recorded a `Remove` action for the old 1.0.0 copy and a no-op for the retained 2.0.0 copy without deleting either version.
 - PowerShell 7, full `Microsoft.Graph` install, 1 run: Managed 9511.12 ms, ModuleFast 10194.36 ms, PSResourceGet 71116.42 ms, PowerShellGet 119544.35 ms.
+- After scoped repository request accounting, PowerShell 7 reran full `Microsoft.Graph` install against the ModuleFast speed gate. Managed completed in 7414.10 ms and ModuleFast completed in 8906.23 ms. The managed detail summary recorded 78 packages, 77 dependencies, 81 whole-operation repository requests, 80 package-delivery requests, 186.5 MB of downloaded package bytes, and about 1.05 GB of output.
+- Windows PowerShell 5.1 reran managed-only full `Microsoft.Graph` install with the same request-accounting detail. Managed completed in 13478.31 ms with 78 packages, 77 dependencies, 81 whole-operation repository requests, 78 package-delivery requests, 178.4 MB of downloaded package bytes, and about 1.05 GB of output.
 - PowerShell 7, full `Az` install, 1 run: Managed 22457.78 ms, PowerShellGet 131093.32 ms, PSResourceGet 141104.45 ms, ModuleFast failed while resolving `Az.DataTransfer(1.0.0)` from its source. Keep this failure visible because resolver compatibility is part of the install contract.
 
 Treat these numbers as a local baseline, not a release claim. Re-run the same commands after installer changes and compare the emitted CSV/JSON files before deciding whether an optimization is real.
