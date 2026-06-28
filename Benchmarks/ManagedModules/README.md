@@ -60,6 +60,13 @@ Add import validation after install/update without adding import time to the ope
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 -ModuleName ThreadJob -Version 2.1.0 -UpdateBaselineVersion 2.0.3 -Operation Install,Update -Engine Managed,ModuleFast,PSResourceGet,PowerShellGet -ValidateImport -RepeatCount 1 -SkipBuild
 ```
 
+Control cache behavior for update benchmarks:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 -ModuleName ThreadJob -Version 2.1.0 -UpdateBaselineVersion 2.0.3 -Operation Update -Engine Managed,PSResourceGet -ValidateImport -CacheMode Cold -RepeatCount 1 -SkipBuild
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 -ModuleName ThreadJob -Version 2.1.0 -UpdateBaselineVersion 2.0.3 -Operation Update -Engine Managed,PSResourceGet -ValidateImport -CacheMode Warm -RepeatCount 1 -SkipBuild
+```
+
 Compare the managed installer against the install-only speed gate:
 
 ```powershell
@@ -107,7 +114,7 @@ Suite runs write `suite-summary.csv`, `suite-summary.json`, `suite-hosts.csv`, a
 
 ## Notes
 
-`Find` and `Save` are safe to compare directly because each compatible engine can run against isolated output folders. ModuleFast is included as an install-only competitor; its find/save/update rows are explicit skips because it does not expose equivalent commands. `Install` runs each engine in a disposable child PowerShell host with benchmark-owned profile, cache, temp, and module path environment variables. `Update` first installs `-UpdateBaselineVersion` outside the timed window, then times only the update operation in the same disposable host root. `-ValidateImport` imports the highest-version manifest from the benchmark output root after timing and writes `ImportStatus`, `ImportVersion`, `ImportMilliseconds`, `ImportManifestPath`, and `ImportError` columns. ModuleFast setup/import is outside the timed operation, uses the locally installed `ModuleFast` module, and is skipped on Windows PowerShell 5.1 because ModuleFast requires PowerShell 7.2 or newer. Install and update output roots are recorded in the CSV/JSON rows and may point at the short temp benchmark folder to keep Windows PowerShell 5.1 below legacy path-length limits.
+`Find` and `Save` are safe to compare directly because each compatible engine can run against isolated output folders. ModuleFast is included as an install-only competitor; its find/save/update rows are explicit skips because it does not expose equivalent commands. `Install` runs each engine in a disposable child PowerShell host with benchmark-owned profile, cache, temp, and module path environment variables. `Update` first installs `-UpdateBaselineVersion` outside the timed window, then times only the update operation in the same disposable host root. `-CacheMode Cold` clears disposable provider/package caches after the baseline install; `-CacheMode Warm` preserves native provider caches and gives managed delivery an explicit package cache folder under the benchmark root; `Default` preserves the historical harness behavior. `-ValidateImport` imports the highest-version manifest from the benchmark output root after timing and writes `ImportStatus`, `ImportVersion`, `ImportMilliseconds`, `ImportManifestPath`, and `ImportError` columns. ModuleFast setup/import is outside the timed operation, uses the locally installed `ModuleFast` module, and is skipped on Windows PowerShell 5.1 because ModuleFast requires PowerShell 7.2 or newer. Install and update output roots are recorded in the CSV/JSON rows and may point at the short temp benchmark folder to keep Windows PowerShell 5.1 below legacy path-length limits.
 
 License acceptance is explicit. Use `-AcceptLicense` only when the benchmark scenario is allowed to accept the package license on behalf of the run.
 
@@ -127,6 +134,8 @@ Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's Pow
 - Windows PowerShell 5.1, `ThreadJob` install/update from 2.0.3 to 2.1.0 with `-ValidateImport`, 1 run: every successful output imported version 2.1.0 from its benchmark output root; install measured PSResourceGet 5566.97 ms, Managed 5788.02 ms, and PowerShellGet 20201.12 ms; update measured PSResourceGet 6973.94 ms and Managed 9910.50 ms, while PowerShellGet failed in its own update path and left version 2.0.3 installed.
 - PowerShell 7, `ThreadJob` save with `-ValidateImport`, 1 run: every successful output imported version 2.1.0 from its benchmark output root; PSResourceGet measured 2407.57 ms, Managed 2734.35 ms, and PowerShellGet 23304.06 ms.
 - Windows PowerShell 5.1, `ThreadJob` save with `-ValidateImport`, 1 run: every successful output imported version 2.1.0 from its benchmark output root; Managed measured 2200.40 ms, PSResourceGet 2515.05 ms, and PowerShellGet 14615.81 ms.
+- Windows PowerShell 5.1, `ThreadJob` update from 2.0.3 to 2.1.0 with `-ValidateImport -CacheMode Cold`, 1 run: managed measured 7978.12 ms and PSResourceGet measured 7519.21 ms; both imported version 2.1.0 from the output root. With `-CacheMode Warm`, managed measured 6861.28 ms and PSResourceGet measured 7448.84 ms; the managed detail artifact still reported no package cache hits for this specific target/dependency combination.
+- PowerShell 7, `ThreadJob` update from 2.0.3 to 2.1.0 with `-ValidateImport -CacheMode Cold`, 1 run: managed measured 4516.84 ms and PSResourceGet measured 4022.21 ms. With `-CacheMode Warm`, managed measured 4087.70 ms and PSResourceGet measured 3818.19 ms. Treat these small-module update numbers as close-run smoke evidence, not a stable optimization claim without repeated rotated runs.
 - PowerShell 7, full `Microsoft.Graph` install, 1 run: Managed 9511.12 ms, ModuleFast 10194.36 ms, PSResourceGet 71116.42 ms, PowerShellGet 119544.35 ms.
 - PowerShell 7, full `Az` install, 1 run: Managed 22457.78 ms, PowerShellGet 131093.32 ms, PSResourceGet 141104.45 ms, ModuleFast failed while resolving `Az.DataTransfer(1.0.0)` from its source. Keep this failure visible because resolver compatibility is part of the install contract.
 

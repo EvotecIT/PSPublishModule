@@ -302,7 +302,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add an explicit disposable-host lane for native `Install-Module` and `Install-PSResource`.
 - [x] Add an explicit disposable-host update lane for native `Update-Module` and `Update-PSResource`.
 - [x] Add `-AcceptLicense` support to the benchmark harness and pass it only when explicitly requested.
-- [ ] Add warm-cache and cold-cache modes.
+- [x] Add warm-cache and cold-cache modes.
 - [ ] Add publish comparisons against local folder feeds.
 - [x] Add import validation after install/save/update for PowerShell 5.1 and PowerShell 7+.
 - [x] Add file and byte counts for saved and installed output roots.
@@ -332,6 +332,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: The benchmark harness now has an explicit update lane that installs `-UpdateBaselineVersion` outside the timed window and then times only the update operation in the same disposable host root. PowerShell 7 updated `ThreadJob` from 2.0.3 to 2.1.0 in 2855 ms with managed, 4479 ms with PSResourceGet, and 11238 ms with PowerShellGet; ModuleFast is an explicit skip because it does not expose update. Windows PowerShell 5.1 updated the same stale module in 4457 ms with managed and 7329 ms with PSResourceGet, while PowerShellGet failed inside its metadata conversion path and left 2.0.3 installed.
 - [x] 2026-06-28: The benchmark harness now supports `-ValidateImport`, which imports the highest-version manifest from the benchmark output root after timed install/save/update operations and records import status separately from operation timing. PowerShell 7 validated `ThreadJob` install/update outputs from managed, ModuleFast install, PSResourceGet, and PowerShellGet; every successful row imported 2.1.0 from the output root. Windows PowerShell 5.1 validated the same managed, PSResourceGet, and PowerShellGet install outputs and managed/PSResourceGet update outputs; PowerShellGet update still failed in its own path before import. This exposed a small-module PS5.1 update optimization target: managed was correct but slower than PSResourceGet on the import-gated stale `ThreadJob` update.
 - [x] 2026-06-28: PowerShell 7 and Windows PowerShell 5.1 also ran import-gated `ThreadJob` save comparisons. Every successful saved output imported 2.1.0 from its benchmark output root. PowerShell 7 measured PSResourceGet at 2408 ms, managed at 2734 ms, and PowerShellGet at 23304 ms. Windows PowerShell 5.1 measured managed at 2200 ms, PSResourceGet at 2515 ms, and PowerShellGet at 14616 ms.
+- [x] 2026-06-28: The benchmark harness now supports explicit `-CacheMode Default|Cold|Warm` for update benchmarks. `Cold` clears disposable provider/package caches after the baseline install; `Warm` preserves native provider caches and gives managed delivery an explicit package cache folder. Windows PowerShell 5.1 import-gated `ThreadJob` update measured managed at 7978 ms versus PSResourceGet at 7519 ms in cold mode, and managed at 6861 ms versus PSResourceGet at 7449 ms in warm mode. PowerShell 7 measured managed at 4517 ms versus PSResourceGet at 4022 ms in cold mode, and managed at 4088 ms versus PSResourceGet at 3818 ms in warm mode. The managed warm detail artifact reported no package cache hits for this specific target/dependency combination, so these small-package numbers should be treated as close-run smoke evidence rather than a stable optimization claim.
 
 ### Next Optimization Targets
 
@@ -339,7 +340,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Coordinate repository metadata caches and package-cache writes so parallel dependency delivery cannot corrupt shared cached packages.
 - [x] Re-measure full `Az` and full `Microsoft.Graph` install after dependency scheduling changes on PowerShell 7 and Windows PowerShell 5.1.
 - [ ] Add repository lookup/request coalescing for repeated transitive dependency checks; current package-cache coordination prevents file races but does not yet share in-flight metadata requests.
-- [ ] Optimize Windows PowerShell 5.1 stale small-module update; the import-gated `ThreadJob` 2.0.3 to 2.1.0 smoke measured managed at 9910 ms versus PSResourceGet at 6974 ms.
+- [ ] Optimize Windows PowerShell 5.1 stale small-module update with repeated cold/warm runs; one import-gated default smoke measured managed at 9910 ms versus PSResourceGet at 6974 ms, while explicit cold/warm cache-mode runs were much closer.
 - [ ] Optimize PowerShell 7 small-module save; the import-gated `ThreadJob` save smoke measured managed at 2734 ms versus PSResourceGet at 2408 ms.
 
 ## Benchmark Scenarios

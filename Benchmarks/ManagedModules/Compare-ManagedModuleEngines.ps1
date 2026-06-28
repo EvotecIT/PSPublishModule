@@ -18,6 +18,9 @@ param(
 
     [string[]] $Operation,
 
+    [ValidateSet('Default', 'Cold', 'Warm')]
+    [string] $CacheMode = 'Default',
+
     [int] $RepeatCount = 1,
 
     [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules'),
@@ -223,6 +226,17 @@ function Get-IsolatedInstallEnvironment {
     }
 }
 
+function Clear-IsolatedPackageCaches {
+    param([string] $Destination)
+
+    foreach ($relativePath in @('AppData\Local', 'PSResourceGet', 'PackageManagement', 'ManagedPackageCache')) {
+        $path = Join-Path $Destination $relativePath
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Get-BenchmarkHostPath {
     $process = Get-Process -Id $PID
     if (-not [string]::IsNullOrWhiteSpace($process.Path)) {
@@ -235,6 +249,8 @@ function Get-BenchmarkHostPath {
 
     (Get-Command pwsh -ErrorAction Stop).Source
 }
+
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ImportValidation.ps1')
 
 function Get-ProviderModulePath {
     param([string] $EngineName)
@@ -322,7 +338,8 @@ function Invoke-IsolatedInstallHost {
         [string] $Destination,
         [string] $DetailPath,
         [string] $OperationName = 'Install',
-        [string] $VersionOverride = $Version
+        [string] $VersionOverride = $Version,
+        [string] $PackageCacheDirectory = ''
     )
 
     $childScript = Join-Path $PSScriptRoot 'Invoke-ManagedModuleInstallChild.ps1'
@@ -354,6 +371,12 @@ function Invoke-IsolatedInstallHost {
         '-ModuleBinary'
         (Resolve-ModuleBinary)
     )
+    if (-not [string]::IsNullOrWhiteSpace($PackageCacheDirectory)) {
+        $arguments += @(
+            '-PackageCacheDirectory'
+            $PackageCacheDirectory
+        )
+    }
     if (-not [string]::IsNullOrWhiteSpace($VersionOverride)) {
         $arguments += @(
             '-Version'
@@ -473,39 +496,6 @@ function Get-OutputRootMetrics {
         FileCount = $files.Count
         TotalBytes = $bytes
     }
-}
-
-function Invoke-ImportValidation {
-    param([string] $OutputRoot)
-
-    if (-not $ValidateImport.IsPresent -or [string]::IsNullOrWhiteSpace($OutputRoot) -or -not (Test-Path -LiteralPath $OutputRoot)) {
-        return $null
-    }
-
-    $childScript = Join-Path $PSScriptRoot 'Invoke-ManagedModuleImportChild.ps1'
-    $output = @(& (Get-BenchmarkHostPath) -NoLogo -NoProfile -ExecutionPolicy Bypass -File $childScript -ModuleName $ModuleName -ModuleRoot $OutputRoot 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        return [pscustomobject]@{
-            Status = 'Failed'
-            Version = ''
-            ManifestPath = ''
-            ElapsedMilliseconds = 0
-            Error = ($output -join [Environment]::NewLine)
-        }
-    }
-
-    $json = @($output | Where-Object { [string] $_ -match '^\s*\{' } | Select-Object -Last 1)
-    if ($json.Count -eq 0) {
-        return [pscustomobject]@{
-            Status = 'Failed'
-            Version = ''
-            ManifestPath = ''
-            ElapsedMilliseconds = 0
-            Error = ($output -join [Environment]::NewLine)
-        }
-    }
-
-    $json[0] | ConvertFrom-Json
 }
 
 function Invoke-TimedOperation {
@@ -826,11 +816,19 @@ function Invoke-UpdateScenario {
 
     $destination = Join-Path $installWorkRoot ("update-{0}-{1}" -f $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
+    $packageCacheDirectory = if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
+        Join-Path $destination 'ManagedPackageCache'
+    } else {
+        ''
+    }
 
     try {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $UpdateBaselineVersion
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $UpdateBaselineVersion -PackageCacheDirectory $packageCacheDirectory
     } catch {
         return New-FailedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason "Baseline install failed: $($_.Exception.Message)" -OutputRoot $destination
+    }
+    if ($CacheMode -eq 'Cold') {
+        Clear-IsolatedPackageCaches -Destination $destination
     }
 
     $detailPath = if ($EngineName -eq 'Managed') {
@@ -840,7 +838,7 @@ function Invoke-UpdateScenario {
     }
 
     Invoke-TimedOperation -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Update'
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Update' -PackageCacheDirectory $packageCacheDirectory
     }
 }
 
@@ -970,6 +968,7 @@ $metadata = [ordered]@{
     RepositoryName = $RepositoryName
     ModuleFastSource = $ModuleFastSource
     AcceptLicense = $AcceptLicense.IsPresent
+    CacheMode = $CacheMode
     ValidateImport = $ValidateImport.IsPresent
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     Suite = $Suite
