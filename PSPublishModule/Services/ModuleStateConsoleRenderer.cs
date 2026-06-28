@@ -124,6 +124,7 @@ internal static class ModuleStateConsoleRenderer
             var executions = new Table().Border(Border());
             executions.AddColumn(new TableColumn("Operation").NoWrap());
             executions.AddColumn(new TableColumn("Repository").NoWrap());
+            executions.AddColumn(new TableColumn("Transport").NoWrap());
             executions.AddColumn(new TableColumn("Performed").NoWrap());
             executions.AddColumn(new TableColumn("Status").NoWrap());
             executions.AddColumn(new TableColumn("Dependencies").NoWrap());
@@ -133,6 +134,7 @@ internal static class ModuleStateConsoleRenderer
                 executions.AddRow(
                     Esc(execution.Operation),
                     Esc(execution.RepositoryName),
+                    Esc(FormatExecutionTransport(execution)),
                     execution.OperationPerformed ? "[green]yes[/]" : "[dim]no[/]",
                     Esc(FormatExecutionStatuses(execution)),
                     execution.DependencyResults.Length.ToString(),
@@ -231,10 +233,22 @@ internal static class ModuleStateConsoleRenderer
             .ToArray();
         if (details.Length > 0)
             return string.Join("; ", details);
+        if (!string.IsNullOrWhiteSpace(execution.DeliveryTransportReason))
+            return execution.DeliveryTransportReason;
 
         return execution.OperationPerformed
             ? "Operation performed."
             : "Operation skipped or no changes were required.";
+    }
+
+    internal static string FormatExecutionTransport(ModuleStateDeliveryExecutionResult execution)
+    {
+        if (execution is null)
+            return string.Empty;
+
+        return execution.RequestedTransport == execution.EffectiveTransport
+            ? execution.EffectiveTransport.ToString()
+            : $"{execution.RequestedTransport} -> {execution.EffectiveTransport}";
     }
 
     private static void WriteRule(string title, string color)

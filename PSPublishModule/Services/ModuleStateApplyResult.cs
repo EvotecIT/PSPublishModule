@@ -118,6 +118,21 @@ public sealed class ModuleStateDeliveryExecutionResult
     public string RepositoryName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the transport requested by the caller or plan execution options.
+    /// </summary>
+    public PowerForge.ModuleStateDeliveryTransport RequestedTransport { get; set; } = PowerForge.ModuleStateDeliveryTransport.PrivateModule;
+
+    /// <summary>
+    /// Gets or sets the transport actually used by the workflow.
+    /// </summary>
+    public PowerForge.ModuleStateDeliveryTransport EffectiveTransport { get; set; } = PowerForge.ModuleStateDeliveryTransport.PrivateModule;
+
+    /// <summary>
+    /// Gets or sets the reason the workflow selected the effective transport.
+    /// </summary>
+    public string DeliveryTransportReason { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets dependency results returned by the private-module workflow.
     /// </summary>
     public ModuleStateDependencyResult[] DependencyResults { get; set; } = [];
