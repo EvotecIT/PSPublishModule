@@ -29,4 +29,9 @@ public sealed class ManagedModuleTransportDecision
     /// True when compatibility remains selected because provider support or provider workflow parity is incomplete.
     /// </summary>
     public bool CompatibilityFallbackIsProviderLimited { get; set; }
+
+    /// <summary>
+    /// True when compatibility remains selected because the request did not resolve a repository source URI or local feed path.
+    /// </summary>
+    public bool CompatibilityFallbackRequiresRepositorySource { get; set; }
 }

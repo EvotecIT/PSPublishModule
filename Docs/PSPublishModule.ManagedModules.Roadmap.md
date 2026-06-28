@@ -371,6 +371,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Windows PowerShell 5.1.26100.8655 imported the local `net472` build and ran the same all-operation local-feed proof. All install/save/update/publish transition gates were `Ready`, compatibility retirement was `Ready`, and 12 runs completed against `C:\Users\przemyslaw.klys.EVOTEC\AppData\Local\Temp\pf-retire-winps-7e4838164a6f4b479500c9a26e0469af`.
 - [x] 2026-06-28: PowerShellGet native install/update compatibility scripts now enable TLS 1.2 before importing PowerShellGet, so public-gallery baseline failures are less likely to be caused by Windows PowerShell transport defaults.
 - [x] 2026-06-28: After TLS hardening, a PowerShell 7.6.3 public `ThreadJob` 1.0.0 to 2.1.0 update benchmark still validated managed and PSResourceGet updates while PowerShellGet failed its native seed/install with `End of Central Directory record could not be found`; the update transition gate remains explicitly incomplete for that provider behavior.
+- [x] 2026-06-28: Auto transport compatibility fallback now records typed evidence when fallback is caused by provider limitations versus unresolved repository source evidence.
 
 ## Benchmark Scenarios
 
@@ -415,5 +416,5 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] Existing private-gallery workflows continue to work through wrappers.
 - [x] ModuleState can maintain installed modules through the managed engine.
 - [ ] Benchmarks prove correctness and performance on Windows PowerShell 5.1 and PowerShell 7+.
-- [ ] Compatibility fallback remains only where provider support is explicitly incomplete.
+- [x] Compatibility fallback remains only where provider support or repository source evidence is explicitly incomplete.
 - [x] Public docs stay vendor-neutral and avoid naming community comparison projects.
