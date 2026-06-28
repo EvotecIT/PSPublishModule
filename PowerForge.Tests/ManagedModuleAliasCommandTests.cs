@@ -73,7 +73,6 @@ public sealed class ManagedModuleAliasCommandTests
     [Theory]
     [InlineData("Find-ManagedModule")]
     [InlineData("Install-ManagedModule")]
-    [InlineData("Measure-ManagedModule")]
     [InlineData("Publish-ManagedModule")]
     [InlineData("Save-ManagedModule")]
     [InlineData("Update-ManagedModule")]

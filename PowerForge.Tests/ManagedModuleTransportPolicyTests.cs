@@ -49,7 +49,7 @@ public sealed class ManagedModuleTransportPolicyTests
     }
 
     [Fact]
-    public void Resolve_AutoWithPartialPrivateProviderWithoutManagedEvidence_UsesProviderLimitedCompatibilityTransport()
+    public void Resolve_AutoWithPartialPrivateProviderWithoutRepositorySource_UsesProviderLimitedCompatibilityTransport()
     {
         var decision = ManagedModuleTransportPolicy.Resolve(new ManagedModuleTransportPolicyInput
         {

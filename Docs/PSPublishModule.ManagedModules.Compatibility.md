@@ -47,7 +47,7 @@ Find-ManagedModule -Name Company.* -ProfileName CompanyModules -AllVersions
 ### Benchmark Repository Metadata
 
 ```powershell
-Measure-ManagedModule -Name Company.Tools -Operation Find -ProfileName CompanyModules -Engine Managed
+.\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 -ModuleName Company.Tools -Operation Find -Engine Managed
 ```
 
 ### Save
@@ -132,7 +132,7 @@ The managed engine owns typed domain models for:
 - Versions: semantic comparison, prerelease labels, PowerShellGet-style bounds, and NuGet/PSResourceGet-style ranges.
 - Plans and actions: install, save, update, publish, ModuleState delivery, repair, and skip reasons.
 - Receipts: successful delivery evidence under the installed module version directory.
-- Benchmarks: engine, operation, timing, package counts, bytes, import validation, publish status, and report paths.
+- Benchmark evidence: engine, operation, timing, package counts, bytes, import validation, publish status, and report paths. Benchmark tooling lives under `Benchmarks`, not in the shipped cmdlet surface.
 
 Cmdlets should map parameters into these models and write result objects. They should not own repository protocol logic, archive extraction, dependency solving, package creation, or ModuleState repair decisions.
 
