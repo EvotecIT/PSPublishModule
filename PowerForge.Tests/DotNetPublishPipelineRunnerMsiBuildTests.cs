@@ -56,18 +56,25 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         try
         {
             Directory.CreateDirectory(Path.Combine(root, "LocalPackages"));
+            Directory.CreateDirectory(Path.Combine(root, "GlobalPackages"));
+            Directory.CreateDirectory(Path.Combine(root, "LocalFallback"));
             File.WriteAllText(
                 Path.Combine(root, "NuGet.config"),
-                "<configuration><packageSources>" +
+                "<configuration><config>" +
+                "<add key=\"globalPackagesFolder\" value=\"GlobalPackages\" />" +
+                "</config><packageSources>" +
                 "<add key=\"local\" value=\"LocalPackages\" />" +
+                "<add key=\"file\" value=\"file:///C:/packages\" />" +
                 "<add key=\"nuget\" value=\"https://api.nuget.org/v3/index.json\" />" +
-                "</packageSources></configuration>");
+                "</packageSources><fallbackPackageFolders>" +
+                "<add key=\"fallback\" value=\"LocalFallback\" />" +
+                "</fallbackPackageFolders></configuration>");
             var importedBuildProps = Path.Combine(root, "Build", "Props", "Generated.props");
             Directory.CreateDirectory(Path.GetDirectoryName(importedBuildProps)!);
             File.WriteAllText(importedBuildProps, "<Project />");
             File.WriteAllText(
                 Path.Combine(root, "Directory.Build.props"),
-                "<Project><Import Project=\"Build\\Props\\Generated.props\" /></Project>");
+                "<Project><Import Project=\"$(MSBuildThisFileDirectory)Build\\Props\\Generated.props\" /></Project>");
             File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project />");
             var sourceDir = Path.Combine(
                 root,
@@ -158,6 +165,30 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     .Value;
                 Assert.Equal(Path.GetFullPath(Path.Combine(root, "LocalPackages")), Path.GetFullPath(localPackageSource));
                 Assert.DoesNotContain(workspace.WorkingDirectory, localPackageSource, StringComparison.OrdinalIgnoreCase);
+                var filePackageSource = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "file", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal("file:///C:/packages", filePackageSource);
+                var globalPackagesFolder = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "globalPackagesFolder", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal(Path.GetFullPath(Path.Combine(root, "GlobalPackages")), Path.GetFullPath(globalPackagesFolder));
+                var fallbackPackageFolder = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "fallback", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal(Path.GetFullPath(Path.Combine(root, "LocalFallback")), Path.GetFullPath(fallbackPackageFolder));
                 Assert.NotNull(workspace.PayloadDirectory);
                 Assert.NotNull(workspace.HarvestPath);
                 Assert.True(File.Exists(Path.Combine(workspace.PayloadDirectory!, "DesktopManager.App.exe")));

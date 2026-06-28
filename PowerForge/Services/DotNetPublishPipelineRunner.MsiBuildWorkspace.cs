@@ -221,11 +221,11 @@ public sealed partial class DotNetPublishPipelineRunner
         var targetPath = Path.Combine(workingDirectory, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
         File.Copy(sourceFullPath, targetPath, overwrite: true);
-        RebaseNuGetConfigPackageSources(targetPath, Path.GetDirectoryName(sourceFullPath)!);
+        RebaseNuGetConfigPaths(targetPath, Path.GetDirectoryName(sourceFullPath)!);
         queue.Enqueue(sourceFullPath);
     }
 
-    private static void RebaseNuGetConfigPackageSources(string targetPath, string sourceDirectory)
+    private static void RebaseNuGetConfigPaths(string targetPath, string sourceDirectory)
     {
         if (!string.Equals(Path.GetFileName(targetPath), "NuGet.config", StringComparison.OrdinalIgnoreCase))
         {
@@ -243,20 +243,15 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var changed = false;
-        foreach (var valueAttribute in document
+        var pathAttributes = document
             .Descendants()
-            .Where(element => string.Equals(element.Name.LocalName, "packageSources", StringComparison.OrdinalIgnoreCase))
-            .Elements()
-            .Where(element => string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase))
+            .Where(IsNuGetPathElement)
             .Select(element => element.Attribute("value"))
-            .Where(attribute => attribute is not null))
+            .Where(attribute => attribute is not null);
+        foreach (var valueAttribute in pathAttributes)
         {
             var value = valueAttribute!.Value;
-            if (string.IsNullOrWhiteSpace(value) ||
-                IsUriPackageSource(value) ||
-                IsRootedPackageSource(value) ||
-                value.IndexOf('$') >= 0 ||
-                value.IndexOf('%') >= 0)
+            if (!ShouldRebaseNuGetPath(value))
             {
                 continue;
             }
@@ -271,11 +266,44 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static bool IsNuGetPathElement(XElement element)
+    {
+        if (!string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var parentName = element.Parent?.Name.LocalName;
+        if (string.Equals(parentName, "packageSources", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(parentName, "fallbackPackageFolders", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.Equals(parentName, "config", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var key = (string?)element.Attribute("key");
+        return string.Equals(key, "globalPackagesFolder", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(key, "repositoryPath", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(key, "http_cache_path", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ShouldRebaseNuGetPath(string value)
+    {
+        return !string.IsNullOrWhiteSpace(value) &&
+            !IsUriPackageSource(value) &&
+            !IsRootedPackageSource(value) &&
+            value.IndexOf('$') < 0 &&
+            value.IndexOf('%') < 0;
+    }
+
     private static bool IsUriPackageSource(string value)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-            !string.IsNullOrWhiteSpace(uri.Scheme) &&
-            !string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
+            !string.IsNullOrWhiteSpace(uri.Scheme);
     }
 
     private static bool IsRootedPackageSource(string value)
@@ -321,7 +349,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string sourceDirectory,
         string projectRootDirectory)
     {
-        var expanded = ExpandGeneratedInstallerBuildImport(import, sourceDirectory, projectRootDirectory);
+        var expanded = NormalizeRelativePathSeparators(ExpandGeneratedInstallerBuildImport(import, sourceDirectory, projectRootDirectory));
         if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
             expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
         {
@@ -330,7 +358,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var importPath = Path.IsPathRooted(expanded)
             ? expanded
-            : Path.Combine(sourceDirectory, NormalizeRelativePathSeparators(expanded));
+            : Path.Combine(sourceDirectory, expanded);
         var projectRoot = AppendDirectorySeparator(Path.GetFullPath(projectRootDirectory));
         if (importPath.IndexOfAny(new[] { '*', '?' }) >= 0)
         {
