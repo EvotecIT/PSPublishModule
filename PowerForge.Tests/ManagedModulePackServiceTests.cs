@@ -29,7 +29,15 @@ public sealed class ManagedModulePackServiceTests
         Assert.Equal("Company.Tools", metadata.Id);
         Assert.Equal("1.2.3", metadata.Version);
         Assert.Equal("Evotec", metadata.Authors);
-        Assert.Equal(new[] { "automation", "company" }, metadata.Tags);
+        Assert.Contains("PSModule", metadata.Tags);
+        Assert.Contains("company", metadata.Tags);
+        Assert.Contains("automation", metadata.Tags);
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        Assert.Contains(archive.Entries, entry => entry.FullName.Equals("package/services/metadata/core-properties/Company.Tools.1.2.3.psmdcp", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("application/vnd.openxmlformats-package.core-properties+xml", ReadEntry(archive, "[Content_Types].xml"), StringComparison.Ordinal);
+        Assert.Contains("metadata/core-properties", ReadEntry(archive, "_rels/.rels"), StringComparison.Ordinal);
+        Assert.Contains("<tags>PSModule company automation</tags>", ReadEntry(archive, "Company.Tools.nuspec"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -281,5 +289,12 @@ public sealed class ManagedModulePackServiceTests
     }
 }
 """;
+    }
+
+    private static string ReadEntry(ZipArchive archive, string name)
+    {
+        var entry = archive.Entries.Single(item => item.FullName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        using var reader = new StreamReader(entry.Open());
+        return reader.ReadToEnd();
     }
 }

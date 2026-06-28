@@ -7,7 +7,7 @@ public sealed partial class ManagedModuleBenchmarkService
         ManagedModuleBenchmarkEngine engine,
         int iteration)
     {
-        using var repositoryScope = CreateCompatibilityPublishRepositoryScope(scenario, engine);
+        using var repositoryScope = CreateCompatibilityRepositoryScope(scenario, engine);
         var repositoryName = repositoryScope.RepositoryName;
         var modulePath = NormalizeOptional(scenario.ModulePath) ?? throw new InvalidOperationException("Publish benchmark scenarios require ModulePath.");
         var packageOutputDirectory = NormalizeOptional(scenario.PackageOutputDirectory);
@@ -54,13 +54,13 @@ public sealed partial class ManagedModuleBenchmarkService
         };
     }
 
-    private CompatibilityPublishRepositoryScope CreateCompatibilityPublishRepositoryScope(
+    private CompatibilityRepositoryScope CreateCompatibilityRepositoryScope(
         ManagedModuleBenchmarkScenario scenario,
         ManagedModuleBenchmarkEngine engine)
     {
         var repositoryName = ResolveCompatibilityRepositoryName(scenario);
         if (scenario.Repository.Kind != ManagedModuleRepositoryKind.LocalFolder)
-            return new CompatibilityPublishRepositoryScope(repositoryName);
+            return new CompatibilityRepositoryScope(repositoryName);
 
         var localSource = ResolveLocalRepositoryPath(scenario.Repository.Source);
         Directory.CreateDirectory(localSource);
@@ -69,12 +69,12 @@ public sealed partial class ManagedModuleBenchmarkService
         {
             var client = new PSResourceGetClient(_compatibilityPowerShellRunner, _logger);
             client.EnsureRepositoryRegistered(scopedName, localSource, trusted: true, timeout: TimeSpan.FromMinutes(2));
-            return new CompatibilityPublishRepositoryScope(scopedName, () => client.UnregisterRepository(scopedName, TimeSpan.FromMinutes(2)));
+            return new CompatibilityRepositoryScope(scopedName, () => client.UnregisterRepository(scopedName, TimeSpan.FromMinutes(2)));
         }
 
         var powerShellGet = new PowerShellGetClient(_compatibilityPowerShellRunner, _logger);
         powerShellGet.EnsureRepositoryRegistered(scopedName, localSource, localSource, trusted: true, credential: scenario.Credential, timeout: TimeSpan.FromMinutes(2));
-        return new CompatibilityPublishRepositoryScope(scopedName, () => powerShellGet.UnregisterRepository(scopedName, TimeSpan.FromMinutes(2)));
+        return new CompatibilityRepositoryScope(scopedName, () => powerShellGet.UnregisterRepository(scopedName, TimeSpan.FromMinutes(2)));
     }
 
     private static string? ResolveCompatibilityPublishEvidencePath(ManagedModuleBenchmarkScenario scenario)
@@ -175,11 +175,11 @@ public sealed partial class ManagedModuleBenchmarkService
         };
     }
 
-    private sealed class CompatibilityPublishRepositoryScope : IDisposable
+    private sealed class CompatibilityRepositoryScope : IDisposable
     {
         private readonly Action? _dispose;
 
-        public CompatibilityPublishRepositoryScope(string? repositoryName, Action? dispose = null)
+        public CompatibilityRepositoryScope(string? repositoryName, Action? dispose = null)
         {
             RepositoryName = repositoryName;
             _dispose = dispose;

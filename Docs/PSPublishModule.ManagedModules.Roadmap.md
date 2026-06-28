@@ -235,6 +235,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Implement module folder validation in C#.
 - [x] Implement module package creation in C#.
 - [x] Implement nuspec generation or preservation.
+- [x] Emit PowerShell module package metadata that legacy and current package providers can discover from local feeds.
 - [x] Implement publish to NuGet v3-compatible feeds.
 - [x] Implement PSGallery publish.
 - [x] Implement private-feed publish with API key.
@@ -365,6 +366,9 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: `Measure-ManagedModule -RequireCompatibilityRetirementReady` now fails closed unless the compatibility-retirement summary proves all required operations and providers are ready.
 - [x] 2026-06-28: `Measure-ManagedModule -Operation` now accepts multiple lifecycle operations in one invocation, so install/save/update/publish evidence can feed one transition and compatibility-retirement result.
 - [x] 2026-06-28: `Install-PrivateModule -Repository <Name>` and `Update-PrivateModule -Repository <Name>` now resolve registered PSResourceGet/PowerShellGet repository sources before `Auto` transport falls back to compatibility delivery, so supported registered sources can use managed delivery without a profile.
+- [x] 2026-06-28: Managed package creation now includes PowerShell module package metadata (`PSModule` tags, core properties, package relationships, owners, license-acceptance metadata, and legacy nuspec namespace) so local feeds published by the managed engine are discoverable by legacy and current package providers.
+- [x] 2026-06-28: PowerShell 7.6.3 imported the local `net10.0` build and ran one `Measure-ManagedModule -Operation Install,Save,Update,Publish -Engine Managed,PSResourceGet,PowerShellGet -EnableNativeInstallUpdateBenchmark -RequireCompatibilityRetirementReady` local-feed proof. All install/save/update/publish transition gates were `Ready`, compatibility retirement was `Ready`, and 12 runs completed against `C:\Users\przemyslaw.klys.EVOTEC\AppData\Local\Temp\pf-retire-24530243606d41e3aa4a25537a4e40a8`.
+- [x] 2026-06-28: Windows PowerShell 5.1.26100.8655 imported the local `net472` build and ran the same all-operation local-feed proof. All install/save/update/publish transition gates were `Ready`, compatibility retirement was `Ready`, and 12 runs completed against `C:\Users\przemyslaw.klys.EVOTEC\AppData\Local\Temp\pf-retire-winps-7e4838164a6f4b479500c9a26e0469af`.
 
 ## Benchmark Scenarios
 

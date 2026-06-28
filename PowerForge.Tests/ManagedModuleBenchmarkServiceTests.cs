@@ -807,6 +807,55 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Contains("CompanyRepository", requests[0].Arguments);
     }
 
+    [Fact]
+    public async Task RunAsync_RegistersLocalRepositoryForCompatibilitySaveScenario()
+    {
+        using var feed = new TemporaryDirectory();
+        using var saveRoot = new TemporaryDirectory();
+        var requests = new List<PowerShellRunRequest>();
+        var scripts = new List<string>();
+        var runner = new StubPowerShellRunner(request =>
+        {
+            requests.Add(request);
+            var script = File.ReadAllText(request.ScriptPath!);
+            scripts.Add(script);
+            if (script.Contains("Save-PSResource", StringComparison.Ordinal))
+            {
+                var output = "PFPSRG::SAVE::ITEM::" + Encode("Company.Tools") + "::" + Encode("1.0.0");
+                return new PowerShellRunResult(0, output, string.Empty, "pwsh");
+            }
+
+            return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
+        });
+        var service = new ManagedModuleBenchmarkService(new NullLogger(), compatibilityPowerShellRunner: runner);
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            ContinueOnError = true,
+            Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "compat-save-local",
+                    Operation = ManagedModuleBenchmarkOperation.Save,
+                    Repository = new ManagedModuleRepository("Local", feed.Path),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    ModuleRoot = saveRoot.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal("Saved", run.Status);
+        Assert.Equal(3, requests.Count);
+        Assert.Contains(scripts, script => script.Contains("Register-PSResourceRepository", StringComparison.Ordinal));
+        Assert.Contains(scripts, script => script.Contains("Save-PSResource", StringComparison.Ordinal));
+        Assert.Contains(scripts, script => script.Contains("Unregister-PSResourceRepository", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(ManagedModuleBenchmarkEngine.PSResourceGet, "Publish-PSResource")]
     [InlineData(ManagedModuleBenchmarkEngine.PowerShellGet, "Publish-Module")]

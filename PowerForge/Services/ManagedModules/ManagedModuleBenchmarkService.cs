@@ -300,7 +300,8 @@ public sealed partial class ManagedModuleBenchmarkService
             throw new InvalidOperationException("PowerShellGet Save-Module compatibility benchmarks do not support MaximumVersion. Use PSResourceGet or the managed engine for range measurements.");
         }
 
-        var repositoryName = ResolveCompatibilityRepositoryName(scenario);
+        using var repositoryScope = CreateCompatibilityRepositoryScope(scenario, engine);
+        var repositoryName = repositoryScope.RepositoryName;
         var destinationPath = NormalizeOptional(scenario.ModuleRoot) ?? throw new InvalidOperationException("Save benchmark scenarios require ModuleRoot.");
         var items = engine == ManagedModuleBenchmarkEngine.PSResourceGet
             ? new PSResourceGetClient(_compatibilityPowerShellRunner, _logger).Save(
