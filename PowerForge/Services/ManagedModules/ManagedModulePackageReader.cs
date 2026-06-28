@@ -80,7 +80,7 @@ public sealed class ManagedModulePackageReader
             FileCount = CountFiles(archive),
             PackageBytes = info.Length,
             UncompressedBytes = CountUncompressedBytes(archive),
-            Dependencies = MergeDependencies(nuspecDependencies, manifest.Dependencies),
+            Dependencies = SelectInstallableDependencies(nuspecDependencies, manifest.Dependencies, manifest.ExternalModuleDependencies),
             ModuleManifestPath = manifest.Path,
             ModuleManifestVersion = manifest.Version,
             ModuleManifestPrerelease = manifest.Prerelease,
@@ -275,6 +275,24 @@ public sealed class ManagedModulePackageReader
         return null;
     }
 
+    private static IReadOnlyList<ManagedModuleDependencyInfo> SelectInstallableDependencies(
+        IReadOnlyList<ManagedModuleDependencyInfo> nuspecDependencies,
+        IReadOnlyList<ManagedModuleDependencyInfo> manifestDependencies,
+        IReadOnlyList<string> manifestExternalModuleDependencies)
+    {
+        var externalDependencies = manifestExternalModuleDependencies.Count == 0
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : manifestExternalModuleDependencies
+                .Where(static dependency => !string.IsNullOrWhiteSpace(dependency))
+                .Select(static dependency => dependency.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var filteredNuspecDependencies = FilterExternalDependencies(nuspecDependencies, externalDependencies).ToArray();
+        var filteredManifestDependencies = FilterExternalDependencies(manifestDependencies, externalDependencies).ToArray();
+
+        return MergeDependencies(filteredNuspecDependencies, filteredManifestDependencies);
+    }
+
     private static IReadOnlyList<ManagedModuleDependencyInfo> MergeDependencies(
         IReadOnlyList<ManagedModuleDependencyInfo> nuspecDependencies,
         IReadOnlyList<ManagedModuleDependencyInfo> manifestDependencies)
@@ -292,6 +310,18 @@ public sealed class ManagedModulePackageReader
             .ThenBy(static dependency => dependency.TargetFramework, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IEnumerable<ManagedModuleDependencyInfo> FilterExternalDependencies(
+        IReadOnlyList<ManagedModuleDependencyInfo> dependencies,
+        ISet<string> externalDependencies)
+    {
+        if (dependencies.Count == 0)
+            return Array.Empty<ManagedModuleDependencyInfo>();
+        if (externalDependencies.Count == 0)
+            return dependencies;
+
+        return dependencies.Where(dependency => !externalDependencies.Contains(dependency.Id));
     }
 
     private static void AddDependency(List<ManagedModuleDependencyInfo> dependencies, XElement dependency, string? targetFramework)

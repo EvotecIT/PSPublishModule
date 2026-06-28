@@ -94,6 +94,46 @@ public sealed class ManagedModulePackageReaderTests
     }
 
     [Fact]
+    public void ReadMetadata_excludes_manifest_external_modules_from_installable_dependencies()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[]
+            {
+                new TestDependency("External.Dependency", "[2.0.0]", null),
+                new TestDependency("Company.Core", "[3.0.0]", null)
+            },
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.0.0'
+                        RequiredModules = @(
+                            @{ ModuleName = 'External.Dependency'; RequiredVersion = '2.0.0' },
+                            @{ ModuleName = 'Company.Core'; RequiredVersion = '3.0.0' }
+                        )
+                        PrivateData = @{
+                            PSData = @{
+                                ExternalModuleDependencies = @('external.dependency')
+                            }
+                        }
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Contains("External.Dependency", metadata.ManifestDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("external.dependency", metadata.ManifestExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(metadata.Dependencies, dependency => string.Equals(dependency.Id, "Company.Core", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(metadata.Dependencies, dependency => string.Equals(dependency.Id, "External.Dependency", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void ReadMetadata_rejects_manifest_name_that_disagrees_with_nuspec_id()
     {
         using var temp = new TemporaryDirectory();
