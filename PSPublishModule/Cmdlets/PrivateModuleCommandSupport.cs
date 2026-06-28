@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -57,6 +58,12 @@ internal static class PrivateModuleCommandSupport
         if (Path.IsPathRooted(trimmed) || trimmed.StartsWith(".", StringComparison.Ordinal))
         {
             source = providerPath ?? trimmed;
+            return true;
+        }
+
+        if (new PowerShellRepositorySourceResolver().TryResolveSource(cmdlet, trimmed, out var registeredSource))
+        {
+            source = registeredSource;
             return true;
         }
 

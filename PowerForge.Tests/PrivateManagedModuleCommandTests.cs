@@ -65,6 +65,34 @@ public sealed class PrivateManagedModuleCommandTests
     }
 
     [Fact]
+    public void InstallPrivateModule_defaults_to_managed_transport_from_registered_repository_source()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        RegisterPSResourceRepositoryFunction(ps, "Company", feed.Path);
+        ps.AddCommand("Install-PrivateModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", "Company")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
+        Assert.Equal("ManagedModule", result.Installer);
+        Assert.Equal("1.0.0", result.ResolvedVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public void UpdatePrivateModule_can_use_managed_transport_against_local_feed()
     {
         using var feed = new TemporaryDirectory();
@@ -248,6 +276,29 @@ public sealed class PrivateManagedModuleCommandTests
         ps.Commands.Clear();
         return ps;
     }
+
+    private static void RegisterPSResourceRepositoryFunction(PowerShell ps, string repositoryName, string source)
+    {
+        ps.AddScript($@"
+$script:PFTestRepositoryName = '{EscapePowerShellSingleQuoted(repositoryName)}'
+$script:PFTestRepositorySource = '{EscapePowerShellSingleQuoted(source)}'
+function global:Get-PSResourceRepository {{
+    param([string] $Name)
+    if ($Name -eq $script:PFTestRepositoryName) {{
+        [pscustomobject]@{{
+            Name = $script:PFTestRepositoryName
+            Uri = $script:PFTestRepositorySource
+        }}
+    }}
+}}
+");
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+    }
+
+    private static string EscapePowerShellSingleQuoted(string value)
+        => value.Replace("'", "''", StringComparison.Ordinal);
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {

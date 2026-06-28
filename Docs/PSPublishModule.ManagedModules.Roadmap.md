@@ -364,6 +364,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Benchmark results now include a typed compatibility-retirement summary that combines transition gates and provider support before compatibility transport can be marked legacy.
 - [x] 2026-06-28: `Measure-ManagedModule -RequireCompatibilityRetirementReady` now fails closed unless the compatibility-retirement summary proves all required operations and providers are ready.
 - [x] 2026-06-28: `Measure-ManagedModule -Operation` now accepts multiple lifecycle operations in one invocation, so install/save/update/publish evidence can feed one transition and compatibility-retirement result.
+- [x] 2026-06-28: `Install-PrivateModule -Repository <Name>` and `Update-PrivateModule -Repository <Name>` now resolve registered PSResourceGet/PowerShellGet repository sources before `Auto` transport falls back to compatibility delivery, so supported registered sources can use managed delivery without a profile.
 
 ## Benchmark Scenarios
 
@@ -390,6 +391,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] Add opt-in `Update-PrivateModule -Transport ManagedModule` routing.
 - [x] Make `Install-PrivateModule` prefer managed transport by default when a repository source URI/path is available, while preserving compatibility transport for bare registered repository names.
 - [x] Make `Update-PrivateModule` prefer managed transport by default when a repository source URI/path is available, while preserving compatibility transport for bare registered repository names.
+- [x] Resolve registered repository source locations before falling back for bare repository names.
 - [x] Route required-module mirroring through the managed engine after save/publish parity is proven.
 - [ ] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
 - [x] Remove embedded PowerShell scripts from the managed path.
