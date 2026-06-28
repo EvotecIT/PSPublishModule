@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -17,9 +18,10 @@ public sealed partial class ManagedModuleRepositoryClient
     private readonly HttpClient _httpClient;
     private readonly ManagedModulePackageReader _packageReader;
     private readonly ManagedModuleRepositoryClientOptions _options;
-    private readonly Dictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _packagePublishAddressCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _packagePublishAddressCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _packageDownloadLocks = new(StringComparer.OrdinalIgnoreCase);
     private long _requestCount;
 
     /// <summary>
@@ -166,17 +168,27 @@ public sealed partial class ManagedModuleRepositoryClient
             throw new ArgumentException("Destination directory is required.", nameof(destinationDirectory));
 
         Directory.CreateDirectory(destinationDirectory);
-        var cached = TryUseCachedPackage(repository, packageId, version, destinationDirectory);
-        if (cached is not null)
-            return cached;
-
-        return repository.Kind switch
+        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
+        var packageLock = _packageDownloadLocks.GetOrAdd(destinationPath, static _ => new SemaphoreSlim(1, 1));
+        await packageLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            ManagedModuleRepositoryKind.LocalFolder => await CopyLocalPackageAsync(repository, packageId, version, destinationDirectory, cancellationToken).ConfigureAwait(false),
-            ManagedModuleRepositoryKind.NuGetV3 => await DownloadNuGetPackageWithPowerShellGalleryReadApiAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
-            ManagedModuleRepositoryKind.NuGetV2 => await DownloadNuGetV2PackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
-            _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
-        };
+            var cached = TryUseCachedPackage(repository, packageId, version, destinationDirectory);
+            if (cached is not null)
+                return cached;
+
+            return repository.Kind switch
+            {
+                ManagedModuleRepositoryKind.LocalFolder => await CopyLocalPackageAsync(repository, packageId, version, destinationDirectory, cancellationToken).ConfigureAwait(false),
+                ManagedModuleRepositoryKind.NuGetV3 => await DownloadNuGetPackageWithPowerShellGalleryReadApiAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
+                ManagedModuleRepositoryKind.NuGetV2 => await DownloadNuGetV2PackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
+                _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
+            };
+        }
+        finally
+        {
+            packageLock.Release();
+        }
     }
 
     /// <summary>

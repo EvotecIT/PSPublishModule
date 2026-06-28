@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ManagedModuleInstallService
 {
+    private const int MaxDependencyInstallConcurrency = 8;
+
     private readonly ILogger _logger;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
     private readonly ManagedModuleArchiveExtractor _extractor;
@@ -95,37 +97,27 @@ public sealed class ManagedModuleInstallService
 
         var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
         var cacheDirectory = ownsCache
-            ? Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules", Guid.NewGuid().ToString("N"))
+            ? Path.Combine(Path.GetTempPath(), "PFMM.C", NewShortId())
             : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
-        var stageRoot = Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules.Stage", Guid.NewGuid().ToString("N"));
+        var stageRoot = Path.Combine(Path.GetTempPath(), "PFMM.S", NewShortId());
         var stageModulePath = Path.Combine(stageRoot, request.Name.Trim(), version);
 
         try
         {
-            using var installLock = ManagedModuleInstallLock.Acquire(moduleRoot, request.Name, cancellationToken);
-            if (Directory.Exists(modulePath) && !request.Force)
+            using (ManagedModuleInstallLock.Acquire(moduleRoot, request.Name, cancellationToken))
             {
-                _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
-                return new ManagedModuleInstallResult
+                if (Directory.Exists(modulePath) && !request.Force)
                 {
-                    Name = request.Name.Trim(),
-                    Version = version,
-                    Status = ManagedModuleInstallStatus.AlreadyInstalled,
-                    RepositoryName = request.Repository.Name,
-                    RepositorySource = request.Repository.Source,
-                    RequestedVersion = request.Version,
-                    MinimumVersion = request.MinimumVersion,
-                    MaximumVersion = request.MaximumVersion,
-                    VersionPolicy = request.VersionPolicy,
-                    ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
-                    RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
-                    AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
-                    ModuleRoot = moduleRoot,
-                    ModulePath = modulePath,
-                    Elapsed = stopwatch.Elapsed,
-                    VersionResolutionElapsed = versionResolutionStopwatch.Elapsed,
-                    RepositoryRequestCount = _repositoryClient.RequestCount - requestCountBefore
-                };
+                    _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
+                    return CreateAlreadyInstalledResult(
+                        request,
+                        version,
+                        moduleRoot,
+                        modulePath,
+                        stopwatch.Elapsed,
+                        versionResolutionStopwatch.Elapsed,
+                        _repositoryClient.RequestCount - requestCountBefore);
+                }
             }
 
             var downloadStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -153,7 +145,24 @@ public sealed class ManagedModuleInstallService
                 ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
 
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            PromoteStagedModule(stageModulePath, modulePath);
+            using (ManagedModuleInstallLock.Acquire(moduleRoot, request.Name, cancellationToken))
+            {
+                if (Directory.Exists(modulePath) && !request.Force)
+                {
+                    _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
+                    return CreateAlreadyInstalledResult(
+                        request,
+                        version,
+                        moduleRoot,
+                        modulePath,
+                        stopwatch.Elapsed,
+                        versionResolutionStopwatch.Elapsed,
+                        _repositoryClient.RequestCount - requestCountBefore);
+                }
+
+                PromoteStagedModule(stageModulePath, modulePath);
+            }
+
             CleanupEmptyStage(stageRoot);
             promotionStopwatch.Stop();
 
@@ -233,6 +242,35 @@ public sealed class ManagedModuleInstallService
         return latest.Version;
     }
 
+    private static ManagedModuleInstallResult CreateAlreadyInstalledResult(
+        ManagedModuleInstallRequest request,
+        string version,
+        string moduleRoot,
+        string modulePath,
+        TimeSpan elapsed,
+        TimeSpan versionResolutionElapsed,
+        long repositoryRequestCount)
+        => new()
+        {
+            Name = request.Name.Trim(),
+            Version = version,
+            Status = ManagedModuleInstallStatus.AlreadyInstalled,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            RequestedVersion = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy,
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
+            AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
+            ModuleRoot = moduleRoot,
+            ModulePath = modulePath,
+            Elapsed = elapsed,
+            VersionResolutionElapsed = versionResolutionElapsed,
+            RepositoryRequestCount = repositoryRequestCount
+        };
+
     private async Task<IReadOnlyList<ManagedModuleInstallResult>> InstallDependenciesAsync(
         ManagedModuleInstallRequest request,
         ManagedModulePackageMetadata? metadata,
@@ -244,8 +282,51 @@ public sealed class ManagedModuleInstallService
         if (dependencies.Length == 0)
             return Array.Empty<ManagedModuleInstallResult>();
 
-        var results = new List<ManagedModuleInstallResult>();
-        foreach (var dependency in dependencies)
+        var concurrency = Math.Min(dependencies.Length, MaxDependencyInstallConcurrency);
+        using var gate = new SemaphoreSlim(concurrency, concurrency);
+        var results = new ManagedModuleInstallResult[dependencies.Length];
+        var tasks = dependencies
+            .Select((dependency, index) => InstallDependencyAsync(
+                request,
+                dependency,
+                index,
+                cacheDirectory,
+                context.CreateBranch(),
+                gate,
+                results,
+                cancellationToken))
+            .ToArray();
+
+        try
+        {
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
+        catch
+        {
+            foreach (var task in tasks)
+            {
+                if (task.Exception is not null)
+                    throw task.Exception.GetBaseException();
+            }
+
+            throw;
+        }
+
+        return results;
+    }
+
+    private async Task InstallDependencyAsync(
+        ManagedModuleInstallRequest request,
+        ManagedModuleDependencyInfo dependency,
+        int index,
+        string cacheDirectory,
+        ManagedModuleInstallContext context,
+        SemaphoreSlim gate,
+        ManagedModuleInstallResult[] results,
+        CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
             var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
             var dependencyVersion = await ResolveDependencyVersionAsync(
@@ -277,10 +358,12 @@ public sealed class ManagedModuleInstallService
                 context,
                 cancellationToken).ConfigureAwait(false);
 
-            results.Add(result);
+            results[index] = result;
         }
-
-        return results;
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private async Task<string> ResolveDependencyVersionAsync(
@@ -412,7 +495,7 @@ public sealed class ManagedModuleInstallService
         {
             if (Directory.Exists(modulePath))
             {
-                backupPath = Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules.Backup", Guid.NewGuid().ToString("N"));
+                backupPath = Path.Combine(Path.GetTempPath(), "PFMM.B", NewShortId());
                 Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
                 Directory.Move(modulePath, backupPath);
             }
@@ -438,4 +521,7 @@ public sealed class ManagedModuleInstallService
 
         Directory.Move(backupPath, modulePath);
     }
+
+    private static string NewShortId()
+        => Guid.NewGuid().ToString("N").Substring(0, 16);
 }

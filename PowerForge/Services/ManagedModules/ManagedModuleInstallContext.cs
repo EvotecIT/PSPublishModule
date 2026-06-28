@@ -2,7 +2,20 @@ namespace PowerForge;
 
 internal sealed class ManagedModuleInstallContext
 {
-    private readonly HashSet<string> _active = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _active;
+
+    public ManagedModuleInstallContext()
+        : this(new HashSet<string>(StringComparer.OrdinalIgnoreCase))
+    {
+    }
+
+    private ManagedModuleInstallContext(HashSet<string> active)
+    {
+        _active = active;
+    }
+
+    public ManagedModuleInstallContext CreateBranch()
+        => new(new HashSet<string>(_active, StringComparer.OrdinalIgnoreCase));
 
     public IDisposable Enter(string moduleName)
     {

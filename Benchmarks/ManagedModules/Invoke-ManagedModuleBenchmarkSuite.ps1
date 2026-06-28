@@ -194,8 +194,6 @@ function Invoke-ScenarioHostRun {
         $compareScript,
         '-ModuleName',
         $Scenario.ModuleName,
-        '-Version',
-        $Scenario.Version,
         '-Operation',
         ((Get-ScenarioOperations -Scenario $Scenario) -join ','),
         '-Engine',
@@ -209,6 +207,9 @@ function Invoke-ScenarioHostRun {
         '-SkipBuild'
     )
 
+    if (-not [string]::IsNullOrWhiteSpace($Scenario.Version)) {
+        $arguments += @('-Version', $Scenario.Version)
+    }
     if ($Scenario.AcceptLicense) {
         $arguments += '-AcceptLicense'
     }
