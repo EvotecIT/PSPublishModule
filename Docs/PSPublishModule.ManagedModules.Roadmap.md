@@ -300,7 +300,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Support named scenario selection for targeted heavy-suite reruns.
 - [x] Run native install comparisons only inside disposable child hosts with benchmark-owned profile, module, cache, and temp roots.
 - [x] Add an explicit disposable-host lane for native `Install-Module` and `Install-PSResource`.
-- [ ] Add an explicit disposable-host update lane for native `Update-Module` and `Update-PSResource`.
+- [x] Add an explicit disposable-host update lane for native `Update-Module` and `Update-PSResource`.
 - [x] Add `-AcceptLicense` support to the benchmark harness and pass it only when explicitly requested.
 - [ ] Add warm-cache and cold-cache modes.
 - [ ] Add publish comparisons against local folder feeds.
@@ -329,6 +329,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: Managed package download/copy streams now use a larger async sequential buffer. PowerShell 7 reran full `Az` 16.0.0 managed install in 98.84 seconds; summed package download time dropped to 65.96 seconds over the same 204 packages and 137.5 MB of downloaded package bytes. PowerShell 7 reran full `Microsoft.Graph` 2.38.0 managed install in 40.03 seconds with 78 packages, 37.22 seconds summed download time, and about 186.5 MB of downloaded package bytes.
 - [x] 2026-06-28: Managed dependency installs now use bounded parallel delivery for independent direct dependencies while preserving per-branch cycle detection, per-module final promotion locks, and coordinated package-cache writes. PowerShell 7 reran full `Microsoft.Graph` 2.38.0 managed install in 13.26 seconds with 78 packages, 77 dependencies, 81 repository requests, and 186.5 MB of downloaded package bytes. PowerShell 7 reran full `Az` 16.0.0 managed install in 17.86 seconds with 204 packages, 203 dependencies, 411 repository requests, and 137.5 MB of downloaded package bytes. Summed package download/extraction time is now expected to exceed wall-clock time because dependency packages are delivered concurrently.
 - [x] 2026-06-28: Windows PowerShell 5.1 reran full latest-version managed install after shortening disposable benchmark roots and managed temp stage paths to avoid classic Windows path-length noise. `Microsoft.Graph` 2.38.0 installed in 15.63 seconds with 78 packages and 77 dependencies. `Az` 16.0.0 installed in 49.50 seconds with 204 packages and 203 dependencies. The corrected suite omits empty `-Version` arguments and the comparison runner now treats omitted version as latest, so PS5 and PS7 heavy-suite evidence measures the same current package versions.
+- [x] 2026-06-28: The benchmark harness now has an explicit update lane that installs `-UpdateBaselineVersion` outside the timed window and then times only the update operation in the same disposable host root. PowerShell 7 updated `ThreadJob` from 2.0.3 to 2.1.0 in 2855 ms with managed, 4479 ms with PSResourceGet, and 11238 ms with PowerShellGet; ModuleFast is an explicit skip because it does not expose update. Windows PowerShell 5.1 updated the same stale module in 4457 ms with managed and 7329 ms with PSResourceGet, while PowerShellGet failed inside its metadata conversion path and left 2.0.3 installed.
 
 ### Next Optimization Targets
 

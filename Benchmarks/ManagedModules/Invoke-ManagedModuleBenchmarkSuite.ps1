@@ -11,6 +11,8 @@ param(
 
     [string[]] $Operation = @('Find', 'Save'),
 
+    [string] $UpdateBaselineVersion = '',
+
     [int] $RepeatCount = 1,
 
     [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\Suites'),
@@ -72,6 +74,7 @@ function New-BenchmarkScenario {
         [string] $Name,
         [string] $ModuleName,
         [string] $Version = '',
+        [string] $UpdateBaselineVersion = '',
         [bool] $AcceptLicense = $false,
         [string[]] $Operations = $Operation
     )
@@ -81,6 +84,7 @@ function New-BenchmarkScenario {
         Name = $Name
         ModuleName = $ModuleName
         Version = $Version
+        UpdateBaselineVersion = $UpdateBaselineVersion
         AcceptLicense = $AcceptLicense
         Operations = $Operations
     }
@@ -88,7 +92,7 @@ function New-BenchmarkScenario {
 
 function Get-ScenarioCatalog {
     @(
-        New-BenchmarkScenario -SuiteName 'Smoke' -Name 'ThreadJob' -ModuleName 'ThreadJob' -Version '2.1.0'
+        New-BenchmarkScenario -SuiteName 'Smoke' -Name 'ThreadJob' -ModuleName 'ThreadJob' -Version '2.1.0' -UpdateBaselineVersion '2.0.3'
         New-BenchmarkScenario -SuiteName 'Graph' -Name 'Graph.Authentication' -ModuleName 'Microsoft.Graph.Authentication' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Graph' -Name 'Graph.Full' -ModuleName 'Microsoft.Graph' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Graph' -Name 'Graph.Beta.Full' -ModuleName 'Microsoft.Graph.Beta' -AcceptLicense $true
@@ -214,6 +218,14 @@ function Invoke-ScenarioHostRun {
     if (-not [string]::IsNullOrWhiteSpace($Scenario.Version)) {
         $arguments += @('-Version', $Scenario.Version)
     }
+    $baselineVersion = if (-not [string]::IsNullOrWhiteSpace($UpdateBaselineVersion)) {
+        $UpdateBaselineVersion
+    } else {
+        [string] $Scenario.UpdateBaselineVersion
+    }
+    if (-not [string]::IsNullOrWhiteSpace($baselineVersion)) {
+        $arguments += @('-UpdateBaselineVersion', $baselineVersion)
+    }
     if ($Scenario.AcceptLicense) {
         $arguments += '-AcceptLicense'
     }
@@ -258,6 +270,7 @@ function Add-SummaryRows {
                 Suite = $Scenario.Suite
                 Scenario = $Scenario.Name
                 ModuleName = $Scenario.ModuleName
+                UpdateBaselineVersion = $Scenario.UpdateBaselineVersion
                 Host = $HostLabel
                 Operation = $row.Operation
                 FastestEngine = $row.FastestEngine
@@ -275,7 +288,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, ModuleName, Version, AcceptLicense, Operations
+    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations
     return
 }
 
@@ -326,6 +339,7 @@ $metadata = [ordered]@{
     Engines = $Engine
     ModuleFastSource = $ModuleFastSource
     Operations = $Operation
+    UpdateBaselineVersion = $UpdateBaselineVersion
     RepeatCount = $RepeatCount
     IncludeInstall = $IncludeInstall.IsPresent
     RotateEngineOrder = $RotateEngineOrder.IsPresent
