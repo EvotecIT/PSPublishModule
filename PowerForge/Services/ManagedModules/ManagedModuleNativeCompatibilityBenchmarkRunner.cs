@@ -189,8 +189,9 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
     private static Dictionary<string, string?> BuildPSResourceGetEnvironment(string sandboxRoot)
     {
         var fakeHome = Path.Combine(sandboxRoot, "home");
+        var tempRoot = Path.Combine(sandboxRoot, "temp");
         var moduleRoot = ResolveCoreCurrentUserModuleRoot(fakeHome);
-        CreateProfileDirectories(fakeHome, moduleRoot);
+        CreateProfileDirectories(fakeHome, moduleRoot, tempRoot);
 
         return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
@@ -198,15 +199,18 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
             ["HOME"] = fakeHome,
             ["USERPROFILE"] = fakeHome,
             ["APPDATA"] = Path.Combine(fakeHome, "AppData", "Roaming"),
-            ["LOCALAPPDATA"] = Path.Combine(fakeHome, "AppData", "Local")
+            ["LOCALAPPDATA"] = Path.Combine(fakeHome, "AppData", "Local"),
+            ["TEMP"] = tempRoot,
+            ["TMP"] = tempRoot
         };
     }
 
     private static Dictionary<string, string?> BuildWindowsPowerShellEnvironment(string sandboxRoot)
     {
         var fakeHome = Path.Combine(sandboxRoot, "home");
+        var tempRoot = Path.Combine(sandboxRoot, "temp");
         var moduleRoot = Path.Combine(fakeHome, "Documents", "WindowsPowerShell", "Modules");
-        CreateProfileDirectories(fakeHome, moduleRoot);
+        CreateProfileDirectories(fakeHome, moduleRoot, tempRoot);
 
         var paths = new List<string> { moduleRoot };
         AddIfDirectory(paths, Path.Combine(GetDocumentsPath(), "WindowsPowerShell", "Modules"));
@@ -219,7 +223,9 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
             ["HOME"] = fakeHome,
             ["USERPROFILE"] = fakeHome,
             ["APPDATA"] = Path.Combine(fakeHome, "AppData", "Roaming"),
-            ["LOCALAPPDATA"] = Path.Combine(fakeHome, "AppData", "Local")
+            ["LOCALAPPDATA"] = Path.Combine(fakeHome, "AppData", "Local"),
+            ["TEMP"] = tempRoot,
+            ["TMP"] = tempRoot
         };
     }
 
@@ -377,9 +383,10 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
         return string.IsNullOrWhiteSpace(stderr) ? (stdout ?? string.Empty).Trim() : stderr.Trim();
     }
 
-    private static void CreateProfileDirectories(string fakeHome, string moduleRoot)
+    private static void CreateProfileDirectories(string fakeHome, string moduleRoot, string tempRoot)
     {
         Directory.CreateDirectory(moduleRoot);
+        Directory.CreateDirectory(tempRoot);
         Directory.CreateDirectory(Path.Combine(fakeHome, "AppData", "Roaming"));
         Directory.CreateDirectory(Path.Combine(fakeHome, "AppData", "Local"));
         Directory.CreateDirectory(Path.Combine(fakeHome, "Documents", "PowerShell", "Modules"));

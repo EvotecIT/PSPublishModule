@@ -38,6 +38,8 @@ public sealed class ManagedModuleNativeCompatibilityBenchmarkRunnerTests
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
         Assert.Equal(moduleRoot.Path, requests[0].WorkingDirectory);
         Assert.Contains("PSGallery", requests[0].Arguments);
+        Assert.Equal(Path.Combine(moduleRoot.Path, "temp"), requests[0].EnvironmentVariables!["TEMP"]);
+        Assert.Equal(Path.Combine(moduleRoot.Path, "temp"), requests[0].EnvironmentVariables!["TMP"]);
         Assert.Contains(scripts, script => script.Contains("SecurityProtocol", StringComparison.Ordinal) && script.Contains("Tls12", StringComparison.Ordinal));
         if (Path.DirectorySeparatorChar == '\\')
         {
