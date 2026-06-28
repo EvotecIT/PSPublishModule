@@ -38,6 +38,8 @@ param(
 
     [double] $ManagedMaxVsFastest = 0,
 
+    [switch] $UseScenarioGates,
+
     [switch] $ListScenarios,
 
     [switch] $RemoveOutputRoots
@@ -95,7 +97,9 @@ function New-BenchmarkScenario {
         [string[]] $Engines = $Engine,
         [string] $Repository = '',
         [string] $RepositoryName = '',
-        [string] $ScenarioModuleFastSource = ''
+        [string] $ScenarioModuleFastSource = '',
+        [int] $ScenarioManagedMaxRank = 0,
+        [double] $ScenarioManagedMaxVsFastest = 0
     )
 
     [pscustomobject]@{
@@ -110,6 +114,8 @@ function New-BenchmarkScenario {
         Repository = $Repository
         RepositoryName = $RepositoryName
         ModuleFastSource = $ScenarioModuleFastSource
+        ManagedMaxRank = $ScenarioManagedMaxRank
+        ManagedMaxVsFastest = $ScenarioManagedMaxVsFastest
     }
 }
 
@@ -124,10 +130,10 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Full' -ModuleName 'Az' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'Teams' -ModuleName 'MicrosoftTeams'
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'ExchangeOnlineManagement' -ModuleName 'ExchangeOnlineManagement'
-        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'ThreadJob.InstallSave.NoOpForce' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce')
+        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'ThreadJob.InstallSave.NoOpForce' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce') -ScenarioManagedMaxVsFastest 1.25
         New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json'
-        New-BenchmarkScenario -SuiteName 'SaveGate' -Name 'Graph.Authentication.Save' -ModuleName 'Microsoft.Graph.Authentication' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet')
+        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'SaveGate' -Name 'Graph.Authentication.Save' -ModuleName 'Microsoft.Graph.Authentication' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxVsFastest 1.05
     )
 }
 
@@ -246,6 +252,26 @@ function Get-ScenarioModuleFastSource {
     }
 
     $ModuleFastSource
+}
+
+function Get-ScenarioManagedMaxRank {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['ManagedMaxRank']) {
+        return [int] $Scenario.ManagedMaxRank
+    }
+
+    0
+}
+
+function Get-ScenarioManagedMaxVsFastest {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['ManagedMaxVsFastest']) {
+        return [double] $Scenario.ManagedMaxVsFastest
+    }
+
+    0.0
 }
 
 function Get-HostOutputLabel {
@@ -397,6 +423,8 @@ function Add-SummaryRows {
                 Repository = Get-ScenarioRepository -Scenario $Scenario
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $Scenario
                 ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $Scenario
+                GateManagedMaxRank = Get-ScenarioManagedMaxRank -Scenario $Scenario
+                GateManagedMaxVsFastest = Get-ScenarioManagedMaxVsFastest -Scenario $Scenario
                 UpdateBaselineVersion = $resolvedBaseline
                 UpdateTargetVersion = $resolvedTarget
                 Host = $HostLabel
@@ -434,7 +462,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, Engines, Repository, RepositoryName, ModuleFastSource
+    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, Engines, Repository, RepositoryName, ModuleFastSource, ManagedMaxRank, ManagedMaxVsFastest
     return
 }
 
@@ -474,12 +502,21 @@ $summaryJsonPath = Join-Path $suiteRoot 'suite-summary.json'
 $hostsPath = Join-Path $suiteRoot 'suite-hosts.csv'
 $gatePath = Join-Path $suiteRoot 'suite-gate.csv'
 $metadataPath = Join-Path $suiteRoot 'metadata.json'
-$gateViolations = @(Get-ManagedPerformanceGateViolation -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest)
+$gateViolations = if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
+    @(Get-ManagedPerformanceGateViolation -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest)
+} elseif ($UseScenarioGates.IsPresent) {
+    @($summaryRows | ForEach-Object {
+            Get-ManagedPerformanceGateViolation -Rows @($_) -MaxRank ([int]$_.GateManagedMaxRank) -MaxVsFastest ([double]$_.GateManagedMaxVsFastest)
+        })
+} else {
+    @()
+}
+$gateViolations = @($gateViolations)
 
 $summaryRows | Export-Csv -LiteralPath $summaryPath -NoTypeInformation
 $summaryRows | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryJsonPath -Encoding UTF8
 $hostRows | Export-Csv -LiteralPath $hostsPath -NoTypeInformation
-if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
+if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0 -or $UseScenarioGates.IsPresent) {
     $gateViolations | Export-Csv -LiteralPath $gatePath -NoTypeInformation
 }
 
@@ -499,6 +536,8 @@ $metadata = [ordered]@{
                 Repository = Get-ScenarioRepository -Scenario $_
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $_
                 ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $_
+                ManagedMaxRank = Get-ScenarioManagedMaxRank -Scenario $_
+                ManagedMaxVsFastest = Get-ScenarioManagedMaxVsFastest -Scenario $_
             }
         })
     Hosts = $HostName
@@ -514,6 +553,7 @@ $metadata = [ordered]@{
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     ManagedMaxRank = $ManagedMaxRank
     ManagedMaxVsFastest = $ManagedMaxVsFastest
+    UseScenarioGates = $UseScenarioGates.IsPresent
     ManagedPerformanceGatePassed = $gateViolations.Count -eq 0
     RemoveOutputRoots = $RemoveOutputRoots.IsPresent
     OutputDirectory = $suiteRoot
