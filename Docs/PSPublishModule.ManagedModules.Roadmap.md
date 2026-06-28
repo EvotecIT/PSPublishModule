@@ -288,9 +288,10 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [ ] Add warm-cache and cold-cache modes.
 - [ ] Add publish comparisons against local folder feeds.
 - [ ] Add import validation after install/save/update for PowerShell 5.1 and PowerShell 7+.
-- [ ] Add package/file/byte counts for saved and installed module roots.
-- [ ] Add measured Graph/Az/Teams/Exchange-heavy scenarios once the core harness is stable.
-- [ ] Add a README section explaining which comparisons are safe on a developer machine and which require disposable hosts.
+- [x] Add file and byte counts for saved and installed output roots.
+- [x] Add Graph/Az/Teams/Exchange-heavy scenario presets for suite runs.
+- [x] Add a README section explaining which comparisons are safe on a developer machine and which require disposable hosts.
+- [ ] Measure Graph/Az/Teams/Exchange-heavy scenario presets on PowerShell 5.1 and PowerShell 7+.
 
 The benchmark harness is intentionally outside the shipped module. The module owns managed module behavior; the repository benchmark scripts own measurement, comparison, and artifact layout.
 
