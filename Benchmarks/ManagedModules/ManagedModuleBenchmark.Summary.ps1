@@ -55,6 +55,8 @@ function New-Summary {
             MedianManagedPackageRepositoryRequests = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRequestCount' } else { 0 }
             MedianManagedDownloadBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDownloadBytes' } else { 0 }
             MedianManagedCacheHits = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCacheHitCount' } else { 0 }
+            MedianManagedMaintenanceActions = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceActionCount' } else { 0 }
+            MedianManagedMaintenanceFindings = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceFindingCount' } else { 0 }
         }
     }
 }
@@ -92,6 +94,8 @@ function New-Comparison {
             ManagedPackageRepositoryRequests = if ($managed.Count) { [double] $managed[0].MedianManagedPackageRepositoryRequests } else { 0 }
             ManagedDownloadBytes = if ($managed.Count) { [double] $managed[0].MedianManagedDownloadBytes } else { 0 }
             ManagedCacheHits = if ($managed.Count) { [double] $managed[0].MedianManagedCacheHits } else { 0 }
+            ManagedMaintenanceActions = if ($managed.Count) { [double] $managed[0].MedianManagedMaintenanceActions } else { 0 }
+            ManagedMaintenanceFindings = if ($managed.Count) { [double] $managed[0].MedianManagedMaintenanceFindings } else { 0 }
             ManagedRootDependencyMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyMs } else { 0 }
             ManagedDownloadMs = if ($managed.Count) { [double] $managed[0].MedianManagedDownloadMs } else { 0 }
             ManagedExtractionMs = if ($managed.Count) { [double] $managed[0].MedianManagedExtractionMs } else { 0 }

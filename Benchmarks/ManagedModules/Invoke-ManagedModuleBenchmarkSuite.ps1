@@ -319,6 +319,8 @@ function Add-SummaryRows {
                 ManagedPackageRepositoryRequests = $row.ManagedPackageRepositoryRequests
                 ManagedDownloadBytes = $row.ManagedDownloadBytes
                 ManagedCacheHits = $row.ManagedCacheHits
+                ManagedMaintenanceActions = $row.ManagedMaintenanceActions
+                ManagedMaintenanceFindings = $row.ManagedMaintenanceFindings
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs
                 ManagedDownloadMs = $row.ManagedDownloadMs
                 ManagedExtractionMs = $row.ManagedExtractionMs
