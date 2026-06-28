@@ -74,7 +74,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             File.WriteAllText(importedBuildProps, "<Project />");
             File.WriteAllText(
                 Path.Combine(root, "Directory.Build.props"),
-                "<Project><Import Project=\"$(MSBuildThisFileDirectory)Build\\Props\\Generated.props\" /></Project>");
+                "<Project><Import Project=\"$(MSBuildThisFileDirectory)Build\\**\\*.props\" /></Project>");
             File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project />");
             var sourceDir = Path.Combine(
                 root,
@@ -88,12 +88,21 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "PortableCompat",
                 "prepare",
                 "generated");
+            var nestedConfigPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Directory.Build.targets");
+            Directory.CreateDirectory(Path.GetDirectoryName(nestedConfigPath)!);
+            File.WriteAllText(nestedConfigPath, "<Project />");
             Directory.CreateDirectory(Path.Combine(sourceDir, "Fragments"));
             var sourceProjectPath = Path.Combine(sourceDir, "DesktopManager_App_MSI.wixproj");
             var stagingDir = Path.Combine(root, "Payload", "DesktopManager.App", "win-x64", "net10.0-windows10.0.19041.0", "PortableCompat");
             Directory.CreateDirectory(stagingDir);
             var payloadFile = Path.Combine(stagingDir, "DesktopManager.App.exe");
             File.WriteAllText(payloadFile, "payload");
+            var firstExternalAsset = Path.Combine(root, "External", "One", "duplicate.txt");
+            var secondExternalAsset = Path.Combine(root, "External", "Two", "duplicate.txt");
+            Directory.CreateDirectory(Path.GetDirectoryName(firstExternalAsset)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(secondExternalAsset)!);
+            File.WriteAllText(firstExternalAsset, "one");
+            File.WriteAllText(secondExternalAsset, "two");
             var licensePath = Path.Combine(root, "Build", "Installer", "DesktopManager-License.rtf");
             Directory.CreateDirectory(Path.GetDirectoryName(licensePath)!);
             File.WriteAllText(licensePath, "{\\rtf1 DesktopManager}");
@@ -123,6 +132,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "<Package Name=\"DesktopManager\">" +
                 $"<WixVariable Id=\"WixUILicenseRtf\" Value=\"{licensePath}\" />" +
                 $"<File Id=\"LiteralPayloadExe\" Source=\"{payloadFile}\" />" +
+                $"<File Id=\"ExternalOne\" Source=\"{firstExternalAsset}\" />" +
+                $"<File Id=\"ExternalTwo\" Source=\"{secondExternalAsset}\" />" +
                 "</Package></Wix>");
             File.WriteAllText(Path.Combine(sourceDir, "Fragments", "Payload.wxs"), "<Wix />");
 
@@ -154,6 +165,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "NuGet.config")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Artifacts", "DotNetPublish", "Directory.Build.targets")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Build", "Props", "Generated.props")));
                 var copiedNuGetConfig = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "NuGet.config"));
                 var localPackageSource = copiedNuGetConfig
@@ -224,13 +236,36 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(copiedLicensePath));
                 var literalSource = product
                     .Descendants(wix + "File")
-                    .Single()
+                    .Single(element => string.Equals((string?)element.Attribute("Id"), "LiteralPayloadExe", StringComparison.OrdinalIgnoreCase))
                     .Attribute("Source")!
                     .Value;
                 Assert.DoesNotContain(stagingDir, literalSource, StringComparison.OrdinalIgnoreCase);
                 var copiedLiteralSource = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, literalSource));
                 Assert.StartsWith(workspace.PayloadDirectory!, copiedLiteralSource, StringComparison.OrdinalIgnoreCase);
                 Assert.True(File.Exists(copiedLiteralSource));
+                var externalSources = product
+                    .Descendants(wix + "File")
+                    .Where(element =>
+                    {
+                        var id = (string?)element.Attribute("Id");
+                        return string.Equals(id, "ExternalOne", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(id, "ExternalTwo", StringComparison.OrdinalIgnoreCase);
+                    })
+                    .Select(element => Path.GetFullPath(Path.Combine(
+                        workspace.WorkingDirectory,
+                        element.Attribute("Source")!.Value)))
+                    .ToArray();
+                Assert.Equal(2, externalSources.Length);
+                Assert.All(externalSources, path =>
+                {
+                    Assert.Equal("duplicate.txt", Path.GetFileName(path));
+                    Assert.True(File.Exists(path));
+                    Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), path, StringComparison.OrdinalIgnoreCase);
+                });
+                Assert.NotEqual(
+                    Path.GetDirectoryName(externalSources[0]),
+                    Path.GetDirectoryName(externalSources[1]),
+                    StringComparer.OrdinalIgnoreCase);
             }
             finally
             {

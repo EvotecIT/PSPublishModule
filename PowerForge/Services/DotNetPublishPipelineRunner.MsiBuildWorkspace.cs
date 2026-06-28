@@ -142,7 +142,7 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             DirectoryCopy(sourceDirectory, workingDirectory);
-            CopyGeneratedInstallerBuildConfiguration(workingDirectory, projectRoot);
+            CopyGeneratedInstallerBuildConfiguration(workingDirectory, projectRoot, sourcePath);
             var projectPath = Path.Combine(workingDirectory, Path.GetFileName(sourcePath));
             if (!File.Exists(projectPath))
             {
@@ -164,7 +164,10 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static void CopyGeneratedInstallerBuildConfiguration(string workingDirectory, string? projectRoot)
+    private static void CopyGeneratedInstallerBuildConfiguration(
+        string workingDirectory,
+        string? projectRoot,
+        string sourceProjectPath)
     {
         if (string.IsNullOrWhiteSpace(projectRoot) ||
             !Directory.Exists(projectRoot))
@@ -185,10 +188,13 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var copiedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var queue = new Queue<string>();
-        foreach (var file in Directory.EnumerateFiles(projectRootPath)
-            .Where(file => candidates.Contains(Path.GetFileName(file))))
+        foreach (var directory in GetGeneratedInstallerBuildConfigurationDirectories(projectRootPath, sourceProjectPath))
         {
-            CopyGeneratedInstallerBuildFile(file, projectRootPath, workingDirectory, copiedFiles, queue);
+            foreach (var file in Directory.EnumerateFiles(directory)
+                .Where(file => candidates.Contains(Path.GetFileName(file))))
+            {
+                CopyGeneratedInstallerBuildFile(file, projectRootPath, workingDirectory, copiedFiles, queue);
+            }
         }
 
         while (queue.Count > 0)
@@ -198,6 +204,30 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 CopyGeneratedInstallerBuildFile(importPath, projectRootPath, workingDirectory, copiedFiles, queue);
             }
+        }
+    }
+
+    private static IEnumerable<string> GetGeneratedInstallerBuildConfigurationDirectories(
+        string projectRoot,
+        string sourceProjectPath)
+    {
+        var projectRootDirectory = AppendDirectorySeparator(Path.GetFullPath(projectRoot));
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourceProjectPath));
+        while (!string.IsNullOrWhiteSpace(sourceDirectory))
+        {
+            var fullDirectory = Path.GetFullPath(sourceDirectory);
+            if (!AppendDirectorySeparator(fullDirectory).StartsWith(projectRootDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                yield break;
+            }
+
+            yield return fullDirectory;
+            if (string.Equals(AppendDirectorySeparator(fullDirectory), projectRootDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                yield break;
+            }
+
+            sourceDirectory = Path.GetDirectoryName(fullDirectory);
         }
     }
 
@@ -362,15 +392,25 @@ public sealed partial class DotNetPublishPipelineRunner
         var projectRoot = AppendDirectorySeparator(Path.GetFullPath(projectRootDirectory));
         if (importPath.IndexOfAny(new[] { '*', '?' }) >= 0)
         {
+            var searchOption = SearchOption.TopDirectoryOnly;
+            var recursiveIndex = importPath.IndexOf("**", StringComparison.Ordinal);
             var directory = Path.GetDirectoryName(importPath);
             var pattern = Path.GetFileName(importPath);
+            if (recursiveIndex >= 0)
+            {
+                var prefix = importPath.Substring(0, recursiveIndex).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                directory = string.IsNullOrWhiteSpace(prefix)
+                    ? sourceDirectory
+                    : prefix;
+                searchOption = SearchOption.AllDirectories;
+            }
             if (string.IsNullOrWhiteSpace(directory) ||
                 !Directory.Exists(directory))
             {
                 yield break;
             }
 
-            foreach (var file in Directory.EnumerateFiles(directory, pattern, SearchOption.TopDirectoryOnly))
+            foreach (var file in Directory.EnumerateFiles(directory, pattern, searchOption))
             {
                 var fullPath = Path.GetFullPath(file);
                 if (fullPath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
@@ -607,6 +647,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             Directory.CreateDirectory(assetsDirectory);
             copiedPath = GetUniqueAssetPath(assetsDirectory, Path.GetFileName(fullPath));
+            Directory.CreateDirectory(Path.GetDirectoryName(copiedPath)!);
             File.Copy(fullPath, copiedPath, overwrite: false);
             copiedAssets[fullPath] = copiedPath;
         }
@@ -627,10 +668,9 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var name = Path.GetFileNameWithoutExtension(safeName);
-        var extension = Path.GetExtension(safeName);
         for (var index = 1; ; index++)
         {
-            candidate = Path.Combine(directory, $"{name}_{index}{extension}");
+            candidate = Path.Combine(directory, $"{name}_{index}", safeName);
             if (!File.Exists(candidate))
             {
                 return candidate;
