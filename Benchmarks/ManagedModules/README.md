@@ -48,6 +48,12 @@ Run the named same-source Graph install speed gate against ModuleFast:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SpeedGate -ScenarioName Graph.Full.SameSource -HostName PowerShell7 -RepeatCount 3 -RotateEngineOrder -ManagedMaxRank 1 -RemoveOutputRoots -SkipBuild
 ```
 
+Run the named Graph.Authentication save stability gate across PowerShell 7 and Windows PowerShell 5.1:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SaveGate -HostName PowerShell7,WindowsPowerShell -RepeatCount 3 -RotateEngineOrder -ManagedMaxVsFastest 1.05 -RemoveOutputRoots -SkipBuild
+```
+
 Run the lifecycle evidence lane across PowerShell 7 and Windows PowerShell 5.1. This lane covers no-op and force semantics for install and save, keeps ModuleFast in the install comparison, and uses compact suite paths so Windows PowerShell 5.1 does not trip over legacy path-length limits. Use the warm-cache ratio gate for a practical maintenance-style check; strict one-shot rank gates can be too sensitive to child-host startup variance on no-op rows:
 
 ```powershell
@@ -271,5 +277,6 @@ Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's Pow
 - The managed PSGallery NuGet v2 fallback download path now uses the same 1 MB async sequential package stream as the NuGet v3/local paths. A before/after `Microsoft.Graph.Authentication` find/save suite showed managed PS7 save improving from 1715.04 ms to 1409.81 ms, narrowing the gap to PSResourceGet from 1.35x to 1.03x. Windows PowerShell 5.1 managed save improved from 2449.07 ms to 1881.92 ms and remained fastest.
 - Managed package delivery now computes the package SHA256 while copying HTTP/local feed streams instead of reopening the `.nupkg` for a second full read. A repeated rotated PowerShell 7 `Microsoft.Graph.Authentication` save comparison measured managed median 1490.32 ms versus PSResourceGet 1410.84 ms, with managed root elapsed 1463.96 ms, download 957.65 ms, extraction 75.11 ms, and promotion 3.40 ms. This improves absolute managed timing versus the previous repeated run (1763.81 ms) but still leaves a roughly 5-6 percent PS7 save gap to close.
 - Managed repository HTTP sends now use response-header completion so package content streams directly into the managed copy/hash path instead of first buffering the full response in memory. A repeated rotated PowerShell 7 `Microsoft.Graph.Authentication` save run ranked managed first by median at 1631.76 ms versus PSResourceGet at 1855.37 ms. A repeated rotated Windows PowerShell 5.1 run using a short benchmark output root ranked managed first at 1606.17 ms versus PSResourceGet at 1701.74 ms. Public-gallery timing still varies, so promote this to a suite gate before treating it as a durable release claim.
+- `SaveGate` now captures the repeated rotated `Microsoft.Graph.Authentication` save comparison for PowerShell 7 and Windows PowerShell 5.1. A strict `-ManagedMaxRank 1` trial caught useful public-gallery variance on PowerShell 7 where managed was within 1.01x of PSResourceGet; the practical `-ManagedMaxVsFastest 1.05` suite gate then passed on both hosts, with managed ranking first at 1234.95 ms on PowerShell 7 and 1719.59 ms on Windows PowerShell 5.1.
 
 Treat these numbers as a local baseline, not a release claim. Re-run the same commands after installer changes and compare the emitted CSV/JSON files before deciding whether an optimization is real.
