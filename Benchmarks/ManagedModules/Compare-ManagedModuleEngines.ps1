@@ -46,7 +46,9 @@ param(
 
     [double] $ManagedMaxVsFastest = 0,
 
-    [switch] $ListScenarios
+    [switch] $ListScenarios,
+
+    [switch] $RemoveOutputRoots
 )
 
 Set-StrictMode -Version Latest
@@ -302,6 +304,7 @@ function Get-BenchmarkHostPath {
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.RepairPlan.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ManagedDetails.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.OutputCleanup.ps1')
 $repositorySource = Resolve-ManagedModuleBenchmarkRepositorySource -Repository $Repository -RepositoryName $RepositoryName
 
 function Get-ProviderModulePath {
@@ -1009,6 +1012,7 @@ if (-not [string]::IsNullOrWhiteSpace([string]$updateBaselineResolution.Message)
 }
 
 $results = [Collections.Generic.List[object]]::new()
+$removedOutputRootCount = 0
 foreach ($iteration in 1..$RepeatCount) {
     $engineOrder = Get-IterationEngineOrder -Iteration $iteration
     foreach ($operationName in $Operation) {
@@ -1031,6 +1035,9 @@ foreach ($iteration in 1..$RepeatCount) {
                 }
                 foreach ($item in @($row)) {
                     $results.Add($item)
+                    if ($RemoveOutputRoots.IsPresent) {
+                        $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows @($item) -AllowedRoots @($workRoot, $installWorkRoot)
+                    }
                 }
             }
         }
@@ -1067,6 +1074,8 @@ $metadata = [ordered]@{
     RepeatCount = $RepeatCount
     ModuleBinary = $moduleBinary
     OutputDirectory = $workRoot
+    RemoveOutputRoots = $RemoveOutputRoots.IsPresent
+    OutputRootsRemoved = 0
     PowerShellVersion = $PSVersionTable.PSVersion.ToString()
     PSEdition = $PSVersionTable.PSEdition
     OS = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
@@ -1087,10 +1096,17 @@ $comparison | Export-Csv -LiteralPath $comparisonPath -NoTypeInformation
 if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
     $gateViolations | Export-Csv -LiteralPath $gatePath -NoTypeInformation
 }
+if ($RemoveOutputRoots.IsPresent) {
+    $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows $results -AllowedRoots @($workRoot, $installWorkRoot)
+    $metadata.OutputRootsRemoved = $removedOutputRootCount
+}
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
 $comparison
 Write-Host "Benchmark output: $workRoot"
+if ($RemoveOutputRoots.IsPresent) {
+    Write-Host "Removed benchmark output roots: $($metadata.OutputRootsRemoved)"
+}
 if ($gateViolations.Count -gt 0) {
     throw "Managed performance gate failed for $($gateViolations.Count) row(s). See '$gatePath'."
 }

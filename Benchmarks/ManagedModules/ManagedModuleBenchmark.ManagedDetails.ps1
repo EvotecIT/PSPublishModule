@@ -94,8 +94,8 @@ function Write-ManagedInstallDetail {
         DependencyCount = [math]::Max(0, $packages.Count - 1)
         UniquePackageCount = $uniquePackages.Count
         UniqueDependencyCount = [math]::Max(0, $uniquePackages.Count - 1)
-        InstalledPackageCount = @($uniquePackages | Where-Object Status -eq 'Installed').Count
-        AlreadyInstalledPackageCount = @($uniquePackages | Where-Object Status -eq 'AlreadyInstalled').Count
+        InstalledPackageCount = @($packages | Where-Object Status -eq 'Installed').Count
+        AlreadyInstalledPackageCount = @($packages | Where-Object Status -eq 'AlreadyInstalled').Count
         RootElapsedMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.Elapsed
         RootDependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
         TotalDownloadMilliseconds = [math]::Round((($packages | Measure-Object DownloadMilliseconds -Sum).Sum), 2)
