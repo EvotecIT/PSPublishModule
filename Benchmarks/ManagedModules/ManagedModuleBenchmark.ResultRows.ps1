@@ -1,3 +1,9 @@
+function Test-BenchmarkOperationUsesUpdateBaseline {
+    param([string] $OperationName)
+
+    $OperationName -eq 'Update' -or $OperationName -eq 'RepairPlan'
+}
+
 function New-SkippedRow {
     param(
         [string] $OperationName,
@@ -13,8 +19,8 @@ function New-SkippedRow {
         Status = 'Skipped'
         ModuleName = $ModuleName
         Version = $null
-        UpdateBaselineVersion = if ($OperationName -eq 'Update') { $script:ResolvedUpdateBaselineVersion } else { '' }
-        UpdateTargetVersion = if ($OperationName -eq 'Update') { $script:ResolvedUpdateTargetVersion } else { '' }
+        UpdateBaselineVersion = if (Test-BenchmarkOperationUsesUpdateBaseline -OperationName $OperationName) { $script:ResolvedUpdateBaselineVersion } else { '' }
+        UpdateTargetVersion = if (Test-BenchmarkOperationUsesUpdateBaseline -OperationName $OperationName) { $script:ResolvedUpdateTargetVersion } else { '' }
         ElapsedMilliseconds = 0
         OutputCount = 0
         OutputDirectoryCount = 0

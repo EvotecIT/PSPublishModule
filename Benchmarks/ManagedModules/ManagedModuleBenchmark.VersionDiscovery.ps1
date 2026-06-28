@@ -198,7 +198,8 @@ function Initialize-ManagedModuleBenchmarkUpdateBaseline {
         [string] $RepositorySource
     )
 
-    if (-not ($Operations -contains 'Update') -or -not [string]::IsNullOrWhiteSpace($CurrentBaselineVersion)) {
+    $requiresBaseline = ($Operations -contains 'Update') -or ($Operations -contains 'RepairPlan')
+    if (-not $requiresBaseline -or -not [string]::IsNullOrWhiteSpace($CurrentBaselineVersion)) {
         return [pscustomobject]@{
             BaselineVersion = $CurrentBaselineVersion
             TargetVersion = $RequestedVersion

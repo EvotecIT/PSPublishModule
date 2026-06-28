@@ -28,7 +28,8 @@ Baseline references:
 
 ## Public Surface Decisions
 
-- `Get-ManagedModule` is not planned now. Use `Get-ModuleState` for installed inventory and `Find-ManagedModule` for repository discovery.
+- `Get-ManagedModule` is the PowerShell-native installed inventory surface. Use `-AsInventory` when an advanced ModuleState inventory object is needed for planning or support bundles.
+- `Repair-ManagedModule` is planned as the day-to-day stale/drift/family/source maintenance surface. Until it lands, use `Invoke-ModuleState` for one-stop maintenance and the lower-level ModuleState plan/apply cmdlets for inspectable repair workflows.
 - `Register-ManagedModuleRepository` is not planned now. Use `Set-ModuleRepositoryProfile`, `Get-ModuleRepositoryProfile`, `Connect-ModuleRepository`, and `Register-ModuleRepository` for repository profiles and compatibility registration. Managed commands can also use direct `-Repository` values.
 - `Install-PrivateModule` and `Update-PrivateModule` stay as convenience wrappers. The reusable path is `Install-ManagedModule`, `Save-ManagedModule`, `Update-ManagedModule`, `Publish-ManagedModule`, and `Invoke-ModuleState`.
 - Public and private command aliases are allowed only when they point to the same managed command implementation. New command families need a distinct operator purpose.
@@ -67,8 +68,16 @@ Install-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -ProfileName Co
 ### Update
 
 ```powershell
+Update-ManagedModule -Repository PSGallery
 Update-ManagedModule -Name Company.Tools -Repository PSGallery
 Update-ManagedModule -Name Company.Tools -VersionPolicy '>=1.2.0 <2.0.0' -ProfileName CompanyModules
+```
+
+### Installed Inventory
+
+```powershell
+Get-ManagedModule -Name Microsoft.Graph.* -IncludeLoaded -ShowSummary
+Get-ManagedModule -Path C:\OfflineModules -AsInventory
 ```
 
 ### Publish
@@ -122,6 +131,27 @@ $plan | Invoke-ModuleStatePlan -Repository CompanyModules -Transport ManagedModu
 | Trust/integrity | Supported | Trusted repository requirement, allowed author policy, expected package SHA256 |
 | WhatIf/Confirm | Supported | Mutating cmdlets use PowerShell `ShouldProcess` |
 | Summaries | Supported | Spectre.Console summaries remain host-side; result objects are still pipeline-friendly |
+
+## Compatibility Checklist
+
+This checklist is the guardrail for replacing common PowerShellGet and PSResourceGet usage without surprises. Matching a parameter name is not enough; each item needs behavior proof, tests, and benchmark evidence when it can affect speed.
+
+- [x] `Install-ManagedModule` supports common `Install-Module` flows: `-Name`, `-Repository`, `-RequiredVersion`, `-MinimumVersion`, `-MaximumVersion`, `-Scope`, `-Force`, `-AllowClobber`, `-AcceptLicense`, `-Credential`, `-WhatIf`, and `-Confirm`.
+- [x] `Update-ManagedModule` supports named updates and no-name estate updates from selected module roots, matching the common `Update-Module` operator habit.
+- [x] `Save-ManagedModule` supports dependency closure, explicit path, version policies, license acceptance, forced replacement, and import-validation benchmark proof.
+- [x] `Find-ManagedModule` supports repository/profile lookup, wildcard module names, all versions, prerelease inclusion, and fast latest-version lookup.
+- [x] `Publish-ManagedModule` supports module package publishing with API key or credential paths through the managed publisher.
+- [x] PSResourceGet-style semantic version ranges are supported through `-VersionPolicy`.
+- [x] PSResourceGet-style `-TrustRepository` behavior maps to trusted repository profiles and `-RequireTrustedRepository` policy instead of hidden prompts.
+- [ ] Decide whether public proxy parameters should be added to managed cmdlets or kept as repository/profile policy only. The managed repository client has proxy behavior, but `-Proxy` and `-ProxyCredential` are not currently public compatibility parameters.
+- [ ] Define exact public semantics for `-Force`, including reinstall, downgrade, no-op, side-by-side, overwrite, receipt repair, and cleanup interactions.
+- [ ] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts across scopes.
+- [ ] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
+- [ ] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, and package hash policies instead of cloning PowerShellGet's publisher-check switch.
+- [ ] Add managed Authenticode/catalog validation equivalent to PSResourceGet `-AuthenticodeCheck`, including timestamped signatures and short-lived certificate chains.
+- [ ] Decide whether migration aliases should expose `-AllowPrerelease`, `-RequiredVersion`, and `-TrustRepository` on the managed cmdlets where the canonical managed parameter name differs.
+- [ ] Document unsupported non-module resource use cases explicitly: scripts, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
+- [ ] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, family coherence, loaded-module safety, and cleanup planning.
 
 ## Model Contracts
 

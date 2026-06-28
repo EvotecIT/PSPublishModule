@@ -307,6 +307,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add warm-cache and cold-cache modes.
 - [ ] Add publish comparisons against local folder feeds.
 - [x] Add import validation after install/save/update for PowerShell 5.1 and PowerShell 7+.
+- [x] Add a managed repair-plan benchmark lane that stages a stale module root and times `Invoke-ModuleState -Installed -Latest -Repair` without applying changes.
 - [x] Add file and byte counts for saved and installed output roots.
 - [x] Add managed install detail artifacts with package count, dependency count, per-package elapsed time, download time, extraction time, promotion time, repository requests, cache hits, and byte counts.
 - [x] Add Graph/Az/Teams/Exchange-heavy scenario presets for suite runs.
@@ -342,6 +343,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: PowerShell 7 reran a managed-only full `Microsoft.Graph` 2.38.0 install after repository read coalescing. The run succeeded in 26.25 seconds with 78 packages, 77 dependencies, 81 repository requests, 186.5 MB downloaded package bytes, and about 1.05 GB of output. This confirms the optimization is safe in a heavy public-gallery run, but it did not reduce the Graph request count in this scenario; the next heavy optimization should be chosen from measured package delivery/extraction/promotion detail rather than assuming metadata coalescing helps every family.
 - [x] 2026-06-28: The benchmark harness now resolves update baselines automatically when `Update` is requested without `-UpdateBaselineVersion`. The resolver chooses the latest stable package version lower than the requested target, records the resolved baseline/target in child metadata and result rows, and the suite summary carries those values forward. PSGallery discovery uses the public NuGet v2 read feed because the current host receives 403 responses from PSGallery v3 metadata endpoints; generic NuGet v3 feeds still use v3 package-base metadata. PowerShell 7 proved the no-baseline path with `ThreadJob` 2.0.3 -> 2.1.0 in 3009 ms and suite-level `Microsoft.Graph.Authentication` 2.37.0 -> 2.38.0 in 4229 ms, both with successful import validation. Windows PowerShell 5.1 proved the same baseline resolver returns `ThreadJob` 2.0.3 -> 2.1.0.
 - [x] 2026-06-28: The benchmark harness now caps post-timing import validation with `-ImportTimeoutSeconds` and records `TimedOut` instead of hanging a heavy suite. Managed-only heavy update runs succeeded on both hosts: PowerShell 7 updated full `Microsoft.Graph` 2.37.0 -> 2.38.0 in 8909 ms and full `Az` 15.6.1 -> 16.0.0 in 10188 ms; Windows PowerShell 5.1 updated them in 16045 ms and 25002 ms. Full Graph and Az import validation timed out after 30 seconds on both hosts. PowerShell 7 updated `MicrosoftTeams` 7.7.0 -> 7.8.0 in 5050 ms and `ExchangeOnlineManagement` 3.9.2 -> 3.10.0 in 3285 ms with successful imports; Windows PowerShell 5.1 updated them in 7115 ms and 5015 ms with successful imports. The slowest proven managed update lane is full Az on Windows PowerShell 5.1, with root dependency delivery and summed download time dominating detail artifacts.
+- [x] 2026-06-28: The benchmark harness now has an initial managed `RepairPlan` lane. It stages a stale module root outside the timed window, then times `Invoke-ModuleState -Installed -Latest -Repair` planning without executing changes. PowerShell 7 planned stale `ThreadJob` 2.0.3 -> 2.1.0 in 1604 ms; Windows PowerShell 5.1 planned the same stale root in 2660 ms. The detail artifacts recorded one planned maintenance action and no findings. ModuleFast, PSResourceGet, and PowerShellGet are explicit skips for this operation because they do not expose equivalent estate repair planning.
 
 ### Next Optimization Targets
 
@@ -352,8 +354,19 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Stabilize Windows PowerShell 5.1 stale small-module update evidence with repeated rotated cold/warm runs.
 - [x] Stabilize PowerShell 7 small-module save evidence with repeated rotated import-gated runs.
 - [x] Measure heavy Graph/Az/Teams/Exchange managed update scenarios on PowerShell 7 and Windows PowerShell 5.1, then optimize the slowest proven managed lane.
-- [ ] Add repair benchmark lanes for stale versions, source drift, scope drift, family coherence, and cleanup planning before optimizing repair-specific behavior.
+- [x] Add an initial repair-plan benchmark lane for stale versions.
+- [ ] Add repair benchmark lanes for source drift, scope drift, family coherence, loaded-module safety, and cleanup planning before optimizing repair-specific behavior.
 - [x] Add explicit heavy update baseline versions or a baseline-discovery mode to the suite runner so Graph/Az/Teams/Exchange update scenarios do not silently skip when no `-UpdateBaselineVersion` is supplied.
+
+### Compatibility Semantics Gates
+
+- [ ] Define and test exact `-Force` behavior for install, update, repair, downgrade, reinstall, no-op, and cleanup planning.
+- [ ] Define and test exact `-AllowClobber` behavior versus PSResourceGet `-NoClobber`, including command conflicts across scopes.
+- [ ] Define and test exact `-AcceptLicense` behavior for root modules, dependencies, no-name updates, and repair plans.
+- [ ] Decide whether public `-Proxy` and `-ProxyCredential` parameters are required on managed cmdlets or remain repository/profile policy.
+- [ ] Add managed Authenticode/catalog validation equivalent to PSResourceGet `-AuthenticodeCheck`, including timestamped signatures and short-lived certificate chains.
+- [ ] Decide whether to expose migration aliases for `-TrustRepository`, `-SkipPublisherCheck`, `-AllowPrerelease`, and `-RequiredVersion` where the managed canonical parameter differs.
+- [ ] Document non-module PSResourceGet resource-kind gaps so scripts, command search, DSC/resource-kind search, and provider bootstrap behavior do not look silently supported.
 
 ## Benchmark Scenarios
 

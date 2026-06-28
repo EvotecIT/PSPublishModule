@@ -57,7 +57,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 }
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-$validOperations = @('Find', 'Save', 'Install', 'InstallManaged', 'Update')
+$validOperations = @('Find', 'Save', 'Install', 'InstallManaged', 'Update', 'RepairPlan')
 
 function Resolve-TokenList {
     param(
@@ -251,6 +251,7 @@ function Get-BenchmarkHostPath {
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ImportValidation.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.VersionDiscovery.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ResultRows.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.RepairPlan.ps1')
 $repositorySource = Resolve-ManagedModuleBenchmarkRepositorySource -Repository $Repository -RepositoryName $RepositoryName
 
 function Get-ProviderModulePath {
@@ -564,8 +565,8 @@ function Invoke-TimedOperation {
         Status = $status
         ModuleName = $ModuleName
         Version = $versionText
-        UpdateBaselineVersion = if ($OperationName -eq 'Update') { $script:ResolvedUpdateBaselineVersion } else { '' }
-        UpdateTargetVersion = if ($OperationName -eq 'Update') { $script:ResolvedUpdateTargetVersion } else { '' }
+        UpdateBaselineVersion = if (Test-BenchmarkOperationUsesUpdateBaseline -OperationName $OperationName) { $script:ResolvedUpdateBaselineVersion } else { '' }
+        UpdateTargetVersion = if (Test-BenchmarkOperationUsesUpdateBaseline -OperationName $OperationName) { $script:ResolvedUpdateTargetVersion } else { '' }
         ElapsedMilliseconds = [math]::Round($timer.Elapsed.TotalMilliseconds, 2)
         OutputCount = $outputCount
         OutputDirectoryCount = $metrics.DirectoryCount
@@ -915,6 +916,7 @@ foreach ($iteration in 1..$RepeatCount) {
                 'Install' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
                 'InstallManaged' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
                 'Update' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration }
+                'RepairPlan' { Invoke-RepairPlanScenario -EngineName $engineName -Iteration $iteration }
             }
             $results.Add($row)
         }
