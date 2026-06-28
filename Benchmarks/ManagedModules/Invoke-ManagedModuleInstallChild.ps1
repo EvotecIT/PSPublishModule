@@ -124,6 +124,7 @@ function Add-ManagedInstallDetail {
         Name = [string] $Result.Name
         Version = [string] $Result.Version
         Status = [string] $Result.Status
+        ModulePath = [string] $Result.ModulePath
         Parent = $Parent
         Depth = $Depth
         ElapsedMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.Elapsed
@@ -160,9 +161,26 @@ function Write-ManagedInstallDetail {
     $rows = [System.Collections.Generic.List[object]]::new()
     Add-ManagedInstallDetail -Result $Result -Parent '' -Depth 0 -Rows $rows
     $packages = @($rows)
+    $uniquePackages = @(
+        $packages |
+            Group-Object -Property {
+                if (-not [string]::IsNullOrWhiteSpace([string] $_.ModulePath)) {
+                    [string] $_.ModulePath
+                } else {
+                    '{0}|{1}|{2}' -f $_.Name, $_.Version, $_.Status
+                }
+            } |
+            ForEach-Object {
+                $_.Group | Sort-Object Depth | Select-Object -First 1
+            }
+    )
     $summary = [pscustomobject]@{
         PackageCount = $packages.Count
         DependencyCount = [math]::Max(0, $packages.Count - 1)
+        UniquePackageCount = $uniquePackages.Count
+        UniqueDependencyCount = [math]::Max(0, $uniquePackages.Count - 1)
+        InstalledPackageCount = @($uniquePackages | Where-Object Status -eq 'Installed').Count
+        AlreadyInstalledPackageCount = @($uniquePackages | Where-Object Status -eq 'AlreadyInstalled').Count
         RootElapsedMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.Elapsed
         RootDependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
         TotalDownloadMilliseconds = [math]::Round((($packages | Measure-Object DownloadMilliseconds -Sum).Sum), 2)

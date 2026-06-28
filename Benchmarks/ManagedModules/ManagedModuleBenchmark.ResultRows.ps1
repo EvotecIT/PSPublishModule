@@ -32,6 +32,10 @@ function New-SkippedRow {
         DetailPath = ''
         ManagedPackageCount = 0
         ManagedDependencyCount = 0
+        ManagedUniquePackageCount = 0
+        ManagedUniqueDependencyCount = 0
+        ManagedInstalledPackageCount = 0
+        ManagedAlreadyInstalledPackageCount = 0
         ManagedRootDependencyMilliseconds = 0
         ManagedTotalDownloadMilliseconds = 0
         ManagedTotalExtractionMilliseconds = 0

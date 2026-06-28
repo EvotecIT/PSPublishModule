@@ -613,6 +613,10 @@ function Invoke-TimedOperation {
         DetailPath = if ($detail) { $DetailPath } else { '' }
         ManagedPackageCount = if ($detailSummary) { [int] $detailSummary.PackageCount } else { 0 }
         ManagedDependencyCount = if ($detailSummary) { [int] $detailSummary.DependencyCount } else { 0 }
+        ManagedUniquePackageCount = if ($detailSummary -and $detailSummary.PSObject.Properties['UniquePackageCount']) { [int] $detailSummary.UniquePackageCount } else { 0 }
+        ManagedUniqueDependencyCount = if ($detailSummary -and $detailSummary.PSObject.Properties['UniqueDependencyCount']) { [int] $detailSummary.UniqueDependencyCount } else { 0 }
+        ManagedInstalledPackageCount = if ($detailSummary -and $detailSummary.PSObject.Properties['InstalledPackageCount']) { [int] $detailSummary.InstalledPackageCount } else { 0 }
+        ManagedAlreadyInstalledPackageCount = if ($detailSummary -and $detailSummary.PSObject.Properties['AlreadyInstalledPackageCount']) { [int] $detailSummary.AlreadyInstalledPackageCount } else { 0 }
         ManagedRootDependencyMilliseconds = if ($detailSummary) { [double] $detailSummary.RootDependencyMilliseconds } else { 0 }
         ManagedTotalDownloadMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalDownloadMilliseconds } else { 0 }
         ManagedTotalExtractionMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalExtractionMilliseconds } else { 0 }
