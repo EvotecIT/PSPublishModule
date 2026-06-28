@@ -205,6 +205,24 @@ The suite runner enables license acceptance only for scenarios that require it, 
 
 Use `-RotateEngineOrder` with `-RepeatCount 3` or higher before making performance claims. Repository and host caches can otherwise make the second or third engine look faster than it really is.
 
+When comparing managed install with ModuleFast, track both the default-source lane and a same-source lane. The default comparison keeps each engine on its normal benchmark source, which means managed uses the `-Repository` value and ModuleFast uses `-ModuleFastSource`. A same-source gate removes repository-backend variance by passing the same NuGet v3 source to both:
+
+```powershell
+.\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 `
+    -ModuleName Microsoft.Graph `
+    -Version 2.38.0 `
+    -Operation Install `
+    -Engine Managed,ModuleFast `
+    -Repository https://pwsh.gallery/index.json `
+    -RepositoryName PWSHGallery `
+    -ModuleFastSource https://pwsh.gallery/index.json `
+    -RepeatCount 3 `
+    -RotateEngineOrder `
+    -AcceptLicense `
+    -ManagedMaxRank 1 `
+    -RemoveOutputRoots
+```
+
 ## Current Evidence
 
 Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's PowerShell 7 module path:
@@ -239,5 +257,7 @@ Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's Pow
 - PowerShell 7, full `Az` install, 1 run: Managed 22457.78 ms, PowerShellGet 131093.32 ms, PSResourceGet 141104.45 ms, ModuleFast failed while resolving `Az.DataTransfer(1.0.0)` from its source. Keep this failure visible because resolver compatibility is part of the install contract.
 - After adding unique package/status counts, PowerShell 7 reran full `Az` install against the ModuleFast speed gate. Managed completed in 12857.88 ms. ModuleFast failed while resolving `Az.DataTransfer(1.0.0)` from its source. The managed detail summary recorded 204 dependency-tree package rows, 103 unique package outputs, 102 unique installed outputs, 1 unique already-installed output, 211 whole-operation repository requests, 206 package-delivery requests, and 137.5 MB of downloaded package bytes.
 - After adding in-flight install coalescing for equivalent dependency targets and increasing managed dependency fan-out to 32, PowerShell 7 reran full `Microsoft.Graph` install against the ModuleFast speed gate with `-RepeatCount 3 -RotateEngineOrder -RemoveOutputRoots`. One rotated run measured managed first by median at 6561.35 ms versus ModuleFast at 7572.29 ms, but the follow-up strict `-ManagedMaxRank 1` gate showed the lane is not yet stable enough to call always-fastest: ModuleFast median 7352.39 ms, managed median 7474.17 ms, managed ratio 1.02x. Managed recorded 78 package-tree rows, 40 unique package outputs, 40 installed rows, 38 already-satisfied coalesced dependency rows, 81 whole-operation repository requests, 80 package-delivery requests, and 186.5 MB downloaded.
+- A follow-up experiment tried a larger managed NuGet v2 download buffer, but the strict full Graph gate exposed download outliers and the change was reverted. The failed run is retained under `Ignore\Benchmarks\ManagedModules\Run-20260628-195825-164112`; managed median was 28147.64 ms versus ModuleFast 6546.36 ms, with one `Microsoft.Graph.Files` download taking about 103 seconds. Treat this as evidence that public-gallery backend and transport variance must be separated from engine changes.
+- PowerShell 7 then ran a same-source full `Microsoft.Graph` 2.38.0 install comparison with both managed and ModuleFast using `https://pwsh.gallery/index.json`. Managed completed in 3441.40 ms versus ModuleFast at 6652.64 ms. The managed detail summary recorded 78 package-tree rows, 40 unique package outputs, 40 installed rows, 38 already-satisfied coalesced dependency rows, 41 whole-operation repository requests, 41 package-delivery requests, 186.5 MB downloaded, and about 1.05 GB of output. This proves the managed engine can beat the ModuleFast lane when both use the same package source; keep default-source and same-source gates separate.
 
 Treat these numbers as a local baseline, not a release claim. Re-run the same commands after installer changes and compare the emitted CSV/JSON files before deciding whether an optimization is real.
