@@ -171,7 +171,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 [PowerForge.ConfigurationBuildDocumentationSegment]@{
     Configuration = [PowerForge.BuildDocumentationConfiguration]@{
         Enable = $true
-        AboutTopicsSourcePath = @('Module/Docs/About')
+        AboutTopicsSourcePath = @('Help/About')
     }
 }
 [PowerForge.ArtefactConfigurationFactory]::new([PowerForge.NullLogger]::new()).Create([PowerForge.ArtefactConfigurationRequest]@{
@@ -205,6 +205,11 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                     StagingPath = "Artefacts/Staging",
                     CsprojPath = "Sources/TopLevel/TopLevel.csproj",
                     DiagnosticsBaselinePath = "Build/diagnostics.json",
+                    DiagnosticsBinaryConflictSearchRoot = new[] { "Modules" },
+                    InstallRootsWasBound = true,
+                    InstallRoots = new[] { "Artefacts/Modules" },
+                    JsonOnly = true,
+                    JsonPath = "Build/powerforge.json",
                     DotNetFramework = Array.Empty<string>(),
                     ExcludeDirectories = Array.Empty<string>(),
                     ExcludeFiles = Array.Empty<string>()
@@ -216,6 +221,10 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Staging"), prepared.PipelineSpec.Build.StagingPath);
                 Assert.Equal(Path.Combine(root.FullName, "Sources", "TopLevel", "TopLevel.csproj"), prepared.PipelineSpec.Build.CsprojPath);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "diagnostics.json"), prepared.PipelineSpec.Diagnostics.BaselinePath);
+                Assert.Equal(new[] { Path.Combine(root.FullName, "Modules") }, prepared.PipelineSpec.Build.BinaryConflictSearchRoots);
+                Assert.Equal(new[] { Path.Combine(root.FullName, "Modules") }, prepared.PipelineSpec.Diagnostics.BinaryConflictSearchRoots);
+                Assert.Equal(new[] { Path.Combine(root.FullName, "Artefacts", "Modules") }, prepared.PipelineSpec.Install.Roots);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "powerforge.json"), prepared.JsonOutputPath);
 
                 var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(prepared.PipelineSpec.Segments[0]);
                 Assert.Equal(Path.Combine(root.FullName, "DbaClientX.PowerShell", "DbaClientX.PowerShell.csproj"), buildLibraries.BuildLibraries.NETProjectPath);
@@ -274,7 +283,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(Path.Combine(root.FullName, "README.md"), documentation.Configuration.PathReadme);
 
                 var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(prepared.PipelineSpec.Segments[12]);
-                Assert.Equal(new[] { Path.Combine(root.FullName, "Module", "Docs", "About") }, buildDocumentation.Configuration.AboutTopicsSourcePath);
+                Assert.Equal(new[] { "Help/About" }, buildDocumentation.Configuration.AboutTopicsSourcePath);
 
                 var fileBackedArtefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[13]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "FileBacked"), fileBackedArtefact.Configuration.Path);
@@ -551,6 +560,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var projectConfig = Path.Combine(root.FullName, "Build", "project.build.json");
             var buildStagingPath = Path.Combine(root.FullName, "Artifacts", "Module", "Staging");
             var buildCsprojPath = Path.Combine(root.FullName, "Sources", "TopLevel", "TopLevel.csproj");
+            var binaryConflictSearchRoot = Path.Combine(root.FullName, "Modules");
+            var installRoot = Path.Combine(root.FullName, "Artifacts", "Modules");
             var diagnosticsBaselinePath = Path.Combine(root.FullName, "Build", "diagnostics.json");
             var netProject = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "SampleModule.PowerShell.csproj");
             var developmentBinaries = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "bin");
@@ -567,7 +578,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var signingPfxPath = Path.Combine(root.FullName, "Build", "cert.pfx");
             var documentationPath = Path.Combine(root.FullName, "Module", "Docs");
             var documentationReadmePath = Path.Combine(root.FullName, "README.md");
-            var aboutTopicsPath = Path.Combine(root.FullName, "Module", "Docs", "About");
+            const string aboutTopicsPath = "Help/About";
             var copyDirectorySource = Path.Combine(root.FullName, "Build", "Templates");
             var copyFileSource = Path.Combine(root.FullName, "Build", "NOTICE.txt");
             var projectOptionsOutputPath = Path.Combine(root.FullName, "Artifacts", "ProjectBuild", "options");
@@ -581,11 +592,17 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                     Name = "SampleModule",
                     SourcePath = root.FullName,
                     StagingPath = buildStagingPath,
-                    CsprojPath = buildCsprojPath
+                    CsprojPath = buildCsprojPath,
+                    BinaryConflictSearchRoots = new[] { binaryConflictSearchRoot }
+                },
+                Install = new ModulePipelineInstallOptions
+                {
+                    Roots = new[] { installRoot }
                 },
                 Diagnostics = new ModulePipelineDiagnosticsOptions
                 {
-                    BaselinePath = diagnosticsBaselinePath
+                    BaselinePath = diagnosticsBaselinePath,
+                    BinaryConflictSearchRoots = new[] { binaryConflictSearchRoot }
                 },
                 Segments = new IConfigurationSegment[]
                 {
@@ -735,6 +752,10 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var json = File.ReadAllText(jsonPath);
             Assert.Contains("\"StagingPath\": \"../Artifacts/Module/Staging\"", json, StringComparison.Ordinal);
             Assert.Contains("\"CsprojPath\": \"../Sources/TopLevel/TopLevel.csproj\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"BinaryConflictSearchRoots\": [", json, StringComparison.Ordinal);
+            Assert.Contains("\"Modules\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Roots\": [", json, StringComparison.Ordinal);
+            Assert.Contains("\"Artifacts/Modules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"BaselinePath\": \"../Build/diagnostics.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"ConfigPath\": \"Build/project.build.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"NETProjectPath\": \"Sources/SampleModule.PowerShell/SampleModule.PowerShell.csproj\"", json, StringComparison.Ordinal);
@@ -760,7 +781,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"PathReadme\": \"README.md\"", json, StringComparison.Ordinal);
             Assert.Contains("\"TestPath\": \"Tests\"", json, StringComparison.Ordinal);
             Assert.Contains("\"AboutTopicsSourcePath\": [", json, StringComparison.Ordinal);
-            Assert.Contains("\"Module/Docs/About\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Help/About\"", json, StringComparison.Ordinal);
             Assert.Contains("\"ApiKeyFilePath\": \"Build/psgallery.key\"", json, StringComparison.Ordinal);
             Assert.Contains("\"FilePath\": \"Build/Test-ReleaseReady.ps1\"", json, StringComparison.Ordinal);
             Assert.Contains("\"WorkingDirectory\": \"Build\"", json, StringComparison.Ordinal);
@@ -772,7 +793,10 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
             Assert.Equal(buildStagingPath, jsonSpec!.Build.StagingPath);
             Assert.Equal(buildCsprojPath, jsonSpec.Build.CsprojPath);
+            Assert.Equal(new[] { binaryConflictSearchRoot }, jsonSpec.Build.BinaryConflictSearchRoots);
+            Assert.Equal(new[] { installRoot }, jsonSpec.Install.Roots);
             Assert.Equal(diagnosticsBaselinePath, jsonSpec.Diagnostics!.BaselinePath);
+            Assert.Equal(new[] { binaryConflictSearchRoot }, jsonSpec.Diagnostics.BinaryConflictSearchRoots);
             var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(jsonSpec!.Segments[0]);
             var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(jsonSpec.Segments[1]);
             var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(jsonSpec.Segments[2]);

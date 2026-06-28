@@ -54,6 +54,10 @@ internal sealed class ModuleBuildPreparationService
         var frameworks = useLegacy && !request.DotNetFrameworkWasBound
             ? Array.Empty<string>()
             : request.DotNetFramework;
+        var binaryConflictSearchRoots = ResolveWorkspacePaths(workspaceRoot, request.DiagnosticsBinaryConflictSearchRoot);
+        var installRoots = request.InstallRootsWasBound
+            ? ResolveWorkspacePaths(workspaceRoot, request.InstallRoots)
+            : null;
 
         var spec = new ModulePipelineSpec
         {
@@ -69,14 +73,14 @@ internal sealed class ModuleBuildPreparationService
                 KeepStaging = request.KeepStaging,
                 ExcludeDirectories = request.ExcludeDirectories ?? Array.Empty<string>(),
                 ExcludeFiles = BuildStageExcludeFiles(request.ExcludeFiles, moduleName!),
-                BinaryConflictSearchRoots = request.DiagnosticsBinaryConflictSearchRoot ?? Array.Empty<string>(),
+                BinaryConflictSearchRoots = binaryConflictSearchRoots,
             },
             Install = new ModulePipelineInstallOptions
             {
                 Enabled = !request.SkipInstall,
                 Strategy = request.InstallStrategyWasBound ? request.InstallStrategy : null,
                 KeepVersions = request.KeepVersionsWasBound ? request.KeepVersions : null,
-                Roots = request.InstallRootsWasBound ? (request.InstallRoots ?? Array.Empty<string>()) : null,
+                Roots = installRoots,
                 LegacyFlatHandling = request.LegacyFlatHandlingWasBound ? request.LegacyFlatHandling : null,
                 PreserveVersions = request.PreserveInstallVersionsWasBound ? request.PreserveInstallVersions : null,
             },
@@ -87,7 +91,7 @@ internal sealed class ModuleBuildPreparationService
                 UpdateBaseline = request.UpdateDiagnosticsBaseline,
                 FailOnNewDiagnostics = request.FailOnNewDiagnostics,
                 FailOnSeverity = request.FailOnDiagnosticsSeverity,
-                BinaryConflictSearchRoots = request.DiagnosticsBinaryConflictSearchRoot ?? Array.Empty<string>()
+                BinaryConflictSearchRoots = binaryConflictSearchRoots
             },
             Segments = segments
         };
@@ -101,7 +105,7 @@ internal sealed class ModuleBuildPreparationService
             BasePathForScaffold = basePathForScaffold,
             UseLegacy = useLegacy,
             PipelineSpec = spec,
-            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, projectRoot) : null,
+            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, projectRoot, workspaceRoot) : null,
             ConfigLabel = useLegacy ? "dsl" : "cmdlet"
         };
     }
@@ -135,7 +139,7 @@ internal sealed class ModuleBuildPreparationService
             BasePathForScaffold = null,
             UseLegacy = false,
             PipelineSpec = spec,
-            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, spec.Build.SourcePath) : null,
+            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, spec.Build.SourcePath, spec.Build.SourcePath) : null,
             ConfigLabel = "json",
             ConfigFilePath = configFullPath
         };
@@ -192,8 +196,13 @@ internal sealed class ModuleBuildPreparationService
         spec.Build.StagingPath = ResolveConfigPathNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = ResolveConfigPathNullable(baseDir, spec.Build.CsprojPath);
         spec.Build.DevelopmentBinariesPath = ResolveConfigPathNullable(baseDir, spec.Build.DevelopmentBinariesPath);
+        spec.Build.BinaryConflictSearchRoots = ResolveConfigPaths(projectRoot, spec.Build.BinaryConflictSearchRoots);
+        if (spec.Install?.Roots is not null)
+            spec.Install.Roots = ResolveConfigPaths(projectRoot, spec.Install.Roots);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
             spec.Diagnostics.BaselinePath = ResolveConfigPath(baseDir, spec.Diagnostics.BaselinePath!);
+        if (spec.Diagnostics is not null)
+            spec.Diagnostics.BinaryConflictSearchRoots = ResolveConfigPaths(projectRoot, spec.Diagnostics.BinaryConflictSearchRoots);
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationAppleAppSegment>() ?? Enumerable.Empty<ConfigurationAppleAppSegment>())
         {
@@ -253,7 +262,6 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.AboutTopicsSourcePath = ResolveConfigPaths(projectRoot, cfg.AboutTopicsSourcePath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
@@ -428,7 +436,6 @@ internal sealed class ModuleBuildPreparationService
                     documentation.Configuration.PathReadme = ResolveWorkspacePath(workspaceRoot, documentation.Configuration.PathReadme) ?? string.Empty;
                     break;
                 case ConfigurationBuildDocumentationSegment buildDocumentation:
-                    buildDocumentation.Configuration.AboutTopicsSourcePath = ResolveWorkspacePaths(workspaceRoot, buildDocumentation.Configuration.AboutTopicsSourcePath);
                     break;
                 case ConfigurationTestSegment test:
                     test.Configuration.TestsPath = ResolveWorkspacePath(workspaceRoot, test.Configuration.TestsPath) ?? string.Empty;
@@ -611,10 +618,10 @@ internal sealed class ModuleBuildPreparationService
         return set.ToArray();
     }
 
-    private static string ResolveJsonOutputPath(ModuleBuildPreparationRequest request, string projectRoot)
+    private static string ResolveJsonOutputPath(ModuleBuildPreparationRequest request, string projectRoot, string jsonBasePath)
     {
         if (!string.IsNullOrWhiteSpace(request.JsonPath))
-            return request.ResolvePath!(request.JsonPath!);
+            return ResolveConfigPath(jsonBasePath, request.JsonPath);
 
         return Path.Combine(projectRoot, "powerforge.json");
     }
@@ -655,8 +662,13 @@ internal sealed class ModuleBuildPreparationService
         spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = MakeRelativeForConfigNullable(baseDir, spec.Build.CsprojPath);
         spec.Build.DevelopmentBinariesPath = MakeRelativeForConfigNullable(baseDir, spec.Build.DevelopmentBinariesPath);
+        spec.Build.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Build.BinaryConflictSearchRoots);
+        if (spec.Install?.Roots is not null)
+            spec.Install.Roots = MakePathsRelativeForProjectRoot(projectRoot, spec.Install.Roots);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
             spec.Diagnostics.BaselinePath = MakeRelativeForConfig(baseDir, spec.Diagnostics.BaselinePath!);
+        if (spec.Diagnostics is not null)
+            spec.Diagnostics.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Diagnostics.BinaryConflictSearchRoots);
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationAppleAppSegment>() ?? Enumerable.Empty<ConfigurationAppleAppSegment>())
         {
@@ -716,7 +728,6 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.AboutTopicsSourcePath = MakePathsRelativeForProjectRoot(projectRoot, cfg.AboutTopicsSourcePath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
