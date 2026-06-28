@@ -59,6 +59,13 @@ public sealed class ManagedModuleImportValidationService
                 .ToArray();
         }
 
+        var existingGate = result.TransitionGates?.FirstOrDefault();
+        result.TransitionGates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(
+            result.Runs,
+            existingGate?.MaximumManagedSlowdownRatio ?? 0,
+            existingGate?.MaximumManagedSlowdownMilliseconds ?? 0);
+        result.CompatibilityRetirement = ManagedModuleCompatibilityRetirementEvaluator.Evaluate(result);
+
         return result;
     }
 

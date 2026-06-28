@@ -118,17 +118,21 @@ public sealed partial class ManagedModuleBenchmarkService
             }
         }
 
+        var providerSupport = BuildProviderSupport(request.Scenarios);
+        var transitionGates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(
+            runs,
+            request.MaximumManagedSlowdownRatio,
+            request.MaximumManagedSlowdownMilliseconds);
+
         return new ManagedModuleBenchmarkResult
         {
             StartedAtUtc = started,
             CompletedAtUtc = DateTimeOffset.UtcNow,
             Environment = ManagedModuleBenchmarkEnvironment.Capture(),
-            ProviderSupport = BuildProviderSupport(request.Scenarios),
+            ProviderSupport = providerSupport,
             Runs = runs,
-            TransitionGates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(
-                runs,
-                request.MaximumManagedSlowdownRatio,
-                request.MaximumManagedSlowdownMilliseconds)
+            TransitionGates = transitionGates,
+            CompatibilityRetirement = ManagedModuleCompatibilityRetirementEvaluator.Evaluate(transitionGates, providerSupport)
         };
     }
 

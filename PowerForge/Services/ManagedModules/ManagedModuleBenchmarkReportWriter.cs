@@ -71,6 +71,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine();
         AppendProviderSupport(markdown, result.ProviderSupport ?? Array.Empty<ManagedModuleProviderSupport>());
         markdown.AppendLine();
+        AppendCompatibilityRetirement(markdown, result.CompatibilityRetirement);
+        markdown.AppendLine();
         AppendSummary(markdown, runs);
         markdown.AppendLine();
         AppendTransitionGates(markdown, result.TransitionGates ?? Array.Empty<ManagedModuleBenchmarkTransitionGateResult>());
@@ -184,6 +186,40 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(Escape(FormatLimitations(support.Limitations)))
                 .AppendLine(" |");
         }
+    }
+
+    private static void AppendCompatibilityRetirement(StringBuilder markdown, ManagedModuleCompatibilityRetirementResult? retirement)
+    {
+        markdown.AppendLine("## Compatibility Retirement");
+        markdown.AppendLine();
+        if (retirement is null)
+        {
+            markdown.AppendLine("_No compatibility retirement evidence was recorded._");
+            return;
+        }
+
+        markdown.AppendLine("| Status | Ready to mark legacy | Required operations | Ready operations | Missing | Incomplete | Blocked | Provider fallbacks |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- |");
+        markdown.Append("| ")
+            .Append(retirement.Status)
+            .Append(" | ")
+            .Append(retirement.ReadyToMarkCompatibilityLegacy ? "yes" : "no")
+            .Append(" | ")
+            .Append(Escape(FormatOperations(retirement.RequiredOperations)))
+            .Append(" | ")
+            .Append(Escape(FormatOperations(retirement.ReadyOperations)))
+            .Append(" | ")
+            .Append(Escape(FormatOperations(retirement.MissingOperations)))
+            .Append(" | ")
+            .Append(Escape(FormatOperations(retirement.IncompleteOperations)))
+            .Append(" | ")
+            .Append(Escape(FormatOperations(retirement.BlockedOperations)))
+            .Append(" | ")
+            .Append(Escape(FormatProviderFallbacks(retirement.ProviderFallbacks)))
+            .AppendLine(" |");
+
+        foreach (var reason in retirement.Reasons ?? Array.Empty<string>())
+            markdown.Append("- ").Append(Escape(reason)).AppendLine();
     }
 
     private static void AppendSummary(StringBuilder markdown, IReadOnlyList<ManagedModuleBenchmarkRunResult> runs)
@@ -365,6 +401,16 @@ public sealed class ManagedModuleBenchmarkReportWriter
         => limitations is null || limitations.Count == 0
             ? string.Empty
             : string.Join("; ", limitations);
+
+    private static string FormatOperations(IReadOnlyList<ManagedModuleBenchmarkOperation>? operations)
+        => operations is null || operations.Count == 0
+            ? string.Empty
+            : string.Join(", ", operations);
+
+    private static string FormatProviderFallbacks(IReadOnlyList<ManagedModuleProviderSupport>? fallbacks)
+        => fallbacks is null || fallbacks.Count == 0
+            ? string.Empty
+            : string.Join(", ", fallbacks.Select(static support => support.Provider + ":" + support.Level));
 
     private static long ResolveTotal(long total, long fallback)
         => total > 0 ? total : fallback;
