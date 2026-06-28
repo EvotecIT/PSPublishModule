@@ -367,6 +367,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: Comparison and suite benchmarks now support optional `-ManagedMaxRank` and `-ManagedMaxVsFastest` gates. Normal exploratory runs remain non-failing, while CI or release evidence runs can fail after writing artifacts when managed is not the fastest successful engine or exceeds an allowed ratio.
 - [x] 2026-06-28: Managed benchmark artifacts now split managed command result elapsed time from benchmark wall-clock time. `ManagedRootElapsedMs` shows the engine result timing from the managed detail artifact, while `ManagedHarnessOverheadMs` shows the child host/import/wrapper remainder, so forced reinstall optimization work can target real engine cost instead of process isolation overhead.
 - [x] 2026-06-28: Managed force delivery now uses a single-dependency fast path before parallel scheduling when a root package has exactly one dependency and the installed dependency already satisfies the declared range without trust-policy package validation. Current warm-cache `ThreadJob` force comparison measured PowerShell 7 managed `UpdateForce` fastest at 1046 ms, while `InstallForce` remains second to ModuleFast at 1088 ms versus 828 ms. Windows PowerShell 5.1 measured managed fastest for both `InstallForce` at 1150 ms and `UpdateForce` at 1186 ms. Detail artifacts show managed package delivery still uses cache hits, zero package-delivery repository requests, and zero downloaded package bytes.
+- [x] 2026-06-28: Managed dependency satisfaction now treats an unbounded dependency declaration as satisfied by an already-installed acceptable stable dependency when no dependency trust-policy package validation is required. Current warm-cache `ThreadJob` force comparison measured managed fastest on both hosts: PowerShell 7 `InstallForce` 691 ms and `UpdateForce` 624 ms, Windows PowerShell 5.1 `InstallForce` 1035 ms and `UpdateForce` 788 ms. Detail artifacts show zero repository requests, one cache hit, zero downloaded package bytes, and root dependency timing under 10 ms for the managed force rows.
 
 ### Next Optimization Targets
 
@@ -385,7 +386,8 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Add explicit heavy update baseline versions or a baseline-discovery mode to the suite runner so Graph/Az/Teams/Exchange update scenarios do not silently skip when no `-UpdateBaselineVersion` is supplied.
 - [x] Add force/no-op benchmark gates for install, save, and update before claiming PowerShellGet/PSResourceGet compatibility parity.
 - [x] Optimize warm forced update when the selected version is already present and the only dependency is already satisfied; current smoke evidence shows managed `UpdateForce` fastest on PowerShell 7 and Windows PowerShell 5.1.
-- [ ] Continue optimizing forced install when the selected version is already present; current PowerShell 7 small-package smoke still shows ModuleFast faster for `InstallForce`, while Windows PowerShell 5.1 has managed fastest.
+- [x] Optimize warm forced install when the selected version is already present and the package has an unbounded already-installed dependency; current smoke evidence shows managed `InstallForce` fastest on PowerShell 7 and Windows PowerShell 5.1.
+- [ ] Stabilize repeated force/no-op benchmark gates with `-RepeatCount 3` after the next optimization pass so one-shot child-host variance does not hide regressions.
 
 ### Compatibility Semantics Gates
 

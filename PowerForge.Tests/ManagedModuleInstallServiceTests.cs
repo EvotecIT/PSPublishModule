@@ -4,7 +4,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed class ManagedModuleInstallServiceTests
+public sealed partial class ManagedModuleInstallServiceTests
 {
     [Fact]
     public async Task InstallAsync_installs_latest_stable_package_to_versioned_module_path()

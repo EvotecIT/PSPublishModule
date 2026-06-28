@@ -421,9 +421,6 @@ public sealed class ManagedModuleInstallService
         out ManagedModuleInstallResult result)
     {
         result = null!;
-        if (range.IsUnbounded)
-            return false;
-
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var installedVersion = GetInstalledVersions(moduleRoot, dependencyName)
             .Where(version => AllowsInstalledDependencyVersion(version, request, range))
