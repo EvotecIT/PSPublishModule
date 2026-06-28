@@ -352,6 +352,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Medium public `PSScriptAnalyzer` 1.25.0 install validated through managed and PSResourceGet native baselines, while PowerShellGet reported an administrator-scope failure in the disposable host; this keeps the broad compatibility-fallback retirement gate open for provider-specific limitations.
 - [x] 2026-06-28: Failed native install/update compatibility baselines now still probe disposable roots for module manifests, file counts, disk size, and validated version evidence when a provider exits nonzero after writing files.
 - [x] 2026-06-28: Transition-gate reports now include the failed compatibility engine and a trimmed native error message when a baseline fails, so provider-specific limitations remain actionable in JSON and Markdown evidence.
+- [x] 2026-06-28: Environment-aware `ThreadJob` 2.1.0 public install benchmarks passed `-RequireTransitionReady` on PowerShell 7.6.3 (`Core`, .NET 10.0.9) and Windows PowerShell 5.1.26100.8655 (`Desktop`, .NET Framework 4.8.9325.0); managed, PSResourceGet, and PowerShellGet runs all validated version 2.1.0 from disposable roots.
 
 ## Benchmark Scenarios
 
