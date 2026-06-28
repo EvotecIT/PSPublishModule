@@ -139,7 +139,7 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.ProviderMatrix' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Accounts.ProviderMatrix' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Full.ProviderMatrix' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-        New-BenchmarkScenario -SuiteName 'SaveGate' -Name 'Graph.Authentication.Save' -ModuleName 'Microsoft.Graph.Authentication' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxVsFastest 1.05
+        New-BenchmarkScenario -SuiteName 'SaveGate' -Name 'Graph.Authentication.Save' -ModuleName 'Microsoft.Graph.Authentication' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxRank 1
     )
 }
 
@@ -275,6 +275,32 @@ function Get-ScenarioManagedMaxVsFastest {
 
     if ($Scenario.PSObject.Properties['ManagedMaxVsFastest']) {
         return [double] $Scenario.ManagedMaxVsFastest
+    }
+
+    0.0
+}
+
+function Get-EffectiveManagedMaxRank {
+    param([object] $Scenario)
+
+    if ($ManagedMaxRank -gt 0) {
+        return $ManagedMaxRank
+    }
+    if ($UseScenarioGates.IsPresent) {
+        return Get-ScenarioManagedMaxRank -Scenario $Scenario
+    }
+
+    0
+}
+
+function Get-EffectiveManagedMaxVsFastest {
+    param([object] $Scenario)
+
+    if ($ManagedMaxVsFastest -gt 0) {
+        return $ManagedMaxVsFastest
+    }
+    if ($UseScenarioGates.IsPresent) {
+        return Get-ScenarioManagedMaxVsFastest -Scenario $Scenario
     }
 
     0.0
@@ -429,8 +455,8 @@ function Add-SummaryRows {
                 Repository = Get-ScenarioRepository -Scenario $Scenario
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $Scenario
                 ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $Scenario
-                GateManagedMaxRank = Get-ScenarioManagedMaxRank -Scenario $Scenario
-                GateManagedMaxVsFastest = Get-ScenarioManagedMaxVsFastest -Scenario $Scenario
+                GateManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $Scenario
+                GateManagedMaxVsFastest = Get-EffectiveManagedMaxVsFastest -Scenario $Scenario
                 UpdateBaselineVersion = $resolvedBaseline
                 UpdateTargetVersion = $resolvedTarget
                 Host = $HostLabel
@@ -546,6 +572,8 @@ $metadata = [ordered]@{
                 ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $_
                 ManagedMaxRank = Get-ScenarioManagedMaxRank -Scenario $_
                 ManagedMaxVsFastest = Get-ScenarioManagedMaxVsFastest -Scenario $_
+                EffectiveManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $_
+                EffectiveManagedMaxVsFastest = Get-EffectiveManagedMaxVsFastest -Scenario $_
             }
         })
     Hosts = $HostName

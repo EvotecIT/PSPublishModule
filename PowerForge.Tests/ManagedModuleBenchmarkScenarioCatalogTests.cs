@@ -30,6 +30,11 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Property(row, "Name") == "Az.Full.ProviderMatrix" &&
             Property(row, "Version") == "16.0.0" &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }));
+        Assert.Contains(rows, row =>
+            Property(row, "Name") == "Graph.Authentication.Save" &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1 &&
+            DoubleProperty(row, "ManagedMaxVsFastest") == 0);
     }
 
     private static JsonDocument InvokeScenarioList(string script)
@@ -42,7 +47,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         process.StartInfo.ArgumentList.Add("Bypass");
         process.StartInfo.ArgumentList.Add("-Command");
         process.StartInfo.ArgumentList.Add(
-            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
+            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.UseShellExecute = false;
@@ -73,4 +78,10 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
 
     private static bool BooleanProperty(JsonElement value, string name)
         => value.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.True;
+
+    private static int Int32Property(JsonElement value, string name)
+        => value.TryGetProperty(name, out var property) && property.TryGetInt32(out var result) ? result : 0;
+
+    private static double DoubleProperty(JsonElement value, string name)
+        => value.TryGetProperty(name, out var property) && property.TryGetDouble(out var result) ? result : 0;
 }
