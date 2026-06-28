@@ -62,6 +62,9 @@ internal sealed class PrivateModuleWorkflowResult
 {
     internal bool OperationPerformed { get; set; }
     internal string RepositoryName { get; set; } = string.Empty;
+    internal ModuleStateDeliveryTransport RequestedTransport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
+    internal ModuleStateDeliveryTransport EffectiveTransport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
+    internal string DeliveryTransportReason { get; set; } = string.Empty;
     internal IReadOnlyList<ModuleDependencyInstallResult> DependencyResults { get; set; } = System.Array.Empty<ModuleDependencyInstallResult>();
 }
 

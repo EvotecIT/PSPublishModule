@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -129,6 +130,62 @@ public sealed class PrivateModuleWorkflowServiceTests
         Assert.NotNull(capturedRequest);
         Assert.Equal("Company", capturedRequest!.RepositoryName);
         Assert.Equal("PSResourceGet", result.DependencyResults[0].Installer);
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, result.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, result.EffectiveTransport);
+        Assert.Contains("registered repository name", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(host.VerboseMessages, message => message.Contains("using PrivateModule", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Execute_AutoTransportWithRepositorySource_UsesManagedExecutor()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        var compatibilityExecutorCalled = false;
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            _ =>
+            {
+                compatibilityExecutorCalled = true;
+                return Array.Empty<ModuleDependencyInstallResult>();
+            });
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "Company.Tools" },
+                RequiredVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Company.Tools"] = "1.0.0"
+                },
+                UseAzureArtifacts = false,
+                RepositoryName = "Local",
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto,
+                ManagedRepositorySource = feed.Path,
+                ManagedModuleRoot = moduleRoot.Path
+            },
+            (_, _) => true);
+
+        Assert.True(result.OperationPerformed);
+        Assert.False(compatibilityExecutorCalled);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("ManagedModule", dependency.Installer);
+        Assert.Equal("1.0.0", dependency.ResolvedVersion);
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, result.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.EffectiveTransport);
+        Assert.Contains("repository source", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(host.VerboseMessages, message => message.Contains("using ManagedModule", StringComparison.OrdinalIgnoreCase));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
     [Fact]
@@ -230,6 +287,8 @@ public sealed class PrivateModuleWorkflowServiceTests
 
     private sealed class FakePrivateGalleryHost : IPrivateGalleryHost
     {
+        internal List<string> VerboseMessages { get; } = new();
+
         public bool ShouldProcess(string target, string action) => true;
 
         public bool IsWhatIfRequested => false;
@@ -238,10 +297,17 @@ public sealed class PrivateModuleWorkflowServiceTests
 
         public void WriteVerbose(string message)
         {
+            VerboseMessages.Add(message);
         }
 
         public void WriteWarning(string message)
         {
         }
     }
+
+    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
+        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+        };
 }

@@ -356,6 +356,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Transition-gate results now expose provider-specific compatibility limitations as typed JSON data and Markdown report columns, and fallback reasons prefer the concrete provider failure over a generic missing-baseline message.
 - [x] 2026-06-28: Environment-aware `ThreadJob` 2.1.0 public install benchmarks passed `-RequireTransitionReady` on PowerShell 7.6.3 (`Core`, .NET 10.0.9) and Windows PowerShell 5.1.26100.8655 (`Desktop`, .NET Framework 4.8.9325.0); managed, PSResourceGet, and PowerShellGet runs all validated version 2.1.0 from disposable roots.
 - [x] 2026-06-28: Environment-aware `ThreadJob` 1.0.0 to 2.1.0 public update benchmarks on PowerShell 7.6.3 and Windows PowerShell 5.1.26100.8655 validated managed and PSResourceGet updates to version 2.1.0, while PowerShellGet failed its native seed/install path with `End of Central Directory record could not be found`; the update transition gate remains incomplete for that explicit provider limitation.
+- [x] 2026-06-28: `Install-PrivateModule` / `Update-PrivateModule` workflow results now record requested transport, effective transport, and the reason `Auto` chose managed delivery or compatibility fallback; verbose output reports the same decision for operator inspection.
 
 ## Benchmark Scenarios
 
