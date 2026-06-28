@@ -7,10 +7,15 @@ public sealed partial class ManagedModuleRepositoryClient
 {
     internal static HttpMessageHandler CreateDefaultHttpMessageHandler(ManagedModuleRepositoryClientOptions options)
     {
+        var decompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+#if !NET472
+        decompression |= DecompressionMethods.Brotli;
+#endif
         var handler = new HttpClientHandler
         {
             UseProxy = options.UseProxy,
-            AllowAutoRedirect = false
+            AllowAutoRedirect = false,
+            AutomaticDecompression = decompression
         };
         if (!options.UseProxy || options.ProxyAddress is null)
             return handler;

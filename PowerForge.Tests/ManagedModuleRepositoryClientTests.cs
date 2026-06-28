@@ -339,6 +339,19 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public void CreateDefaultHttpMessageHandler_requests_compressed_repository_responses()
+    {
+        var handler = Assert.IsType<HttpClientHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
+            new ManagedModuleRepositoryClientOptions()));
+
+        Assert.True(handler.AutomaticDecompression.HasFlag(DecompressionMethods.GZip));
+        Assert.True(handler.AutomaticDecompression.HasFlag(DecompressionMethods.Deflate));
+#if !NET472
+        Assert.True(handler.AutomaticDecompression.HasFlag(DecompressionMethods.Brotli));
+#endif
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_writes_package_from_nuget_v3_feed()
     {
         var requests = new List<RecordedRequest>();
