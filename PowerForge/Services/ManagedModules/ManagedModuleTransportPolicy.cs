@@ -66,7 +66,8 @@ public static class ManagedModuleTransportPolicy
             {
                 RequestedTransport = input.RequestedTransport,
                 EffectiveTransport = ModuleStateDeliveryTransport.PrivateModule,
-                Reason = "Auto selected compatibility transport because the repository input resolved to a registered repository name rather than a repository source URI or local feed path."
+                Reason = "Auto selected compatibility transport because the repository input resolved to a registered repository name rather than a repository source URI or local feed path.",
+                CompatibilityFallbackRequiresRepositorySource = true
             };
         }
 

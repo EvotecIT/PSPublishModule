@@ -30,6 +30,7 @@ public sealed class ManagedModuleTransportPolicyTests
         Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, decision.EffectiveTransport);
         Assert.Contains("registered repository name", decision.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.False(decision.CompatibilityFallbackIsProviderLimited);
+        Assert.True(decision.CompatibilityFallbackRequiresRepositorySource);
     }
 
     [Fact]
@@ -60,6 +61,7 @@ public sealed class ManagedModuleTransportPolicyTests
         Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, decision.EffectiveTransport);
         Assert.Equal(ManagedModuleProviderSupportLevel.Partial, decision.ProviderSupport?.Level);
         Assert.True(decision.CompatibilityFallbackIsProviderLimited);
+        Assert.False(decision.CompatibilityFallbackRequiresRepositorySource);
         Assert.Contains("OIDC", decision.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
