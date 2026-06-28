@@ -376,6 +376,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Transition gates now distinguish managed engine readiness from legacy compatibility provider failures. Benchmark JSON and Markdown can show `ManagedEvidenceReady` and `LegacyCompatibilityProviderFailureObserved` when managed passes but an old compatibility baseline fails.
 - [x] 2026-06-28: Native compatibility Windows PowerShell hosts now pre-seed the disposable PowerShellGet profile with the default PSGallery repository instead of relying on `Register-PSRepository -Default` bootstrap. A public `ThreadJob` 1.0.0 to 2.1.0 update rerun against `C:\Users\przemyslaw.klys.EVOTEC\AppData\Local\Temp\pf-public-update-e18fc1f0c0b94c89ba44761591b3053f` validated managed and PSResourceGet updates to 2.1.0, while PowerShellGet reached its native install path and still failed with `End of Central Directory record could not be found`.
 - [x] 2026-06-28: `Measure-ManagedModule -RequireManagedEvidenceReady` now fails closed when managed install/save/update/publish evidence is missing, failed, import-invalid, version-invalid, or outside the active performance policy, while still allowing reports to show incomplete legacy compatibility baselines separately.
+- [x] 2026-06-28: Benchmark JSON and Markdown reports now include a typed managed-evidence readiness summary, so measured-operation readiness can be audited independently from the stricter compatibility-retirement gate.
 
 ## Benchmark Scenarios
 

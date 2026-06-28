@@ -71,6 +71,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine();
         AppendProviderSupport(markdown, result.ProviderSupport ?? Array.Empty<ManagedModuleProviderSupport>());
         markdown.AppendLine();
+        AppendManagedEvidence(markdown, result.ManagedEvidence);
+        markdown.AppendLine();
         AppendCompatibilityRetirement(markdown, result.CompatibilityRetirement);
         markdown.AppendLine();
         AppendSummary(markdown, runs);
@@ -186,6 +188,36 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(Escape(FormatLimitations(support.Limitations)))
                 .AppendLine(" |");
         }
+    }
+
+    private static void AppendManagedEvidence(StringBuilder markdown, ManagedModuleManagedEvidenceResult? evidence)
+    {
+        markdown.AppendLine("## Managed Evidence");
+        markdown.AppendLine();
+        if (evidence is null)
+        {
+            markdown.AppendLine("_No managed evidence summary was recorded._");
+            return;
+        }
+
+        markdown.AppendLine("| Status | Ready | Required operations | Ready operations | Missing | Incomplete |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | --- |");
+        markdown.Append("| ")
+            .Append(evidence.Status)
+            .Append(" | ")
+            .Append(evidence.Ready ? "yes" : "no")
+            .Append(" | ")
+            .Append(Escape(FormatOperations(evidence.RequiredOperations)))
+            .Append(" | ")
+            .Append(Escape(FormatOperations(evidence.ReadyOperations)))
+            .Append(" | ")
+            .Append(Escape(FormatOperations(evidence.MissingOperations)))
+            .Append(" | ")
+            .Append(Escape(FormatOperations(evidence.IncompleteOperations)))
+            .AppendLine(" |");
+
+        foreach (var reason in evidence.Reasons ?? Array.Empty<string>())
+            markdown.Append("- ").Append(Escape(reason)).AppendLine();
     }
 
     private static void AppendCompatibilityRetirement(StringBuilder markdown, ManagedModuleCompatibilityRetirementResult? retirement)

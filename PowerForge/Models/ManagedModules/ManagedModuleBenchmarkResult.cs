@@ -36,6 +36,11 @@ public sealed class ManagedModuleBenchmarkResult
     public IReadOnlyList<ManagedModuleBenchmarkTransitionGateResult> TransitionGates { get; set; } = Array.Empty<ManagedModuleBenchmarkTransitionGateResult>();
 
     /// <summary>
+    /// Managed engine evidence readiness for the measured transition gates.
+    /// </summary>
+    public ManagedModuleManagedEvidenceResult ManagedEvidence { get; set; } = new();
+
+    /// <summary>
     /// Overall evidence summary for marking compatibility transport as legacy.
     /// </summary>
     public ManagedModuleCompatibilityRetirementResult CompatibilityRetirement { get; set; } = new();

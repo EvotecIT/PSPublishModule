@@ -263,8 +263,11 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
 
     private void AssertManagedEvidenceReady(ManagedModuleBenchmarkResult result)
     {
-        var gates = result.TransitionGates ?? Array.Empty<ManagedModuleBenchmarkTransitionGateResult>();
-        if (gates.Count == 0)
+        var evidence = result.ManagedEvidence ?? ManagedModuleManagedEvidenceEvaluator.Evaluate(result);
+        if (evidence.Ready)
+            return;
+
+        if (evidence.RequiredOperations.Count == 0)
         {
             ThrowTerminatingError(new ErrorRecord(
                 new InvalidOperationException("No transition gates were evaluated. Measure install, save, update, or publish before requiring managed evidence readiness."),
@@ -274,15 +277,7 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             return;
         }
 
-        var blocked = gates
-            .Where(static gate => !gate.ManagedEvidenceReady)
-            .ToArray();
-        if (blocked.Length == 0)
-            return;
-
-        var details = string.Join(
-            "; ",
-            blocked.Select(static gate => gate.Operation + " (" + string.Join("; ", gate.Reasons ?? Array.Empty<string>()) + ")"));
+        var details = string.Join("; ", evidence.Reasons ?? Array.Empty<string>());
         ThrowTerminatingError(new ErrorRecord(
             new InvalidOperationException("Managed module evidence gate is not ready. " + details),
             "ManagedModuleEvidenceGateNotReady",

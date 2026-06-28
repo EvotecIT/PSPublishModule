@@ -123,6 +123,7 @@ public sealed partial class ManagedModuleBenchmarkService
             runs,
             request.MaximumManagedSlowdownRatio,
             request.MaximumManagedSlowdownMilliseconds);
+        var managedEvidence = ManagedModuleManagedEvidenceEvaluator.Evaluate(transitionGates);
 
         return new ManagedModuleBenchmarkResult
         {
@@ -132,6 +133,7 @@ public sealed partial class ManagedModuleBenchmarkService
             ProviderSupport = providerSupport,
             Runs = runs,
             TransitionGates = transitionGates,
+            ManagedEvidence = managedEvidence,
             CompatibilityRetirement = ManagedModuleCompatibilityRetirementEvaluator.Evaluate(transitionGates, providerSupport)
         };
     }
