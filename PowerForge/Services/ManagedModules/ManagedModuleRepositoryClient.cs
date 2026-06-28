@@ -222,7 +222,7 @@ public sealed partial class ManagedModuleRepositoryClient
             var result = repository.Kind switch
             {
                 ManagedModuleRepositoryKind.LocalFolder => await CopyLocalPackageAsync(repository, packageId, version, destinationDirectory, cancellationToken).ConfigureAwait(false),
-                ManagedModuleRepositoryKind.NuGetV3 => await DownloadNuGetPackageWithPowerShellGalleryReadApiAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
+                ManagedModuleRepositoryKind.NuGetV3 => await DownloadNuGetPackageWithPowerShellGalleryCdnAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
                 ManagedModuleRepositoryKind.NuGetV2 => await DownloadNuGetV2PackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
             };
@@ -290,23 +290,6 @@ public sealed partial class ManagedModuleRepositoryClient
         }
 
         return await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<ManagedModuleDownloadResult> DownloadNuGetPackageWithPowerShellGalleryReadApiAsync(
-        ManagedModuleRepository repository,
-        string packageId,
-        string version,
-        string destinationDirectory,
-        RepositoryCredential? credential,
-        CancellationToken cancellationToken)
-    {
-        if (ShouldUsePowerShellGalleryV2ReadApi(repository))
-        {
-            var fallback = CreatePowerShellGalleryV2Fallback(repository);
-            return await DownloadNuGetV2PackageAsync(fallback, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
-        }
-
-        return await DownloadNuGetPackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
     }
 
     private ManagedModuleDownloadResult? TryUseCachedPackage(

@@ -396,13 +396,35 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
-    public async Task DownloadPackageAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
+    public async Task DownloadPackageAsync_uses_powershellgallery_cdn_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();
         using var temp = new TemporaryDirectory();
-        using var client = new HttpClient(new ManagedModuleHandler(
-            requests,
-            powerShellGalleryV3StatusCode: HttpStatusCode.Forbidden));
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "PSGallery",
+            "https://www.powershellgallery.com/api/v3/index.json");
+
+        var result = await repositoryClient.DownloadPackageAsync(repository, "Pester", "5.7.0", temp.Path);
+
+        Assert.True(File.Exists(result.PackagePath));
+        Assert.Equal("Pester", result.Metadata!.Id);
+        Assert.Equal("5.7.0", result.Metadata.Version);
+        Assert.Equal("PSGallery", result.RepositoryName);
+        Assert.Equal("https://cdn.powershellgallery.com/packages/pester.5.7.0.nupkg", result.Source);
+        Assert.Equal(0, result.RedirectCount);
+        Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://cdn.powershellgallery.com/packages/pester.5.7.0.nupkg");
+        Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0");
+    }
+
+    [Fact]
+    public async Task DownloadPackageAsync_falls_back_to_powershellgallery_v2_package_when_cdn_misses()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests, powerShellGalleryCdnStatusCode: HttpStatusCode.NotFound));
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository(
             "PSGallery",
@@ -416,6 +438,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("PSGallery", result.RepositoryName);
         Assert.Equal("https://www.powershellgallery.com/api/v2/package/Pester/5.7.0", result.Source);
         Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://cdn.powershellgallery.com/packages/pester.5.7.0.nupkg");
         Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0");
     }
 
@@ -687,18 +710,21 @@ public sealed class ManagedModuleRepositoryClientTests
         private readonly List<RecordedRequest> _requests;
         private readonly bool _conflictPublishes;
         private readonly HttpStatusCode? _powerShellGalleryV3StatusCode;
+        private readonly HttpStatusCode? _powerShellGalleryCdnStatusCode;
         private int _serviceIndexFailures;
 
         public ManagedModuleHandler(
             List<RecordedRequest> requests,
             bool conflictPublishes = false,
             int serviceIndexFailures = 0,
-            HttpStatusCode? powerShellGalleryV3StatusCode = null)
+            HttpStatusCode? powerShellGalleryV3StatusCode = null,
+            HttpStatusCode? powerShellGalleryCdnStatusCode = null)
         {
             _requests = requests;
             _conflictPublishes = conflictPublishes;
             _serviceIndexFailures = serviceIndexFailures;
             _powerShellGalleryV3StatusCode = powerShellGalleryV3StatusCode;
+            _powerShellGalleryCdnStatusCode = powerShellGalleryCdnStatusCode;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -837,6 +863,18 @@ public sealed class ManagedModuleRepositoryClientTests
 
             if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0")
             {
+                var bytes = TestPackageFactory.CreateBytes("Pester", "5.7.0");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(bytes)
+                });
+            }
+
+            if (uri.AbsoluteUri == "https://cdn.powershellgallery.com/packages/pester.5.7.0.nupkg")
+            {
+                if (_powerShellGalleryCdnStatusCode.HasValue)
+                    return Task.FromResult(new HttpResponseMessage(_powerShellGalleryCdnStatusCode.Value));
+
                 var bytes = TestPackageFactory.CreateBytes("Pester", "5.7.0");
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
