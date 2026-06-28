@@ -282,14 +282,16 @@ public sealed class ManagedModuleBenchmarkReportWriter
             return;
         }
 
-        markdown.AppendLine("| Operation | Status | Default ready | Fallback | Managed | Compatibility | Covered baselines | Performance | Provider limitations | Reasons |");
-        markdown.AppendLine("| --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- |");
+        markdown.AppendLine("| Operation | Status | Managed ready | Default ready | Fallback | Managed | Compatibility | Covered baselines | Performance | Provider limitations | Legacy provider failure | Reasons |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- | --- |");
         foreach (var gate in gates.OrderBy(static gate => gate.Operation))
         {
             markdown.Append("| ")
                 .Append(gate.Operation)
                 .Append(" | ")
                 .Append(gate.Status)
+                .Append(" | ")
+                .Append(gate.ManagedEvidenceReady ? "yes" : "no")
                 .Append(" | ")
                 .Append(gate.ReadyForDefaultManagedTransport ? "yes" : "no")
                 .Append(" | ")
@@ -308,6 +310,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(Escape(FormatPerformance(gate)))
                 .Append(" | ")
                 .Append(Escape(FormatProviderLimitations(gate)))
+                .Append(" | ")
+                .Append(gate.LegacyCompatibilityProviderFailureObserved ? "yes" : "no")
                 .Append(" | ")
                 .Append(Escape(string.Join("; ", gate.Reasons ?? Array.Empty<string>())))
                 .AppendLine(" |");

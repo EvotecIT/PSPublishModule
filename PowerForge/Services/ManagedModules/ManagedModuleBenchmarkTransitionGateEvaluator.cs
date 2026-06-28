@@ -59,6 +59,7 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
             maximumManagedSlowdownRatio,
             maximumManagedSlowdownMilliseconds);
         var providerLimitations = BuildCompatibilityProviderLimitations(compatibilityRuns);
+        var managedEvidenceReady = IsManagedEvidenceReady(managedRuns, performance);
         var reasons = BuildReasons(operation, managedRuns, compatibilityRuns, coveredCompatibilityEngines, performance, providerLimitations);
         var status = ResolveStatus(operation, compatibilityRuns, reasons);
         var nativeIsolationRequired = RequiresNativeIsolation(operation, compatibilityRuns);
@@ -69,9 +70,11 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
             Operation = operation,
             Status = status,
             ReadyForDefaultManagedTransport = status == ManagedModuleBenchmarkTransitionGateStatus.Ready,
+            ManagedEvidenceReady = managedEvidenceReady,
             CompatibilityFallbackRequired = status != ManagedModuleBenchmarkTransitionGateStatus.Ready,
             CompatibilityFallbackReason = fallbackReason,
             CompatibilityProviderLimitations = providerLimitations,
+            LegacyCompatibilityProviderFailureObserved = managedEvidenceReady && providerLimitations.Count > 0,
             NativeIsolationRequired = nativeIsolationRequired,
             ManagedRunCount = managedRuns.Length,
             SuccessfulManagedRunCount = managedRuns.Count(static run => run.Succeeded),
@@ -200,6 +203,15 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
     private static bool HasFailedImportValidation(ManagedModuleBenchmarkRunResult run)
         => (run.ImportValidations ?? Array.Empty<ManagedModuleImportValidationResult>())
             .Any(static validation => !validation.Succeeded);
+
+    private static bool IsManagedEvidenceReady(
+        IReadOnlyList<ManagedModuleBenchmarkRunResult> managedRuns,
+        PerformanceEvidence? performance)
+        => managedRuns.Count > 0 &&
+           managedRuns.All(static run => run.Succeeded) &&
+           managedRuns.All(static run => run.VersionValidationSucceeded != false) &&
+           !managedRuns.Any(HasFailedImportValidation) &&
+           performance is not { WithinPolicy: false };
 
     private static PerformanceEvidence? EvaluatePerformance(
         IReadOnlyList<ManagedModuleBenchmarkRunResult> managedRuns,

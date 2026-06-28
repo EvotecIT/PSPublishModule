@@ -19,7 +19,9 @@ public sealed class ManagedModuleBenchmarkTransitionGateEvaluatorTests
 
         var gate = Assert.Single(gates);
         Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Incomplete, gate.Status);
+        Assert.True(gate.ManagedEvidenceReady);
         Assert.False(gate.NativeIsolationRequired);
+        Assert.True(gate.LegacyCompatibilityProviderFailureObserved);
         Assert.Contains("PowerShellGet", gate.CompatibilityFallbackReason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Administrator rights", gate.CompatibilityFallbackReason, StringComparison.OrdinalIgnoreCase);
         var limitation = Assert.Single(gate.CompatibilityProviderLimitations);
