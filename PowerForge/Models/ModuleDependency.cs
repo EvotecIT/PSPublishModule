@@ -31,25 +31,6 @@ public sealed class ModuleDependency
     /// </summary>
     public ModuleDependency(
         string name,
-        string? requiredVersion,
-        string? minimumVersion,
-        string? maximumVersion)
-        : this(
-            name,
-            requiredVersion,
-            minimumVersion,
-            maximumVersion,
-            installScope: null,
-            minimumVersionInclusive: true,
-            maximumVersionInclusive: true)
-    {
-    }
-
-    /// <summary>
-    /// Creates a new dependency specification.
-    /// </summary>
-    public ModuleDependency(
-        string name,
         string? requiredVersion = null,
         string? minimumVersion = null,
         string? maximumVersion = null,
