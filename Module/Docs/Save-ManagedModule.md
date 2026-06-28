@@ -1,4 +1,4 @@
-﻿---
+---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
@@ -11,7 +11,7 @@ Saves modules from a managed repository to an explicit module root.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -73,6 +73,22 @@ Allowed package author values from package metadata.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: RequiredAuthor, TrustedAuthor
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AuthenticodeCheck
+Validate Authenticode signatures for signable package files before saving.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False
