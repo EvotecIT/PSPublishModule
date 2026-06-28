@@ -1,6 +1,6 @@
 # Managed Module Benchmarks
 
-`Compare-ManagedModuleEngines.ps1` is the PowerShell/user-workflow benchmark harness for managed module lifecycle work. It compares PSPublishModule's managed cmdlets against available compatibility tools, writes raw evidence and summary files under `Ignore\Benchmarks\ManagedModules\Run-*`, and keeps benchmark commands out of the shipped module surface.
+`Compare-ManagedModuleEngines.ps1` is the PowerShell/user-workflow benchmark harness for managed module lifecycle work. It compares PSPublishModule's managed cmdlets against available compatibility tools, writes direct-run evidence under `Ignore\Benchmarks\ManagedModules\Run-*`, writes suite evidence under `Ignore\Benchmarks\MM\S*`, and keeps benchmark commands out of the shipped module surface.
 
 The production module should expose module-management cmdlets. Benchmarking stays here as contributor and CI evidence, similar to other Evotec benchmark folders.
 
@@ -46,6 +46,12 @@ Run the named same-source Graph install speed gate against ModuleFast:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SpeedGate -ScenarioName Graph.Full.SameSource -HostName PowerShell7 -RepeatCount 3 -RotateEngineOrder -ManagedMaxRank 1 -RemoveOutputRoots -SkipBuild
+```
+
+Run the lifecycle evidence lane across PowerShell 7 and Windows PowerShell 5.1. This lane covers no-op and force semantics for install and save, keeps ModuleFast in the install comparison, and uses compact suite paths so Windows PowerShell 5.1 does not trip over legacy path-length limits. Use the warm-cache ratio gate for a practical maintenance-style check; strict one-shot rank gates can be too sensitive to child-host startup variance on no-op rows:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite LifecycleGate -HostName PowerShell7,WindowsPowerShell -RepeatCount 1 -RotateEngineOrder -CacheMode Warm -ManagedMaxVsFastest 1.25 -RemoveOutputRoots -SkipBuild
 ```
 
 Fail a comparison when managed is not the fastest successful engine:
@@ -253,5 +259,6 @@ Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's Pow
 - After adding in-flight install coalescing for equivalent dependency targets and increasing managed dependency fan-out to 32, PowerShell 7 reran full `Microsoft.Graph` install against the ModuleFast speed gate with `-RepeatCount 3 -RotateEngineOrder -RemoveOutputRoots`. One rotated run measured managed first by median at 6561.35 ms versus ModuleFast at 7572.29 ms, but the follow-up strict `-ManagedMaxRank 1` gate showed the lane is not yet stable enough to call always-fastest: ModuleFast median 7352.39 ms, managed median 7474.17 ms, managed ratio 1.02x. Managed recorded 78 package-tree rows, 40 unique package outputs, 40 installed rows, 38 already-satisfied coalesced dependency rows, 81 whole-operation repository requests, 80 package-delivery requests, and 186.5 MB downloaded.
 - A follow-up experiment tried a larger managed NuGet v2 download buffer, but the strict full Graph gate exposed download outliers and the change was reverted. The failed run is retained under `Ignore\Benchmarks\ManagedModules\Run-20260628-195825-164112`; managed median was 28147.64 ms versus ModuleFast 6546.36 ms, with one `Microsoft.Graph.Files` download taking about 103 seconds. Treat this as evidence that public-gallery backend and transport variance must be separated from engine changes.
 - PowerShell 7 then ran same-source full `Microsoft.Graph` 2.38.0 install comparisons with both managed and ModuleFast using `https://pwsh.gallery/index.json`. The first single run measured managed at 3441.40 ms versus ModuleFast at 6652.64 ms. A follow-up repeated rotated gate with `-RepeatCount 3 -ManagedMaxRank 1` passed in `Ignore\Benchmarks\ManagedModules\Run-20260628-200710-188900`: managed median 3565.75 ms, ModuleFast median 8925.20 ms, all six operation rows succeeded, and the gate CSV contained no violations. The managed detail summary recorded 78 package-tree rows, 40 unique package outputs, 40 installed rows, 38 already-satisfied coalesced dependency rows, 41 whole-operation repository requests, 41 package-delivery requests, 186.5 MB downloaded, and about 1.05 GB of output. This proves the managed engine can beat the ModuleFast lane when both use the same package source; keep default-source and same-source gates separate.
+- The suite runner now writes compact suite folders under `Ignore\Benchmarks\MM` and uses compact host/scenario folder names so Windows PowerShell 5.1 save benchmarks avoid legacy path-length failures. A warm lifecycle ratio gate passed on 2026-06-28 with `-ManagedMaxVsFastest 1.25`: PowerShell 7 measured managed fastest for `InstallNoOp` at 566.37 ms, `InstallForce` at 606.77 ms, `SaveNoOp` at 46.91 ms, and `SaveForce` at 29.27 ms; Windows PowerShell 5.1 measured managed fastest for `InstallNoOp` at 623.98 ms, `InstallForce` at 806.27 ms, `SaveNoOp` at 51.61 ms, and `SaveForce` at 36.09 ms.
 
 Treat these numbers as a local baseline, not a release claim. Re-run the same commands after installer changes and compare the emitted CSV/JSON files before deciding whether an optimization is real.

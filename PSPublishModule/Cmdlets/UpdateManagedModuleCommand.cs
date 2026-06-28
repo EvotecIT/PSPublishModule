@@ -24,7 +24,6 @@ namespace PSPublishModule;
 /// <code>Update-ManagedModule -Name Company.Tools -Repository C:\Packages -Path C:\Modules</code>
 /// </example>
 [Cmdlet(VerbsData.Update, "ManagedModule", SupportsShouldProcess = true)]
-[Alias("Update-PublicModule")]
 [OutputType(typeof(ManagedModuleUpdateResult), typeof(ManagedModuleUpdatePlan))]
 public sealed class UpdateManagedModuleCommand : PSCmdlet
 {

@@ -7,21 +7,23 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleAliasCommandTests
 {
     [Theory]
-    [InlineData("Find-PublicModule", "Find-ManagedModule")]
-    [InlineData("Install-PublicModule", "Install-ManagedModule")]
-    [InlineData("Publish-PublicModule", "Publish-ManagedModule")]
-    [InlineData("Save-PublicModule", "Save-ManagedModule")]
-    [InlineData("Update-PublicModule", "Update-ManagedModule")]
-    public void Managed_module_public_aliases_resolve_to_managed_commands(string aliasName, string commandName)
+    [InlineData("Find-PublicModule")]
+    [InlineData("Install-PublicModule")]
+    [InlineData("Publish-PublicModule")]
+    [InlineData("Save-PublicModule")]
+    [InlineData("Update-PublicModule")]
+    public void Managed_module_public_aliases_are_not_exported(string aliasName)
     {
         using var ps = CreatePowerShellWithModuleImported();
         ps.AddCommand("Get-Command")
-            .AddArgument(aliasName);
+            .AddParameter("Name", aliasName)
+            .AddParameter("ErrorAction", ActionPreference.Ignore);
 
-        var command = Assert.IsType<AliasInfo>(Assert.Single(ps.Invoke()).BaseObject);
+        var results = ps.Invoke();
+        ps.Streams.Error.Clear();
 
-        AssertNoPowerShellErrors(ps);
-        Assert.Equal(commandName, command.Definition);
+        Assert.Empty(ps.Streams.Error);
+        Assert.Empty(results);
     }
 
     [Fact]

@@ -26,7 +26,6 @@ namespace PSPublishModule;
 /// <code>Find-ManagedModule -Name Company.Tools -Repository C:\Packages -AllVersions -AllowPrerelease</code>
 /// </example>
 [Cmdlet(VerbsCommon.Find, "ManagedModule")]
-[Alias("Find-PublicModule")]
 [OutputType(typeof(ManagedModuleVersionInfo))]
 public sealed class FindManagedModuleCommand : PSCmdlet
 {
