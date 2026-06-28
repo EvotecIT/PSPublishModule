@@ -3,6 +3,7 @@ function Invoke-IsolatedRepairPlanHost {
         [string] $Destination,
         [string] $DetailPath,
         [string] $MaintenanceReceiptPath = '',
+        [string[]] $Family = @(),
         [bool] $Latest
     )
 
@@ -33,6 +34,10 @@ function Invoke-IsolatedRepairPlanHost {
             '-MaintenanceReceiptPath'
             $MaintenanceReceiptPath
         )
+    }
+    if ($Family -and $Family.Count -gt 0) {
+        $arguments += '-Family'
+        $arguments += $Family
     }
     if ($AcceptLicense.IsPresent) {
         $arguments += '-AcceptLicense'
@@ -145,6 +150,35 @@ function New-RepairPlanMaintenanceReceipt {
     $path
 }
 
+function New-RepairPlanSyntheticModule {
+    param(
+        [string] $Destination,
+        [string] $Name,
+        [string] $Version
+    )
+
+    $moduleDirectory = Join-Path $Destination (Join-Path $Name $Version)
+    New-Item -Path $moduleDirectory -ItemType Directory -Force | Out-Null
+    $manifestPath = Join-Path $moduleDirectory ($Name + '.psd1')
+    @"
+@{
+    RootModule = '$Name.psm1'
+    ModuleVersion = '$Version'
+    GUID = '$([Guid]::NewGuid())'
+    Author = 'PowerForge benchmark'
+    Description = 'Synthetic module-state repair benchmark module.'
+}
+"@ | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $moduleDirectory ($Name + '.psm1')) -Value '' -Encoding UTF8
+}
+
+function New-RepairPlanFamilyCoherenceSeed {
+    param([string] $Destination)
+
+    New-RepairPlanSyntheticModule -Destination $Destination -Name 'Microsoft.Graph.Authentication' -Version '2.36.0'
+    New-RepairPlanSyntheticModule -Destination $Destination -Name 'Microsoft.Graph.Users' -Version '2.38.0'
+}
+
 function Invoke-RepairPlanScenario {
     param([string] $EngineName, [int] $Iteration, [string] $ScenarioName)
 
@@ -171,14 +205,20 @@ function Invoke-RepairPlanScenario {
     }
     $versionOverride = if ($ScenarioName -eq 'StaleVersion') {
         $script:ResolvedUpdateBaselineVersion
+    } elseif ($ScenarioName -eq 'FamilyCoherence') {
+        ''
     } else {
         $script:ResolvedUpdateTargetVersion
     }
 
-    try {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $versionOverride -PackageCacheDirectory $packageCacheDirectory
-    } catch {
-        return New-FailedRow -OperationName 'RepairPlan' -ScenarioName $ScenarioName -EngineName $EngineName -Iteration $Iteration -Reason "Baseline install failed: $($_.Exception.Message)" -OutputRoot $destination
+    if ($ScenarioName -eq 'FamilyCoherence') {
+        New-RepairPlanFamilyCoherenceSeed -Destination $destination
+    } else {
+        try {
+            Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $versionOverride -PackageCacheDirectory $packageCacheDirectory
+        } catch {
+            return New-FailedRow -OperationName 'RepairPlan' -ScenarioName $ScenarioName -EngineName $EngineName -Iteration $Iteration -Reason "Baseline install failed: $($_.Exception.Message)" -OutputRoot $destination
+        }
     }
     if ($CacheMode -eq 'Cold') {
         Clear-IsolatedPackageCaches -Destination $destination
@@ -186,6 +226,7 @@ function Invoke-RepairPlanScenario {
 
     $maintenanceReceiptPath = ''
     $latest = $ScenarioName -eq 'StaleVersion'
+    $family = @()
     if ($ScenarioName -eq 'SourceDrift') {
         $installedVersion = Get-InstalledModuleVersion -Root $destination -Name $ModuleName
         $moduleDirectory = Find-RepairPlanModuleDirectory -Destination $destination -ExpectedVersion $installedVersion
@@ -194,10 +235,12 @@ function Invoke-RepairPlanScenario {
     } elseif ($ScenarioName -eq 'ScopeDrift') {
         $installedVersion = Get-InstalledModuleVersion -Root $destination -Name $ModuleName
         $maintenanceReceiptPath = New-RepairPlanMaintenanceReceipt -Destination $destination -Version $installedVersion -Source 'Managed module benchmark scope-drift seed' -Scope 'CurrentUser'
+    } elseif ($ScenarioName -eq 'FamilyCoherence') {
+        $family = @('Graph')
     }
 
     $detailPath = Join-Path $workRoot ("managed-repairplan-{0}-details-{1}.json" -f $ScenarioName, $Iteration)
     Invoke-TimedOperation -OperationName 'RepairPlan' -ScenarioName $ScenarioName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
-        Invoke-IsolatedRepairPlanHost -Destination $destination -DetailPath $detailPath -MaintenanceReceiptPath $maintenanceReceiptPath -Latest $latest
+        Invoke-IsolatedRepairPlanHost -Destination $destination -DetailPath $detailPath -MaintenanceReceiptPath $maintenanceReceiptPath -Family $family -Latest $latest
     }
 }

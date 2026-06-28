@@ -62,7 +62,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 $validOperations = @('Find', 'Save', 'Install', 'InstallManaged', 'Update', 'RepairPlan')
-$validRepairScenarios = @('StaleVersion', 'SourceDrift', 'ScopeDrift')
+$validRepairScenarios = @('StaleVersion', 'SourceDrift', 'ScopeDrift', 'FamilyCoherence')
 
 function Resolve-TokenList {
     param(
@@ -878,7 +878,7 @@ if ($ListScenarios.IsPresent) {
 New-Item -Path $workRoot -ItemType Directory -Force | Out-Null
 Invoke-LocalBuild
 $moduleBinary = Import-LocalModule
-$updateBaselineResolution = Initialize-ManagedModuleBenchmarkUpdateBaseline -Operations $Operation -CurrentBaselineVersion $UpdateBaselineVersion -ModuleName $ModuleName -RequestedVersion $Version -RepositorySource $repositorySource
+$updateBaselineResolution = Initialize-ManagedModuleBenchmarkUpdateBaseline -Operations $Operation -RepairScenarios $RepairScenario -CurrentBaselineVersion $UpdateBaselineVersion -ModuleName $ModuleName -RequestedVersion $Version -RepositorySource $repositorySource
 $script:ResolvedUpdateBaselineVersion = [string]$updateBaselineResolution.BaselineVersion
 $script:ResolvedUpdateTargetVersion = [string]$updateBaselineResolution.TargetVersion
 $script:UpdateBaselineResolutionError = [string]$updateBaselineResolution.Error
