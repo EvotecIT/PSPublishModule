@@ -58,10 +58,11 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
             compatibilityRuns,
             maximumManagedSlowdownRatio,
             maximumManagedSlowdownMilliseconds);
-        var reasons = BuildReasons(operation, managedRuns, compatibilityRuns, coveredCompatibilityEngines, performance);
+        var providerLimitations = BuildCompatibilityProviderLimitations(compatibilityRuns);
+        var reasons = BuildReasons(operation, managedRuns, compatibilityRuns, coveredCompatibilityEngines, performance, providerLimitations);
         var status = ResolveStatus(operation, compatibilityRuns, reasons);
         var nativeIsolationRequired = RequiresNativeIsolation(operation, compatibilityRuns);
-        var fallbackReason = ResolveCompatibilityFallbackReason(status, nativeIsolationRequired, reasons);
+        var fallbackReason = ResolveCompatibilityFallbackReason(status, nativeIsolationRequired, reasons, providerLimitations);
 
         return new ManagedModuleBenchmarkTransitionGateResult
         {
@@ -70,6 +71,7 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
             ReadyForDefaultManagedTransport = status == ManagedModuleBenchmarkTransitionGateStatus.Ready,
             CompatibilityFallbackRequired = status != ManagedModuleBenchmarkTransitionGateStatus.Ready,
             CompatibilityFallbackReason = fallbackReason,
+            CompatibilityProviderLimitations = providerLimitations,
             NativeIsolationRequired = nativeIsolationRequired,
             ManagedRunCount = managedRuns.Length,
             SuccessfulManagedRunCount = managedRuns.Count(static run => run.Succeeded),
@@ -94,7 +96,8 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
         IReadOnlyList<ManagedModuleBenchmarkRunResult> managedRuns,
         IReadOnlyList<ManagedModuleBenchmarkRunResult> compatibilityRuns,
         IReadOnlyCollection<string> coveredCompatibilityEngines,
-        PerformanceEvidence? performance)
+        PerformanceEvidence? performance,
+        IReadOnlyList<string> providerLimitations)
     {
         var reasons = new List<string>();
         if (managedRuns.Count == 0)
@@ -123,9 +126,7 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
         else if (failedCompatibility.Length > 0)
         {
             reasons.Add("One or more compatibility benchmark runs failed.");
-            reasons.AddRange(failedCompatibility
-                .GroupBy(static run => string.IsNullOrWhiteSpace(run.Engine) ? "Unknown" : run.Engine!)
-                .Select(static group => FormatCompatibilityFailureReason(group.Key, group.First())));
+            reasons.AddRange(providerLimitations);
         }
 
         if (operation is ManagedModuleBenchmarkOperation.Install or ManagedModuleBenchmarkOperation.Update &&
@@ -169,15 +170,26 @@ public static class ManagedModuleBenchmarkTransitionGateEvaluator
     private static string? ResolveCompatibilityFallbackReason(
         ManagedModuleBenchmarkTransitionGateStatus status,
         bool nativeIsolationRequired,
-        IReadOnlyList<string> reasons)
+        IReadOnlyList<string> reasons,
+        IReadOnlyList<string> providerLimitations)
     {
         if (status == ManagedModuleBenchmarkTransitionGateStatus.Ready)
             return null;
         if (nativeIsolationRequired)
             return "Native install/update comparison requires an isolated disposable host before compatibility fallback can be retired.";
+        if (providerLimitations.Count > 0)
+            return providerLimitations[0];
 
         return reasons.FirstOrDefault();
     }
+
+    private static IReadOnlyList<string> BuildCompatibilityProviderLimitations(
+        IReadOnlyList<ManagedModuleBenchmarkRunResult> compatibilityRuns)
+        => compatibilityRuns
+            .Where(static run => !run.Succeeded && !IsDefaultIsolationBlock(run))
+            .GroupBy(static run => string.IsNullOrWhiteSpace(run.Engine) ? "Unknown" : run.Engine!)
+            .Select(static group => FormatCompatibilityFailureReason(group.Key, group.First()))
+            .ToArray();
 
     private static bool IsManagedEngine(string? engine)
         => IsEngine(engine, ManagedModuleBenchmarkEngine.Managed.ToString());

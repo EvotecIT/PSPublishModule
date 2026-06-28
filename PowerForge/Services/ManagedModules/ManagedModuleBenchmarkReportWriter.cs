@@ -216,8 +216,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
             return;
         }
 
-        markdown.AppendLine("| Operation | Status | Default ready | Fallback | Managed | Compatibility | Covered baselines | Performance | Reasons |");
-        markdown.AppendLine("| --- | --- | --- | --- | ---: | ---: | --- | --- | --- |");
+        markdown.AppendLine("| Operation | Status | Default ready | Fallback | Managed | Compatibility | Covered baselines | Performance | Provider limitations | Reasons |");
+        markdown.AppendLine("| --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- |");
         foreach (var gate in gates.OrderBy(static gate => gate.Operation))
         {
             markdown.Append("| ")
@@ -240,6 +240,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
                 .Append(Escape(FormatCompatibilityCoverage(gate)))
                 .Append(" | ")
                 .Append(Escape(FormatPerformance(gate)))
+                .Append(" | ")
+                .Append(Escape(FormatProviderLimitations(gate)))
                 .Append(" | ")
                 .Append(Escape(string.Join("; ", gate.Reasons ?? Array.Empty<string>())))
                 .AppendLine(" |");
@@ -279,6 +281,14 @@ public sealed class ManagedModuleBenchmarkReportWriter
                " (managed median " + FormatNullableMilliseconds(gate.ManagedMedianMilliseconds) +
                ", compatibility median " + FormatNullableMilliseconds(gate.CompatibilityMedianMilliseconds) +
                ", allowed " + FormatNullableMilliseconds(gate.AllowedManagedMilliseconds) + ")";
+    }
+
+    private static string FormatProviderLimitations(ManagedModuleBenchmarkTransitionGateResult gate)
+    {
+        var limitations = gate.CompatibilityProviderLimitations ?? Array.Empty<string>();
+        return limitations.Count == 0
+            ? "none"
+            : string.Join("; ", limitations);
     }
 
     private static string FormatNullableMilliseconds(double? milliseconds)
