@@ -81,9 +81,19 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan Elapsed { get; set; }
 
     /// <summary>
+    /// Elapsed time spent resolving the selected package version before delivery.
+    /// </summary>
+    public TimeSpan VersionResolutionElapsed { get; set; }
+
+    /// <summary>
     /// Package download or copy result when the install performed package delivery.
     /// </summary>
     public ManagedModuleDownloadResult? Download { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent downloading or copying the package into the package cache.
+    /// </summary>
+    public TimeSpan DownloadElapsed { get; set; }
 
     /// <summary>
     /// Number of files extracted into the module directory.
@@ -99,6 +109,16 @@ public sealed class ManagedModuleInstallResult
     /// Elapsed time spent extracting the package archive.
     /// </summary>
     public TimeSpan ExtractionElapsed { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent installing dependencies before this module was promoted.
+    /// </summary>
+    public TimeSpan DependencyElapsed { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent moving the staged module into the final module root.
+    /// </summary>
+    public TimeSpan PromotionElapsed { get; set; }
 
     /// <summary>
     /// Repository HTTP request attempts observed during this install operation, including dependencies.

@@ -44,6 +44,11 @@ public sealed class ManagedModuleInstallServiceTests
         Assert.False(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.nuspec")));
         Assert.Equal(2, result.FileCount);
         Assert.True(result.ExtractedBytes > 0);
+        Assert.True(result.VersionResolutionElapsed >= TimeSpan.Zero);
+        Assert.True(result.DownloadElapsed > TimeSpan.Zero);
+        Assert.True(result.ExtractionElapsed > TimeSpan.Zero);
+        Assert.True(result.DependencyElapsed >= TimeSpan.Zero);
+        Assert.True(result.PromotionElapsed > TimeSpan.Zero);
         Assert.False(string.IsNullOrWhiteSpace(result.ReceiptPath));
         Assert.True(File.Exists(result.ReceiptPath));
         Assert.NotNull(result.Receipt);

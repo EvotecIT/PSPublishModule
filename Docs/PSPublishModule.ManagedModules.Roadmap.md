@@ -291,6 +291,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [ ] Add publish comparisons against local folder feeds.
 - [ ] Add import validation after install/save/update for PowerShell 5.1 and PowerShell 7+.
 - [x] Add file and byte counts for saved and installed output roots.
+- [x] Add managed install detail artifacts with package count, dependency count, per-package elapsed time, download time, extraction time, promotion time, repository requests, cache hits, and byte counts.
 - [x] Add Graph/Az/Teams/Exchange-heavy scenario presets for suite runs.
 - [x] Add a README section explaining which comparisons are safe on a developer machine and which require disposable hosts.
 - [ ] Measure Graph/Az/Teams/Exchange-heavy scenario presets on PowerShell 5.1 and PowerShell 7+.
@@ -309,6 +310,13 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: Windows PowerShell 5.1 imported the local `net472` build and ran the full `Microsoft.Graph` find smoke through managed and PowerShellGet engines; managed returned version 2.38.0 in 347 ms and ranked first in that run.
 - [x] 2026-06-28: PowerShell 7 ran disposable-host full `Az` 16.0.0 managed install with explicit license acceptance. Managed installed 2790 files and about 623 MB in 115.31 seconds, giving the first whole-Az baseline for the next optimization pass.
 - [x] 2026-06-28: Windows PowerShell 5.1 reran disposable-host `ThreadJob` managed install after the archive extraction optimization; managed completed in 2.96 seconds.
+- [x] 2026-06-28: PowerShell 7 reran full `Az` 16.0.0 managed install with package-level detail output. The run completed in 121.48 seconds; the managed detail artifact reported 204 packages, 203 dependencies, 119.15 seconds spent in root dependency delivery, 78.14 seconds summed package download time, 2.42 seconds summed extraction time, and 0.41 seconds summed promotion time. This identifies dependency scheduling and repository delivery as the next optimization target; extraction is no longer the dominant cost for Az.
+
+### Next Optimization Targets
+
+- [ ] Design safe parallel dependency delivery for independent direct dependencies while preserving cycle detection, per-module install locks, source/trust/license policy, and deterministic failure reporting.
+- [ ] Add repository lookup/request de-duplication evidence for dependency-heavy installs before changing concurrency.
+- [ ] Re-measure full `Az` and full `Microsoft.Graph` install after dependency scheduling changes on PowerShell 7 and Windows PowerShell 5.1.
 
 ## Benchmark Scenarios
 

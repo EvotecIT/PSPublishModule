@@ -81,6 +81,7 @@ Every run writes:
 - `managed-module-summary.csv`: grouped median/min/max rows by operation and engine.
 - `managed-module-comparison.csv`: fastest successful engine per operation, plus managed rank and ratio.
 - `metadata.json`: runtime, selected engines, module, version, repository, and output paths.
+- `managed-install-details.json`: managed install package tree details, written under the managed install output root for install runs. It includes package/dependency counts, per-package elapsed/download/extraction/promotion timings, request counts, cache hits, and byte counts.
 
 Start with `managed-module-comparison.csv` for a quick scoreboard, then inspect `managed-module-results.csv` when a competitor is skipped or failed.
 
