@@ -45,6 +45,7 @@ $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
 [Threading.Thread]::CurrentThread.CurrentCulture = $invariantCulture
 [Threading.Thread]::CurrentThread.CurrentUICulture = $invariantCulture
 
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Artifacts.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ManagedDetails.ps1')
 
 function Get-VersionParameter {
