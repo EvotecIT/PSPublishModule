@@ -60,6 +60,12 @@ public sealed class ModuleBuildPreparationServiceTests
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "DbaClientX.psd1"), "@{ ModuleVersion = '1.0.0' }");
 
             var settings = ScriptBlock.Create("""
+$projectOptions = [System.Collections.Generic.Dictionary[string,object]]::new()
+$projectOptions['OutputPath'] = 'Artefacts/ProjectBuild/options'
+$projectOptions['PlanOutputPath'] = 'Build/project-options-plan.json'
+$packageOptions = [System.Collections.Generic.Dictionary[string,object]]::new()
+$packageOptions['OutputPath'] = 'Artefacts/PackageBuild/options'
+$packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 [PowerForge.ConfigurationBuildLibrariesSegment]@{
     BuildLibraries = [PowerForge.BuildLibrariesConfiguration]@{
         NETProjectPath = 'DbaClientX.PowerShell/DbaClientX.PowerShell.csproj'
@@ -70,6 +76,7 @@ public sealed class ModuleBuildPreparationServiceTests
     Configuration = [PowerForge.ProjectBuildConfigurationReference]@{
         ConfigPath = 'Build/project.build.json'
         BuildBeforeModule = $true
+        Options = $projectOptions
     }
 }
 [PowerForge.ConfigurationArtefactSegment]@{
@@ -111,6 +118,19 @@ public sealed class ModuleBuildPreparationServiceTests
         PublishApiKeyFilePath = 'Build/nuget.key'
         NugetCredentialSecretFilePath = 'Build/nuget.secret'
         GitHubAccessTokenFilePath = 'Build/github.token'
+        Options = $packageOptions
+    }
+}
+[PowerForge.ConfigurationTestSegment]@{
+    Configuration = [PowerForge.TestConfiguration]@{
+        TestsPath = 'Tests'
+    }
+}
+[PowerForge.ConfigurationOptionsSegment]@{
+    Options = [PowerForge.ConfigurationOptions]@{
+        Signing = [PowerForge.SigningOptionsConfiguration]@{
+            CertificatePFXPath = 'Build/cert.pfx'
+        }
     }
 }
 [PowerForge.ConfigurationPublishSegment]@{
@@ -162,6 +182,8 @@ public sealed class ModuleBuildPreparationServiceTests
 
                 var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(prepared.PipelineSpec.Segments[1]);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "project.build.json"), projectBuild.Configuration.ConfigPath);
+                Assert.Equal(Path.Combine(root.FullName, "Artefacts", "ProjectBuild", "options"), projectBuild.Configuration.Options!["OutputPath"]);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "project-options-plan.json"), projectBuild.Configuration.Options["PlanOutputPath"]);
 
                 var artefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[2]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed"), artefact.Configuration.Path);
@@ -181,18 +203,26 @@ public sealed class ModuleBuildPreparationServiceTests
                 Assert.Equal(Path.Combine(root.FullName, "Build", "nuget.key"), packageBuild.Configuration.PublishApiKeyFilePath);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "nuget.secret"), packageBuild.Configuration.NugetCredentialSecretFilePath);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "github.token"), packageBuild.Configuration.GitHubAccessTokenFilePath);
+                Assert.Equal(Path.Combine(root.FullName, "Artefacts", "PackageBuild", "options"), packageBuild.Configuration.Options!["OutputPath"]);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "package-options-plan.json"), packageBuild.Configuration.Options["PlanOutputPath"]);
 
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "RequiredModules"), artefact.Configuration.RequiredModules.Path);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "Modules"), artefact.Configuration.RequiredModules.ModulesPath);
 
-                var publish = Assert.IsType<ConfigurationPublishSegment>(prepared.PipelineSpec.Segments[5]);
+                var test = Assert.IsType<ConfigurationTestSegment>(prepared.PipelineSpec.Segments[5]);
+                Assert.Equal(Path.Combine(root.FullName, "Tests"), test.Configuration.TestsPath);
+
+                var options = Assert.IsType<ConfigurationOptionsSegment>(prepared.PipelineSpec.Segments[6]);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "cert.pfx"), options.Options.Signing!.CertificatePFXPath);
+
+                var publish = Assert.IsType<ConfigurationPublishSegment>(prepared.PipelineSpec.Segments[7]);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "psgallery.key"), publish.Configuration.ApiKeyFilePath);
 
-                var action = Assert.IsType<ConfigurationActionSegment>(prepared.PipelineSpec.Segments[6]);
+                var action = Assert.IsType<ConfigurationActionSegment>(prepared.PipelineSpec.Segments[8]);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "Test-ReleaseReady.ps1"), action.Configuration.FilePath);
                 Assert.Equal(Path.Combine(root.FullName, "Build"), action.Configuration.WorkingDirectory);
 
-                var release = Assert.IsType<ConfigurationReleaseSegment>(prepared.PipelineSpec.Segments[7]);
+                var release = Assert.IsType<ConfigurationReleaseSegment>(prepared.PipelineSpec.Segments[9]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "UploadReady"), release.Configuration.StageRoot);
             }
             finally
@@ -473,8 +503,14 @@ public sealed class ModuleBuildPreparationServiceTests
             var publishKey = Path.Combine(root.FullName, "Build", "psgallery.key");
             var actionFile = Path.Combine(root.FullName, "Build", "Test-ReleaseReady.ps1");
             var actionWorkingDirectory = Path.Combine(root.FullName, "Build");
+            var testsPath = Path.Combine(root.FullName, "Tests");
+            var signingPfxPath = Path.Combine(root.FullName, "Build", "cert.pfx");
             var copyDirectorySource = Path.Combine(root.FullName, "Build", "Templates");
             var copyFileSource = Path.Combine(root.FullName, "Build", "NOTICE.txt");
+            var projectOptionsOutputPath = Path.Combine(root.FullName, "Artifacts", "ProjectBuild", "options");
+            var projectOptionsPlanPath = Path.Combine(root.FullName, "Build", "project-options-plan.json");
+            var packageOptionsOutputPath = Path.Combine(root.FullName, "Artifacts", "PackageBuild", "options");
+            var packageOptionsPlanPath = Path.Combine(root.FullName, "Build", "package-options-plan.json");
             var spec = new ModulePipelineSpec
             {
                 Build = new ModuleBuildSpec
@@ -489,7 +525,12 @@ public sealed class ModuleBuildPreparationServiceTests
                         Configuration = new ProjectBuildConfigurationReference
                         {
                             ConfigPath = projectConfig,
-                            BuildBeforeModule = true
+                            BuildBeforeModule = true,
+                            Options = new Dictionary<string, object?>
+                            {
+                                ["OutputPath"] = projectOptionsOutputPath,
+                                ["PlanOutputPath"] = projectOptionsPlanPath
+                            }
                         }
                     },
                     new ConfigurationBuildLibrariesSegment
@@ -510,7 +551,12 @@ public sealed class ModuleBuildPreparationServiceTests
                             PlanOutputPath = Path.Combine(root.FullName, "Artifacts", "Packages", "plan.json"),
                             PublishApiKeyFilePath = Path.Combine(root.FullName, "Build", "nuget.key"),
                             NugetCredentialSecretFilePath = Path.Combine(root.FullName, "Build", "nuget.secret"),
-                            GitHubAccessTokenFilePath = Path.Combine(root.FullName, "Build", "github.token")
+                            GitHubAccessTokenFilePath = Path.Combine(root.FullName, "Build", "github.token"),
+                            Options = new Dictionary<string, object?>
+                            {
+                                ["OutputPath"] = packageOptionsOutputPath,
+                                ["PlanOutputPath"] = packageOptionsPlanPath
+                            }
                         }
                     },
                     new ConfigurationArtefactSegment
@@ -539,6 +585,23 @@ public sealed class ModuleBuildPreparationServiceTests
                                     Source = copyFileSource,
                                     Destination = "NOTICE.txt"
                                 }
+                            }
+                        }
+                    },
+                    new ConfigurationTestSegment
+                    {
+                        Configuration = new TestConfiguration
+                        {
+                            TestsPath = testsPath
+                        }
+                    },
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Signing = new SigningOptionsConfiguration
+                            {
+                                CertificatePFXPath = signingPfxPath
                             }
                         }
                     },
@@ -579,6 +642,10 @@ public sealed class ModuleBuildPreparationServiceTests
             Assert.Contains("\"RootPath\": \"Sources\"", json, StringComparison.Ordinal);
             Assert.Contains("\"StagingPath\": \"Artifacts/Packages/Staging\"", json, StringComparison.Ordinal);
             Assert.Contains("\"PlanOutputPath\": \"Artifacts/Packages/plan.json\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"OutputPath\": \"Artifacts/ProjectBuild/options\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"PlanOutputPath\": \"Build/project-options-plan.json\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"OutputPath\": \"Artifacts/PackageBuild/options\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"PlanOutputPath\": \"Build/package-options-plan.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"PublishApiKeyFilePath\": \"Build/nuget.key\"", json, StringComparison.Ordinal);
             Assert.Contains("\"NugetCredentialSecretFilePath\": \"Build/nuget.secret\"", json, StringComparison.Ordinal);
             Assert.Contains("\"GitHubAccessTokenFilePath\": \"Build/github.token\"", json, StringComparison.Ordinal);
@@ -587,6 +654,8 @@ public sealed class ModuleBuildPreparationServiceTests
             Assert.Contains("\"ModulesPath\": \"Module/Artefacts/Packed/Modules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Source\": \"Build/Templates\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Source\": \"Build/NOTICE.txt\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"TestsPath\": \"Tests\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"CertificatePFXPath\": \"Build/cert.pfx\"", json, StringComparison.Ordinal);
             Assert.Contains("\"ApiKeyFilePath\": \"Build/psgallery.key\"", json, StringComparison.Ordinal);
             Assert.Contains("\"FilePath\": \"Build/Test-ReleaseReady.ps1\"", json, StringComparison.Ordinal);
             Assert.Contains("\"WorkingDirectory\": \"Build\"", json, StringComparison.Ordinal);
@@ -600,10 +669,14 @@ public sealed class ModuleBuildPreparationServiceTests
             var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(jsonSpec.Segments[1]);
             var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(jsonSpec.Segments[2]);
             var artefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec.Segments[3]);
-            var publish = Assert.IsType<ConfigurationPublishSegment>(jsonSpec.Segments[4]);
-            var action = Assert.IsType<ConfigurationActionSegment>(jsonSpec.Segments[5]);
-            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[6]);
+            var test = Assert.IsType<ConfigurationTestSegment>(jsonSpec.Segments[4]);
+            var options = Assert.IsType<ConfigurationOptionsSegment>(jsonSpec.Segments[5]);
+            var publish = Assert.IsType<ConfigurationPublishSegment>(jsonSpec.Segments[6]);
+            var action = Assert.IsType<ConfigurationActionSegment>(jsonSpec.Segments[7]);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[8]);
             Assert.Equal(projectConfig, projectBuild.Configuration.ConfigPath);
+            Assert.Equal(projectOptionsOutputPath, projectBuild.Configuration.Options!["OutputPath"]);
+            Assert.Equal(projectOptionsPlanPath, projectBuild.Configuration.Options["PlanOutputPath"]);
             Assert.Equal(netProject, buildLibraries.BuildLibraries.NETProjectPath);
             Assert.Equal(developmentBinaries, buildLibraries.BuildLibraries.NETDevelopmentBinariesPath);
             Assert.Equal(packageRoot, packageBuild.Configuration.RootPath);
@@ -611,6 +684,8 @@ public sealed class ModuleBuildPreparationServiceTests
             Assert.Equal(Path.Combine(root.FullName, "Build", "nuget.key"), packageBuild.Configuration.PublishApiKeyFilePath);
             Assert.Equal(Path.Combine(root.FullName, "Build", "nuget.secret"), packageBuild.Configuration.NugetCredentialSecretFilePath);
             Assert.Equal(Path.Combine(root.FullName, "Build", "github.token"), packageBuild.Configuration.GitHubAccessTokenFilePath);
+            Assert.Equal(packageOptionsOutputPath, packageBuild.Configuration.Options!["OutputPath"]);
+            Assert.Equal(packageOptionsPlanPath, packageBuild.Configuration.Options["PlanOutputPath"]);
             Assert.Equal(artefactRoot, artefact.Configuration.Path);
             Assert.Equal(artefactRequiredModules, artefact.Configuration.RequiredModules.Path);
             Assert.Equal(artefactModules, artefact.Configuration.RequiredModules.ModulesPath);
@@ -618,6 +693,8 @@ public sealed class ModuleBuildPreparationServiceTests
             Assert.Equal("Templates", artefact.Configuration.DirectoryOutput[0].Destination);
             Assert.Equal(copyFileSource, artefact.Configuration.FilesOutput![0].Source);
             Assert.Equal("NOTICE.txt", artefact.Configuration.FilesOutput[0].Destination);
+            Assert.Equal(testsPath, test.Configuration.TestsPath);
+            Assert.Equal(signingPfxPath, options.Options.Signing!.CertificatePFXPath);
             Assert.Equal(publishKey, publish.Configuration.ApiKeyFilePath);
             Assert.Equal(actionFile, action.Configuration.FilePath);
             Assert.Equal(actionWorkingDirectory, action.Configuration.WorkingDirectory);

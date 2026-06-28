@@ -9,6 +9,18 @@ namespace PowerForge;
 
 internal sealed class ModuleBuildPreparationService
 {
+    private static readonly HashSet<string> PackageBuildOptionPathNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        nameof(PackageBuildConfiguration.RootPath),
+        nameof(PackageBuildConfiguration.OutputPath),
+        nameof(PackageBuildConfiguration.ReleaseZipOutputPath),
+        nameof(PackageBuildConfiguration.StagingPath),
+        nameof(PackageBuildConfiguration.PlanOutputPath),
+        nameof(PackageBuildConfiguration.PublishApiKeyFilePath),
+        nameof(PackageBuildConfiguration.NugetCredentialSecretFilePath),
+        nameof(PackageBuildConfiguration.GitHubAccessTokenFilePath)
+    };
+
     public ModuleBuildPreparedContext Prepare(ModuleBuildPreparationRequest request)
     {
         if (request is null)
@@ -199,8 +211,10 @@ internal sealed class ModuleBuildPreparationService
         foreach (var segment in spec.Segments?.OfType<ConfigurationProjectBuildSegment>() ?? Enumerable.Empty<ConfigurationProjectBuildSegment>())
         {
             var cfg = segment.Configuration;
-            if (cfg is null || string.IsNullOrWhiteSpace(cfg.ConfigPath)) continue;
-            cfg.ConfigPath = ResolveConfigPath(projectRoot, cfg.ConfigPath);
+            if (cfg is null) continue;
+            if (!string.IsNullOrWhiteSpace(cfg.ConfigPath))
+                cfg.ConfigPath = ResolveConfigPath(projectRoot, cfg.ConfigPath);
+            ResolvePackageBuildOptionPaths(cfg.Options, projectRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationBuildLibrariesSegment>() ?? Enumerable.Empty<ConfigurationBuildLibrariesSegment>())
@@ -223,6 +237,21 @@ internal sealed class ModuleBuildPreparationService
             cfg.PublishApiKeyFilePath = ResolveConfigPathNullable(projectRoot, cfg.PublishApiKeyFilePath);
             cfg.NugetCredentialSecretFilePath = ResolveConfigPathNullable(projectRoot, cfg.NugetCredentialSecretFilePath);
             cfg.GitHubAccessTokenFilePath = ResolveConfigPathNullable(projectRoot, cfg.GitHubAccessTokenFilePath);
+            ResolvePackageBuildOptionPaths(cfg.Options, projectRoot);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null || string.IsNullOrWhiteSpace(cfg.TestsPath)) continue;
+            cfg.TestsPath = ResolveConfigPath(projectRoot, cfg.TestsPath);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationOptionsSegment>() ?? Enumerable.Empty<ConfigurationOptionsSegment>())
+        {
+            var signing = segment.Options?.Signing;
+            if (signing is null) continue;
+            signing.CertificatePFXPath = ResolveConfigPathNullable(projectRoot, signing.CertificatePFXPath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationReleaseSegment>() ?? Enumerable.Empty<ConfigurationReleaseSegment>())
@@ -357,6 +386,7 @@ internal sealed class ModuleBuildPreparationService
                     break;
                 case ConfigurationProjectBuildSegment projectBuild:
                     projectBuild.Configuration.ConfigPath = ResolveWorkspacePath(workspaceRoot, projectBuild.Configuration.ConfigPath) ?? string.Empty;
+                    ResolvePackageBuildOptionPaths(projectBuild.Configuration.Options, workspaceRoot);
                     break;
                 case ConfigurationPackageBuildSegment packageBuild:
                     var package = packageBuild.Configuration;
@@ -368,6 +398,15 @@ internal sealed class ModuleBuildPreparationService
                     package.PublishApiKeyFilePath = ResolveWorkspacePath(workspaceRoot, package.PublishApiKeyFilePath);
                     package.NugetCredentialSecretFilePath = ResolveWorkspacePath(workspaceRoot, package.NugetCredentialSecretFilePath);
                     package.GitHubAccessTokenFilePath = ResolveWorkspacePath(workspaceRoot, package.GitHubAccessTokenFilePath);
+                    ResolvePackageBuildOptionPaths(package.Options, workspaceRoot);
+                    break;
+                case ConfigurationTestSegment test:
+                    test.Configuration.TestsPath = ResolveWorkspacePath(workspaceRoot, test.Configuration.TestsPath) ?? string.Empty;
+                    break;
+                case ConfigurationOptionsSegment options:
+                    var signing = options.Options?.Signing;
+                    if (signing is not null)
+                        signing.CertificatePFXPath = ResolveWorkspacePath(workspaceRoot, signing.CertificatePFXPath);
                     break;
                 case ConfigurationReleaseSegment release:
                     release.Configuration.StageRoot = ResolveWorkspacePath(workspaceRoot, release.Configuration.StageRoot);
@@ -407,6 +446,24 @@ internal sealed class ModuleBuildPreparationService
             return path;
 
         return PathValueResolver.Resolve(workspaceRoot, path!);
+    }
+
+    private static void ResolvePackageBuildOptionPaths(Dictionary<string, object?>? options, string rootPath)
+    {
+        if (options is null || options.Count == 0)
+            return;
+
+        foreach (var optionName in PackageBuildOptionPathNames)
+        {
+            if (!options.TryGetValue(optionName, out var value))
+                continue;
+
+            var path = GetStringOptionValue(value);
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+
+            options[optionName] = ResolveWorkspacePath(rootPath, path);
+        }
     }
 
     private static string? ResolveArtefactLayoutPath(string rootPath, string? artefactPath, string? layoutPath)
@@ -520,8 +577,10 @@ internal sealed class ModuleBuildPreparationService
         foreach (var segment in spec.Segments?.OfType<ConfigurationProjectBuildSegment>() ?? Enumerable.Empty<ConfigurationProjectBuildSegment>())
         {
             var cfg = segment.Configuration;
-            if (cfg is null || string.IsNullOrWhiteSpace(cfg.ConfigPath)) continue;
-            cfg.ConfigPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.ConfigPath));
+            if (cfg is null) continue;
+            if (!string.IsNullOrWhiteSpace(cfg.ConfigPath))
+                cfg.ConfigPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.ConfigPath));
+            MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationBuildLibrariesSegment>() ?? Enumerable.Empty<ConfigurationBuildLibrariesSegment>())
@@ -544,6 +603,21 @@ internal sealed class ModuleBuildPreparationService
             cfg.PublishApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.PublishApiKeyFilePath);
             cfg.NugetCredentialSecretFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.NugetCredentialSecretFilePath);
             cfg.GitHubAccessTokenFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.GitHubAccessTokenFilePath);
+            MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null || string.IsNullOrWhiteSpace(cfg.TestsPath)) continue;
+            cfg.TestsPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.TestsPath));
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationOptionsSegment>() ?? Enumerable.Empty<ConfigurationOptionsSegment>())
+        {
+            var signing = segment.Options?.Signing;
+            if (signing is null) continue;
+            signing.CertificatePFXPath = MakeRelativeForProjectRoot(projectRoot, signing.CertificatePFXPath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationReleaseSegment>() ?? Enumerable.Empty<ConfigurationReleaseSegment>())
@@ -614,6 +688,34 @@ internal sealed class ModuleBuildPreparationService
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
         return MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, path));
+    }
+
+    private static void MakePackageBuildOptionPathsRelative(Dictionary<string, object?>? options, string projectRoot)
+    {
+        if (options is null || options.Count == 0)
+            return;
+
+        foreach (var optionName in PackageBuildOptionPathNames)
+        {
+            if (!options.TryGetValue(optionName, out var value))
+                continue;
+
+            var path = GetStringOptionValue(value);
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+
+            options[optionName] = MakeRelativeForProjectRoot(projectRoot, path);
+        }
+    }
+
+    private static string? GetStringOptionValue(object? value)
+    {
+        return value switch
+        {
+            string text => text,
+            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
+            _ => null
+        };
     }
 
     private static string MakeRelativeForConfig(string baseDir, string path)
