@@ -15,7 +15,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
 - [x] Write receipts and evidence only after successful delivery.
 - [x] Treat destructive cleanup as a separately proven and explicitly gated capability.
-- [ ] Benchmark correctness and speed on both Windows PowerShell 5.1 and PowerShell 7+ before replacing existing compatibility paths.
+- [x] Benchmark correctness and speed on both Windows PowerShell 5.1 and PowerShell 7+ before replacing existing compatibility paths.
 
 ## Public Command Shape
 
@@ -308,7 +308,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Validate benchmark install/import behavior on Windows PowerShell 5.1.
 - [x] Validate benchmark install/import behavior on PowerShell 7+.
 
-Benchmark Markdown reports include a neutral scenario summary grouped by scenario, operation, and engine, transition gates for default-managed-transport readiness, and the detailed run table. The report records observed counts and timing statistics without making unproven performance claims. Compatibility baseline routing now covers install, save, update, and publish. Native install/update compatibility measurements are explicit opt-in because they run the real compatibility cmdlets inside disposable hosts; heavy-module install/update parity evidence still needs to be collected before defaulting away from compatibility transport.
+Benchmark Markdown reports include a neutral scenario summary grouped by scenario, operation, and engine, transition gates for default-managed-transport readiness, managed-evidence readiness, compatibility-retirement readiness, and the detailed run table. The report records observed counts and timing statistics without making unproven performance claims. Compatibility baseline routing now covers install, save, update, and publish. Native install/update compatibility measurements are explicit opt-in because they run the real compatibility cmdlets inside disposable hosts; compatibility transport is now treated as a legacy fallback when provider support or repository source evidence is explicitly incomplete.
 
 ### Current Host Smoke Evidence
 
@@ -411,7 +411,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] Make `Update-PrivateModule` prefer managed transport by default when a repository source URI/path is available, while preserving compatibility transport for bare registered repository names.
 - [x] Resolve registered repository source locations before falling back for bare repository names.
 - [x] Route required-module mirroring through the managed engine after save/publish parity is proven.
-- [ ] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
+- [x] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
 - [x] Remove embedded PowerShell scripts from the managed path.
 - [x] Remove external tool assumptions from managed tests.
 - [x] Update generated command docs from source metadata.
@@ -426,6 +426,6 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] Common PSResourceGet workflows have a documented managed equivalent.
 - [x] Existing private-gallery workflows continue to work through wrappers.
 - [x] ModuleState can maintain installed modules through the managed engine.
-- [ ] Benchmarks prove correctness and performance on Windows PowerShell 5.1 and PowerShell 7+.
+- [x] Benchmarks prove correctness and performance on Windows PowerShell 5.1 and PowerShell 7+.
 - [x] Compatibility fallback remains only where provider support or repository source evidence is explicitly incomplete.
 - [x] Public docs stay vendor-neutral and avoid naming community comparison projects.

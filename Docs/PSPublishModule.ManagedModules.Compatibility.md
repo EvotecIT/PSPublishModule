@@ -161,10 +161,14 @@ Cmdlets should map parameters into these models and write result objects. They s
 
 ## Transition Gates
 
-Compatibility transport stays available until all of these are true:
+Compatibility transport stays available as a legacy fallback. The managed engine is the preferred path when source evidence and provider support allow it; compatibility is still selected when a provider gap or missing repository-source signal would make the managed decision unsafe.
+
+The managed path can be treated as the default for supported module workflows after all of these are true:
 
 - Managed install/save/update/publish passes local-folder and public-feed proof on Windows PowerShell 5.1 and PowerShell 7+.
 - Benchmarks cover cold cache, warm cache, heavy extraction, dependency closure, no-op update, private feed metadata, and publish comparison.
 - Common PowerShellGet and PSResourceGet module workflows have documented managed equivalents.
 - ModuleState can maintain the same estate through managed transport with receipts and inspectable repair plans.
 - Provider gaps are documented as explicit partial support instead of hidden fallbacks.
+
+Current status: these gates have local evidence on both Windows PowerShell 5.1 and PowerShell 7+. `Auto` transport prefers managed delivery for local paths, direct repository URIs, and registered/profile repositories that resolve to source endpoints. Compatibility transport remains available for provider-specific bootstrap gaps, non-module resource kinds, and unresolved repository names; those decisions are surfaced in typed result objects and summaries instead of being hidden.
