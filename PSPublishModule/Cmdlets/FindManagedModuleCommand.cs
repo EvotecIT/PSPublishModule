@@ -104,20 +104,30 @@ public sealed class FindManagedModuleCommand : PSCmdlet
                 ? client.SearchPackagesAsync(repository, moduleName, Prerelease.IsPresent, credential, First)
                     .GetAwaiter()
                     .GetResult()
-                : SelectVersions(client.GetVersionsAsync(repository, moduleName, Prerelease.IsPresent, credential)
-                    .GetAwaiter()
-                    .GetResult());
+                : FindExactPackageVersions(client, repository, moduleName, credential);
 
             foreach (var version in output)
                 WriteObject(version);
         }
     }
 
-    private IReadOnlyList<ManagedModuleVersionInfo> SelectVersions(IReadOnlyList<ManagedModuleVersionInfo> versions)
+    private IReadOnlyList<ManagedModuleVersionInfo> FindExactPackageVersions(
+        ManagedModuleRepositoryClient client,
+        ManagedModuleRepository repository,
+        string moduleName,
+        RepositoryCredential? credential)
     {
-        if (AllVersions.IsPresent || versions.Count == 0)
-            return versions;
+        if (AllVersions.IsPresent)
+        {
+            return client.GetVersionsAsync(repository, moduleName, Prerelease.IsPresent, credential)
+                .GetAwaiter()
+                .GetResult();
+        }
 
-        return new[] { versions[versions.Count - 1] };
+        var latest = client.GetLatestVersionAsync(repository, moduleName, Prerelease.IsPresent, credential)
+            .GetAwaiter()
+            .GetResult();
+        return latest is null ? Array.Empty<ManagedModuleVersionInfo>() : new[] { latest };
     }
+
 }

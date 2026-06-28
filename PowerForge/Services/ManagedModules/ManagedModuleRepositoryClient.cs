@@ -75,6 +75,36 @@ public sealed partial class ManagedModuleRepositoryClient
     }
 
     /// <summary>
+    /// Gets the latest selected package version from the repository without requiring a full version enumeration when the repository supports it.
+    /// </summary>
+    /// <param name="repository">Repository to query.</param>
+    /// <param name="packageId">Package id.</param>
+    /// <param name="includePrerelease">Include prerelease versions.</param>
+    /// <param name="credential">Optional repository credential.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The latest selected version, or <c>null</c> when no version was found.</returns>
+    public async Task<ManagedModuleVersionInfo?> GetLatestVersionAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        bool includePrerelease = false,
+        RepositoryCredential? credential = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (repository is null)
+            throw new ArgumentNullException(nameof(repository));
+        if (string.IsNullOrWhiteSpace(packageId))
+            throw new ArgumentException("Package id is required.", nameof(packageId));
+
+        return repository.Kind switch
+        {
+            ManagedModuleRepositoryKind.LocalFolder => GetLocalVersions(repository, packageId, includePrerelease).LastOrDefault(),
+            ManagedModuleRepositoryKind.NuGetV3 => await GetLatestNuGetVersionWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => await GetLatestNuGetV2VersionAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
+            _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
+        };
+    }
+
+    /// <summary>
     /// Searches package ids from the repository and returns the latest selected version per match.
     /// </summary>
     /// <param name="repository">Repository to query.</param>
@@ -169,6 +199,22 @@ public sealed partial class ManagedModuleRepositoryClient
         }
 
         return await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ManagedModuleVersionInfo?> GetLatestNuGetVersionWithPowerShellGalleryReadApiAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        if (ShouldUsePowerShellGalleryV2ReadApi(repository))
+        {
+            var fallback = CreatePowerShellGalleryV2Fallback(repository);
+            return await GetLatestNuGetV2VersionAsync(fallback, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
+        }
+
+        return (await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false)).LastOrDefault();
     }
 
     private async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(

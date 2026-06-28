@@ -102,6 +102,67 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetLatestVersionAsync_uses_nuget_v2_latest_package_filter()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var version = await repositoryClient.GetLatestVersionAsync(repository, "Company.Tools", includePrerelease: false);
+
+        Assert.NotNull(version);
+        Assert.Equal("Company.Tools", version!.Name);
+        Assert.Equal("1.1.0", version.Version);
+        Assert.Equal("Gallery", version.RepositoryName);
+        Assert.Equal(repository.Source, version.RepositorySource);
+        Assert.Contains(
+            requests,
+            request => request.Url == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsLatestVersion&$top=1");
+        Assert.DoesNotContain(requests, request => request.Url.Contains("FindPackagesById", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task GetLatestVersionAsync_uses_absolute_latest_filter_for_prerelease()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var version = await repositoryClient.GetLatestVersionAsync(repository, "Company.Tools", includePrerelease: true);
+
+        Assert.NotNull(version);
+        Assert.Equal("1.2.0-preview1", version!.Version);
+        Assert.True(version.IsPrerelease);
+        Assert.Contains(
+            requests,
+            request => request.Url == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsAbsoluteLatestVersion&$top=1");
+    }
+
+    [Fact]
+    public async Task GetLatestVersionAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "PSGallery",
+            "https://www.powershellgallery.com/api/v3/index.json");
+
+        var version = await repositoryClient.GetLatestVersionAsync(repository, "Pester", includePrerelease: false);
+
+        Assert.NotNull(version);
+        Assert.Equal("5.7.0", version!.Version);
+        Assert.Equal("PSGallery", version.RepositoryName);
+        Assert.Equal("https://www.powershellgallery.com/api/v2", version.RepositorySource);
+        Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.Contains(
+            requests,
+            request => request.Url == "https://www.powershellgallery.com/api/v2/Packages()?$filter=Id%20eq%20'Pester'%20and%20IsLatestVersion&$top=1");
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_follows_nuget_v2_find_packages_next_pages()
     {
         var requests = new List<RecordedRequest>();
@@ -659,6 +720,20 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
+            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsLatestVersion&$top=1")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
+                    "<entry><content><m:properties><d:Id>Company.Tools</d:Id><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsAbsoluteLatestVersion&$top=1")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
+                    "<entry><content><m:properties><d:Id>Company.Tools</d:Id><d:Version>1.2.0-preview1</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
             if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
@@ -666,6 +741,13 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>5.6.1</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>5.7.0-preview1</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>5.7.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/Packages()?$filter=Id%20eq%20'Pester'%20and%20IsLatestVersion&$top=1")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
+                    "<entry><content><m:properties><d:Id>Pester</d:Id><d:Version>5.7.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Paged.Tools'")
