@@ -267,7 +267,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var importPath = Path.IsPathRooted(expanded)
             ? expanded
-            : Path.Combine(sourceDirectory, expanded);
+            : Path.Combine(sourceDirectory, NormalizeRelativePathSeparators(expanded));
         var projectRoot = AppendDirectorySeparator(Path.GetFullPath(projectRootDirectory));
         if (importPath.IndexOfAny(new[] { '*', '?' }) >= 0)
         {
@@ -309,6 +309,13 @@ public sealed partial class DotNetPublishPipelineRunner
             .Replace("$(MSBuildProjectDirectory)", projectRootDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
             .Replace("$(MSBuildProjectFullPath)", Path.Combine(projectRootDirectory, "PowerForge.Generated.wixproj"))
             .Replace("$(MSBuildProjectExtension)", ".wixproj");
+    }
+
+    private static string NormalizeRelativePathSeparators(string path)
+    {
+        return path
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
     }
 
     private static GeneratedInstallerExternalFiles PrepareGeneratedInstallerExternalFiles(
