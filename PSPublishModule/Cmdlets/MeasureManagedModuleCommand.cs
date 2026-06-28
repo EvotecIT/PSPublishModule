@@ -163,6 +163,10 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter RequireTransitionReady { get; set; }
 
+    /// <summary>Fail the command when compatibility transport cannot yet be marked legacy.</summary>
+    [Parameter]
+    public SwitchParameter RequireCompatibilityRetirementReady { get; set; }
+
     /// <summary>Allow native Install-Module, Install-PSResource, Update-Module, and Update-PSResource comparisons in disposable child hosts.</summary>
     [Parameter]
     public SwitchParameter EnableNativeInstallUpdateBenchmark { get; set; }
@@ -242,6 +246,8 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
         WriteReports(result, reportPath, markdownReportPath);
         if (RequireTransitionReady.IsPresent)
             AssertTransitionReady(result);
+        if (RequireCompatibilityRetirementReady.IsPresent)
+            AssertCompatibilityRetirementReady(result);
 
         WriteObject(result);
     }
@@ -281,6 +287,20 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
         ThrowTerminatingError(new ErrorRecord(
             new InvalidOperationException("Managed module transition gate is not ready. " + details),
             "ManagedModuleTransitionGateNotReady",
+            ErrorCategory.InvalidResult,
+            result));
+    }
+
+    private void AssertCompatibilityRetirementReady(ManagedModuleBenchmarkResult result)
+    {
+        result.CompatibilityRetirement ??= ManagedModuleCompatibilityRetirementEvaluator.Evaluate(result);
+        if (result.CompatibilityRetirement.ReadyToMarkCompatibilityLegacy)
+            return;
+
+        var reasons = string.Join("; ", result.CompatibilityRetirement.Reasons ?? Array.Empty<string>());
+        ThrowTerminatingError(new ErrorRecord(
+            new InvalidOperationException("Managed module compatibility retirement gate is not ready. " + reasons),
+            "ManagedModuleCompatibilityRetirementNotReady",
             ErrorCategory.InvalidResult,
             result));
     }
