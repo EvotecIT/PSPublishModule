@@ -32,6 +32,8 @@ param(
 
     [switch] $AcceptLicense,
 
+    [switch] $AuthenticodeCheck,
+
     [switch] $ValidateImport,
 
     [int] $ImportTimeoutSeconds = 120,
@@ -398,6 +400,9 @@ function Invoke-IsolatedInstallHost {
     if ($AcceptLicense.IsPresent) {
         $arguments += '-AcceptLicense'
     }
+    if ($AuthenticodeCheck.IsPresent) {
+        $arguments += '-AuthenticodeCheck'
+    }
     if (-not [string]::IsNullOrWhiteSpace($DetailPath)) {
         $arguments += @(
             '-ResultPath'
@@ -649,6 +654,7 @@ function Invoke-SaveScenario {
                     $parameters.Version = $Version
                 }
                 Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+                Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
                 Save-ManagedModule @parameters
             }
         }
@@ -668,6 +674,7 @@ function Invoke-SaveScenario {
                     $parameters[$entry.Key] = $entry.Value
                 }
                 Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-PSResource' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+                Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-PSResource' -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
                 Save-PSResource @parameters
             }
         }
@@ -937,6 +944,7 @@ $metadata = [ordered]@{
     RepositoryName = $RepositoryName
     ModuleFastSource = $ModuleFastSource
     AcceptLicense = $AcceptLicense.IsPresent
+    AuthenticodeCheck = $AuthenticodeCheck.IsPresent
     CacheMode = $CacheMode
     ValidateImport = $ValidateImport.IsPresent
     ImportTimeoutSeconds = $ImportTimeoutSeconds

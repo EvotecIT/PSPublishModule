@@ -91,6 +91,11 @@ public sealed class ManagedModuleInstallResult
     public ManagedModuleDownloadResult? Download { get; set; }
 
     /// <summary>
+    /// Authenticode validation evidence when signature checking was requested.
+    /// </summary>
+    public ManagedModuleAuthenticodeVerificationResult? AuthenticodeVerification { get; set; }
+
+    /// <summary>
     /// Elapsed time spent downloading or copying the package into the package cache.
     /// </summary>
     public TimeSpan DownloadElapsed { get; set; }

@@ -103,6 +103,12 @@ Compare a package that requires license acceptance:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 -ModuleName Microsoft.Graph.Authentication -Version '' -Operation Find,Save -AcceptLicense
 ```
 
+Compare Authenticode validation overhead for engines that expose an equivalent switch:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 -ModuleName Company.SignedTools -Operation Save,Install -Engine Managed,PSResourceGet -AuthenticodeCheck -RepeatCount 3 -RotateEngineOrder -SkipBuild
+```
+
 List emitted operation rows without running:
 
 ```powershell
@@ -129,6 +135,8 @@ Suite runs write `suite-summary.csv`, `suite-summary.json`, `suite-hosts.csv`, a
 `Find` and `Save` are safe to compare directly because each compatible engine can run against isolated output folders. ModuleFast is included as an install-only competitor; its find/save/update/repair rows are explicit skips when it does not expose an equivalent command. `Install` runs each engine in a disposable child PowerShell host with benchmark-owned profile, cache, temp, and module path environment variables. `Update` first installs `-UpdateBaselineVersion` outside the timed window, then times only the update operation in the same disposable host root. `RepairPlan` uses the same stale baseline setup, then times the managed `Invoke-ModuleState -Installed -Latest -Repair` planning path without executing changes. When `Update` or `RepairPlan` is requested without `-UpdateBaselineVersion`, the harness resolves the latest stable version lower than the requested target and records both `ResolvedUpdateBaselineVersion` and `ResolvedUpdateTargetVersion` in metadata. `-CacheMode Cold` clears disposable provider/package caches after the baseline install; `-CacheMode Warm` preserves native provider caches and gives managed delivery an explicit package cache folder under the benchmark root; `Default` preserves the historical harness behavior. `-ValidateImport` imports the highest-version manifest from the benchmark output root after timing and writes `ImportStatus`, `ImportVersion`, `ImportMilliseconds`, `ImportManifestPath`, and `ImportError` columns. Use `-ImportTimeoutSeconds` to cap that post-timing import proof for very large module families. ModuleFast setup/import is outside the timed operation, uses the locally installed `ModuleFast` module, and is skipped on Windows PowerShell 5.1 because ModuleFast requires PowerShell 7.2 or newer. Install and update output roots are recorded in the CSV/JSON rows and may point at the short temp benchmark folder to keep Windows PowerShell 5.1 below legacy path-length limits.
 
 License acceptance is explicit. Use `-AcceptLicense` only when the benchmark scenario is allowed to accept the package license on behalf of the run.
+
+Authenticode validation is explicit. Use `-AuthenticodeCheck` only when the benchmark is meant to measure signature verification overhead; unsigned packages are expected to fail that safety gate.
 
 The suite runner enables license acceptance only for scenarios that require it, such as full Graph and Az package family scenarios. Keep that behavior explicit when adding new scenarios.
 

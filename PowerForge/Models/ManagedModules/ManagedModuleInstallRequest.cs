@@ -91,6 +91,11 @@ public sealed class ManagedModuleInstallRequest
     public bool AcceptLicense { get; set; }
 
     /// <summary>
+    /// Require Authenticode validation for signable files extracted from the package before promotion.
+    /// </summary>
+    public bool AuthenticodeCheck { get; set; }
+
+    /// <summary>
     /// Skip installing dependencies declared by the package.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }

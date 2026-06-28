@@ -144,6 +144,10 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter AcceptLicense { get; set; }
 
+    /// <summary>Validate Authenticode signatures for signable package files before promotion.</summary>
+    [Parameter]
+    public SwitchParameter AuthenticodeCheck { get; set; }
+
     /// <summary>Skip installing dependencies declared by the package.</summary>
     [Parameter]
     [Alias("SkipDependenciesCheck")]
@@ -193,6 +197,7 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
                 Force = Force.IsPresent,
                 AllowClobber = AllowClobber.IsPresent,
                 AcceptLicense = AcceptLicense.IsPresent,
+                AuthenticodeCheck = AuthenticodeCheck.IsPresent,
                 SkipDependencyCheck = SkipDependencyCheck.IsPresent
             };
 

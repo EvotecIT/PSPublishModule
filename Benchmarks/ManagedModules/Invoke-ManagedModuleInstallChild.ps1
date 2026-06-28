@@ -32,6 +32,8 @@ param(
 
     [switch] $AcceptLicense,
 
+    [switch] $AuthenticodeCheck,
+
     [string] $ResultPath
 )
 
@@ -104,6 +106,7 @@ function Add-ManagedInstallDetail {
     )
 
     $download = $Result.Download
+    $authenticode = $Result.AuthenticodeVerification
     $Rows.Add([pscustomobject]@{
         Name = [string] $Result.Name
         Version = [string] $Result.Version
@@ -121,6 +124,8 @@ function Add-ManagedInstallDetail {
         ExtractedBytes = [long] $Result.ExtractedBytes
         DownloadBytes = if ($download) { [long] $download.BytesWritten } else { 0L }
         DownloadFromCache = if ($download) { [bool] $download.FromCache } else { $false }
+        AuthenticodeCheckedFiles = if ($authenticode) { [int] $authenticode.CheckedFiles } else { 0 }
+        AuthenticodeFiles = if ($authenticode) { @($authenticode.Files) } else { @() }
     })
 
     foreach ($dependency in @($Result.DependencyResults)) {
@@ -247,6 +252,7 @@ switch ($EngineName) {
 
         $commandName = if ($Operation -eq 'Update') { 'Update-ManagedModule' } else { 'Install-ManagedModule' }
         Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
         $result = if ($Operation -eq 'Update') {
             Update-ManagedModule @parameters
         } else {
@@ -281,6 +287,7 @@ switch ($EngineName) {
         }
 
         Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
         if ($Operation -eq 'Install') {
             Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'Reinstall' -Enabled $true
             Install-PSResource @parameters
