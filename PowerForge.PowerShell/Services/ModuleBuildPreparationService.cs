@@ -86,7 +86,7 @@ internal sealed class ModuleBuildPreparationService
             },
             Diagnostics = new ModulePipelineDiagnosticsOptions
             {
-                BaselinePath = ResolveWorkspacePath(workspaceRoot, request.DiagnosticsBaselinePath),
+                BaselinePath = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, request.DiagnosticsBaselinePath),
                 GenerateBaseline = request.GenerateDiagnosticsBaseline,
                 UpdateBaseline = request.UpdateDiagnosticsBaseline,
                 FailOnNewDiagnostics = request.FailOnNewDiagnostics,
@@ -438,10 +438,10 @@ internal sealed class ModuleBuildPreparationService
                 case ConfigurationBuildDocumentationSegment buildDocumentation:
                     break;
                 case ConfigurationTestSegment test:
-                    test.Configuration.TestsPath = ResolveWorkspacePath(workspaceRoot, test.Configuration.TestsPath) ?? string.Empty;
+                    test.Configuration.TestsPath = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, test.Configuration.TestsPath) ?? string.Empty;
                     break;
                 case ConfigurationValidationSegment validation:
-                    validation.Settings.Tests.TestPath = ResolveWorkspacePath(workspaceRoot, validation.Settings.Tests.TestPath);
+                    validation.Settings.Tests.TestPath = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, validation.Settings.Tests.TestPath);
                     break;
                 case ConfigurationOptionsSegment options:
                     var signing = options.Options?.Signing;
@@ -485,6 +485,9 @@ internal sealed class ModuleBuildPreparationService
         if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path))
             return path;
 
+        if (ContainsPathToken(path!))
+            return Path.Combine(workspaceRoot, PathValueResolver.Clean(path!));
+
         return PathValueResolver.Resolve(workspaceRoot, path!);
     }
 
@@ -510,6 +513,18 @@ internal sealed class ModuleBuildPreparationService
 
         return ResolveWorkspacePath(workspaceRoot, path);
     }
+
+    private static bool ContainsPathToken(string path)
+        => path.Contains("<TagName>", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("{TagName}", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("<ModuleVersion>", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("{ModuleVersion}", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("<ModuleVersionWithPreRelease>", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("{ModuleVersionWithPreRelease}", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("<TagModuleVersionWithPreRelease>", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("{TagModuleVersionWithPreRelease}", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("<ModuleName>", StringComparison.OrdinalIgnoreCase) ||
+           path.Contains("{ModuleName}", StringComparison.OrdinalIgnoreCase);
 
     private static string[] ResolveConfigPaths(string rootPath, string[]? paths)
     {

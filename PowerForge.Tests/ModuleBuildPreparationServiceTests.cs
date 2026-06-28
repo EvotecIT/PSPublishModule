@@ -161,7 +161,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 }
 [PowerForge.ConfigurationReleaseSegment]@{
     Configuration = [PowerForge.ReleaseConfiguration]@{
-        StageRoot = 'Module/Artefacts/UploadReady'
+        StageRoot = 'Artefacts/UploadReady/<ModuleVersion>'
         VersionSource = [PowerForge.ReleaseVersionSource]::ProjectBuild
     }
 }
@@ -190,7 +190,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
     Type = [PowerForge.ArtefactType]::Packed
     EnableSpecified = $true
     Enable = $true
-    Path = 'Module/Artefacts/FileBacked'
+    Path = 'Module/Artefacts/FileBacked/<TagModuleVersionWithPreRelease>'
     PreScriptMergePath = 'Build/header.ps1'
 })
 """);
@@ -232,7 +232,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(moduleRoot.FullName, prepared.PipelineSpec.Build.SourcePath);
                 Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Staging"), prepared.PipelineSpec.Build.StagingPath);
                 Assert.Equal(Path.Combine(root.FullName, "Sources", "TopLevel", "TopLevel.csproj"), prepared.PipelineSpec.Build.CsprojPath);
-                Assert.Equal(Path.Combine(root.FullName, "Build", "diagnostics.json"), prepared.PipelineSpec.Diagnostics.BaselinePath);
+                Assert.Equal("Build/diagnostics.json", prepared.PipelineSpec.Diagnostics.BaselinePath);
                 Assert.Equal(new[] { Path.Combine(root.FullName, "Modules") }, prepared.PipelineSpec.Build.BinaryConflictSearchRoots);
                 Assert.Equal(new[] { Path.Combine(root.FullName, "Modules") }, prepared.PipelineSpec.Diagnostics.BinaryConflictSearchRoots);
                 Assert.Equal(new[] { Path.Combine(root.FullName, "Artefacts", "Modules") }, prepared.PipelineSpec.Install.Roots);
@@ -276,7 +276,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "Modules"), artefact.Configuration.RequiredModules.ModulesPath);
 
                 var test = Assert.IsType<ConfigurationTestSegment>(prepared.PipelineSpec.Segments[5]);
-                Assert.Equal(Path.Combine(root.FullName, "Tests"), test.Configuration.TestsPath);
+                Assert.Equal("Tests", test.Configuration.TestsPath);
 
                 var options = Assert.IsType<ConfigurationOptionsSegment>(prepared.PipelineSpec.Segments[6]);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "cert.pfx"), options.Options.Signing!.CertificatePFXPath);
@@ -289,10 +289,10 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(Path.Combine(root.FullName, "Build"), action.Configuration.WorkingDirectory);
 
                 var release = Assert.IsType<ConfigurationReleaseSegment>(prepared.PipelineSpec.Segments[9]);
-                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "UploadReady"), release.Configuration.StageRoot);
+                Assert.Equal(Path.Combine(root.FullName, "Artefacts", "UploadReady", "<ModuleVersion>"), release.Configuration.StageRoot);
 
                 var validation = Assert.IsType<ConfigurationValidationSegment>(prepared.PipelineSpec.Segments[10]);
-                Assert.Equal(Path.Combine(root.FullName, "Tests"), validation.Settings.Tests.TestPath);
+                Assert.Equal("Tests", validation.Settings.Tests.TestPath);
 
                 var documentation = Assert.IsType<ConfigurationDocumentationSegment>(prepared.PipelineSpec.Segments[11]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Docs"), documentation.Configuration.Path);
@@ -302,7 +302,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(new[] { "Help/About" }, buildDocumentation.Configuration.AboutTopicsSourcePath);
 
                 var fileBackedArtefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[13]);
-                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "FileBacked"), fileBackedArtefact.Configuration.Path);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "FileBacked", "<TagModuleVersionWithPreRelease>"), fileBackedArtefact.Configuration.Path);
                 Assert.Contains("Write-Output", fileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
             }
             finally
