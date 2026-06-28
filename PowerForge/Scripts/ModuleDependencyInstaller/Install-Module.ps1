@@ -35,11 +35,12 @@ try {
     ErrorAction = 'Stop'
     SkipPublisherCheck = $true
     Scope = 'CurrentUser'
-    AcceptLicense = $true
   }
   if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
   if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
   elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }
+  $installCommand = Get-Command Install-Module -ErrorAction Stop
+  if ($installCommand.Parameters.ContainsKey('AcceptLicense')) { $params.AcceptLicense = $true }
   if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
     $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
     $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)

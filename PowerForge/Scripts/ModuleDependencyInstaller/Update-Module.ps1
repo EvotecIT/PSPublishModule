@@ -31,9 +31,10 @@ try {
     Force = $true
     ErrorAction = 'Stop'
     Scope = 'CurrentUser'
-    AcceptLicense = $true
   }
   if ($PrereleaseFlag -eq '1') { $params.AllowPrerelease = $true }
+  $updateCommand = Get-Command Update-Module -ErrorAction Stop
+  if ($updateCommand.Parameters.ContainsKey('AcceptLicense')) { $params.AcceptLicense = $true }
   if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
     $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
     $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
