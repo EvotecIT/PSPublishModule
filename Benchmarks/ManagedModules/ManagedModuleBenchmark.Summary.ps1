@@ -14,6 +14,15 @@ function Get-Median {
     [math]::Round(($sorted[$middle - 1] + $sorted[$middle]) / 2, 2)
 }
 
+function Get-MedianProperty {
+    param(
+        [object[]] $Rows,
+        [string] $Name
+    )
+
+    Get-Median -Values @($Rows | ForEach-Object { [double] $_.$Name })
+}
+
 function New-Summary {
     param([object[]] $Rows)
 
@@ -30,6 +39,17 @@ function New-Summary {
             MedianMs = Get-Median -Values @($passed | ForEach-Object { [double]$_.ElapsedMilliseconds })
             MinMs = if ($passed.Count) { [math]::Round(($passed | Measure-Object ElapsedMilliseconds -Minimum).Minimum, 2) } else { 0 }
             MaxMs = if ($passed.Count) { [math]::Round(($passed | Measure-Object ElapsedMilliseconds -Maximum).Maximum, 2) } else { 0 }
+            MedianOutputFileCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'OutputFileCount' } else { 0 }
+            MedianOutputBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'OutputBytes' } else { 0 }
+            MedianManagedPackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageCount' } else { 0 }
+            MedianManagedDependencyCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDependencyCount' } else { 0 }
+            MedianManagedRootDependencyMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyMilliseconds' } else { 0 }
+            MedianManagedDownloadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDownloadMilliseconds' } else { 0 }
+            MedianManagedExtractionMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionMilliseconds' } else { 0 }
+            MedianManagedPromotionMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionMilliseconds' } else { 0 }
+            MedianManagedRepositoryRequests = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRepositoryRequestCount' } else { 0 }
+            MedianManagedDownloadBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDownloadBytes' } else { 0 }
+            MedianManagedCacheHits = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCacheHitCount' } else { 0 }
         }
     }
 }
@@ -57,6 +77,15 @@ function New-Comparison {
             } else {
                 ''
             }
+            ManagedPackageCount = if ($managed.Count) { [double] $managed[0].MedianManagedPackageCount } else { 0 }
+            ManagedDependencyCount = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyCount } else { 0 }
+            ManagedRepositoryRequests = if ($managed.Count) { [double] $managed[0].MedianManagedRepositoryRequests } else { 0 }
+            ManagedDownloadBytes = if ($managed.Count) { [double] $managed[0].MedianManagedDownloadBytes } else { 0 }
+            ManagedCacheHits = if ($managed.Count) { [double] $managed[0].MedianManagedCacheHits } else { 0 }
+            ManagedRootDependencyMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyMs } else { 0 }
+            ManagedDownloadMs = if ($managed.Count) { [double] $managed[0].MedianManagedDownloadMs } else { 0 }
+            ManagedExtractionMs = if ($managed.Count) { [double] $managed[0].MedianManagedExtractionMs } else { 0 }
+            ManagedPromotionMs = if ($managed.Count) { [double] $managed[0].MedianManagedPromotionMs } else { 0 }
         }
     }
 }

@@ -151,14 +151,14 @@ Every run writes:
 
 - `managed-module-results.csv`: raw per-run rows, including repair scenario and optional import validation columns.
 - `managed-module-results.json`: raw per-run rows as JSON.
-- `managed-module-summary.csv`: grouped median/min/max rows by operation, scenario, and engine.
-- `managed-module-comparison.csv`: fastest successful engine per operation and scenario, plus managed rank and ratio.
+- `managed-module-summary.csv`: grouped median/min/max rows by operation, scenario, and engine, including output size and managed detail medians when detail artifacts are present.
+- `managed-module-comparison.csv`: fastest successful engine per operation and scenario, plus managed rank, ratio, and managed package/request/download/extract/promotion medians.
 - `metadata.json`: runtime, selected engines, module, version, repository, and output paths.
 - `managed-install-details-<n>.json`: managed install package tree details, written under the benchmark run folder for install runs. It includes package/dependency counts, per-package elapsed/download/extraction/promotion timings, request counts, cache hits, and byte counts.
 
 Start with `managed-module-comparison.csv` for a quick scoreboard, then inspect `managed-module-results.csv` when a competitor is skipped or failed.
 
-Suite runs write `suite-summary.csv`, `suite-summary.json`, `suite-hosts.csv`, and per-scenario child run folders.
+Suite runs write `suite-summary.csv`, `suite-summary.json`, `suite-hosts.csv`, and per-scenario child run folders. Suite summaries carry the managed detail medians from each child comparison row so heavy Graph/Az/Teams/Exchange runs can be inspected from one file before drilling into package detail artifacts.
 
 ## Notes
 
