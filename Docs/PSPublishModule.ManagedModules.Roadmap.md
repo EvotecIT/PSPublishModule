@@ -77,6 +77,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Define which existing cmdlets become wrappers and which remain independent.
 - [x] Support exact-version NuGet v2 package downloads for public gallery endpoints that do not expose a reachable NuGet v3 service index from the current host.
 - [x] Support NuGet v2 version lookup and package-id wildcard search for public gallery endpoints.
+- [x] Use the public PowerShell Gallery NuGet v2 read API directly for canonical PSGallery find/save/install/update operations so managed reads avoid slow or blocked v3 service-index probes while generic NuGet v3 feeds and publish endpoints keep their v3 behavior.
 
 ## Current Receipt And Rollback Contract
 
@@ -379,6 +380,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Benchmark JSON and Markdown reports now include a typed managed-evidence readiness summary, so measured-operation readiness can be audited independently from the stricter compatibility-retirement gate.
 - [x] 2026-06-28: PowerShell 7.6.3 imported the current local `net10.0` build and ran `Measure-ManagedModule -Operation Update,Install,Save,Publish -Engine Managed,PSResourceGet,PowerShellGet -EnableNativeInstallUpdateBenchmark -RequireManagedEvidenceReady -RequireCompatibilityRetirementReady` against managed-published local packages. All 12 runs completed, all four transition gates were `Ready`, managed evidence was `Ready`, and compatibility retirement was `Ready`; report root: `C:\Users\przemyslaw.klys.EVOTEC\AppData\Local\Temp\pf-current-proof-ps7-current-580c79b21f794c68bf359932503e10f8`.
 - [x] 2026-06-28: Windows PowerShell 5.1.26100.8655 imported the current local `net472` build and ran the same current-head all-operation local-feed proof. All 12 runs completed, all four transition gates were `Ready`, managed evidence was `Ready`, and compatibility retirement was `Ready`; report root: `C:\Users\przemyslaw.klys.EVOTEC\AppData\Local\Temp\pf-current-proof-winps-current-b592d60114994eb1b3e603d611d4edda`.
+- [x] 2026-06-28: Canonical PSGallery managed reads now bypass the public v3 service-index probe and use the Gallery NuGet v2 read API directly; repository-client contract tests verify version lookup, search, and package download do not request `https://www.powershellgallery.com/api/v3/index.json`.
 
 ## Benchmark Scenarios
 

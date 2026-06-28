@@ -140,7 +140,7 @@ Cmdlets should map parameters into these models and write result objects. They s
 
 | Provider/source | Support level | Notes |
 | --- | --- | --- |
-| PowerShell Gallery | Supported | NuGet v3 service index and flat-container package flow. |
+| PowerShell Gallery | Supported | Canonical PSGallery read operations use the NuGet v2 API for find/save/install/update because that endpoint is the reliable public module feed surface; managed publish and generic NuGet feeds still use NuGet v3 service metadata where required. |
 | Generic NuGet v3 feed | Supported | Find, save, install, update, and publish with API key or basic credential where the feed supports it. |
 | Local folder feed | Supported | Used for deterministic tests, offline bundles, local publish, and benchmark smoke proof. |
 | Azure Artifacts | Partial | Profiles and direct v3 feed URLs work. Credential-provider bootstrapping remains a compatibility/profile concern. |
@@ -152,7 +152,7 @@ Cmdlets should map parameters into these models and write result objects. They s
 
 - Repository trust is explicit. A trusted profile or caller policy can allow unattended install/update; `RequireTrustedRepository` blocks untrusted sources.
 - Credentials are resolved before managed repository access. The core engine receives credential values or no credential; it does not call external credential helpers.
-- Retries, timeouts, cancellation, proxy behavior, and HTTP error messages belong in the managed repository client.
+- Retries, timeouts, cancellation, proxy behavior, endpoint selection, and HTTP error messages belong in the managed repository client. The public PowerShell Gallery default resolves read operations through its NuGet v2 endpoint to avoid slow or blocked v3 service-index probes.
 - Side-by-side versions are valid when version policies ask for exact or compatible copies. Forced replacement stages first and rolls back on promotion failure.
 - Downgrades require explicit policy through the selected version/range and force behavior.
 - Loaded modules can block unsafe updates unless the caller explicitly allows that risk.
