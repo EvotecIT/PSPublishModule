@@ -29,6 +29,8 @@ param(
 
     [switch] $AcceptLicense,
 
+    [switch] $ValidateImport,
+
     [switch] $RotateEngineOrder,
 
     [switch] $ListScenarios
@@ -473,6 +475,39 @@ function Get-OutputRootMetrics {
     }
 }
 
+function Invoke-ImportValidation {
+    param([string] $OutputRoot)
+
+    if (-not $ValidateImport.IsPresent -or [string]::IsNullOrWhiteSpace($OutputRoot) -or -not (Test-Path -LiteralPath $OutputRoot)) {
+        return $null
+    }
+
+    $childScript = Join-Path $PSScriptRoot 'Invoke-ManagedModuleImportChild.ps1'
+    $output = @(& (Get-BenchmarkHostPath) -NoLogo -NoProfile -ExecutionPolicy Bypass -File $childScript -ModuleName $ModuleName -ModuleRoot $OutputRoot 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{
+            Status = 'Failed'
+            Version = ''
+            ManifestPath = ''
+            ElapsedMilliseconds = 0
+            Error = ($output -join [Environment]::NewLine)
+        }
+    }
+
+    $json = @($output | Where-Object { [string] $_ -match '^\s*\{' } | Select-Object -Last 1)
+    if ($json.Count -eq 0) {
+        return [pscustomobject]@{
+            Status = 'Failed'
+            Version = ''
+            ManifestPath = ''
+            ElapsedMilliseconds = 0
+            Error = ($output -join [Environment]::NewLine)
+        }
+    }
+
+    $json[0] | ConvertFrom-Json
+}
+
 function Invoke-TimedOperation {
     param(
         [string] $OperationName,
@@ -490,6 +525,7 @@ function Invoke-TimedOperation {
     $outputCount = 0
     $metrics = $null
     $detail = $null
+    $importValidation = $null
 
     try {
         $output = @(& $ScriptBlock)
@@ -514,6 +550,10 @@ function Invoke-TimedOperation {
         }
 
         $timer.Stop()
+    }
+
+    if ($status -eq 'Succeeded') {
+        $importValidation = Invoke-ImportValidation -OutputRoot $OutputRoot
     }
 
     if (-not $metrics) {
@@ -549,6 +589,11 @@ function Invoke-TimedOperation {
         ManagedRepositoryRequestCount = if ($detailSummary) { [long] $detailSummary.TotalRepositoryRequestCount } else { 0 }
         ManagedDownloadBytes = if ($detailSummary) { [long] $detailSummary.TotalDownloadBytes } else { 0 }
         ManagedCacheHitCount = if ($detailSummary) { [int] $detailSummary.CacheHitCount } else { 0 }
+        ImportStatus = if ($importValidation) { [string] $importValidation.Status } else { '' }
+        ImportVersion = if ($importValidation) { [string] $importValidation.Version } else { '' }
+        ImportMilliseconds = if ($importValidation) { [double] $importValidation.ElapsedMilliseconds } else { 0 }
+        ImportManifestPath = if ($importValidation) { [string] $importValidation.ManifestPath } else { '' }
+        ImportError = if ($importValidation) { [string] $importValidation.Error } else { '' }
         Error = $errorText
     }
 }
@@ -584,6 +629,11 @@ function New-SkippedRow {
         ManagedRepositoryRequestCount = 0
         ManagedDownloadBytes = 0
         ManagedCacheHitCount = 0
+        ImportStatus = ''
+        ImportVersion = ''
+        ImportMilliseconds = 0
+        ImportManifestPath = ''
+        ImportError = ''
         Error = $Reason
     }
 }
@@ -920,6 +970,7 @@ $metadata = [ordered]@{
     RepositoryName = $RepositoryName
     ModuleFastSource = $ModuleFastSource
     AcceptLicense = $AcceptLicense.IsPresent
+    ValidateImport = $ValidateImport.IsPresent
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     Suite = $Suite
     Engines = $Engine

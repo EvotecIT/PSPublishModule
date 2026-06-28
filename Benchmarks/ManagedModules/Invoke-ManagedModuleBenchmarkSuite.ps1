@@ -25,6 +25,8 @@ param(
     [Alias('IncludeInstallManaged')]
     [switch] $IncludeInstall,
 
+    [switch] $ValidateImport,
+
     [switch] $RotateEngineOrder,
 
     [switch] $ListScenarios
@@ -229,6 +231,9 @@ function Invoke-ScenarioHostRun {
     if ($Scenario.AcceptLicense) {
         $arguments += '-AcceptLicense'
     }
+    if ($ValidateImport.IsPresent) {
+        $arguments += '-ValidateImport'
+    }
     if ($RotateEngineOrder.IsPresent) {
         $arguments += '-RotateEngineOrder'
     }
@@ -342,6 +347,7 @@ $metadata = [ordered]@{
     UpdateBaselineVersion = $UpdateBaselineVersion
     RepeatCount = $RepeatCount
     IncludeInstall = $IncludeInstall.IsPresent
+    ValidateImport = $ValidateImport.IsPresent
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     OutputDirectory = $suiteRoot
 }

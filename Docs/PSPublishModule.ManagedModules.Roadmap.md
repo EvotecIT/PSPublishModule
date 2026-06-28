@@ -304,7 +304,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add `-AcceptLicense` support to the benchmark harness and pass it only when explicitly requested.
 - [ ] Add warm-cache and cold-cache modes.
 - [ ] Add publish comparisons against local folder feeds.
-- [ ] Add import validation after install/save/update for PowerShell 5.1 and PowerShell 7+.
+- [x] Add import validation after install/save/update for PowerShell 5.1 and PowerShell 7+.
 - [x] Add file and byte counts for saved and installed output roots.
 - [x] Add managed install detail artifacts with package count, dependency count, per-package elapsed time, download time, extraction time, promotion time, repository requests, cache hits, and byte counts.
 - [x] Add Graph/Az/Teams/Exchange-heavy scenario presets for suite runs.
@@ -330,6 +330,8 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: Managed dependency installs now use bounded parallel delivery for independent direct dependencies while preserving per-branch cycle detection, per-module final promotion locks, and coordinated package-cache writes. PowerShell 7 reran full `Microsoft.Graph` 2.38.0 managed install in 13.26 seconds with 78 packages, 77 dependencies, 81 repository requests, and 186.5 MB of downloaded package bytes. PowerShell 7 reran full `Az` 16.0.0 managed install in 17.86 seconds with 204 packages, 203 dependencies, 411 repository requests, and 137.5 MB of downloaded package bytes. Summed package download/extraction time is now expected to exceed wall-clock time because dependency packages are delivered concurrently.
 - [x] 2026-06-28: Windows PowerShell 5.1 reran full latest-version managed install after shortening disposable benchmark roots and managed temp stage paths to avoid classic Windows path-length noise. `Microsoft.Graph` 2.38.0 installed in 15.63 seconds with 78 packages and 77 dependencies. `Az` 16.0.0 installed in 49.50 seconds with 204 packages and 203 dependencies. The corrected suite omits empty `-Version` arguments and the comparison runner now treats omitted version as latest, so PS5 and PS7 heavy-suite evidence measures the same current package versions.
 - [x] 2026-06-28: The benchmark harness now has an explicit update lane that installs `-UpdateBaselineVersion` outside the timed window and then times only the update operation in the same disposable host root. PowerShell 7 updated `ThreadJob` from 2.0.3 to 2.1.0 in 2855 ms with managed, 4479 ms with PSResourceGet, and 11238 ms with PowerShellGet; ModuleFast is an explicit skip because it does not expose update. Windows PowerShell 5.1 updated the same stale module in 4457 ms with managed and 7329 ms with PSResourceGet, while PowerShellGet failed inside its metadata conversion path and left 2.0.3 installed.
+- [x] 2026-06-28: The benchmark harness now supports `-ValidateImport`, which imports the highest-version manifest from the benchmark output root after timed install/save/update operations and records import status separately from operation timing. PowerShell 7 validated `ThreadJob` install/update outputs from managed, ModuleFast install, PSResourceGet, and PowerShellGet; every successful row imported 2.1.0 from the output root. Windows PowerShell 5.1 validated the same managed, PSResourceGet, and PowerShellGet install outputs and managed/PSResourceGet update outputs; PowerShellGet update still failed in its own path before import. This exposed a small-module PS5.1 update optimization target: managed was correct but slower than PSResourceGet on the import-gated stale `ThreadJob` update.
+- [x] 2026-06-28: PowerShell 7 and Windows PowerShell 5.1 also ran import-gated `ThreadJob` save comparisons. Every successful saved output imported 2.1.0 from its benchmark output root. PowerShell 7 measured PSResourceGet at 2408 ms, managed at 2734 ms, and PowerShellGet at 23304 ms. Windows PowerShell 5.1 measured managed at 2200 ms, PSResourceGet at 2515 ms, and PowerShellGet at 14616 ms.
 
 ### Next Optimization Targets
 
@@ -337,6 +339,8 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Coordinate repository metadata caches and package-cache writes so parallel dependency delivery cannot corrupt shared cached packages.
 - [x] Re-measure full `Az` and full `Microsoft.Graph` install after dependency scheduling changes on PowerShell 7 and Windows PowerShell 5.1.
 - [ ] Add repository lookup/request coalescing for repeated transitive dependency checks; current package-cache coordination prevents file races but does not yet share in-flight metadata requests.
+- [ ] Optimize Windows PowerShell 5.1 stale small-module update; the import-gated `ThreadJob` 2.0.3 to 2.1.0 smoke measured managed at 9910 ms versus PSResourceGet at 6974 ms.
+- [ ] Optimize PowerShell 7 small-module save; the import-gated `ThreadJob` save smoke measured managed at 2734 ms versus PSResourceGet at 2408 ms.
 
 ## Benchmark Scenarios
 
