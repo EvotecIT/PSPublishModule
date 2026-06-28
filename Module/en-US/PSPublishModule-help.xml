@@ -27295,12 +27295,12 @@ engine directly and returns typed benchmark run data that can be compared with c
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Operation</maml:name>
           <maml:description>
-            <maml:para>Lifecycle operation to measure.</maml:para>
+            <maml:para>Lifecycle operation or operations to measure.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">ManagedModuleBenchmarkOperation</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleBenchmarkOperation[]</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Find</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Install</command:parameterValue>
@@ -27309,7 +27309,7 @@ engine directly and returns typed benchmark run data that can be compared with c
             <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
-            <maml:name>ManagedModuleBenchmarkOperation</maml:name>
+            <maml:name>ManagedModuleBenchmarkOperation[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -27394,6 +27394,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireCompatibilityRetirementReady</maml:name>
+          <maml:description>
+            <maml:para>Fail the command when compatibility transport cannot yet be marked legacy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -27756,12 +27768,12 @@ engine directly and returns typed benchmark run data that can be compared with c
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Operation</maml:name>
         <maml:description>
-          <maml:para>Lifecycle operation to measure.</maml:para>
+          <maml:para>Lifecycle operation or operations to measure.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">ManagedModuleBenchmarkOperation</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleBenchmarkOperation[]</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Find</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Install</command:parameterValue>
@@ -27770,7 +27782,7 @@ engine directly and returns typed benchmark run data that can be compared with c
           <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
-          <maml:name>ManagedModuleBenchmarkOperation</maml:name>
+          <maml:name>ManagedModuleBenchmarkOperation[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27855,6 +27867,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequireCompatibilityRetirementReady</maml:name>
+        <maml:description>
+          <maml:para>Fail the command when compatibility transport cannot yet be marked legacy.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
