@@ -29,9 +29,9 @@ Baseline references:
 ## Public Surface Decisions
 
 - `Get-ManagedModule` is the PowerShell-native installed inventory surface. Use `-AsInventory` when an advanced ModuleState inventory object is needed for planning or support bundles.
-- `Repair-ManagedModule` is the day-to-day stale/drift/family/source maintenance surface. Use `-Plan` for preview. The lower-level ModuleState cmdlets remain available when inventory, plan, test, and apply need to be inspected independently.
+- `Repair-ManagedModule` is the day-to-day stale/drift/family/source maintenance surface. Use `-Plan` for preview. ModuleState remains the internal planning engine, not a compatibility promise for unreleased public cmdlet names.
 - `Register-ManagedModuleRepository` is not planned now. Use `Set-ModuleRepositoryProfile`, `Get-ModuleRepositoryProfile`, `Connect-ModuleRepository`, and `Register-ModuleRepository` for repository profiles and compatibility registration. Managed commands can also use direct `-Repository` values.
-- `Install-PrivateModule` and `Update-PrivateModule` stay as convenience wrappers. The reusable path is `Install-ManagedModule`, `Save-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, `Publish-ManagedModule`, and advanced ModuleState cmdlets.
+- `Install-PrivateModule` and `Update-PrivateModule` stay as convenience wrappers. The reusable path is `Find-ManagedModule`, `Install-ManagedModule`, `Save-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, and `Publish-ManagedModule`.
 - Public and private command aliases are allowed only when they point to the same managed command implementation. New command families need a distinct operator purpose.
 
 ## Switching Examples
@@ -106,23 +106,20 @@ Update-PrivateModule  -ProfileName CompanyModules -Name Company.Tools -Transport
 
 ### Estate Maintenance
 
-Use `Invoke-ModuleState` as the operator entrypoint when the question is not just "install this module", but "keep this machine's module estate under control":
+Use `Repair-ManagedModule` as the operator entrypoint when the question is not just "install this module", but "keep this machine's module estate under control":
 
 ```powershell
-Invoke-ModuleState -Installed -Latest -Repository PSGallery -Transport ManagedModule -ShowSummary
+Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 ```
 
-For automation and support bundles, keep the steps inspectable:
+For automation and support bundles, keep the steps inspectable through managed-family objects:
 
 ```powershell
-$inventory = Get-ModuleState -IncludeLoaded -ShowSummary
-$plan = $inventory | Get-ModuleStatePlan -DesiredState @{
-    Modules = @(
-        @{ Name = 'Company.Tools'; Version = '=1.2.0'; Repository = 'CompanyModules'; Scope = 'CurrentUser' }
-    )
-} -Repair -ShowSummary
-$plan | Test-ModuleState -PassThru -ShowSummary
-$plan | Invoke-ModuleStatePlan -Repository CompanyModules -Transport ManagedModule -Execute -ShowSummary
+$inventory = Get-ManagedModule -IncludeLoaded -AsInventory -ShowSummary
+$preview = Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -Plan -ShowSummary
+$preview.Plan | Format-List
+$preview.Test | Format-List
+Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSummary
 ```
 
 ## Parameter Matrix
@@ -173,11 +170,11 @@ The managed engine owns typed domain models for:
 - Repositories: source, name, kind, trust, priority, and profile-derived evidence.
 - Packages: identity, nuspec metadata, manifest metadata, dependency metadata, hashes, file counts, and byte counts.
 - Versions: semantic comparison, prerelease labels, PowerShellGet-style bounds, and NuGet/PSResourceGet-style ranges.
-- Plans and actions: install, save, update, publish, ModuleState delivery, repair, and skip reasons.
+- Plans and actions: install, save, update, publish, managed delivery, repair, and skip reasons.
 - Receipts: successful delivery evidence under the installed module version directory.
 - Benchmark evidence: engine, operation, timing, package counts, bytes, import validation, publish status, and report paths. Benchmark tooling lives under `Benchmarks`, not in the shipped cmdlet surface.
 
-Cmdlets should map parameters into these models and write result objects. They should not own repository protocol logic, archive extraction, dependency solving, package creation, or ModuleState repair decisions.
+Cmdlets should map parameters into these models and write result objects. They should not own repository protocol logic, archive extraction, dependency solving, package creation, or repair decisions.
 
 ## Provider Support
 
@@ -224,7 +221,7 @@ Same-name modules are skipped during conflict checks so side-by-side versions an
 
 ### License Acceptance Semantics
 
-Managed install, save, update, and ModuleState managed delivery never prompt for license acceptance. If the selected package or any dependency package declares `requireLicenseAcceptance=true`, the operation fails unless the caller passes `-AcceptLicense`.
+Managed install, save, update, and repair delivery never prompt for license acceptance. If the selected package or any dependency package declares `requireLicenseAcceptance=true`, the operation fails unless the caller passes `-AcceptLicense`.
 
 `-AcceptLicense` applies to the whole dependency closure for that operation. This is intentional for unattended estate maintenance: either the operator or automation policy accepts the package licenses up front, or no package that requires acceptance is promoted. A license-required dependency blocks the parent package before the parent is promoted.
 
@@ -240,14 +237,14 @@ This check is currently Windows-only. Calling it on non-Windows hosts fails clea
 
 ## Transition Gates
 
-Compatibility transport stays available as a legacy fallback. The managed engine is the preferred path when source evidence and provider support allow it; compatibility is still selected when a provider gap or missing repository-source signal would make the managed decision unsafe.
+Compatibility transport stays available as a temporary fallback. The managed engine is the preferred path when source evidence and provider support allow it; compatibility is still selected when a provider gap or missing repository-source signal would make the managed decision unsafe.
 
 The managed path can be treated as the default for supported module workflows after all of these are true:
 
 - Managed install/save/update/publish passes local-folder and public-feed proof on Windows PowerShell 5.1 and PowerShell 7+.
 - Benchmarks cover cold cache, warm cache, heavy extraction, dependency closure, no-op update, private feed metadata, and publish comparison.
 - Common PowerShellGet and PSResourceGet module workflows have documented managed equivalents.
-- ModuleState can maintain the same estate through managed transport with receipts and inspectable repair plans.
+- `Repair-ManagedModule` maintains the same estate through managed transport with receipts and inspectable repair plans.
 - Provider gaps are documented as explicit partial support instead of hidden fallbacks.
 
 Current status: these gates have local evidence on both Windows PowerShell 5.1 and PowerShell 7+. `Auto` transport prefers managed delivery for local paths, direct repository URIs, and registered/profile repositories that resolve to source endpoints. Compatibility transport remains available for provider-specific bootstrap gaps, non-module resource kinds, and unresolved repository names; those decisions are surfaced in typed result objects and summaries instead of being hidden.

@@ -86,6 +86,11 @@ public sealed class ManagedModulePackageMetadata
     public IReadOnlyList<ManagedModuleDependencyInfo> ManifestDependencies { get; set; } = Array.Empty<ManagedModuleDependencyInfo>();
 
     /// <summary>
+    /// External module dependencies declared by PrivateData.PSData.ExternalModuleDependencies.
+    /// </summary>
+    public IReadOnlyList<string> ManifestExternalModuleDependencies { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Full path to the package that was read.
     /// </summary>
     public string? PackagePath { get; set; }

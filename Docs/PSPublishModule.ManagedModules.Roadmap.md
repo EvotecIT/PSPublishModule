@@ -11,7 +11,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Keep PowerShellGet and PSResourceGet as compatibility baselines and temporary fallbacks, not as the long-term engine.
 - [x] Preserve easy migration from existing `Install-Module`, `Save-Module`, `Publish-Module`, `Install-PSResource`, `Save-PSResource`, and `Publish-PSResource` usage.
 - [x] Keep `Install-PrivateModule` and `Update-PrivateModule` as thin compatibility/convenience wrappers with opt-in managed transport.
-- [x] Make `Get-ManagedModule`, `Update-ManagedModule`, and `Repair-ManagedModule` the day-to-day estate maintenance entrypoints while keeping ModuleState plan objects internal/advanced.
+- [x] Make `Get-ManagedModule`, `Update-ManagedModule`, and `Repair-ManagedModule` the day-to-day estate maintenance entrypoints while keeping ModuleState plan objects as internal engine vocabulary.
 - [x] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
 - [x] Write receipts and evidence only after successful delivery.
 - [x] Treat destructive cleanup as a separately proven and explicitly gated capability.
@@ -27,7 +27,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Add non-conflicting public aliases for the managed find/save/install/update/publish commands.
 - [x] Introduce `Get-ManagedModule` as the PowerShell-native installed inventory surface.
 - [x] Introduce `Repair-ManagedModule` as the one-stop stale/drift/family/source maintenance surface.
-- [ ] Keep `Get-ModuleState`, `Get-ModuleStatePlan`, `Test-ModuleState`, `Invoke-ModuleStatePlan`, and `Invoke-ModuleState` as advanced compatibility surfaces until the managed naming family fully replaces them.
+- [ ] Remove unreleased `Get-ModuleState`, `Get-ModuleStatePlan`, `Test-ModuleState`, `Invoke-ModuleStatePlan`, and `Invoke-ModuleState` public exports once the managed command family exposes the needed inventory, plan, test, and apply workflows.
 - [x] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
 - [x] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed install delivery when `-Transport ManagedModule` is selected.
 - [x] Keep `Update-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed update delivery when `-Transport ManagedModule` is selected.
@@ -73,7 +73,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] `-Plan` remains the non-mutating inspection switch across install, update, and repair flows.
 - [ ] `-WhatIf` remains the operator safety gate for mutations.
 - [ ] Destructive cleanup remains separately gated instead of being implied by update.
-- [ ] ModuleState plan/apply cmdlets remain advanced surfaces and internal implementation vocabulary, not the primary user story.
+- [ ] ModuleState plan/apply types remain reusable internal implementation vocabulary; unreleased ModuleState cmdlets do not need compatibility shims or aliases.
 
 ## Phase 1: Design And Contracts
 
@@ -105,7 +105,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - `Install-ManagedModule`, `Save-ManagedModule`, and `Update-ManagedModule` can require a caller-supplied `ExpectedPackageSha256`.
 - Expected SHA256 validation runs after download or local-feed copy and before package extraction, dependency installation, final promotion, or receipt creation.
 - Expected SHA256 applies only to the requested root package; dependency and family-member packages need their own future policy object instead of inheriting one hash accidentally.
-- ModuleState desired-state objects can carry `ExpectedPackageSha256` / `PackageSha256` / `Sha256`; managed transport preserves it in plans, prepared commands, and direct `Invoke-ModuleStatePlan -Execute` delivery.
+- ModuleState desired-state objects can carry `ExpectedPackageSha256` / `PackageSha256` / `Sha256`; managed transport preserves it in repair plans, prepared commands, and managed delivery.
 - Install and update result objects expose both the receipt object and receipt path when disk state changed.
 - Forced replacement stages the new version first, moves the existing version to a temporary backup, promotes the staged version, and restores the backup if promotion fails.
 - Per-module install locks are stored under `<moduleRoot>/.powerforge/locks` and guard install/update mutations for the same module name.
@@ -129,6 +129,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - Managed publish configuration can name a private required-module upstream and provide `RequiredModuleSourceRepositoryUri` for the managed source.
 - Managed required-module mirroring publishes package dependency metadata transitively before the package that requires it.
 - Named private upstream profiles can be used as managed required-module sources; publish configuration resolves the profile into the repository name and source URI.
+- Direct `Publish-ManagedModule` dependency validation honors `PrivateData.PSData.ExternalModuleDependencies` from the module manifest, so external runtime dependencies do not have to exist in the publish target feed.
 
 ## Phase 2: Managed Repository Client
 
@@ -266,6 +267,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Implement `-SkipModuleManifestValidate`.
 - [x] Integrate with existing `ModulePublisher`.
 - [x] Integrate with required-module mirroring.
+- [x] Skip publish dependency validation for manifest `RequiredModules` also listed in `PrivateData.PSData.ExternalModuleDependencies`.
 - [x] Emit typed publish result objects.
 - [x] Add Spectre.Console summary output.
 - [x] Add tests for package creation.
@@ -275,25 +277,24 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Validate local-feed publish smoke on Windows PowerShell 5.1.
 - [x] Validate local-feed publish smoke on PowerShell 7+.
 
-## Phase 9: ModuleState Integration
+## Phase 9: Managed Maintenance Integration
 
-- [x] Teach `Invoke-ModuleState` to use the managed engine for install/update/save operations.
-- [x] Teach `Invoke-ModuleState` and `Invoke-ModuleStatePlan` to use the managed engine for install/update delivery when requested.
-- [x] Teach `Invoke-ModuleState` and `Invoke-ModuleStatePlan` to use the managed engine for save delivery when requested.
-- [x] Keep `Get-ModuleState` inventory object-first.
-- [x] Keep `Get-ModuleStatePlan` as an inspectable plan surface.
-- [x] Keep `Test-ModuleState` as a validation surface.
-- [x] Keep `Invoke-ModuleStatePlan` as the low-level apply surface.
-- [x] Add `-Transport ManagedModule` to ModuleState apply flows as a transition switch.
-- [x] Keep compatibility transport available until managed parity is proven.
+- [x] Teach the maintenance engine to use the managed engine for install/update/save operations.
+- [x] Teach `Repair-ManagedModule` to plan and apply managed install/update delivery.
+- [x] Teach `Repair-ManagedModule` to plan and apply managed save delivery where repair workflows need offline materialization.
+- [x] Keep `Get-ManagedModule -AsInventory` object-first for support bundles and advanced planning.
+- [ ] Add managed-family plan/test/apply surfaces only where `Repair-ManagedModule -Plan` and typed result objects are not enough.
+- [ ] Remove unreleased ModuleState public cmdlets/exports after the managed-family surface covers the inspected workflows.
+- [x] Use managed delivery as the default repair transport.
+- [ ] Retire compatibility transport from the primary repair path once managed parity is proven by benchmarks and compatibility tests.
 - [x] Ensure maintenance receipts contain managed-engine evidence.
 - [x] Ensure summaries explain what changed, what was skipped, and why.
-- [x] Add tests for ModuleState managed delivery command shaping.
-- [x] Add tests for ModuleState managed install.
-- [x] Add tests for ModuleState managed update.
-- [x] Add tests for ModuleState managed save.
-- [x] Add tests for ModuleState managed source repair.
-- [x] Add tests for ModuleState source/scope/family repairs through the managed engine.
+- [x] Add tests for managed maintenance delivery command shaping.
+- [x] Add tests for managed maintenance install.
+- [x] Add tests for managed maintenance update.
+- [x] Add tests for managed maintenance save.
+- [x] Add tests for managed maintenance source repair.
+- [x] Add tests for source/scope/family repairs through the managed engine.
 
 ## Phase 10: Benchmarks And Proof
 

@@ -94,11 +94,12 @@ internal sealed class ManagedModuleInstallContext
         var waitingFor = pending.WaitingForKey;
         while (!string.IsNullOrWhiteSpace(waitingFor))
         {
-            if (_ownedInstallKeys.Contains(waitingFor))
+            var currentKey = waitingFor!;
+            if (_ownedInstallKeys.Contains(currentKey))
                 return true;
-            if (!visited.Add(waitingFor))
+            if (!visited.Add(currentKey))
                 return true;
-            if (!_inFlightInstalls.TryGetValue(waitingFor, out var nextPending))
+            if (!_inFlightInstalls.TryGetValue(currentKey, out var nextPending))
                 return false;
 
             waitingFor = nextPending.WaitingForKey;
