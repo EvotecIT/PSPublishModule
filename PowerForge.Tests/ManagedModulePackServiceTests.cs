@@ -96,6 +96,37 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public void Pack_omits_external_module_dependencies_from_nuspec_dependencies()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'External.Dependency'; RequiredVersion = '2.0.0' }, @{ ModuleName = 'Company.Core'; RequiredVersion = '3.0.0' })",
+            externalModuleDependencies: "            ExternalModuleDependencies = @('external.dependency')");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        var dependencyIds = ReadNuspecDependencyIds(archive);
+        var metadata = new ManagedModulePackageReader().ReadMetadata(result.PackagePath);
+
+        Assert.Contains("Company.Core", dependencyIds);
+        Assert.DoesNotContain("External.Dependency", dependencyIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("External.Dependency", metadata.ManifestDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("external.dependency", metadata.ManifestExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(metadata.Dependencies, dependency => string.Equals(dependency.Id, "External.Dependency", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Pack_requires_manifest_metadata_unless_validation_is_skipped()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -279,6 +310,10 @@ public sealed class ManagedModulePackServiceTests
         var metadata = new ManagedModulePackageReader().ReadMetadata(result.PackagePath);
         Assert.Contains("External.Dependency", metadata.ManifestDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
         Assert.Contains("external.dependency", metadata.ManifestExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(metadata.Dependencies, dependency => string.Equals(dependency.Id, "External.Dependency", StringComparison.OrdinalIgnoreCase));
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        Assert.DoesNotContain("External.Dependency", ReadNuspecDependencyIds(archive), StringComparer.OrdinalIgnoreCase);
     }
 
     private static void CreateModule(
@@ -329,5 +364,18 @@ public sealed class ManagedModulePackServiceTests
         var entry = archive.Entries.Single(item => item.FullName.Equals(name, StringComparison.OrdinalIgnoreCase));
         using var reader = new StreamReader(entry.Open());
         return reader.ReadToEnd();
+    }
+
+    private static string[] ReadNuspecDependencyIds(ZipArchive archive)
+    {
+        var nuspec = archive.Entries.Single(entry => entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
+        using var stream = nuspec.Open();
+        var document = XDocument.Load(stream);
+        return document.Descendants()
+            .Where(static element => element.Name.LocalName == "dependency")
+            .Select(static element => element.Attribute("id")?.Value)
+            .Where(static id => !string.IsNullOrWhiteSpace(id))
+            .Select(static id => id!)
+            .ToArray();
     }
 }

@@ -251,9 +251,17 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         if (metadata is null)
             return Array.Empty<ManagedModuleDependencyInfo>();
 
+        var externalDependencies = metadata.ManifestExternalModuleDependencies is { Count: > 0 }
+            ? metadata.ManifestExternalModuleDependencies
+                .Where(static dependency => !string.IsNullOrWhiteSpace(dependency))
+                .Select(static dependency => dependency.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         return (metadata.Dependencies ?? Array.Empty<ManagedModuleDependencyInfo>())
             .Concat(metadata.ManifestDependencies ?? Array.Empty<ManagedModuleDependencyInfo>())
             .Where(static dependency => !string.IsNullOrWhiteSpace(dependency.Id))
+            .Where(dependency => !externalDependencies.Contains(dependency.Id))
             .GroupBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group
                 .OrderBy(static dependency => string.IsNullOrWhiteSpace(dependency.TargetFramework) ? 0 : 1)

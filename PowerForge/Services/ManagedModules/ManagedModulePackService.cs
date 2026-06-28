@@ -194,8 +194,15 @@ public sealed class ManagedModulePackService
     }
 
     private static ManagedModuleDependencyInfo[] ReadPackageDependencies(string manifestPath)
-        => ModuleManifestValueReader.ReadRequiredModules(manifestPath)
+    {
+        var externalDependencies = ModuleManifestValueReader.ReadPsDataStringOrArray(manifestPath, "ExternalModuleDependencies")
+            .Where(static dependency => !string.IsNullOrWhiteSpace(dependency))
+            .Select(static dependency => dependency.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return ModuleManifestValueReader.ReadRequiredModules(manifestPath)
             .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
+            .Where(module => !externalDependencies.Contains(module.ModuleName!))
             .Select(static module => new ManagedModuleDependencyInfo
             {
                 Id = module.ModuleName,
@@ -204,6 +211,7 @@ public sealed class ManagedModulePackService
             .OrderBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
 
     private static XElement CreateDependencyElement(XNamespace ns, ManagedModuleDependencyInfo dependency)
     {
