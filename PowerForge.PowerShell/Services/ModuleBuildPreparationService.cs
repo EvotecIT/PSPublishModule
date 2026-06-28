@@ -459,10 +459,10 @@ internal sealed class ModuleBuildPreparationService
                     action.Configuration.WorkingDirectory = ResolveWorkspacePath(workspaceRoot, action.Configuration.WorkingDirectory);
                     break;
                 case ConfigurationAppleAppSegment appleApp:
-                    appleApp.Configuration.ProjectPath = ResolveWorkspacePath(workspaceRoot, appleApp.Configuration.ProjectPath) ?? string.Empty;
+                    appleApp.Configuration.ProjectPath = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, appleApp.Configuration.ProjectPath) ?? string.Empty;
                     break;
                 case ConfigurationXcodeProjectVersionSegment xcodeProject:
-                    xcodeProject.Configuration.Path = ResolveWorkspacePath(workspaceRoot, xcodeProject.Configuration.Path) ?? string.Empty;
+                    xcodeProject.Configuration.Path = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, xcodeProject.Configuration.Path) ?? string.Empty;
                     break;
                 case ConfigurationArtefactSegment artefact:
                     ResolveWorkspaceRelativeArtefactPaths(artefact.Configuration, workspaceRoot, projectRoot);
@@ -473,9 +473,12 @@ internal sealed class ModuleBuildPreparationService
 
     private static void ResolveWorkspaceRelativeArtefactPaths(ArtefactConfiguration configuration, string workspaceRoot, string projectRoot)
     {
-        configuration.Path = ResolveWorkspacePath(workspaceRoot, configuration.Path);
-        configuration.RequiredModules.Path = ResolveArtefactLayoutPath(workspaceRoot, configuration.Path, configuration.RequiredModules.Path);
-        configuration.RequiredModules.ModulesPath = ResolveArtefactLayoutPath(workspaceRoot, configuration.Path, configuration.RequiredModules.ModulesPath);
+        configuration.Path = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, configuration.Path);
+        var layoutRoot = Path.IsPathRooted(configuration.Path ?? string.Empty)
+            ? workspaceRoot
+            : projectRoot;
+        configuration.RequiredModules.Path = ResolveArtefactLayoutPath(layoutRoot, configuration.Path, configuration.RequiredModules.Path);
+        configuration.RequiredModules.ModulesPath = ResolveArtefactLayoutPath(layoutRoot, configuration.Path, configuration.RequiredModules.ModulesPath);
         ResolveCopyMappingSources(configuration.DirectoryOutput, workspaceRoot, projectRoot);
         ResolveCopyMappingSources(configuration.FilesOutput, workspaceRoot, projectRoot);
     }
@@ -653,8 +656,9 @@ internal sealed class ModuleBuildPreparationService
     {
         var cleaned = PathValueResolver.Clean(path);
         var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
-        var firstSeparator = cleaned.IndexOfAny(separators);
-        return firstSeparator < 0 ? cleaned : cleaned.Substring(0, firstSeparator);
+        return cleaned
+            .Split(separators, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(static segment => !string.Equals(segment, ".", StringComparison.Ordinal)) ?? string.Empty;
     }
 
     private static bool SamePath(string left, string right)
@@ -738,13 +742,13 @@ internal sealed class ModuleBuildPreparationService
         spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = MakeRelativeForConfigNullable(baseDir, spec.Build.CsprojPath);
         spec.Build.DevelopmentBinariesPath = MakeRelativeForConfigNullable(baseDir, spec.Build.DevelopmentBinariesPath);
-        spec.Build.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Build.BinaryConflictSearchRoots);
+        spec.Build.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Build.BinaryConflictSearchRoots, preserveExternalRooted: true);
         if (spec.Install?.Roots is not null)
             spec.Install.Roots = MakePathsRelativeForProjectRoot(projectRoot, spec.Install.Roots, preserveExternalRooted: true);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
             spec.Diagnostics.BaselinePath = MakeRelativeForConfig(baseDir, spec.Diagnostics.BaselinePath!);
         if (spec.Diagnostics is not null)
-            spec.Diagnostics.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Diagnostics.BinaryConflictSearchRoots);
+            spec.Diagnostics.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Diagnostics.BinaryConflictSearchRoots, preserveExternalRooted: true);
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationAppleAppSegment>() ?? Enumerable.Empty<ConfigurationAppleAppSegment>())
         {
@@ -838,7 +842,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.ApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.ApiKeyFilePath);
+            cfg.ApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.ApiKeyFilePath, preserveExternalRooted: true);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationActionSegment>() ?? Enumerable.Empty<ConfigurationActionSegment>())
@@ -889,7 +893,7 @@ internal sealed class ModuleBuildPreparationService
             if (mapping is null || string.IsNullOrWhiteSpace(mapping.Source))
                 continue;
 
-            mapping.Source = MakeRelativeForProjectRoot(projectRoot, mapping.Source) ?? string.Empty;
+            mapping.Source = MakeRelativeForProjectRoot(projectRoot, mapping.Source, preserveExternalRooted: true) ?? string.Empty;
         }
     }
 

@@ -122,7 +122,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 [PowerForge.ConfigurationArtefactSegment]@{
     ArtefactType = [PowerForge.ArtefactType]::Unpacked
     Configuration = [PowerForge.ArtefactConfiguration]@{
-        Path = 'Module/Artefacts/Unpacked'
+        Path = 'Artefacts/Unpacked'
         RequiredModules = [PowerForge.ArtefactRequiredModulesConfiguration]@{
             Path = 'Modules'
             ModulesPath = 'Payload/MainModules'
@@ -180,7 +180,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 }
 [PowerForge.ConfigurationDocumentationSegment]@{
     Configuration = [PowerForge.DocumentationConfiguration]@{
-        Path = 'Module/Docs'
+        Path = '.\Module\Docs'
         PathReadme = 'Docs/Readme.md'
     }
 }
@@ -197,6 +197,18 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
     Path = 'Module/Artefacts/FileBacked/<TagModuleVersionWithPreRelease>'
     PreScriptMergePath = 'Build/header.ps1'
 })
+[PowerForge.ConfigurationAppleAppSegment]@{
+    Configuration = [PowerForge.AppleAppConfiguration]@{
+        ProjectPath = '.\Tactra.xcodeproj'
+        UseResolvedVersion = $true
+    }
+}
+[PowerForge.ConfigurationXcodeProjectVersionSegment]@{
+    Configuration = [PowerForge.XcodeProjectVersionConfiguration]@{
+        Path = 'Mac\TactraMac.xcodeproj'
+        UseResolvedVersion = $true
+    }
+}
 """);
 
             var outsideRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-outside-" + Guid.NewGuid().ToString("N")));
@@ -265,7 +277,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal("Packages/Foo.nupkg", artefact.Configuration.FilesOutput[2].Destination);
 
                 var artefactWithRelativeLayout = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[3]);
-                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Unpacked"), artefactWithRelativeLayout.Configuration.Path);
+                Assert.Equal("Artefacts/Unpacked", artefactWithRelativeLayout.Configuration.Path);
                 Assert.Equal("Modules", artefactWithRelativeLayout.Configuration.RequiredModules.Path);
                 Assert.Equal("Payload/MainModules", artefactWithRelativeLayout.Configuration.RequiredModules.ModulesPath);
 
@@ -310,6 +322,12 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 var fileBackedArtefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[13]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "FileBacked", "<TagModuleVersionWithPreRelease>"), fileBackedArtefact.Configuration.Path);
                 Assert.Contains("Write-Output", fileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
+
+                var appleApp = Assert.IsType<ConfigurationAppleAppSegment>(prepared.PipelineSpec.Segments[14]);
+                Assert.Equal(".\\Tactra.xcodeproj", appleApp.Configuration.ProjectPath);
+
+                var xcodeProject = Assert.IsType<ConfigurationXcodeProjectVersionSegment>(prepared.PipelineSpec.Segments[15]);
+                Assert.Equal("Mac\\TactraMac.xcodeproj", xcodeProject.Configuration.Path);
             }
             finally
             {
@@ -662,6 +680,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var buildStagingPath = Path.Combine(root.FullName, "Artifacts", "Module", "Staging");
             var buildCsprojPath = Path.Combine(root.FullName, "Sources", "TopLevel", "TopLevel.csproj");
             var binaryConflictSearchRoot = Path.Combine(root.FullName, "Modules");
+            var externalBinaryConflictSearchRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "BinaryScan-" + Guid.NewGuid().ToString("N"));
             var installRoot = Path.Combine(root.FullName, "Artifacts", "Modules");
             var externalInstallRoot = Path.Combine(Path.GetTempPath(), "PowerShell", "Modules");
             var diagnosticsBaselinePath = Path.Combine(root.FullName, "Build", "diagnostics.json");
@@ -673,7 +692,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var artefactRoot = Path.Combine(root.FullName, "Module", "Artefacts", "Packed");
             var artefactRequiredModules = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "RequiredModules");
             var artefactModules = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "Modules");
-            var publishKey = Path.Combine(root.FullName, "Build", "psgallery.key");
+            var publishKey = Path.Combine(Path.GetTempPath(), "PowerForge", "Secrets-" + Guid.NewGuid().ToString("N"), "psgallery.key");
             var actionFile = Path.Combine(root.FullName, "Build", "Test-ReleaseReady.ps1");
             var actionWorkingDirectory = Path.Combine(root.FullName, "Build");
             var testsPath = Path.Combine(root.FullName, "Tests");
@@ -683,6 +702,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             const string aboutTopicsPath = "Help/About";
             var copyDirectorySource = Path.Combine(root.FullName, "Build", "Templates");
             var copyFileSource = Path.Combine(root.FullName, "Build", "NOTICE.txt");
+            var externalCopyFileSource = Path.Combine(Path.GetTempPath(), "PowerForge", "Shared-" + Guid.NewGuid().ToString("N"), "NOTICE.txt");
             var projectOptionsOutputPath = Path.Combine(root.FullName, "Artifacts", "ProjectBuild", "options");
             var projectOptionsPlanPath = Path.Combine(root.FullName, "Build", "project-options-plan.json");
             var packageOptionsOutputPath = Path.Combine(root.FullName, "Artifacts", "PackageBuild", "options");
@@ -695,7 +715,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                     SourcePath = root.FullName,
                     StagingPath = buildStagingPath,
                     CsprojPath = buildCsprojPath,
-                    BinaryConflictSearchRoots = new[] { binaryConflictSearchRoot }
+                    BinaryConflictSearchRoots = new[] { binaryConflictSearchRoot, externalBinaryConflictSearchRoot }
                 },
                 Install = new ModulePipelineInstallOptions
                 {
@@ -704,7 +724,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Diagnostics = new ModulePipelineDiagnosticsOptions
                 {
                     BaselinePath = diagnosticsBaselinePath,
-                    BinaryConflictSearchRoots = new[] { binaryConflictSearchRoot }
+                    BinaryConflictSearchRoots = new[] { binaryConflictSearchRoot, externalBinaryConflictSearchRoot }
                 },
                 Segments = new IConfigurationSegment[]
                 {
@@ -772,6 +792,11 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                                 {
                                     Source = copyFileSource,
                                     Destination = "NOTICE.txt"
+                                },
+                                new ArtefactCopyMapping
+                                {
+                                    Source = externalCopyFileSource,
+                                    Destination = "ExternalNotice.txt"
                                 }
                             }
                         }
@@ -856,6 +881,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"CsprojPath\": \"../Sources/TopLevel/TopLevel.csproj\"", json, StringComparison.Ordinal);
             Assert.Contains("\"BinaryConflictSearchRoots\": [", json, StringComparison.Ordinal);
             Assert.Contains("\"Modules\"", json, StringComparison.Ordinal);
+            Assert.Contains(externalBinaryConflictSearchRoot.Replace('\\', '/'), json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"Roots\": [", json, StringComparison.Ordinal);
             Assert.Contains("\"Artifacts/Modules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"BaselinePath\": \"../Build/diagnostics.json\"", json, StringComparison.Ordinal);
@@ -876,6 +902,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"ModulesPath\": \"Module/Artefacts/Packed/Modules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Source\": \"Build/Templates\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Source\": \"Build/NOTICE.txt\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"Source\": \"{externalCopyFileSource.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"TestsPath\": \"Tests\"", json, StringComparison.Ordinal);
             Assert.Contains("\"CertificatePFXPath\": \"Build/cert.pfx\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Path\": \"Module/Docs\"", json, StringComparison.Ordinal);
@@ -883,7 +910,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"TestPath\": \"Tests\"", json, StringComparison.Ordinal);
             Assert.Contains("\"AboutTopicsSourcePath\": [", json, StringComparison.Ordinal);
             Assert.Contains("\"Help/About\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"ApiKeyFilePath\": \"Build/psgallery.key\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"ApiKeyFilePath\": \"{publishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"FilePath\": \"Build/Test-ReleaseReady.ps1\"", json, StringComparison.Ordinal);
             Assert.Contains("\"WorkingDirectory\": \"Build\"", json, StringComparison.Ordinal);
             Assert.Contains("\"StageRoot\": \"Artifacts/Release\"", json, StringComparison.Ordinal);
@@ -895,10 +922,10 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             service.ResolvePipelineSpecPaths(jsonSpec, jsonPath);
             Assert.Equal(buildStagingPath, jsonSpec!.Build.StagingPath);
             Assert.Equal(buildCsprojPath, jsonSpec.Build.CsprojPath);
-            Assert.Equal(new[] { binaryConflictSearchRoot }, jsonSpec.Build.BinaryConflictSearchRoots);
+            Assert.Equal(new[] { binaryConflictSearchRoot, externalBinaryConflictSearchRoot }, jsonSpec.Build.BinaryConflictSearchRoots);
             Assert.Equal(new[] { installRoot, externalInstallRoot }, jsonSpec.Install.Roots);
             Assert.Equal(diagnosticsBaselinePath, jsonSpec.Diagnostics!.BaselinePath);
-            Assert.Equal(new[] { binaryConflictSearchRoot }, jsonSpec.Diagnostics.BinaryConflictSearchRoots);
+            Assert.Equal(new[] { binaryConflictSearchRoot, externalBinaryConflictSearchRoot }, jsonSpec.Diagnostics.BinaryConflictSearchRoots);
             var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(jsonSpec!.Segments[0]);
             var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(jsonSpec.Segments[1]);
             var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(jsonSpec.Segments[2]);
@@ -930,6 +957,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal("Templates", artefact.Configuration.DirectoryOutput[0].Destination);
             Assert.Equal(copyFileSource, artefact.Configuration.FilesOutput![0].Source);
             Assert.Equal("NOTICE.txt", artefact.Configuration.FilesOutput[0].Destination);
+            Assert.Equal(externalCopyFileSource.Replace('\\', '/'), artefact.Configuration.FilesOutput[1].Source);
+            Assert.Equal("ExternalNotice.txt", artefact.Configuration.FilesOutput[1].Destination);
             Assert.Equal(testsPath, test.Configuration.TestsPath);
             Assert.Equal(signingPfxPath, options.Options.Signing!.CertificatePFXPath);
             Assert.Equal(documentationPath, documentation.Configuration.Path);
