@@ -11,9 +11,17 @@ param(
     [Parameter(Mandatory)]
     [string] $ModuleBinary,
 
+    [string] $Version,
+
     [string] $MaintenanceReceiptPath,
 
     [string[]] $Family,
+
+    [string] $Cleanup,
+
+    [string] $LoadedModulePath,
+
+    [switch] $IncludeLoaded,
 
     [switch] $Latest,
 
@@ -59,7 +67,10 @@ function Write-MaintenanceDetail {
     $plan = Get-PropertyValue -InputObject $Result -Name 'Plan'
     $test = Get-PropertyValue -InputObject $Result -Name 'Test'
     $actions = @(@(Get-PropertyValue -InputObject $plan -Name 'Actions') | Where-Object { $null -ne $_ })
-    $findings = @(@(Get-PropertyValue -InputObject $test -Name 'Findings') | Where-Object { $null -ne $_ })
+    $findings = @(@(Get-PropertyValue -InputObject $plan -Name 'Findings') | Where-Object { $null -ne $_ })
+    if ($findings.Count -eq 0) {
+        $findings = @(@(Get-PropertyValue -InputObject $test -Name 'Findings') | Where-Object { $null -ne $_ })
+    }
 
     $parent = Split-Path -Path $Path -Parent
     if (-not [string]::IsNullOrWhiteSpace($parent)) {
@@ -88,16 +99,25 @@ function Write-MaintenanceDetail {
 
 Import-Module -Name $ModuleBinary -Force
 
+if (-not [string]::IsNullOrWhiteSpace($LoadedModulePath)) {
+    Import-Module -Name $LoadedModulePath -Force
+}
+
 $parameters = @{
-    Installed = $true
-    Repair = $true
     ModulePath = $Destination
     Repository = $Repository
     Transport = 'ManagedModule'
     ModuleRoot = $Destination
+    Plan = $true
+}
+if (-not [string]::IsNullOrWhiteSpace($ModuleName)) {
+    $parameters.Name = $ModuleName
 }
 if ($Latest.IsPresent) {
     $parameters.Latest = $true
+}
+if (-not [string]::IsNullOrWhiteSpace($Version)) {
+    $parameters.Version = $Version
 }
 if (-not [string]::IsNullOrWhiteSpace($MaintenanceReceiptPath)) {
     $parameters.MaintenanceReceiptPath = $MaintenanceReceiptPath
@@ -105,10 +125,16 @@ if (-not [string]::IsNullOrWhiteSpace($MaintenanceReceiptPath)) {
 if ($Family -and $Family.Count -gt 0) {
     $parameters.Family = $Family
 }
+if (-not [string]::IsNullOrWhiteSpace($Cleanup)) {
+    $parameters.Cleanup = $Cleanup
+}
+if ($IncludeLoaded.IsPresent) {
+    $parameters.IncludeLoaded = $true
+}
 if ($AcceptLicense.IsPresent) {
     $parameters.AcceptLicense = $true
 }
 
-$result = Invoke-ModuleState @parameters
+$result = Repair-ManagedModule @parameters
 Write-MaintenanceDetail -Result $result -Path $ResultPath
 $result

@@ -3,7 +3,11 @@ function Invoke-IsolatedRepairPlanHost {
         [string] $Destination,
         [string] $DetailPath,
         [string] $MaintenanceReceiptPath = '',
+        [string] $Version = '',
         [string[]] $Family = @(),
+        [string] $Cleanup = '',
+        [string] $LoadedModulePath = '',
+        [bool] $IncludeLoaded = $false,
         [bool] $Latest
     )
 
@@ -29,6 +33,12 @@ function Invoke-IsolatedRepairPlanHost {
     if ($Latest) {
         $arguments += '-Latest'
     }
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        $arguments += @(
+            '-Version'
+            $Version
+        )
+    }
     if (-not [string]::IsNullOrWhiteSpace($MaintenanceReceiptPath)) {
         $arguments += @(
             '-MaintenanceReceiptPath'
@@ -38,6 +48,21 @@ function Invoke-IsolatedRepairPlanHost {
     if ($Family -and $Family.Count -gt 0) {
         $arguments += '-Family'
         $arguments += $Family
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Cleanup)) {
+        $arguments += @(
+            '-Cleanup'
+            $Cleanup
+        )
+    }
+    if (-not [string]::IsNullOrWhiteSpace($LoadedModulePath)) {
+        $arguments += @(
+            '-LoadedModulePath'
+            $LoadedModulePath
+        )
+    }
+    if ($IncludeLoaded) {
+        $arguments += '-IncludeLoaded'
     }
     if ($AcceptLicense.IsPresent) {
         $arguments += '-AcceptLicense'
@@ -179,6 +204,21 @@ function New-RepairPlanFamilyCoherenceSeed {
     New-RepairPlanSyntheticModule -Destination $Destination -Name 'Microsoft.Graph.Users' -Version '2.38.0'
 }
 
+function New-RepairPlanLoadedSafetySeed {
+    param([string] $Destination)
+
+    New-RepairPlanSyntheticModule -Destination $Destination -Name $ModuleName -Version '1.0.0'
+    New-RepairPlanSyntheticModule -Destination $Destination -Name $ModuleName -Version '2.0.0'
+    Join-Path $Destination (Join-Path $ModuleName (Join-Path '1.0.0' ($ModuleName + '.psd1')))
+}
+
+function New-RepairPlanCleanupPlanningSeed {
+    param([string] $Destination)
+
+    New-RepairPlanSyntheticModule -Destination $Destination -Name $ModuleName -Version '1.0.0'
+    New-RepairPlanSyntheticModule -Destination $Destination -Name $ModuleName -Version '2.0.0'
+}
+
 function Invoke-RepairPlanScenario {
     param([string] $EngineName, [int] $Iteration, [string] $ScenarioName)
 
@@ -205,14 +245,19 @@ function Invoke-RepairPlanScenario {
     }
     $versionOverride = if ($ScenarioName -eq 'StaleVersion') {
         $script:ResolvedUpdateBaselineVersion
-    } elseif ($ScenarioName -eq 'FamilyCoherence') {
+    } elseif ($ScenarioName -in @('FamilyCoherence', 'LoadedModuleSafety', 'CleanupPlanning')) {
         ''
     } else {
         $script:ResolvedUpdateTargetVersion
     }
 
+    $loadedModulePath = ''
     if ($ScenarioName -eq 'FamilyCoherence') {
         New-RepairPlanFamilyCoherenceSeed -Destination $destination
+    } elseif ($ScenarioName -eq 'LoadedModuleSafety') {
+        $loadedModulePath = New-RepairPlanLoadedSafetySeed -Destination $destination
+    } elseif ($ScenarioName -eq 'CleanupPlanning') {
+        New-RepairPlanCleanupPlanningSeed -Destination $destination
     } else {
         try {
             Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $versionOverride -PackageCacheDirectory $packageCacheDirectory
@@ -227,6 +272,9 @@ function Invoke-RepairPlanScenario {
     $maintenanceReceiptPath = ''
     $latest = $ScenarioName -eq 'StaleVersion'
     $family = @()
+    $version = ''
+    $cleanup = ''
+    $includeLoaded = $false
     if ($ScenarioName -eq 'SourceDrift') {
         $installedVersion = Get-InstalledModuleVersion -Root $destination -Name $ModuleName
         $moduleDirectory = Find-RepairPlanModuleDirectory -Destination $destination -ExpectedVersion $installedVersion
@@ -237,10 +285,15 @@ function Invoke-RepairPlanScenario {
         $maintenanceReceiptPath = New-RepairPlanMaintenanceReceipt -Destination $destination -Version $installedVersion -Source 'Managed module benchmark scope-drift seed' -Scope 'CurrentUser'
     } elseif ($ScenarioName -eq 'FamilyCoherence') {
         $family = @('Graph')
+    } elseif ($ScenarioName -eq 'LoadedModuleSafety') {
+        $version = '2.0.0'
+        $includeLoaded = $true
+    } elseif ($ScenarioName -eq 'CleanupPlanning') {
+        $cleanup = 'OldVersions'
     }
 
     $detailPath = Join-Path $workRoot ("managed-repairplan-{0}-details-{1}.json" -f $ScenarioName, $Iteration)
     Invoke-TimedOperation -OperationName 'RepairPlan' -ScenarioName $ScenarioName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
-        Invoke-IsolatedRepairPlanHost -Destination $destination -DetailPath $detailPath -MaintenanceReceiptPath $maintenanceReceiptPath -Family $family -Latest $latest
+        Invoke-IsolatedRepairPlanHost -Destination $destination -DetailPath $detailPath -MaintenanceReceiptPath $maintenanceReceiptPath -Version $version -Family $family -Cleanup $cleanup -LoadedModulePath $loadedModulePath -IncludeLoaded $includeLoaded -Latest $latest
     }
 }
