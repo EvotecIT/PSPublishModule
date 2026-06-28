@@ -18,6 +18,8 @@ param(
 
     [int] $RepeatCount = 1,
 
+    [int] $SetupRetryCount = 2,
+
     [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\MM'),
 
     [ValidateSet('Debug', 'Release')]
@@ -357,6 +359,8 @@ function Invoke-ScenarioHostRun {
         (Get-ScenarioModuleFastSource -Scenario $Scenario),
         '-RepeatCount',
         ([string]$RepeatCount),
+        '-SetupRetryCount',
+        ([string]$SetupRetryCount),
         '-OutputDirectory',
         $scenarioRoot,
         '-Configuration',
@@ -585,6 +589,7 @@ $metadata = [ordered]@{
     UpdateBaselineVersion = $UpdateBaselineVersion
     CacheMode = $CacheMode
     RepeatCount = $RepeatCount
+    SetupRetryCount = $SetupRetryCount
     IncludeInstall = $IncludeInstall.IsPresent
     ValidateImport = $ValidateImport.IsPresent
     ImportTimeoutSeconds = $ImportTimeoutSeconds

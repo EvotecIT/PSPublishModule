@@ -25,6 +25,8 @@ param(
 
     [int] $RepeatCount = 1,
 
+    [int] $SetupRetryCount = 2,
+
     [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules'),
 
     [ValidateSet('Debug', 'Release')]
@@ -152,6 +154,29 @@ function Test-BenchmarkOperationRequiresExistingTarget {
     param([string] $OperationName)
 
     $OperationName -in @('SaveNoOp', 'SaveForce', 'InstallNoOp', 'InstallForce', 'UpdateNoOp', 'UpdateForce')
+}
+
+function Invoke-BenchmarkSetupOperation {
+    param(
+        [string] $Label,
+        [scriptblock] $ScriptBlock
+    )
+
+    $attemptCount = 1 + $SetupRetryCount
+    $errors = [Collections.Generic.List[string]]::new()
+    for ($attempt = 1; $attempt -le $attemptCount; $attempt++) {
+        try {
+            & $ScriptBlock
+            return
+        } catch {
+            $errors.Add(("Attempt {0}: {1}" -f $attempt, $_.Exception.Message))
+            if ($attempt -ge $attemptCount) {
+                throw ("{0} failed after {1} attempt(s). {2}" -f $Label, $attemptCount, ($errors -join "`n"))
+            }
+
+            Start-Sleep -Seconds ([Math]::Min(5, $attempt))
+        }
+    }
 }
 
 $script:ResolvedUpdateBaselineVersion = $UpdateBaselineVersion
@@ -581,9 +606,11 @@ function Invoke-SaveScenario {
 
     if (Test-BenchmarkOperationRequiresExistingTarget -OperationName $OperationName) {
         try {
-            Invoke-SaveEngineCommand -EngineName $EngineName -Destination $destination -Force $true -PackageCacheDirectory $packageCacheDirectory | Out-Null
+            Invoke-BenchmarkSetupOperation -Label 'Preseed save' -ScriptBlock {
+                Invoke-SaveEngineCommand -EngineName $EngineName -Destination $destination -Force $true -PackageCacheDirectory $packageCacheDirectory | Out-Null
+            }
         } catch {
-            return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason "Preseed save failed: $($_.Exception.Message)" -OutputRoot $destination
+            return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $_.Exception.Message -OutputRoot $destination
         }
         if ($CacheMode -eq 'Cold') {
             Clear-IsolatedPackageCaches -Destination $destination
@@ -636,9 +663,11 @@ function Invoke-InstallScenario {
 
     if (Test-BenchmarkOperationRequiresExistingTarget -OperationName $OperationName) {
         try {
-            Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -PackageCacheDirectory $packageCacheDirectory -Force $true
+            Invoke-BenchmarkSetupOperation -Label 'Preseed install' -ScriptBlock {
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -PackageCacheDirectory $packageCacheDirectory -Force $true
+            }
         } catch {
-            return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason "Preseed install failed: $($_.Exception.Message)" -OutputRoot $destination
+            return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $_.Exception.Message -OutputRoot $destination
         }
         if ($CacheMode -eq 'Cold') {
             Clear-IsolatedPackageCaches -Destination $destination
@@ -701,9 +730,11 @@ function Invoke-UpdateScenario {
     }
 
     try {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $preseedVersion -PackageCacheDirectory $packageCacheDirectory -Force $true
+        Invoke-BenchmarkSetupOperation -Label 'Preseed install' -ScriptBlock {
+            Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $preseedVersion -PackageCacheDirectory $packageCacheDirectory -Force $true
+        }
     } catch {
-        return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason "Preseed install failed: $($_.Exception.Message)" -OutputRoot $destination
+        return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $_.Exception.Message -OutputRoot $destination
     }
     if ($CacheMode -eq 'Cold') {
         Clear-IsolatedPackageCaches -Destination $destination
@@ -741,6 +772,10 @@ $RepairScenario = Resolve-RepairScenarioList -Value $RepairScenario
 
 if ($RepeatCount -lt 1) {
     throw 'RepeatCount must be greater than zero.'
+}
+
+if ($SetupRetryCount -lt 0) {
+    throw 'SetupRetryCount cannot be negative.'
 }
 
 if ($ListScenarios.IsPresent) {
@@ -834,6 +869,7 @@ $metadata = [ordered]@{
     Operations = $Operation
     RepairScenarios = $RepairScenario
     RepeatCount = $RepeatCount
+    SetupRetryCount = $SetupRetryCount
     ModuleBinary = $moduleBinary
     OutputDirectory = $workRoot
     RemoveOutputRoots = $RemoveOutputRoots.IsPresent
