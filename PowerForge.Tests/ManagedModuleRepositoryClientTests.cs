@@ -31,7 +31,7 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
-    public async Task GetVersionsAsync_resolves_powershellgallery_service_metadata()
+    public async Task GetVersionsAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();
         using var client = new HttpClient(new ManagedModuleHandler(requests));
@@ -46,15 +46,15 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.All(versions, version =>
         {
             Assert.Equal("PSGallery", version.RepositoryName);
-            Assert.Equal(repository.Source, version.RepositorySource);
-            Assert.StartsWith("https://psgallery.test/packages/pester/", version.PackageSource, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("https://www.powershellgallery.com/api/v2", version.RepositorySource);
+            Assert.StartsWith("https://www.powershellgallery.com/api/v2/package/Pester/", version.PackageSource, StringComparison.OrdinalIgnoreCase);
         });
-        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
-        Assert.Contains(requests, request => request.Url == "https://psgallery.test/packages/pester/index.json");
+        Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'");
     }
 
     [Fact]
-    public async Task GetVersionsAsync_falls_back_to_powershellgallery_v2_when_v3_service_index_is_forbidden()
+    public async Task GetVersionsAsync_does_not_probe_unavailable_powershellgallery_v3_for_reads()
     {
         var requests = new List<RecordedRequest>();
         using var client = new HttpClient(new ManagedModuleHandler(
@@ -74,7 +74,7 @@ public sealed class ManagedModuleRepositoryClientTests
             Assert.Equal("https://www.powershellgallery.com/api/v2", version.RepositorySource);
             Assert.StartsWith("https://www.powershellgallery.com/api/v2/package/Pester/", version.PackageSource, StringComparison.OrdinalIgnoreCase);
         });
-        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
         Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'");
     }
 
@@ -315,7 +315,7 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
-    public async Task DownloadPackageAsync_falls_back_to_powershellgallery_v2_when_v3_service_index_is_forbidden()
+    public async Task DownloadPackageAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();
         using var temp = new TemporaryDirectory();
@@ -334,7 +334,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("5.7.0", result.Metadata.Version);
         Assert.Equal("PSGallery", result.RepositoryName);
         Assert.Equal("https://www.powershellgallery.com/api/v2/package/Pester/5.7.0", result.Source);
-        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
         Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0");
     }
 
@@ -549,7 +549,7 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
-    public async Task SearchPackagesAsync_falls_back_to_powershellgallery_v2_when_v3_service_index_is_forbidden()
+    public async Task SearchPackagesAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();
         using var client = new HttpClient(new ManagedModuleHandler(
@@ -567,7 +567,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("5.7.0", result.Version);
         Assert.Equal("PSGallery", result.RepositoryName);
         Assert.Equal("https://www.powershellgallery.com/api/v2", result.RepositorySource);
-        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
         Assert.Contains(
             requests,
             request => request.Url == "https://www.powershellgallery.com/api/v2/Packages()?$filter=substringof('Pester',Id)%20and%20IsLatestVersion&$top=100");

@@ -32,6 +32,19 @@ try {
 }
 
 try {
+  $nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+  if ($null -eq $nugetProvider) {
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force -ErrorAction Stop | Out-Null
+  }
+  Import-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
+} catch {
+  $msg = 'NuGet package provider is not available for PowerShellGet: ' + $_.Exception.Message
+  $b64 = Enc $msg
+  Write-Output ('PFMOD::ERROR::' + $b64)
+  exit 4
+}
+
+try {
   $params = @{
     Name = $Name
     Force = $true
