@@ -42,6 +42,32 @@ public sealed class ManagedModuleBenchmarkArtifactScriptTests
         Assert.Equal("Managed", document.RootElement.GetProperty("Engine").GetString());
     }
 
+    [Fact]
+    public void ArtifactJsonWriter_WritesEmptyArrayForEmptyInput()
+    {
+        using var temp = new TemporaryDirectory();
+        using var ps = PowerShell.Create();
+        var script = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "ManagedModuleBenchmark.Artifacts.ps1");
+        var jsonPath = Path.Combine(temp.Path, "empty.json");
+        ps.AddScript(File.ReadAllText(script) + Environment.NewLine + $$"""
+            $jsonPath = '{{EscapePowerShellString(jsonPath)}}'
+            Write-ManagedBenchmarkJson -InputObject @() -Path $jsonPath -Depth 4
+            [pscustomobject]@{
+                JsonText = Get-Content -LiteralPath $jsonPath -Raw
+                TemporaryCount = @(Get-ChildItem -LiteralPath (Split-Path -Path $jsonPath -Parent) -Filter '.*.tmp' -Force).Count
+            }
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var row = Assert.Single(results);
+        Assert.Equal(0, Convert.ToInt32(row.Properties["TemporaryCount"].Value));
+        using var document = JsonDocument.Parse(Property(row, "JsonText"));
+        Assert.Equal(JsonValueKind.Array, document.RootElement.ValueKind);
+        Assert.Equal(0, document.RootElement.GetArrayLength());
+    }
+
     private static string Property(PSObject value, string name)
         => value.Properties[name]?.Value?.ToString() ?? string.Empty;
 

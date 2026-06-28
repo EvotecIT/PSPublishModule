@@ -174,7 +174,7 @@ public sealed partial class ManagedModuleInstallService
         var cacheDirectory = ownsCache
             ? Path.Combine(Path.GetTempPath(), "PFMM.C", NewShortId())
             : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
-        var stageRoot = Path.Combine(Path.GetTempPath(), "PFMM.S", NewShortId());
+        var stageRoot = CreateStageRoot(moduleRoot);
         var stageModulePath = Path.Combine(stageRoot, request.Name.Trim(), version);
 
         try
@@ -398,6 +398,18 @@ public sealed partial class ManagedModuleInstallService
         => string.IsNullOrWhiteSpace(versionPolicy)
             ? ManagedModuleVersionRange.FromBounds(minimumVersion, maximumVersion)
             : ManagedModuleVersionRange.Parse(versionPolicy);
+
+    private static string CreateStageRoot(string moduleRoot)
+    {
+#if NET472
+        return Path.Combine(Path.GetTempPath(), "PFMM.S", NewShortId());
+#else
+        var root = Path.GetFullPath(moduleRoot.Trim().Trim('"'))
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var parent = Path.GetDirectoryName(root);
+        return Path.Combine(string.IsNullOrWhiteSpace(parent) ? root : parent!, ".pfmm-stage-" + NewShortId());
+#endif
+    }
 
     private static void CleanupEmptyStage(string stageRoot)
     {
