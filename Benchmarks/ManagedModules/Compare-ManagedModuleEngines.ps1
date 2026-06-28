@@ -633,6 +633,14 @@ function Invoke-TimedOperation {
         return $value
     }
 
+    $elapsedMilliseconds = [math]::Round($timer.Elapsed.TotalMilliseconds, 2)
+    $managedRootElapsedMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootElapsedMilliseconds')
+    $managedHarnessOverheadMilliseconds = if ($detail) {
+        [math]::Round([math]::Max(0, $elapsedMilliseconds - $managedRootElapsedMilliseconds), 2)
+    } else {
+        0
+    }
+
     [pscustomobject]@{
         Operation = $OperationName
         Scenario = $ScenarioName
@@ -643,7 +651,7 @@ function Invoke-TimedOperation {
         Version = $versionText
         UpdateBaselineVersion = if (Test-BenchmarkOperationUsesUpdateBaseline -OperationName $OperationName) { $script:ResolvedUpdateBaselineVersion } else { '' }
         UpdateTargetVersion = if (Test-BenchmarkOperationUsesUpdateBaseline -OperationName $OperationName) { $script:ResolvedUpdateTargetVersion } else { '' }
-        ElapsedMilliseconds = [math]::Round($timer.Elapsed.TotalMilliseconds, 2)
+        ElapsedMilliseconds = $elapsedMilliseconds
         OutputCount = $outputCount
         OutputDirectoryCount = $metrics.DirectoryCount
         OutputFileCount = $metrics.FileCount
@@ -656,6 +664,8 @@ function Invoke-TimedOperation {
         ManagedUniqueDependencyCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'UniqueDependencyCount')
         ManagedInstalledPackageCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'InstalledPackageCount')
         ManagedAlreadyInstalledPackageCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'AlreadyInstalledPackageCount')
+        ManagedRootElapsedMilliseconds = $managedRootElapsedMilliseconds
+        ManagedHarnessOverheadMilliseconds = $managedHarnessOverheadMilliseconds
         ManagedRootDependencyMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyMilliseconds')
         ManagedTotalDownloadMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadMilliseconds')
         ManagedTotalExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionMilliseconds')

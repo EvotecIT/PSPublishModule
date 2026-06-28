@@ -270,6 +270,50 @@ public sealed class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_force_reinstalls_root_without_replacing_satisfied_dependency()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateDependencyFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0,2.0.0)", null) },
+            files: CreateModuleFiles("1.0.0"));
+        var existingRootPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(existingRootPath);
+        File.WriteAllText(Path.Combine(existingRootPath, "marker.txt"), "replace-root");
+        var existingDependencyPath = Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0");
+        Directory.CreateDirectory(existingDependencyPath);
+        File.WriteAllText(Path.Combine(existingDependencyPath, "marker.txt"), "keep-dependency");
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            Force = true
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.False(File.Exists(Path.Combine(existingRootPath, "marker.txt")));
+        Assert.True(File.Exists(Path.Combine(existingRootPath, "Company.Tools.psd1")));
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, dependency.Status);
+        Assert.Equal("keep-dependency", File.ReadAllText(Path.Combine(existingDependencyPath, "marker.txt")));
+        Assert.Null(dependency.Download);
+    }
+
+    [Fact]
     public async Task InstallAsync_rejects_package_when_expected_sha256_does_not_match()
     {
         using var feed = new TemporaryDirectory();

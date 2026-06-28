@@ -297,11 +297,23 @@ public sealed class ManagedModuleInstallService
         if (dependencies.Length == 0)
             return Array.Empty<ManagedModuleInstallResult>();
 
+        if (dependencies.Length == 1)
+        {
+            var singleResult = await InstallDependencyCoreAsync(
+                request,
+                dependencies[0],
+                cacheDirectory,
+                context.CreateBranch(),
+                cancellationToken).ConfigureAwait(false);
+
+            return new[] { singleResult };
+        }
+
         var concurrency = Math.Min(dependencies.Length, MaxDependencyInstallConcurrency);
         using var gate = new SemaphoreSlim(concurrency, concurrency);
         var results = new ManagedModuleInstallResult[dependencies.Length];
         var tasks = dependencies
-            .Select((dependency, index) => InstallDependencyAsync(
+            .Select((dependency, index) => InstallDependencyWithGateAsync(
                 request,
                 dependency,
                 index,
@@ -330,7 +342,7 @@ public sealed class ManagedModuleInstallService
         return results;
     }
 
-    private async Task InstallDependencyAsync(
+    private async Task InstallDependencyWithGateAsync(
         ManagedModuleInstallRequest request,
         ManagedModuleDependencyInfo dependency,
         int index,
@@ -343,51 +355,63 @@ public sealed class ManagedModuleInstallService
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
-            var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
-            if (dependencyTrustPolicy is null &&
-                TryCreateSatisfiedDependencyResult(request, dependency.Id, range, out var satisfiedResult))
-            {
-                results[index] = satisfiedResult;
-                return;
-            }
-
-            var dependencyVersion = await ResolveDependencyVersionAsync(
+            results[index] = await InstallDependencyCoreAsync(
                 request,
-                dependency.Id,
-                range,
-                cancellationToken).ConfigureAwait(false);
-
-            var result = await InstallAsync(
-                new ManagedModuleInstallRequest
-                {
-                    Repository = request.Repository,
-                    Name = dependency.Id,
-                    Version = dependencyVersion,
-                    VersionPolicy = null,
-                    IncludePrerelease = request.IncludePrerelease || range.AllowsPrerelease,
-                    Scope = request.Scope,
-                    ShellEdition = request.ShellEdition,
-                    ModuleRoot = request.ModuleRoot,
-                    PackageCacheDirectory = cacheDirectory,
-                    ExpectedPackageSha256 = null,
-                    TrustPolicy = dependencyTrustPolicy,
-                    Credential = request.Credential,
-                    Force = false,
-                    AllowClobber = request.AllowClobber,
-                    AcceptLicense = request.AcceptLicense,
-                    AuthenticodeCheck = request.AuthenticodeCheck,
-                    SkipDependencyCheck = false
-                },
+                dependency,
+                cacheDirectory,
                 context,
                 cancellationToken).ConfigureAwait(false);
-
-            results[index] = result;
         }
         finally
         {
             gate.Release();
         }
+    }
+
+    private async Task<ManagedModuleInstallResult> InstallDependencyCoreAsync(
+        ManagedModuleInstallRequest request,
+        ManagedModuleDependencyInfo dependency,
+        string cacheDirectory,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken)
+    {
+        var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+        var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
+        if (dependencyTrustPolicy is null &&
+            TryCreateSatisfiedDependencyResult(request, dependency.Id, range, out var satisfiedResult))
+        {
+            return satisfiedResult;
+        }
+
+        var dependencyVersion = await ResolveDependencyVersionAsync(
+            request,
+            dependency.Id,
+            range,
+            cancellationToken).ConfigureAwait(false);
+
+        return await InstallAsync(
+            new ManagedModuleInstallRequest
+            {
+                Repository = request.Repository,
+                Name = dependency.Id,
+                Version = dependencyVersion,
+                VersionPolicy = null,
+                IncludePrerelease = request.IncludePrerelease || range.AllowsPrerelease,
+                Scope = request.Scope,
+                ShellEdition = request.ShellEdition,
+                ModuleRoot = request.ModuleRoot,
+                PackageCacheDirectory = cacheDirectory,
+                ExpectedPackageSha256 = null,
+                TrustPolicy = dependencyTrustPolicy,
+                Credential = request.Credential,
+                Force = false,
+                AllowClobber = request.AllowClobber,
+                AcceptLicense = request.AcceptLicense,
+                AuthenticodeCheck = request.AuthenticodeCheck,
+                SkipDependencyCheck = false
+            },
+            context,
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static bool TryCreateSatisfiedDependencyResult(
