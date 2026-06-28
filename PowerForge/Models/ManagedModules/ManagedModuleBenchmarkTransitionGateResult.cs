@@ -31,6 +31,11 @@ public sealed class ManagedModuleBenchmarkTransitionGateResult
     public string? CompatibilityFallbackReason { get; set; }
 
     /// <summary>
+    /// Compatibility provider failures that explain why fallback remains required.
+    /// </summary>
+    public IReadOnlyList<string> CompatibilityProviderLimitations { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// True when native install/update comparison needs an isolated disposable host before it can be trusted.
     /// </summary>
     public bool NativeIsolationRequired { get; set; }

@@ -20,7 +20,11 @@ public sealed class ManagedModuleBenchmarkTransitionGateEvaluatorTests
         var gate = Assert.Single(gates);
         Assert.Equal(ManagedModuleBenchmarkTransitionGateStatus.Incomplete, gate.Status);
         Assert.False(gate.NativeIsolationRequired);
-        Assert.Equal("Missing successful compatibility baseline for PowerShellGet.", gate.CompatibilityFallbackReason);
+        Assert.Contains("PowerShellGet", gate.CompatibilityFallbackReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Administrator rights", gate.CompatibilityFallbackReason, StringComparison.OrdinalIgnoreCase);
+        var limitation = Assert.Single(gate.CompatibilityProviderLimitations);
+        Assert.Contains("PowerShellGet", limitation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Administrator rights", limitation, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(gate.Reasons, reason => reason.Contains("PowerShellGet", StringComparison.OrdinalIgnoreCase) &&
                                                 reason.Contains("Administrator rights", StringComparison.OrdinalIgnoreCase));
     }
