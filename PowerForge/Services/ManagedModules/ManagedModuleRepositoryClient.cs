@@ -11,6 +11,8 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class ManagedModuleRepositoryClient
 {
+    private const int PackageCopyBufferSize = 1024 * 1024;
+
     private readonly ILogger _logger;
     private readonly HttpClient _httpClient;
     private readonly ManagedModulePackageReader _packageReader;
@@ -455,9 +457,9 @@ public sealed partial class ManagedModuleRepositoryClient
 
         long bytesWritten;
         using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
-        using (var destination = File.Create(destinationPath))
+        using (var destination = CreatePackageFileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            await source.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
+            await source.CopyToAsync(destination, PackageCopyBufferSize, cancellationToken).ConfigureAwait(false);
             bytesWritten = destination.Length;
         }
 
@@ -487,10 +489,10 @@ public sealed partial class ManagedModuleRepositoryClient
             throw CreateLocalRepositoryException(repository, "Download", $"Package '{packageId}' version '{version}' was not found in local repository '{repository.Name}'.");
 
         var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
-        using (var source = File.OpenRead(match.PackageSource))
-        using (var destination = File.Create(destinationPath))
+        using (var source = CreatePackageFileStream(match.PackageSource, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (var destination = CreatePackageFileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            await source.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
+            await source.CopyToAsync(destination, PackageCopyBufferSize, cancellationToken).ConfigureAwait(false);
         }
 
         return new ManagedModuleDownloadResult
@@ -552,6 +554,15 @@ public sealed partial class ManagedModuleRepositoryClient
 
         throw CreateRepositoryContractException(repository, "ServiceIndex", "NuGet service index did not expose PackageBaseAddress.");
     }
+
+    private static FileStream CreatePackageFileStream(string path, FileMode mode, FileAccess access, FileShare share)
+        => new(
+            path,
+            mode,
+            access,
+            share,
+            PackageCopyBufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
 
     private async Task<string> ResolveSearchQueryServiceAsync(
         ManagedModuleRepository repository,
