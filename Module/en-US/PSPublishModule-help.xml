@@ -27411,6 +27411,18 @@ engine directly and returns typed benchmark run data that can be compared with c
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireManagedEvidenceReady</maml:name>
+          <maml:description>
+            <maml:para>Fail the command when managed engine evidence is missing or failed, even if compatibility baselines are still incomplete.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequireTransitionReady</maml:name>
           <maml:description>
             <maml:para>Fail the command when benchmark transition gates are not ready for managed transport defaults.</maml:para>
@@ -27875,6 +27887,18 @@ engine directly and returns typed benchmark run data that can be compared with c
         <maml:name>RequireCompatibilityRetirementReady</maml:name>
         <maml:description>
           <maml:para>Fail the command when compatibility transport cannot yet be marked legacy.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequireManagedEvidenceReady</maml:name>
+        <maml:description>
+          <maml:para>Fail the command when managed engine evidence is missing or failed, even if compatibility baselines are still incomplete.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

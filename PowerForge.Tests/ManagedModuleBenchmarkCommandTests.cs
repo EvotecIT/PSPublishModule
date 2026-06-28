@@ -89,12 +89,65 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.True(command.Parameters.ContainsKey("ValidateImport"));
         Assert.True(command.Parameters.ContainsKey("ImportHost"));
         Assert.True(command.Parameters.ContainsKey("RequireTransitionReady"));
+        Assert.True(command.Parameters.ContainsKey("RequireManagedEvidenceReady"));
         Assert.True(command.Parameters.ContainsKey("RequireCompatibilityRetirementReady"));
         Assert.True(command.Parameters.ContainsKey("EnableNativeInstallUpdateBenchmark"));
         Assert.True(command.Parameters.ContainsKey("MaximumManagedSlowdownRatio"));
         Assert.True(command.Parameters.ContainsKey("MaximumManagedSlowdownMilliseconds"));
         Assert.True(command.Parameters.ContainsKey("ModulePath"));
         Assert.True(command.Parameters.ContainsKey("PackageOutputDirectory"));
+    }
+
+    [Fact]
+    public void MeasureManagedModule_RequireManagedEvidenceReady_AllowsMissingCompatibilityBaselines()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Measure-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Operation", ManagedModuleBenchmarkOperation.Install)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("RequireManagedEvidenceReady");
+
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleBenchmarkResult>(Assert.Single(results).BaseObject);
+        var gate = Assert.Single(result.TransitionGates);
+        Assert.True(gate.ManagedEvidenceReady);
+        Assert.False(gate.ReadyForDefaultManagedTransport);
+        Assert.Contains(gate.Reasons, reason => reason.Contains("Missing successful compatibility baseline", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void MeasureManagedModule_RequireManagedEvidenceReady_FailsWhenManagedRunFails()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Measure-ManagedModule")
+            .AddParameter("Name", "Company.Missing")
+            .AddParameter("Operation", ManagedModuleBenchmarkOperation.Install)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("RequireManagedEvidenceReady");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("Managed module evidence gate is not ready", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("One or more managed benchmark runs failed", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
