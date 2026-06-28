@@ -347,6 +347,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: The benchmark harness now caps post-timing import validation with `-ImportTimeoutSeconds` and records `TimedOut` instead of hanging a heavy suite. Managed-only heavy update runs succeeded on both hosts: PowerShell 7 updated full `Microsoft.Graph` 2.37.0 -> 2.38.0 in 8909 ms and full `Az` 15.6.1 -> 16.0.0 in 10188 ms; Windows PowerShell 5.1 updated them in 16045 ms and 25002 ms. Full Graph and Az import validation timed out after 30 seconds on both hosts. PowerShell 7 updated `MicrosoftTeams` 7.7.0 -> 7.8.0 in 5050 ms and `ExchangeOnlineManagement` 3.9.2 -> 3.10.0 in 3285 ms with successful imports; Windows PowerShell 5.1 updated them in 7115 ms and 5015 ms with successful imports. The slowest proven managed update lane is full Az on Windows PowerShell 5.1, with root dependency delivery and summed download time dominating detail artifacts.
 - [x] 2026-06-28: The benchmark harness now has an initial managed `RepairPlan` lane. It stages a stale module root outside the timed window, then times `Invoke-ModuleState -Installed -Latest -Repair` planning without executing changes. PowerShell 7 planned stale `ThreadJob` 2.0.3 -> 2.1.0 in 1604 ms; Windows PowerShell 5.1 planned the same stale root in 2660 ms. The detail artifacts recorded one planned maintenance action and no findings. ModuleFast, PSResourceGet, and PowerShellGet are explicit skips for this operation because they do not expose equivalent estate repair planning.
 - [x] 2026-06-28: The `RepairPlan` benchmark now supports scenario-specific rows. `-RepairScenario SourceDrift` installs the target version outside the timed window, stamps disposable module metadata with a different source, writes a maintenance receipt expecting the requested repository, and times repair planning without applying changes. Managed-only `ThreadJob` source-drift smoke measured 643 ms on PowerShell 7 and 1088 ms on Windows PowerShell 5.1; the detail artifacts recorded a forced repair install targeting `PSGallery`.
+- [x] 2026-06-28: The `RepairPlan` benchmark now includes `-RepairScenario ScopeDrift`. It installs the target version outside the timed window, writes a maintenance receipt expecting `CurrentUser`, and times repair planning without applying changes. Managed-only `ThreadJob` scope-drift smoke measured 734 ms on PowerShell 7 and 665 ms on Windows PowerShell 5.1; the detail artifacts recorded a repair install targeting `CurrentUser`.
 
 ### Next Optimization Targets
 
@@ -359,7 +360,8 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Measure heavy Graph/Az/Teams/Exchange managed update scenarios on PowerShell 7 and Windows PowerShell 5.1, then optimize the slowest proven managed lane.
 - [x] Add an initial repair-plan benchmark lane for stale versions.
 - [x] Add a repair-plan benchmark lane for source drift.
-- [ ] Add repair benchmark lanes for scope drift, family coherence, loaded-module safety, and cleanup planning before optimizing repair-specific behavior.
+- [x] Add a repair-plan benchmark lane for scope drift.
+- [ ] Add repair benchmark lanes for family coherence, loaded-module safety, and cleanup planning before optimizing repair-specific behavior.
 - [x] Add explicit heavy update baseline versions or a baseline-discovery mode to the suite runner so Graph/Az/Teams/Exchange update scenarios do not silently skip when no `-UpdateBaselineVersion` is supplied.
 
 ### Compatibility Semantics Gates
