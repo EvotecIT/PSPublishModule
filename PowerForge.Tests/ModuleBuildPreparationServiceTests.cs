@@ -111,6 +111,10 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             [PowerForge.ArtefactCopyMapping]@{
                 Source = 'Build/NOTICE.txt'
                 Destination = 'RepoNotice.txt'
+            },
+            [PowerForge.ArtefactCopyMapping]@{
+                Source = 'Artefacts/ProjectBuild/packages/Foo.nupkg'
+                Destination = 'Packages/Foo.nupkg'
             }
         )
     }
@@ -257,6 +261,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal("NOTICE.txt", artefact.Configuration.FilesOutput[0].Destination);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "NOTICE.txt"), artefact.Configuration.FilesOutput[1].Source);
                 Assert.Equal("RepoNotice.txt", artefact.Configuration.FilesOutput[1].Destination);
+                Assert.Equal(Path.Combine(root.FullName, "Artefacts", "ProjectBuild", "packages", "Foo.nupkg"), artefact.Configuration.FilesOutput[2].Source);
+                Assert.Equal("Packages/Foo.nupkg", artefact.Configuration.FilesOutput[2].Destination);
 
                 var artefactWithRelativeLayout = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[3]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Unpacked"), artefactWithRelativeLayout.Configuration.Path);
@@ -540,6 +546,49 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
     }
 
     [Fact]
+    public void WritePipelineSpecJson_preserves_tokenized_artefact_paths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-tokens-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = root.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Path = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "<TagModuleVersionWithPreRelease>")
+                        }
+                    }
+                }
+            };
+
+            new ModuleBuildPreparationService().WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            Assert.NotNull(jsonSpec);
+
+            var artefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec!.Segments[0]);
+            Assert.Equal("Module/Artefacts/Packed/<TagModuleVersionWithPreRelease>", artefact.Configuration.Path);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void WritePipelineSpecJson_keeps_apple_and_xcode_paths_relative_to_project_root()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-apple-" + Guid.NewGuid().ToString("N")));
@@ -614,6 +663,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var buildCsprojPath = Path.Combine(root.FullName, "Sources", "TopLevel", "TopLevel.csproj");
             var binaryConflictSearchRoot = Path.Combine(root.FullName, "Modules");
             var installRoot = Path.Combine(root.FullName, "Artifacts", "Modules");
+            var externalInstallRoot = Path.Combine(Path.GetTempPath(), "PowerShell", "Modules");
             var diagnosticsBaselinePath = Path.Combine(root.FullName, "Build", "diagnostics.json");
             var netProject = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "SampleModule.PowerShell.csproj");
             var developmentBinaries = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "bin");
@@ -649,7 +699,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 },
                 Install = new ModulePipelineInstallOptions
                 {
-                    Roots = new[] { installRoot }
+                    Roots = new[] { installRoot, externalInstallRoot }
                 },
                 Diagnostics = new ModulePipelineDiagnosticsOptions
                 {
@@ -822,7 +872,6 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"PublishApiKeyFilePath\": \"Build/nuget.key\"", json, StringComparison.Ordinal);
             Assert.Contains("\"NugetCredentialSecretFilePath\": \"Build/nuget.secret\"", json, StringComparison.Ordinal);
             Assert.Contains("\"GitHubAccessTokenFilePath\": \"Build/github.token\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"Path\": \"Module/Artefacts/Packed\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Path\": \"Module/Artefacts/Packed/RequiredModules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"ModulesPath\": \"Module/Artefacts/Packed/Modules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Source\": \"Build/Templates\"", json, StringComparison.Ordinal);
@@ -841,12 +890,13 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 
             var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
             Assert.NotNull(jsonSpec);
+            Assert.Contains(jsonSpec!.Install.Roots!, root => string.Equals(root, externalInstallRoot.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase));
 
-            service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
+            service.ResolvePipelineSpecPaths(jsonSpec, jsonPath);
             Assert.Equal(buildStagingPath, jsonSpec!.Build.StagingPath);
             Assert.Equal(buildCsprojPath, jsonSpec.Build.CsprojPath);
             Assert.Equal(new[] { binaryConflictSearchRoot }, jsonSpec.Build.BinaryConflictSearchRoots);
-            Assert.Equal(new[] { installRoot }, jsonSpec.Install.Roots);
+            Assert.Equal(new[] { installRoot, externalInstallRoot }, jsonSpec.Install.Roots);
             Assert.Equal(diagnosticsBaselinePath, jsonSpec.Diagnostics!.BaselinePath);
             Assert.Equal(new[] { binaryConflictSearchRoot }, jsonSpec.Diagnostics.BinaryConflictSearchRoots);
             var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(jsonSpec!.Segments[0]);
@@ -1253,7 +1303,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 ParameterSetName = "Config",
                 ConfigPath = configPath,
                 CurrentPath = root.FullName,
-                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path))
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                JsonOnly = true,
+                JsonPath = "out.json"
             });
 
             Assert.Equal("PowerTierBridge", prepared.ModuleName);
@@ -1266,6 +1318,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal(Path.Combine(root.FullName, "TierBridge.PowerShell", "TierBridge.PowerShell.csproj"), prepared.PipelineSpec.Build.CsprojPath);
             Assert.Equal(Path.Combine(root.FullName, "Sources", "Demo", "bin"), prepared.PipelineSpec.Build.DevelopmentBinariesPath);
             Assert.Equal(Path.Combine(configDir.FullName, ".powerforge", "module-baseline.json"), prepared.PipelineSpec.Diagnostics.BaselinePath);
+            Assert.Equal(Path.Combine(root.FullName, "out.json"), prepared.JsonOutputPath);
         }
         finally
         {

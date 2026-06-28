@@ -139,7 +139,7 @@ internal sealed class ModuleBuildPreparationService
             BasePathForScaffold = null,
             UseLegacy = false,
             PipelineSpec = spec,
-            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, spec.Build.SourcePath, spec.Build.SourcePath) : null,
+            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, spec.Build.SourcePath, request.CurrentPath) : null,
             ConfigLabel = "json",
             ConfigFilePath = configFullPath
         };
@@ -626,7 +626,7 @@ internal sealed class ModuleBuildPreparationService
 
             if (!string.IsNullOrWhiteSpace(requiredFirstSegment) && !StartsWithPathSegment(mapping.Source, requiredFirstSegment!))
             {
-                if (string.IsNullOrWhiteSpace(projectRoot) || !ExistsUnderWorkspaceRoot(rootPath, projectRoot!, mapping.Source))
+                if (string.IsNullOrWhiteSpace(projectRoot) || IsModuleRelativeCopySource(mapping.Source))
                     continue;
             }
 
@@ -634,14 +634,10 @@ internal sealed class ModuleBuildPreparationService
         }
     }
 
-    private static bool ExistsUnderWorkspaceRoot(string rootPath, string projectRoot, string path)
+    private static bool IsModuleRelativeCopySource(string path)
     {
-        var workspacePath = PathValueResolver.Resolve(rootPath, path);
-        if (!File.Exists(workspacePath) && !Directory.Exists(workspacePath))
-            return false;
-
-        var projectPath = PathValueResolver.Resolve(projectRoot, path);
-        return !File.Exists(projectPath) && !Directory.Exists(projectPath);
+        var firstSegment = GetFirstPathSegment(path);
+        return string.Equals(firstSegment, "Examples", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool StartsWithPathSegment(string path, string segment)
@@ -649,11 +645,16 @@ internal sealed class ModuleBuildPreparationService
         if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(segment))
             return false;
 
+        var firstSegment = GetFirstPathSegment(path);
+        return string.Equals(firstSegment, segment, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetFirstPathSegment(string path)
+    {
         var cleaned = PathValueResolver.Clean(path);
         var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
         var firstSeparator = cleaned.IndexOfAny(separators);
-        var firstSegment = firstSeparator < 0 ? cleaned : cleaned.Substring(0, firstSeparator);
-        return string.Equals(firstSegment, segment, StringComparison.OrdinalIgnoreCase);
+        return firstSeparator < 0 ? cleaned : cleaned.Substring(0, firstSeparator);
     }
 
     private static bool SamePath(string left, string right)
@@ -739,7 +740,7 @@ internal sealed class ModuleBuildPreparationService
         spec.Build.DevelopmentBinariesPath = MakeRelativeForConfigNullable(baseDir, spec.Build.DevelopmentBinariesPath);
         spec.Build.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Build.BinaryConflictSearchRoots);
         if (spec.Install?.Roots is not null)
-            spec.Install.Roots = MakePathsRelativeForProjectRoot(projectRoot, spec.Install.Roots);
+            spec.Install.Roots = MakePathsRelativeForProjectRoot(projectRoot, spec.Install.Roots, preserveExternalRooted: true);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
             spec.Diagnostics.BaselinePath = MakeRelativeForConfig(baseDir, spec.Diagnostics.BaselinePath!);
         if (spec.Diagnostics is not null)
@@ -868,6 +869,8 @@ internal sealed class ModuleBuildPreparationService
             return MakeRelativeForProjectRoot(projectRoot, layoutPath);
         if (string.IsNullOrWhiteSpace(artefactPath))
             return NormalizePathSeparators(layoutPath!);
+        if (ContainsPathToken(layoutPath!) || ContainsPathToken(artefactPath!))
+            return NormalizePathSeparators(layoutPath!);
 
         var artefactRoot = ResolveConfigPath(projectRoot, artefactPath);
         var candidate = ResolveConfigPath(projectRoot, layoutPath);
@@ -893,7 +896,20 @@ internal sealed class ModuleBuildPreparationService
     private static string? MakeRelativeForProjectRoot(string projectRoot, string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
-        return MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, path));
+        return MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted: false);
+    }
+
+    private static string? MakeRelativeForProjectRoot(string projectRoot, string? path, bool preserveExternalRooted)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        if (ContainsPathToken(path!))
+            return MakeTokenizedPathRelativeForProjectRoot(projectRoot, path!);
+
+        var resolved = ResolveConfigPath(projectRoot, path);
+        if (preserveExternalRooted && Path.IsPathRooted(PathValueResolver.Clean(path!)) && !IsSameOrChildPath(projectRoot, resolved))
+            return NormalizePathSeparators(resolved);
+
+        return MakeRelativeForConfig(projectRoot, resolved);
     }
 
     private static void MakePackageBuildOptionPathsRelative(Dictionary<string, object?>? options, string projectRoot)
@@ -914,15 +930,68 @@ internal sealed class ModuleBuildPreparationService
         }
     }
 
-    private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths)
+    private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths, bool preserveExternalRooted = false)
     {
         if (paths is null || paths.Length == 0)
             return Array.Empty<string>();
 
         return paths
-            .Select(path => MakeRelativeForProjectRoot(projectRoot, path) ?? string.Empty)
+            .Select(path => MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted) ?? string.Empty)
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .ToArray();
+    }
+
+    private static string MakeTokenizedPathRelativeForProjectRoot(string projectRoot, string path)
+    {
+        var cleaned = PathValueResolver.Clean(path);
+        if (!Path.IsPathRooted(cleaned))
+            return NormalizePathSeparators(cleaned);
+
+        var tokenIndex = IndexOfPathToken(cleaned);
+        if (tokenIndex < 0)
+            return NormalizePathSeparators(cleaned);
+
+        var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+        var prefix = cleaned.Substring(0, tokenIndex).TrimEnd(separators);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return NormalizePathSeparators(cleaned);
+
+        var prefixFullPath = Path.GetFullPath(prefix);
+        if (!IsSameOrChildPath(projectRoot, prefixFullPath))
+            return NormalizePathSeparators(cleaned);
+
+        var relativePrefix = MakeRelativeForConfig(projectRoot, prefixFullPath);
+        var suffix = cleaned.Substring(tokenIndex).TrimStart(separators);
+        return string.Equals(relativePrefix, ".", StringComparison.Ordinal)
+            ? NormalizePathSeparators(suffix)
+            : NormalizePathSeparators(Path.Combine(relativePrefix, suffix));
+    }
+
+    private static int IndexOfPathToken(string path)
+    {
+        var tokens = new[]
+        {
+            "<TagName>",
+            "{TagName}",
+            "<ModuleVersion>",
+            "{ModuleVersion}",
+            "<ModuleVersionWithPreRelease>",
+            "{ModuleVersionWithPreRelease}",
+            "<TagModuleVersionWithPreRelease>",
+            "{TagModuleVersionWithPreRelease}",
+            "<ModuleName>",
+            "{ModuleName}"
+        };
+
+        var index = -1;
+        foreach (var token in tokens)
+        {
+            var tokenIndex = path.IndexOf(token, StringComparison.OrdinalIgnoreCase);
+            if (tokenIndex >= 0 && (index < 0 || tokenIndex < index))
+                index = tokenIndex;
+        }
+
+        return index;
     }
 
     private static string? GetStringOptionValue(object? value)
