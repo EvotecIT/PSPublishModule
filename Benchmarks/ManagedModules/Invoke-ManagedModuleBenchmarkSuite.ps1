@@ -309,6 +309,15 @@ function Add-SummaryRows {
                 ManagedMs = $row.ManagedMs
                 ManagedRank = $row.ManagedRank
                 ManagedVsFastest = $row.ManagedVsFastest
+                ManagedPackageCount = $row.ManagedPackageCount
+                ManagedDependencyCount = $row.ManagedDependencyCount
+                ManagedRepositoryRequests = $row.ManagedRepositoryRequests
+                ManagedDownloadBytes = $row.ManagedDownloadBytes
+                ManagedCacheHits = $row.ManagedCacheHits
+                ManagedRootDependencyMs = $row.ManagedRootDependencyMs
+                ManagedDownloadMs = $row.ManagedDownloadMs
+                ManagedExtractionMs = $row.ManagedExtractionMs
+                ManagedPromotionMs = $row.ManagedPromotionMs
                 RunPath = $RunPath
             })
         }

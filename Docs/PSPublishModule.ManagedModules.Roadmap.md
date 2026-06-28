@@ -314,6 +314,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add managed repair-plan benchmark lanes for source drift, scope drift, family coherence, loaded-module safety, and cleanup planning.
 - [x] Add file and byte counts for saved and installed output roots.
 - [x] Add managed install detail artifacts with package count, dependency count, per-package elapsed time, download time, extraction time, promotion time, repository requests, cache hits, and byte counts.
+- [x] Surface managed detail medians in benchmark summary, comparison, and suite summary artifacts so optimization runs can be ranked by phase, requests, bytes, and cache hits without opening every detail JSON file.
 - [x] Add Graph/Az/Teams/Exchange-heavy scenario presets for suite runs.
 - [x] Add a README section explaining which comparisons are safe on a developer machine and which require disposable hosts.
 - [ ] Measure Graph/Az/Teams/Exchange-heavy scenario presets on PowerShell 5.1 and PowerShell 7+.
