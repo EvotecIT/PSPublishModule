@@ -66,6 +66,14 @@ public sealed class ManagedModuleBenchmarkReportWriterTests
                     ManagedLifecycleSupported = true,
                     CompatibilityFallbackRecommended = false
                 }
+            },
+            CompatibilityRetirement = new ManagedModuleCompatibilityRetirementResult
+            {
+                Status = ManagedModuleCompatibilityRetirementStatus.Ready,
+                ReadyToMarkCompatibilityLegacy = true,
+                RequiredOperations = new[] { ManagedModuleBenchmarkOperation.Install },
+                ReadyOperations = new[] { ManagedModuleBenchmarkOperation.Install },
+                Reasons = new[] { "All required transition gates are ready and provider support does not require compatibility fallback." }
             }
         };
 
@@ -73,6 +81,8 @@ public sealed class ManagedModuleBenchmarkReportWriterTests
 
         Assert.Contains("## Provider Support", markdown, StringComparison.Ordinal);
         Assert.Contains("| Local folder feed | Supported | yes | not required |  |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Compatibility Retirement", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Ready | yes | Install | Install |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Scenario Summary", markdown, StringComparison.Ordinal);
         Assert.Contains("| install-small | Install | Managed | 2 | 2 | 0 | 200 | 200 | 100 | 300 | 2 | 420 | 600 |", markdown, StringComparison.Ordinal);
         Assert.Contains("| install-small | Install | PSResourceGet | 1 | 0 | 1 | 500 | 500 | 500 | 500 | 0 | 0 | 0 |", markdown, StringComparison.Ordinal);
@@ -91,6 +101,7 @@ public sealed class ManagedModuleBenchmarkReportWriterTests
         });
 
         Assert.Contains("## Scenario Summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Compatibility Retirement", markdown, StringComparison.Ordinal);
         Assert.Contains("_No provider support evidence was recorded._", markdown, StringComparison.Ordinal);
         Assert.Contains("_No benchmark runs were recorded._", markdown, StringComparison.Ordinal);
     }

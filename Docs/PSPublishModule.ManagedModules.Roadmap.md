@@ -361,6 +361,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Managed provider support is now a typed PowerForge contract with `Supported`, `Partial`, `Expected`, and `Unsupported` levels; private-module `Auto` transport reasons use that contract instead of hidden provider-specific fallback prose.
 - [x] 2026-06-28: Benchmark JSON and Markdown reports now include typed provider-support evidence so compatibility fallback readiness can be audited beside transition gates.
 - [x] 2026-06-28: Auto transport selection now uses a reusable `ManagedModuleTransportPolicy` contract, so compatibility fallback decisions are explicit, provider-limited when applicable, and shared by private-module workflows.
+- [x] 2026-06-28: Benchmark results now include a typed compatibility-retirement summary that combines transition gates and provider support before compatibility transport can be marked legacy.
 
 ## Benchmark Scenarios
 

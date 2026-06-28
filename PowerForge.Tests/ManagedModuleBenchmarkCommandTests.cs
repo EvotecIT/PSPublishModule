@@ -51,10 +51,12 @@ public sealed class ManagedModuleBenchmarkCommandTests
         var providerSupport = Assert.Single(result.ProviderSupport);
         Assert.Equal("Local folder feed", providerSupport.Provider);
         Assert.True(providerSupport.ManagedLifecycleSupported);
+        Assert.Equal(ManagedModuleCompatibilityRetirementStatus.Incomplete, result.CompatibilityRetirement.Status);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
         Assert.Contains("\"ScenarioId\": \"Install:Company.Tools\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"Environment\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"ProviderSupport\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
+        Assert.Contains("\"CompatibilityRetirement\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"FinalDiskBytes\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"RepositoryRequestCount\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"TransitionGates\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
@@ -62,6 +64,7 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.Contains("## Environment", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("## Provider Support", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Local folder feed", File.ReadAllText(markdownPath), StringComparison.Ordinal);
+        Assert.Contains("## Compatibility Retirement", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("## Transition Gates", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Default ready", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Fallback", File.ReadAllText(markdownPath), StringComparison.Ordinal);

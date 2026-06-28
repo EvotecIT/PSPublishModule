@@ -34,4 +34,9 @@ public sealed class ManagedModuleBenchmarkResult
     /// Operation-level evidence gates used when deciding whether the managed engine can replace compatibility defaults.
     /// </summary>
     public IReadOnlyList<ManagedModuleBenchmarkTransitionGateResult> TransitionGates { get; set; } = Array.Empty<ManagedModuleBenchmarkTransitionGateResult>();
+
+    /// <summary>
+    /// Overall evidence summary for marking compatibility transport as legacy.
+    /// </summary>
+    public ManagedModuleCompatibilityRetirementResult CompatibilityRetirement { get; set; } = new();
 }
