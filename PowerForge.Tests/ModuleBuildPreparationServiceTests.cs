@@ -58,7 +58,11 @@ public sealed class ModuleBuildPreparationServiceTests
             var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
             var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
             Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Build", "Templates"));
+            Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Examples"));
             File.WriteAllText(Path.Combine(root.FullName, "Build", "header.ps1"), "Write-Output 'header'");
+            File.WriteAllText(Path.Combine(root.FullName, "Build", "NOTICE.txt"), "notice");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "Examples", "NOTICE.txt"), "module notice");
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "DbaClientX.psd1"), "@{ ModuleVersion = '1.0.0' }");
 
             var settings = ScriptBlock.Create("""
@@ -93,12 +97,20 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             [PowerForge.ArtefactCopyMapping]@{
                 Source = 'Module/Build/LICENSE'
                 Destination = 'LICENSE'
+            },
+            [PowerForge.ArtefactCopyMapping]@{
+                Source = 'Build/Templates'
+                Destination = 'Templates'
             }
         )
         FilesOutput = [PowerForge.ArtefactCopyMapping[]]@(
             [PowerForge.ArtefactCopyMapping]@{
                 Source = 'Examples/NOTICE.txt'
                 Destination = 'NOTICE.txt'
+            },
+            [PowerForge.ArtefactCopyMapping]@{
+                Source = 'Build/NOTICE.txt'
+                Destination = 'RepoNotice.txt'
             }
         )
     }
@@ -239,8 +251,12 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed"), artefact.Configuration.Path);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Build", "LICENSE"), artefact.Configuration.DirectoryOutput![0].Source);
                 Assert.Equal("LICENSE", artefact.Configuration.DirectoryOutput[0].Destination);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "Templates"), artefact.Configuration.DirectoryOutput[1].Source);
+                Assert.Equal("Templates", artefact.Configuration.DirectoryOutput[1].Destination);
                 Assert.Equal("Examples/NOTICE.txt", artefact.Configuration.FilesOutput![0].Source);
                 Assert.Equal("NOTICE.txt", artefact.Configuration.FilesOutput[0].Destination);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "NOTICE.txt"), artefact.Configuration.FilesOutput[1].Source);
+                Assert.Equal("RepoNotice.txt", artefact.Configuration.FilesOutput[1].Destination);
 
                 var artefactWithRelativeLayout = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[3]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Unpacked"), artefactWithRelativeLayout.Configuration.Path);

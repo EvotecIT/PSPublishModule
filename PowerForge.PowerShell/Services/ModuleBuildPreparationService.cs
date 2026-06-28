@@ -610,10 +610,23 @@ internal sealed class ModuleBuildPreparationService
                 continue;
 
             if (!string.IsNullOrWhiteSpace(requiredFirstSegment) && !StartsWithPathSegment(mapping.Source, requiredFirstSegment!))
-                continue;
+            {
+                if (string.IsNullOrWhiteSpace(projectRoot) || !ExistsUnderWorkspaceRoot(rootPath, projectRoot!, mapping.Source))
+                    continue;
+            }
 
             mapping.Source = PathValueResolver.Resolve(rootPath, mapping.Source);
         }
+    }
+
+    private static bool ExistsUnderWorkspaceRoot(string rootPath, string projectRoot, string path)
+    {
+        var workspacePath = PathValueResolver.Resolve(rootPath, path);
+        if (!File.Exists(workspacePath) && !Directory.Exists(workspacePath))
+            return false;
+
+        var projectPath = PathValueResolver.Resolve(projectRoot, path);
+        return !File.Exists(projectPath) && !Directory.Exists(projectPath);
     }
 
     private static bool StartsWithPathSegment(string path, string segment)
