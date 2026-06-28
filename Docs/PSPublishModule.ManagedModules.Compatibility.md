@@ -209,6 +209,7 @@ Cmdlets should map parameters into these models and write result objects. They s
 - Without `-Force`, installing or saving an exact version that already exists is a no-op plan and does not write files.
 - `Update-ManagedModule -Force` reinstalls the selected target version when the selected target is already the installed version.
 - `Update-ManagedModule -Force` does not silently downgrade a newer installed version to an older selected version. Downgrade behavior needs a separate explicit policy so stale-version repair and operator mistakes do not collapse into the same switch.
+- `Repair-ManagedModule -Force` marks prepared managed/private install, update, and save delivery commands as forced. In `-Plan` mode this is visible on the prepared command object and command arguments, but no mutation occurs.
 - `-Force` does not imply destructive old-version cleanup. Cleanup remains a separate maintenance/repair decision.
 - `Publish-ManagedModule -Force` bypasses managed preflight duplicate/version guards where the target repository supports replacement or accepts the pushed package. It does not guarantee that a remote feed will overwrite an existing package.
 

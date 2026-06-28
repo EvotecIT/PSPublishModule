@@ -129,6 +129,32 @@ public sealed class RepairManagedModuleCommandTests
         Assert.Empty(result.Apply.ExecutionResults);
     }
 
+    [Fact]
+    public void RepairManagedModule_PlanForceMarksPreparedUpdateCommand()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Latest")
+            .AddParameter("Repository", "LocalFeed")
+            .AddParameter("Force")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.Equal("Update-ManagedModule", command.CommandName);
+        Assert.True(command.Force);
+        Assert.Contains("-Force", command.Arguments);
+        Assert.False(result.Apply.ExecutionRequested);
+        Assert.Empty(result.Apply.ExecutionResults);
+    }
+
     private static string CreateInstalledModule(string moduleRoot, string name, string version)
     {
         var modulePath = Path.Combine(moduleRoot, name, version);

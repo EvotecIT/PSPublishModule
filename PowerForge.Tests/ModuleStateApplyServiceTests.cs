@@ -26,7 +26,8 @@ public sealed class ModuleStateApplyServiceTests
 
         var update = result.Receipt.Commands[0];
         Assert.Equal("Update-PrivateModule", update.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-ProfileName", "Company", "-InstallPrerequisites", "-Prerelease" }, update.Arguments);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-ProfileName", "Company", "-InstallPrerequisites", "-Prerelease", "-Force" }, update.Arguments);
+        Assert.True(update.Force);
         Assert.Contains("Update-PrivateModule", update.CommandText, StringComparison.Ordinal);
 
         var install = result.Receipt.Commands[1];
@@ -34,6 +35,7 @@ public sealed class ModuleStateApplyServiceTests
         Assert.Equal(new[] { "-Name", "Company.Other", "-VersionPolicy", ">=1.0.0", "-ProfileName", "Company", "-InstallPrerequisites", "-Prerelease", "-Force" }, install.Arguments);
         Assert.Equal(">=1.0.0", install.VersionPolicy);
         Assert.True(install.IsRepair);
+        Assert.True(install.Force);
     }
 
     [Fact]
@@ -70,7 +72,8 @@ public sealed class ModuleStateApplyServiceTests
 
         var update = result.Receipt.Commands[0];
         Assert.Equal("Update-ManagedModule", update.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "CurrentUser", "-Repository", "FallbackModules", "-InstallPrerequisites", "-Prerelease", "-ExpectedPackageSha256", new string('a', 64) }, update.Arguments);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "CurrentUser", "-Repository", "FallbackModules", "-InstallPrerequisites", "-Prerelease", "-ExpectedPackageSha256", new string('a', 64), "-Force" }, update.Arguments);
+        Assert.True(update.Force);
         Assert.Contains("Update-ManagedModule", update.CommandText, StringComparison.Ordinal);
 
         var install = result.Receipt.Commands[1];
@@ -78,6 +81,7 @@ public sealed class ModuleStateApplyServiceTests
         Assert.Equal(new[] { "-Name", "Company.Other", "-VersionPolicy", ">=1.0.0 <2.0.0", "-Repository", "CompanyModules", "-InstallPrerequisites", "-Prerelease", "-Force" }, install.Arguments);
         Assert.Equal(">=1.0.0 <2.0.0", install.VersionPolicy);
         Assert.True(install.IsRepair);
+        Assert.True(install.Force);
     }
 
     [Fact]
