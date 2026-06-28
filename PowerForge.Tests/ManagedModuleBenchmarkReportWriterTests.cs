@@ -56,11 +56,23 @@ public sealed class ManagedModuleBenchmarkReportWriterTests
                     Elapsed = TimeSpan.FromMilliseconds(500),
                     ErrorMessage = "Baseline unavailable."
                 }
+            },
+            ProviderSupport = new[]
+            {
+                new ManagedModuleProviderSupport
+                {
+                    Provider = "Local folder feed",
+                    Level = ManagedModuleProviderSupportLevel.Supported,
+                    ManagedLifecycleSupported = true,
+                    CompatibilityFallbackRecommended = false
+                }
             }
         };
 
         var markdown = writer.BuildMarkdown(result);
 
+        Assert.Contains("## Provider Support", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Local folder feed | Supported | yes | not required |  |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Scenario Summary", markdown, StringComparison.Ordinal);
         Assert.Contains("| install-small | Install | Managed | 2 | 2 | 0 | 200 | 200 | 100 | 300 | 2 | 420 | 600 |", markdown, StringComparison.Ordinal);
         Assert.Contains("| install-small | Install | PSResourceGet | 1 | 0 | 1 | 500 | 500 | 500 | 500 | 0 | 0 | 0 |", markdown, StringComparison.Ordinal);
@@ -79,6 +91,7 @@ public sealed class ManagedModuleBenchmarkReportWriterTests
         });
 
         Assert.Contains("## Scenario Summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("_No provider support evidence was recorded._", markdown, StringComparison.Ordinal);
         Assert.Contains("_No benchmark runs were recorded._", markdown, StringComparison.Ordinal);
     }
 }

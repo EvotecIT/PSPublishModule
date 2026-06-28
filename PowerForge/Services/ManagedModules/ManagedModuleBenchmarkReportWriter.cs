@@ -69,6 +69,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine();
         AppendEnvironment(markdown, result.Environment);
         markdown.AppendLine();
+        AppendProviderSupport(markdown, result.ProviderSupport ?? Array.Empty<ManagedModuleProviderSupport>());
+        markdown.AppendLine();
         AppendSummary(markdown, runs);
         markdown.AppendLine();
         AppendTransitionGates(markdown, result.TransitionGates ?? Array.Empty<ManagedModuleBenchmarkTransitionGateResult>());
@@ -154,6 +156,34 @@ public sealed class ManagedModuleBenchmarkReportWriter
             .Append(" | ")
             .Append(Escape(value))
             .AppendLine(" |");
+    }
+
+    private static void AppendProviderSupport(StringBuilder markdown, IReadOnlyList<ManagedModuleProviderSupport> providerSupport)
+    {
+        markdown.AppendLine("## Provider Support");
+        markdown.AppendLine();
+        if (providerSupport.Count == 0)
+        {
+            markdown.AppendLine("_No provider support evidence was recorded._");
+            return;
+        }
+
+        markdown.AppendLine("| Provider | Level | Managed lifecycle | Compatibility fallback | Limitations |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- |");
+        foreach (var support in providerSupport)
+        {
+            markdown.Append("| ")
+                .Append(Escape(support.Provider))
+                .Append(" | ")
+                .Append(support.Level)
+                .Append(" | ")
+                .Append(support.ManagedLifecycleSupported ? "yes" : "no")
+                .Append(" | ")
+                .Append(support.CompatibilityFallbackRecommended ? "recommended" : "not required")
+                .Append(" | ")
+                .Append(Escape(FormatLimitations(support.Limitations)))
+                .AppendLine(" |");
+        }
     }
 
     private static void AppendSummary(StringBuilder markdown, IReadOnlyList<ManagedModuleBenchmarkRunResult> runs)
@@ -330,6 +360,11 @@ public sealed class ManagedModuleBenchmarkReportWriter
 
         return value!.Replace("|", "\\|").Replace(Environment.NewLine, " ");
     }
+
+    private static string FormatLimitations(IReadOnlyList<string>? limitations)
+        => limitations is null || limitations.Count == 0
+            ? string.Empty
+            : string.Join("; ", limitations);
 
     private static long ResolveTotal(long total, long fallback)
         => total > 0 ? total : fallback;

@@ -359,6 +359,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: `Install-PrivateModule` / `Update-PrivateModule` workflow results now record requested transport, effective transport, and the reason `Auto` chose managed delivery or compatibility fallback; verbose output reports the same decision for operator inspection.
 - [x] 2026-06-28: `Invoke-ModuleState` execution results and Spectre summaries now surface the same requested/effective transport decision, so estate maintenance output can explain `Auto -> ManagedModule` and `Auto -> PrivateModule` routing.
 - [x] 2026-06-28: Managed provider support is now a typed PowerForge contract with `Supported`, `Partial`, `Expected`, and `Unsupported` levels; private-module `Auto` transport reasons use that contract instead of hidden provider-specific fallback prose.
+- [x] 2026-06-28: Benchmark JSON and Markdown reports now include typed provider-support evidence so compatibility fallback readiness can be audited beside transition gates.
 
 ## Benchmark Scenarios
 

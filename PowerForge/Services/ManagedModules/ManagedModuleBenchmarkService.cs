@@ -123,6 +123,7 @@ public sealed partial class ManagedModuleBenchmarkService
             StartedAtUtc = started,
             CompletedAtUtc = DateTimeOffset.UtcNow,
             Environment = ManagedModuleBenchmarkEnvironment.Capture(),
+            ProviderSupport = BuildProviderSupport(request.Scenarios),
             Runs = runs,
             TransitionGates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(
                 runs,
@@ -130,6 +131,21 @@ public sealed partial class ManagedModuleBenchmarkService
                 request.MaximumManagedSlowdownMilliseconds)
         };
     }
+
+    private static IReadOnlyList<ManagedModuleProviderSupport> BuildProviderSupport(IReadOnlyList<ManagedModuleBenchmarkScenario> scenarios)
+        => scenarios
+            .Where(static scenario => scenario.Repository is not null)
+            .Select(static scenario => ManagedModuleProviderSupportEvaluator.Evaluate(scenario.Repository))
+            .GroupBy(static support => string.Join(
+                "|",
+                support.Provider,
+                support.Level.ToString(),
+                support.ManagedLifecycleSupported.ToString(),
+                support.CompatibilityFallbackRecommended.ToString(),
+                string.Join(";", support.Limitations ?? Array.Empty<string>())),
+                StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToArray();
 
     private async Task<ManagedModuleBenchmarkRunResult> RunScenarioAsync(
         ManagedModuleBenchmarkScenario scenario,

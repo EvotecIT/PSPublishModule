@@ -629,6 +629,9 @@ public sealed class ManagedModuleBenchmarkServiceTests
         Assert.Equal(2, gate.SuccessfulCompatibilityRunCount);
         Assert.Contains("PSResourceGet", gate.CoveredCompatibilityEngines);
         Assert.Contains("PowerShellGet", gate.CoveredCompatibilityEngines);
+        var providerSupport = Assert.Single(result.ProviderSupport);
+        Assert.Equal("Local folder feed", providerSupport.Provider);
+        Assert.Equal(ManagedModuleProviderSupportLevel.Supported, providerSupport.Level);
     }
 
     [Fact]
