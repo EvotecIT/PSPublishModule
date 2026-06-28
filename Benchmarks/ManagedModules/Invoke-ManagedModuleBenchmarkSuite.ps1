@@ -18,7 +18,7 @@ param(
 
     [int] $RepeatCount = 1,
 
-    [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\Suites'),
+    [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\MM'),
 
     [ValidateSet('Debug', 'Release')]
     [string] $Configuration = 'Release',
@@ -48,8 +48,8 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
-$suiteRoot = Join-Path $OutputDirectory ('Suite-{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
-$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'SpeedGate', 'All')
+$suiteRoot = Join-Path $OutputDirectory ('S{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), $PID)
+$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'SpeedGate', 'All')
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
@@ -124,13 +124,14 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Full' -ModuleName 'Az' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'Teams' -ModuleName 'MicrosoftTeams'
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'ExchangeOnlineManagement' -ModuleName 'ExchangeOnlineManagement'
+        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'ThreadJob.InstallSave.NoOpForce' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce')
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json'
     )
 }
 
 function Resolve-ScenarioList {
     $selectedSuites = if ($Suite -contains 'All') {
-        @('Smoke', 'Graph', 'Az', 'Enterprise', 'SpeedGate')
+        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'SpeedGate')
     } else {
         $Suite
     }
@@ -245,6 +246,28 @@ function Get-ScenarioModuleFastSource {
     $ModuleFastSource
 }
 
+function Get-HostOutputLabel {
+    param([string] $HostLabel)
+
+    switch ($HostLabel) {
+        'PowerShell7' { 'ps7' }
+        'WindowsPowerShell' { 'ps5' }
+        'Current' { 'cur' }
+        default { $HostLabel }
+    }
+}
+
+function Get-ScenarioOutputLabel {
+    param([object] $Scenario)
+
+    $index = [array]::IndexOf(@($script:scenarios), $Scenario)
+    if ($index -lt 0) {
+        $index = 0
+    }
+
+    'sc{0:D2}' -f ($index + 1)
+}
+
 function Invoke-ScenarioHostRun {
     param(
         [object] $Scenario,
@@ -252,7 +275,7 @@ function Invoke-ScenarioHostRun {
         [string] $Executable
     )
 
-    $scenarioRoot = Join-Path $suiteRoot ('{0}\{1}' -f $HostLabel, $Scenario.Name)
+    $scenarioRoot = Join-Path $suiteRoot ('{0}\{1}' -f (Get-HostOutputLabel -HostLabel $HostLabel), (Get-ScenarioOutputLabel -Scenario $Scenario))
     New-Item -Path $scenarioRoot -ItemType Directory -Force | Out-Null
 
     $arguments = @(
