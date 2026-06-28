@@ -618,6 +618,7 @@ function Invoke-TimedOperation {
         ManagedTotalExtractionMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalExtractionMilliseconds } else { 0 }
         ManagedTotalPromotionMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalPromotionMilliseconds } else { 0 }
         ManagedRepositoryRequestCount = if ($detailSummary) { [long] $detailSummary.TotalRepositoryRequestCount } else { 0 }
+        ManagedPackageRepositoryRequestCount = if ($detailSummary) { [long] $detailSummary.TotalPackageRepositoryRequestCount } else { 0 }
         ManagedDownloadBytes = if ($detailSummary) { [long] $detailSummary.TotalDownloadBytes } else { 0 }
         ManagedCacheHitCount = if ($detailSummary) { [int] $detailSummary.CacheHitCount } else { 0 }
         ImportStatus = if ($importValidation) { [string] $importValidation.Status } else { '' }

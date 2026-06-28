@@ -40,7 +40,7 @@ public sealed class ManagedModuleUpdateService
         Validate(request);
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var requestCountBefore = _repositoryClient.RequestCount;
+        using var requestScope = _repositoryClient.BeginRequestScope();
 
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
@@ -76,7 +76,7 @@ public sealed class ManagedModuleUpdateService
                 ModuleRoot = moduleRoot,
                 ModulePath = Path.Combine(moduleRoot, request.Name.Trim(), currentVersion!),
                 Elapsed = stopwatch.Elapsed,
-                RepositoryRequestCount = _repositoryClient.RequestCount - requestCountBefore,
+                RepositoryRequestCount = requestScope.Count,
                 SourcePolicySatisfied = sourceEvaluation.IsSatisfied,
                 SourcePolicyReason = sourceEvaluation.Reason,
                 InstalledReceipt = sourceEvaluation.Receipt,
@@ -115,7 +115,7 @@ public sealed class ManagedModuleUpdateService
             ModuleRoot = moduleRoot,
             ModulePath = modulePath,
             Elapsed = stopwatch.Elapsed,
-            RepositoryRequestCount = _repositoryClient.RequestCount - requestCountBefore,
+            RepositoryRequestCount = requestScope.Count,
             InstallResult = install,
             Receipt = install?.Receipt,
             ReceiptPath = install?.ReceiptPath,

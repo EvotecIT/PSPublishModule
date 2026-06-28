@@ -65,7 +65,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var current = request;
         for (var redirect = 0; redirect < 5; redirect++)
         {
-            System.Threading.Interlocked.Increment(ref _requestCount);
+            RecordRequestAttempt();
             var response = _options.RequestTimeout is null
                 ? await _httpClient.SendAsync(current, cancellationToken).ConfigureAwait(false)
                 : await SendWithTimeoutAsync(current, cancellationToken).ConfigureAwait(false);
