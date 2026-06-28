@@ -116,8 +116,15 @@ function Write-ManagedInstallDetail {
         New-Item -Path $parent -ItemType Directory -Force | Out-Null
     }
 
-    [pscustomobject]@{
+    $detail = [pscustomobject]@{
         Summary = $summary
         Packages = $packages
-    } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Path -Encoding UTF8
+    }
+
+    if (Get-Command -Name Write-ManagedBenchmarkJson -ErrorAction SilentlyContinue) {
+        Write-ManagedBenchmarkJson -InputObject $detail -Path $Path -Depth 6
+        return
+    }
+
+    $detail | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Path -Encoding UTF8
 }

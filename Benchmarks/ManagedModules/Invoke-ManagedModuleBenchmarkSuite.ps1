@@ -57,6 +57,7 @@ $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.HostComparison.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.OptimizationTargets.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Artifacts.ps1')
 
 function Resolve-TokenList {
     param(
@@ -516,15 +517,15 @@ $gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summary
 $hostComparisonRows = @(New-ManagedHostComparison -Rows @($summaryRows))
 $optimizationTargetRows = @(New-ManagedOptimizationTarget -Rows @($summaryRows))
 
-$summaryRows | Export-Csv -LiteralPath $summaryPath -NoTypeInformation
-$summaryRows | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryJsonPath -Encoding UTF8
-$hostComparisonRows | Export-Csv -LiteralPath $hostComparisonPath -NoTypeInformation
-$hostComparisonRows | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $hostComparisonJsonPath -Encoding UTF8
-$optimizationTargetRows | Export-Csv -LiteralPath $optimizationTargetsPath -NoTypeInformation
-$optimizationTargetRows | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $optimizationTargetsJsonPath -Encoding UTF8
-$hostRows | Export-Csv -LiteralPath $hostsPath -NoTypeInformation
+Write-ManagedBenchmarkCsv -InputObject @($summaryRows) -Path $summaryPath
+Write-ManagedBenchmarkJson -InputObject @($summaryRows) -Path $summaryJsonPath -Depth 8
+Write-ManagedBenchmarkCsv -InputObject @($hostComparisonRows) -Path $hostComparisonPath
+Write-ManagedBenchmarkJson -InputObject @($hostComparisonRows) -Path $hostComparisonJsonPath -Depth 8
+Write-ManagedBenchmarkCsv -InputObject @($optimizationTargetRows) -Path $optimizationTargetsPath
+Write-ManagedBenchmarkJson -InputObject @($optimizationTargetRows) -Path $optimizationTargetsJsonPath -Depth 8
+Write-ManagedBenchmarkCsv -InputObject @($hostRows) -Path $hostsPath
 if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0 -or $UseScenarioGates.IsPresent) {
-    $gateViolations | Export-Csv -LiteralPath $gatePath -NoTypeInformation
+    Write-ManagedBenchmarkCsv -InputObject @($gateViolations) -Path $gatePath
 }
 
 $metadata = [ordered]@{
@@ -567,7 +568,7 @@ $metadata = [ordered]@{
     RemoveOutputRoots = $RemoveOutputRoots.IsPresent
     OutputDirectory = $suiteRoot
 }
-$metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+Write-ManagedBenchmarkJson -InputObject $metadata -Path $metadataPath -Depth 8
 
 $summaryRows
 Write-Host "Benchmark suite output: $suiteRoot"

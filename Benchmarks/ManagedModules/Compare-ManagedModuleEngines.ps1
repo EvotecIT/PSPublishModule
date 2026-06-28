@@ -71,6 +71,8 @@ $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 $validOperations = @('Find', 'Save', 'SaveNoOp', 'SaveForce', 'Install', 'InstallManaged', 'InstallNoOp', 'InstallForce', 'Update', 'UpdateNoOp', 'UpdateForce', 'RepairPlan', 'Publish')
 $validRepairScenarios = @('StaleVersion', 'SourceDrift', 'ScopeDrift', 'FamilyCoherence', 'LoadedModuleSafety', 'CleanupPlanning')
 
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Artifacts.ps1')
+
 function Resolve-TokenList {
     param(
         [string[]] $Value,
@@ -849,18 +851,18 @@ $comparisonPath = Join-Path $workRoot 'managed-module-comparison.csv'
 $gatePath = Join-Path $workRoot 'managed-module-gate.csv'
 $metadataPath = Join-Path $workRoot 'metadata.json'
 
-$results | Export-Csv -LiteralPath $resultsPath -NoTypeInformation
-$results | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $resultsJsonPath -Encoding UTF8
-$summary | Export-Csv -LiteralPath $summaryPath -NoTypeInformation
-$comparison | Export-Csv -LiteralPath $comparisonPath -NoTypeInformation
+Write-ManagedBenchmarkCsv -InputObject @($results) -Path $resultsPath
+Write-ManagedBenchmarkJson -InputObject @($results) -Path $resultsJsonPath -Depth 8
+Write-ManagedBenchmarkCsv -InputObject @($summary) -Path $summaryPath
+Write-ManagedBenchmarkCsv -InputObject @($comparison) -Path $comparisonPath
 if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
-    $gateViolations | Export-Csv -LiteralPath $gatePath -NoTypeInformation
+    Write-ManagedBenchmarkCsv -InputObject @($gateViolations) -Path $gatePath
 }
 if ($RemoveOutputRoots.IsPresent) {
     $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows $results -AllowedRoots @($workRoot, $installWorkRoot)
     $metadata.OutputRootsRemoved = $removedOutputRootCount
 }
-$metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+Write-ManagedBenchmarkJson -InputObject $metadata -Path $metadataPath -Depth 8
 
 $comparison
 Write-Host "Benchmark output: $workRoot"
