@@ -24,6 +24,8 @@ param(
 
     [string] $ModuleBinary,
 
+    [string] $PackageCacheDirectory,
+
     [string] $ProviderModulePath,
 
     [string[]] $ProviderDependencyModulePath,
@@ -239,6 +241,9 @@ switch ($EngineName) {
         if (-not [string]::IsNullOrWhiteSpace($Version)) {
             $parameters.Version = $Version
         }
+        if (-not [string]::IsNullOrWhiteSpace($PackageCacheDirectory)) {
+            $parameters.PackageCacheDirectory = $PackageCacheDirectory
+        }
 
         $commandName = if ($Operation -eq 'Update') { 'Update-ManagedModule' } else { 'Install-ManagedModule' }
         Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
@@ -247,9 +252,14 @@ switch ($EngineName) {
         } else {
             Install-ManagedModule @parameters
         }
-        if ($Operation -eq 'Install') {
-            Write-ManagedInstallDetail -Result $result -Path $ResultPath
+        $detailResult = if ($Operation -eq 'Update' -and $result.PSObject.Properties['InstallResult']) {
+            $result.InstallResult
+        } elseif ($Operation -eq 'Install') {
+            $result
+        } else {
+            $null
         }
+        Write-ManagedInstallDetail -Result $detailResult -Path $ResultPath
         $result
     }
     'PSResourceGet' {

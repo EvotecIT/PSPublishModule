@@ -13,6 +13,9 @@ param(
 
     [string] $UpdateBaselineVersion = '',
 
+    [ValidateSet('Default', 'Cold', 'Warm')]
+    [string] $CacheMode = 'Default',
+
     [int] $RepeatCount = 1,
 
     [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\Suites'),
@@ -214,6 +217,8 @@ function Invoke-ScenarioHostRun {
         $scenarioRoot,
         '-Configuration',
         $Configuration,
+        '-CacheMode',
+        $CacheMode,
         '-SkipBuild'
     )
 
@@ -345,6 +350,7 @@ $metadata = [ordered]@{
     ModuleFastSource = $ModuleFastSource
     Operations = $Operation
     UpdateBaselineVersion = $UpdateBaselineVersion
+    CacheMode = $CacheMode
     RepeatCount = $RepeatCount
     IncludeInstall = $IncludeInstall.IsPresent
     ValidateImport = $ValidateImport.IsPresent
