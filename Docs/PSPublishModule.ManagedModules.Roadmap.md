@@ -318,6 +318,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Split managed benchmark request evidence into whole-operation repository requests and package-delivery requests so parallel dependency detail rows do not hide metadata/version-resolution costs.
 - [x] Split managed package count evidence into dependency-tree rows and unique package/status counts so heavy families with repeated shared dependencies do not inflate optimization targets.
 - [x] Surface repair-plan maintenance action and finding medians in benchmark summary, comparison, and suite summary artifacts so repair optimization is not hidden behind install-only package metrics.
+- [x] Add explicit no-op and forced-reinstall benchmark operations for install, save, and update so compatibility semantics are measured instead of inferred from fresh installs.
 - [x] Add Graph/Az/Teams/Exchange-heavy scenario presets for suite runs.
 - [x] Add a README section explaining which comparisons are safe on a developer machine and which require disposable hosts.
 - [ ] Measure Graph/Az/Teams/Exchange-heavy scenario presets on PowerShell 5.1 and PowerShell 7+.
@@ -360,6 +361,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: Managed repository request accounting is now scoped per async install/update operation and benchmark details split whole-operation requests from package-delivery requests. A fresh PowerShell 7 full `Microsoft.Graph` install comparison measured managed at 7414 ms versus ModuleFast at 8906 ms, with managed recording 78 packages, 77 dependencies, 81 whole-operation repository requests, 80 package-delivery requests, and 186.5 MB downloaded. Windows PowerShell 5.1 managed-only full Graph measured 13478 ms with 81 whole-operation requests and 78 package-delivery requests.
 - [x] 2026-06-28: Managed benchmark detail artifacts now split package tree rows from unique package/status counts. A fresh PowerShell 7 full `Az` install comparison measured managed at 12858 ms while ModuleFast failed resolving `Az.DataTransfer(1.0.0)`. Managed recorded 204 dependency-tree package rows, 103 unique package outputs, 102 unique installed outputs, 1 unique already-installed output, 211 whole-operation repository requests, 206 package-delivery requests, and 137.5 MB downloaded.
 - [x] 2026-06-28: Repair force semantics now flow through prepared delivery commands for install, update, and save actions. Focused tests prove `Repair-ManagedModule -Latest -Force -Plan` prepares a forced `Update-ManagedModule` command without executing mutation, and the PowerShell-facing command object exposes the effective `Force` flag.
+- [x] 2026-06-28: The benchmark harness now has explicit `InstallNoOp`, `InstallForce`, `SaveNoOp`, `SaveForce`, `UpdateNoOp`, and `UpdateForce` operations. PowerShell 7 `ThreadJob` 2.1.0 import-gated smoke measured managed as fastest for install no-op (701 ms), save no-op (18 ms), save force (1115 ms), and update no-op (1000 ms); ModuleFast was fastest for install force (1128 ms versus managed 3531 ms), and PSResourceGet was fastest for update force (1426 ms versus managed 1834 ms). Windows PowerShell 5.1 measured managed as fastest for install no-op (888 ms), install force (1956 ms), save no-op (20 ms), save force (1089 ms), and update no-op (273 ms); PSResourceGet was fastest for update force (1148 ms versus managed 3375 ms). ModuleFast remained an explicit PS5.1 skip, PSResourceGet save force is an explicit skip because `Save-PSResource` exposes no force/reinstall save parameter on the inspected hosts, and Windows PowerShellGet update failed inside its own metadata conversion path.
 
 ### Next Optimization Targets
 
@@ -376,6 +378,8 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Add a repair-plan benchmark lane for family coherence.
 - [x] Add repair benchmark lanes for loaded-module safety and cleanup planning before optimizing repair-specific behavior.
 - [x] Add explicit heavy update baseline versions or a baseline-discovery mode to the suite runner so Graph/Az/Teams/Exchange update scenarios do not silently skip when no `-UpdateBaselineVersion` is supplied.
+- [x] Add force/no-op benchmark gates for install, save, and update before claiming PowerShellGet/PSResourceGet compatibility parity.
+- [ ] Optimize forced reinstall/update when the selected version is already present; current smoke evidence shows managed `UpdateForce` slower than PSResourceGet on both PS7 and PS5.1, and `InstallForce` slower than ModuleFast on PS7 small-package runs.
 
 ### Compatibility Semantics Gates
 

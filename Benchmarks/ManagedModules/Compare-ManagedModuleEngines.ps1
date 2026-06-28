@@ -61,7 +61,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 }
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-$validOperations = @('Find', 'Save', 'Install', 'InstallManaged', 'Update', 'RepairPlan')
+$validOperations = @('Find', 'Save', 'SaveNoOp', 'SaveForce', 'Install', 'InstallManaged', 'InstallNoOp', 'InstallForce', 'Update', 'UpdateNoOp', 'UpdateForce', 'RepairPlan')
 $validRepairScenarios = @('StaleVersion', 'SourceDrift', 'ScopeDrift', 'FamilyCoherence', 'LoadedModuleSafety', 'CleanupPlanning')
 
 function Resolve-TokenList {
@@ -131,6 +131,18 @@ function Resolve-RepairScenarioList {
     }
 
     Resolve-TokenList -Value @($expanded) -Allowed $validRepairScenarios -Label 'repair scenario'
+}
+
+function Test-BenchmarkOperationUsesForce {
+    param([string] $OperationName)
+
+    $OperationName -in @('Save', 'SaveForce', 'Install', 'InstallManaged', 'InstallForce', 'UpdateForce')
+}
+
+function Test-BenchmarkOperationRequiresExistingTarget {
+    param([string] $OperationName)
+
+    $OperationName -in @('SaveNoOp', 'SaveForce', 'InstallNoOp', 'InstallForce', 'UpdateNoOp', 'UpdateForce')
 }
 
 $script:ResolvedUpdateBaselineVersion = $UpdateBaselineVersion
@@ -373,7 +385,8 @@ function Invoke-IsolatedInstallHost {
         [string] $DetailPath,
         [string] $OperationName = 'Install',
         [string] $VersionOverride = $Version,
-        [string] $PackageCacheDirectory = ''
+        [string] $PackageCacheDirectory = '',
+        [bool] $Force = $false
     )
 
     $childScript = Join-Path $PSScriptRoot 'Invoke-ManagedModuleInstallChild.ps1'
@@ -432,6 +445,9 @@ function Invoke-IsolatedInstallHost {
     }
     if ($AuthenticodeCheck.IsPresent) {
         $arguments += '-AuthenticodeCheck'
+    }
+    if ($Force) {
+        $arguments += '-Force'
     }
     if (-not [string]::IsNullOrWhiteSpace($DetailPath)) {
         $arguments += @(
@@ -686,177 +702,212 @@ function Invoke-FindScenario {
     }
 }
 
-function Invoke-SaveScenario {
-    param([string] $EngineName, [int] $Iteration)
+function Invoke-SaveEngineCommand {
+    param(
+        [string] $EngineName,
+        [string] $Destination,
+        [bool] $Force
+    )
 
-    $destination = Join-Path $workRoot ("save-{0}-{1}" -f $EngineName, $Iteration)
+    switch ($EngineName) {
+        'Managed' {
+            $parameters = @{
+                Name = $ModuleName
+                Path = $Destination
+                Repository = $repositorySource
+                RepositoryName = $RepositoryName
+                AllowClobber = $true
+            }
+            if ($Force) {
+                $parameters.Force = $true
+            }
+            if (-not [string]::IsNullOrWhiteSpace($Version)) {
+                $parameters.Version = $Version
+            }
+            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
+            Save-ManagedModule @parameters
+        }
+        'PSResourceGet' {
+            $parameters = @{
+                Name = $ModuleName
+                Path = $Destination
+                Repository = $RepositoryName
+                TrustRepository = $true
+            }
+            foreach ($entry in (Get-VersionParameter -CommandName 'Save-PSResource' -ExactVersion $Version).GetEnumerator()) {
+                $parameters[$entry.Key] = $entry.Value
+            }
+            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-PSResource' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-PSResource' -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
+            Save-PSResource @parameters
+        }
+        'PowerShellGet' {
+            $parameters = @{
+                Name = $ModuleName
+                Path = $Destination
+                Repository = $RepositoryName
+            }
+            if ($Force) {
+                $parameters.Force = $true
+            }
+            foreach ($entry in (Get-VersionParameter -CommandName 'Save-Module' -ExactVersion $Version).GetEnumerator()) {
+                $parameters[$entry.Key] = $entry.Value
+            }
+            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-Module' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+            Save-Module @parameters
+        }
+    }
+}
+
+function Invoke-SaveScenario {
+    param([string] $EngineName, [int] $Iteration, [string] $OperationName = 'Save')
+
+    $destination = Join-Path $workRoot ("save-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
+    $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
 
     switch ($EngineName) {
         'ModuleFast' {
-            return New-SkippedRow -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast does not expose an equivalent save command.'
-        }
-        'Managed' {
-            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
-                $parameters = @{
-                    Name = $ModuleName
-                    Path = $destination
-                    Repository = $repositorySource
-                    RepositoryName = $RepositoryName
-                    AllowClobber = $true
-                    Force = $true
-                }
-                if (-not [string]::IsNullOrWhiteSpace($Version)) {
-                    $parameters.Version = $Version
-                }
-                Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
-                Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
-                Save-ManagedModule @parameters
-            }
+            return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast does not expose an equivalent save command.'
         }
         'PSResourceGet' {
             if (-not (Test-CommandAvailable 'Save-PSResource')) {
-                return New-SkippedRow -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -Reason 'Save-PSResource is not available.'
-            }
-
-            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
-                $parameters = @{
-                    Name = $ModuleName
-                    Path = $destination
-                    Repository = $RepositoryName
-                    TrustRepository = $true
-                }
-                foreach ($entry in (Get-VersionParameter -CommandName 'Save-PSResource' -ExactVersion $Version).GetEnumerator()) {
-                    $parameters[$entry.Key] = $entry.Value
-                }
-                Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-PSResource' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
-                Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-PSResource' -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
-                Save-PSResource @parameters
+                return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'Save-PSResource is not available.'
             }
         }
         'PowerShellGet' {
             if (-not (Test-CommandAvailable 'Save-Module')) {
-                return New-SkippedRow -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -Reason 'Save-Module is not available.'
-            }
-
-            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
-                $parameters = @{
-                    Name = $ModuleName
-                    Path = $destination
-                    Repository = $RepositoryName
-                    Force = $true
-                }
-                foreach ($entry in (Get-VersionParameter -CommandName 'Save-Module' -ExactVersion $Version).GetEnumerator()) {
-                    $parameters[$entry.Key] = $entry.Value
-                }
-                Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-Module' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
-                Save-Module @parameters
+                return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'Save-Module is not available.'
             }
         }
+    }
+
+    if ($EngineName -eq 'PSResourceGet' -and $OperationName -eq 'SaveForce') {
+        return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'Save-PSResource does not expose an equivalent force/reinstall save parameter.'
+    }
+
+    if (Test-BenchmarkOperationRequiresExistingTarget -OperationName $OperationName) {
+        try {
+            Invoke-SaveEngineCommand -EngineName $EngineName -Destination $destination -Force $true | Out-Null
+        } catch {
+            return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason "Preseed save failed: $($_.Exception.Message)" -OutputRoot $destination
+        }
+    }
+
+    Invoke-TimedOperation -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
+        Invoke-SaveEngineCommand -EngineName $EngineName -Destination $destination -Force $force
     }
 }
 
 function Invoke-InstallScenario {
-    param([string] $EngineName, [int] $Iteration)
+    param([string] $EngineName, [int] $Iteration, [string] $OperationName = 'Install')
 
-    $destination = Join-Path $installWorkRoot ("install-{0}-{1}" -f $EngineName, $Iteration)
+    $destination = Join-Path $installWorkRoot ("install-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
+    $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
 
     switch ($EngineName) {
         'ModuleFast' {
             if ($PSVersionTable.PSEdition -eq 'Desktop' -or $PSVersionTable.PSVersion -lt [version]'7.2') {
-                return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast requires PowerShell 7.2 or newer.'
+                return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast requires PowerShell 7.2 or newer.'
             }
             if (-not (Get-ProviderModulePath -EngineName $EngineName)) {
-                return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast is not installed for this benchmark host.'
-            }
-
-            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
-                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath ''
-            }
-        }
-        'Managed' {
-            $detailPath = Join-Path $workRoot ("managed-install-details-{0}.json" -f $Iteration)
-            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
-                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath
+                return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast is not installed for this benchmark host.'
             }
         }
         'PSResourceGet' {
             if (-not (Test-CommandAvailable 'Install-PSResource')) {
-                return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'Install-PSResource is not available.'
-            }
-
-            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
-                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath ''
+                return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'Install-PSResource is not available.'
             }
         }
         'PowerShellGet' {
             if (-not (Test-CommandAvailable 'Install-Module')) {
-                return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'Install-Module is not available.'
-            }
-
-            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
-                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath ''
+                return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'Install-Module is not available.'
             }
         }
+    }
+
+    if (Test-BenchmarkOperationRequiresExistingTarget -OperationName $OperationName) {
+        try {
+            Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -Force $true
+        } catch {
+            return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason "Preseed install failed: $($_.Exception.Message)" -OutputRoot $destination
+        }
+    }
+
+    $detailPath = if ($EngineName -eq 'Managed') {
+        Join-Path $workRoot ("managed-{0}-details-{1}.json" -f $OperationName, $Iteration)
+    } else {
+        ''
+    }
+
+    Invoke-TimedOperation -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Install' -Force $force
     }
 }
 
 function Invoke-UpdateScenario {
-    param([string] $EngineName, [int] $Iteration)
+    param([string] $EngineName, [int] $Iteration, [string] $OperationName = 'Update')
 
-    if ([string]::IsNullOrWhiteSpace($script:ResolvedUpdateBaselineVersion)) {
+    if ($OperationName -eq 'Update' -and [string]::IsNullOrWhiteSpace($script:ResolvedUpdateBaselineVersion)) {
         $reason = if ([string]::IsNullOrWhiteSpace($script:UpdateBaselineResolutionError)) {
             'UpdateBaselineVersion could not be resolved for update benchmarks.'
         } else {
             $script:UpdateBaselineResolutionError
         }
 
-        return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason $reason
+        return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $reason
     }
 
     if ($EngineName -eq 'ModuleFast') {
-        return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast does not expose an equivalent update command.'
+        return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast does not expose an equivalent update command.'
     }
 
     switch ($EngineName) {
         'PSResourceGet' {
             if (-not (Test-CommandAvailable 'Update-PSResource')) {
-                return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason 'Update-PSResource is not available.'
+                return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'Update-PSResource is not available.'
             }
         }
         'PowerShellGet' {
             if (-not (Test-CommandAvailable 'Update-Module')) {
-                return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason 'Update-Module is not available.'
+                return New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason 'Update-Module is not available.'
             }
         }
     }
 
-    $destination = Join-Path $installWorkRoot ("update-{0}-{1}" -f $EngineName, $Iteration)
+    $destination = Join-Path $installWorkRoot ("update-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
     $packageCacheDirectory = if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
         Join-Path $destination 'ManagedPackageCache'
     } else {
         ''
     }
+    $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
+    $preseedVersion = if ($OperationName -eq 'Update') {
+        $script:ResolvedUpdateBaselineVersion
+    } else {
+        $Version
+    }
 
     try {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $script:ResolvedUpdateBaselineVersion -PackageCacheDirectory $packageCacheDirectory
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $preseedVersion -PackageCacheDirectory $packageCacheDirectory -Force $true
     } catch {
-        return New-FailedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason "Baseline install failed: $($_.Exception.Message)" -OutputRoot $destination
+        return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason "Preseed install failed: $($_.Exception.Message)" -OutputRoot $destination
     }
     if ($CacheMode -eq 'Cold') {
         Clear-IsolatedPackageCaches -Destination $destination
     }
 
     $detailPath = if ($EngineName -eq 'Managed') {
-        Join-Path $workRoot ("managed-update-details-{0}.json" -f $Iteration)
+        Join-Path $workRoot ("managed-{0}-details-{1}.json" -f $OperationName, $Iteration)
     } else {
         ''
     }
 
-    Invoke-TimedOperation -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Update' -PackageCacheDirectory $packageCacheDirectory
+    Invoke-TimedOperation -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Update' -PackageCacheDirectory $packageCacheDirectory -Force $force
     }
 }
 
@@ -921,10 +972,16 @@ foreach ($iteration in 1..$RepeatCount) {
             foreach ($engineName in $engineOrder) {
                 $row = switch ($operationName) {
                     'Find' { Invoke-FindScenario -EngineName $engineName -Iteration $iteration }
-                    'Save' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration }
-                    'Install' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
-                    'InstallManaged' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
-                    'Update' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration }
+                    'Save' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'SaveNoOp' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'SaveForce' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'Install' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'InstallManaged' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'InstallNoOp' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'InstallForce' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'Update' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'UpdateNoOp' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
+                    'UpdateForce' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
                     'RepairPlan' { Invoke-RepairPlanScenario -EngineName $engineName -Iteration $iteration -ScenarioName $scenarioName }
                 }
                 foreach ($item in @($row)) {

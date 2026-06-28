@@ -34,6 +34,8 @@ param(
 
     [switch] $AuthenticodeCheck,
 
+    [switch] $Force,
+
     [string] $ResultPath
 )
 
@@ -254,8 +256,10 @@ switch ($EngineName) {
             DestinationOnly = $true
             NoPSModulePathUpdate = $true
             NoProfileUpdate = $true
-            Update = $true
             PassThru = $true
+        }
+        if ($Force.IsPresent) {
+            $parameters.Update = $true
         }
         Install-ModuleFast @parameters
     }
@@ -273,7 +277,7 @@ switch ($EngineName) {
             ModuleRoot = $Destination
             AllowClobber = $true
         }
-        if ($Operation -eq 'Install') {
+        if ($Force.IsPresent) {
             $parameters.Force = $true
         }
         if (-not [string]::IsNullOrWhiteSpace($Version)) {
@@ -322,9 +326,10 @@ switch ($EngineName) {
         Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
         Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
         if ($Operation -eq 'Install') {
-            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'Reinstall' -Enabled $true
+            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'Reinstall' -Enabled $Force.IsPresent
             Install-PSResource @parameters
         } else {
+            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'Force' -Enabled $Force.IsPresent
             Update-PSResource @parameters
         }
     }
@@ -343,6 +348,8 @@ switch ($EngineName) {
         if ($Operation -eq 'Install') {
             $parameters.Repository = $RepositoryName
             $parameters.AllowClobber = $true
+        }
+        if ($Force.IsPresent) {
             $parameters.Force = $true
         }
         $commandName = if ($Operation -eq 'Update') { 'Update-Module' } else { 'Install-Module' }

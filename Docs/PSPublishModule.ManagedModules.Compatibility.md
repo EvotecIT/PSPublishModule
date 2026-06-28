@@ -164,6 +164,7 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [ ] Document unsupported non-module resource use cases explicitly: scripts, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
 - [x] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, and family coherence.
 - [x] Add repair/maintenance benchmark lanes for loaded-module safety and cleanup planning, with command-level plan tests that prove loaded-module findings and cleanup actions remain visible without mutation.
+- [x] Add install/save/update no-op and force benchmark lanes so existing-target behavior is measured across managed, PowerShellGet, PSResourceGet, and the install-only speed gate where an equivalent operation exists.
 
 ## Model Contracts
 
