@@ -59,7 +59,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-WhatIf` and `-Confirm` on mutating cmdlets.
 - [x] Return typed result objects with enough data to audit source, target path, version policy, resolved version, dependency actions, elapsed time, and receipt state.
 - [x] Support `Update-ManagedModule` without `-Name` so the command updates installed modules from the selected roots like `Update-Module`.
-- [ ] Define exact `-Force`, `-AllowClobber`, `-AcceptLicense`, `-TrustRepository`, `-SkipPublisherCheck`, and signature-check semantics so compatibility choices are explicit and unsurprising.
+- [ ] Finish exact `-Force`, `-TrustRepository`, `-SkipPublisherCheck`, and signature-check semantics so compatibility choices are explicit and unsurprising.
+- [x] Define exact install/save/update semantics for `-Force`, `-AllowClobber`, and `-AcceptLicense` so the common managed delivery path is explicit and unsurprising.
 - [ ] Add managed Authenticode/catalog validation compatible with PowerShellGet/PSResourceGet expectations, including timestamped signatures and short-lived certificate behavior.
 
 ## Current Managed Maintenance Direction
@@ -360,9 +361,12 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 
 ### Compatibility Semantics Gates
 
-- [ ] Define and test exact `-Force` behavior for install, update, repair, downgrade, reinstall, no-op, and cleanup planning.
-- [ ] Define and test exact `-AllowClobber` behavior versus PSResourceGet `-NoClobber`, including command conflicts across scopes.
-- [ ] Define and test exact `-AcceptLicense` behavior for root modules, dependencies, no-name updates, and repair plans.
+- [x] Define and test exact `-Force` behavior for install/save/update exact-version reinstall, update reinstall, no-op, downgrade blocking, and no implied cleanup.
+- [ ] Define and test exact `-Force` behavior for repair, receipt repair, cleanup planning, and explicit downgrade policy.
+- [x] Define and test exact `-AllowClobber` behavior versus PSResourceGet `-NoClobber` for manifest-declared command conflicts in the selected target root.
+- [ ] Define repair-time cross-scope command-conflict behavior so estate maintenance can report conflicts beyond one install target root without surprising normal installs.
+- [x] Define and test exact `-AcceptLicense` behavior for root modules, dependencies, and unattended managed delivery.
+- [ ] Define repair-plan and no-name update license reporting so estate maintenance can show which planned packages require `-AcceptLicense` before mutation.
 - [ ] Decide whether public `-Proxy` and `-ProxyCredential` parameters are required on managed cmdlets or remain repository/profile policy.
 - [ ] Add managed Authenticode/catalog validation equivalent to PSResourceGet `-AuthenticodeCheck`, including timestamped signatures and short-lived certificate chains.
 - [ ] Decide whether to expose migration aliases for `-TrustRepository`, `-SkipPublisherCheck`, `-AllowPrerelease`, and `-RequiredVersion` where the managed canonical parameter differs.
