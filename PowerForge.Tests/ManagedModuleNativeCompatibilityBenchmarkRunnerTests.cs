@@ -13,10 +13,12 @@ public sealed class ManagedModuleNativeCompatibilityBenchmarkRunnerTests
         File.WriteAllText(Path.Combine(copiedModulePath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
         File.WriteAllText(Path.Combine(copiedModulePath, "Company.Tools.psm1"), string.Empty);
         var requests = new List<PowerShellRunRequest>();
+        var scripts = new List<string>();
         var runner = new ManagedModuleNativeCompatibilityBenchmarkRunner(
             new StubPowerShellRunner(request =>
             {
                 requests.Add(request);
+                scripts.Add(File.ReadAllText(request.ScriptPath!));
                 return new PowerShellRunResult(0, "PFMOD::INSTALL::OK", string.Empty, "powershell.exe");
             }),
             new NullLogger());
@@ -36,6 +38,7 @@ public sealed class ManagedModuleNativeCompatibilityBenchmarkRunnerTests
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
         Assert.Equal(moduleRoot.Path, requests[0].WorkingDirectory);
         Assert.Contains("PSGallery", requests[0].Arguments);
+        Assert.Contains(scripts, script => script.Contains("SecurityProtocol", StringComparison.Ordinal) && script.Contains("Tls12", StringComparison.Ordinal));
         if (Path.DirectorySeparatorChar == '\\')
         {
             Assert.Contains("powershell.exe", requests[0].ExecutableOverride!, StringComparison.OrdinalIgnoreCase);
