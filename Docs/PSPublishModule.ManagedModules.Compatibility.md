@@ -149,7 +149,8 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [ ] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
 - [ ] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, and package hash policies instead of cloning PowerShellGet's publisher-check switch.
 - [ ] Add managed Authenticode/catalog validation equivalent to PSResourceGet `-AuthenticodeCheck`, including timestamped signatures and short-lived certificate chains.
-- [ ] Decide whether migration aliases should expose `-AllowPrerelease`, `-RequiredVersion`, and `-TrustRepository` on the managed cmdlets where the canonical managed parameter name differs.
+- [x] Expose semantically equivalent migration aliases such as `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` where they map cleanly to managed cmdlet behavior.
+- [ ] Decide whether to add explicit `-TrustRepository` and `-SkipPublisherCheck` compatibility parameters. They should not be aliases unless their behavior is intentionally defined because repository trust and publisher checks are different safety concepts in the managed engine.
 - [ ] Document unsupported non-module resource use cases explicitly: scripts, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
 - [ ] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, family coherence, loaded-module safety, and cleanup planning.
 

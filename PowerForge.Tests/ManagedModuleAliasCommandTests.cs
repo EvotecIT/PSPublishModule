@@ -88,6 +88,48 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.True(command.Parameters.ContainsKey("ProfileName"));
     }
 
+    [Theory]
+    [InlineData("Find-ManagedModule", "Name", "ModuleName")]
+    [InlineData("Find-ManagedModule", "Repository", "Source")]
+    [InlineData("Find-ManagedModule", "Repository", "RepositoryUri")]
+    [InlineData("Find-ManagedModule", "Prerelease", "AllowPrerelease")]
+    [InlineData("Install-ManagedModule", "Version", "RequiredVersion")]
+    [InlineData("Install-ManagedModule", "Repository", "Source")]
+    [InlineData("Install-ManagedModule", "Repository", "RepositoryUri")]
+    [InlineData("Install-ManagedModule", "Prerelease", "AllowPrerelease")]
+    [InlineData("Install-ManagedModule", "ModuleRoot", "Path")]
+    [InlineData("Install-ManagedModule", "SkipDependencyCheck", "SkipDependenciesCheck")]
+    [InlineData("Save-ManagedModule", "Version", "RequiredVersion")]
+    [InlineData("Save-ManagedModule", "Repository", "Source")]
+    [InlineData("Save-ManagedModule", "Repository", "RepositoryUri")]
+    [InlineData("Save-ManagedModule", "Prerelease", "AllowPrerelease")]
+    [InlineData("Save-ManagedModule", "Path", "DestinationPath")]
+    [InlineData("Save-ManagedModule", "SkipDependencyCheck", "SkipDependenciesCheck")]
+    [InlineData("Update-ManagedModule", "Version", "RequiredVersion")]
+    [InlineData("Update-ManagedModule", "Repository", "Source")]
+    [InlineData("Update-ManagedModule", "Repository", "RepositoryUri")]
+    [InlineData("Update-ManagedModule", "Prerelease", "AllowPrerelease")]
+    [InlineData("Update-ManagedModule", "ModuleRoot", "Path")]
+    [InlineData("Update-ManagedModule", "SkipDependencyCheck", "SkipDependenciesCheck")]
+    [InlineData("Publish-ManagedModule", "Path", "ModulePath")]
+    [InlineData("Publish-ManagedModule", "Repository", "RepositoryUri")]
+    [InlineData("Publish-ManagedModule", "Repository", "Source")]
+    [InlineData("Publish-ManagedModule", "ApiKey", "NuGetApiKey")]
+    [InlineData("Publish-ManagedModule", "ApiKeyFilePath", "NuGetApiKeyPath")]
+    [InlineData("Publish-ManagedModule", "OutputDirectory", "DestinationPath")]
+    public void Managed_module_commands_expose_safe_migration_aliases(string commandName, string parameterName, string aliasName)
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument(commandName);
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(command.Parameters.TryGetValue(parameterName, out var parameter), $"Parameter '{parameterName}' was not found on {commandName}.");
+        Assert.Contains(aliasName, parameter.Aliases);
+    }
+
     [Fact]
     public void FindManagedModule_uses_repository_profile_source()
     {
