@@ -73,6 +73,12 @@ Run the lifecycle evidence lane across PowerShell 7 and Windows PowerShell 5.1. 
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite LifecycleGate -HostName PowerShell7,WindowsPowerShell -RepeatCount 1 -RotateEngineOrder -CacheMode Warm -UseScenarioGates -RemoveOutputRoots -SkipBuild
 ```
 
+Run the exact-version Graph and Az install lifecycle gates when optimizing force/no-op install behavior beyond small modules. These scenarios compare Managed with ModuleFast and PSResourceGet under a strict managed-rank gate. PowerShellGet remains available in provider-matrix compatibility runs, but it is not included in this speed gate because its install path can dominate runtime without being the fastest competitor:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite LifecycleGate -ScenarioName Graph.Authentication.InstallExact.NoOpForce,Az.Accounts.InstallExact.NoOpForce -HostName PowerShell7 -RepeatCount 3 -RotateEngineOrder -CacheMode Warm -UseScenarioGates -RemoveOutputRoots -SkipBuild
+```
+
 Run the publish evidence lane against local folder feeds. The fixture module and feed are synthetic and benchmark-owned, repository registration happens outside the timed publish operation, and ModuleFast is kept as an explicit skipped row because it has no publish command:
 
 ```powershell
@@ -294,5 +300,6 @@ Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's Pow
 - Managed repository HTTP sends now use response-header completion so package content streams directly into the managed copy/hash path instead of first buffering the full response in memory. A repeated rotated PowerShell 7 `Microsoft.Graph.Authentication` save run ranked managed first by median at 1631.76 ms versus PSResourceGet at 1855.37 ms. A repeated rotated Windows PowerShell 5.1 run using a short benchmark output root ranked managed first at 1606.17 ms versus PSResourceGet at 1701.74 ms. Public-gallery timing still varies, so promote this to a suite gate before treating it as a durable release claim.
 - `SaveGate` now captures the repeated rotated `Microsoft.Graph.Authentication` save comparison for PowerShell 7 and Windows PowerShell 5.1. It initially used a practical `-ManagedMaxVsFastest 1.05` tolerance while public-gallery variance was being separated from managed engine behavior.
 - `SaveGate` now owns a strict managed-rank threshold. A repeated rotated strict run on 2026-06-29 passed on both hosts with managed rank 1: PowerShell 7 measured managed at 1122.16 ms and Windows PowerShell 5.1 measured managed at 1756.28 ms. Suite summary rows now show the effective gate threshold, so explicit strict runs no longer look like looser scenario-gated runs in the artifacts.
+- Managed install no-op now checks installed versions before remote latest/range resolution. PowerShell 7 repeated rotated exact-version install lifecycle gates passed for `Microsoft.Graph.Authentication` 2.38.0 and `Az.Accounts` 5.5.0 with `-ManagedMaxRank 1`, ModuleFast, and PSResourceGet included. Graph.Authentication measured managed first for `InstallNoOp` at 513.14 ms and `InstallForce` at 674.82 ms; Az.Accounts measured managed first for `InstallNoOp` at 565.95 ms and `InstallForce` at 736.04 ms. Managed detail rows recorded zero repository requests for both no-op and warm forced install rows.
 
 Treat these numbers as a local baseline, not a release claim. Re-run the same commands after installer changes and compare the emitted CSV/JSON files before deciding whether an optimization is real.
