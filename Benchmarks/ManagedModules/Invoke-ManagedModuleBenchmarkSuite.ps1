@@ -5,7 +5,9 @@ param(
 
     [string[]] $HostName = @('Current'),
 
-    [string[]] $Engine = @('Managed', 'PSResourceGet', 'PowerShellGet'),
+    [string[]] $Engine = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet'),
+
+    [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
 
     [string[]] $Operation = @('Find', 'Save'),
 
@@ -198,6 +200,8 @@ function Invoke-ScenarioHostRun {
         ((Get-ScenarioOperations -Scenario $Scenario) -join ','),
         '-Engine',
         ($Engine -join ','),
+        '-ModuleFastSource',
+        $ModuleFastSource,
         '-RepeatCount',
         ([string]$RepeatCount),
         '-OutputDirectory',
@@ -320,6 +324,7 @@ $metadata = [ordered]@{
     ScenarioNames = $ScenarioName
     Hosts = $HostName
     Engines = $Engine
+    ModuleFastSource = $ModuleFastSource
     Operations = $Operation
     RepeatCount = $RepeatCount
     IncludeInstall = $IncludeInstall.IsPresent

@@ -10,7 +10,9 @@ param(
 
     [string] $RepositoryName = 'PSGallery',
 
-    [string[]] $Engine = @('Managed', 'PSResourceGet', 'PowerShellGet'),
+    [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
+
+    [string[]] $Engine = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet'),
 
     [string[]] $Operation,
 
@@ -45,7 +47,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
     Join-Path ([IO.Path]::GetTempPath()) 'pfmm'
 }
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
-$validEngines = @('Managed', 'PSResourceGet', 'PowerShellGet')
+$validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 $validOperations = @('Find', 'Save', 'Install', 'InstallManaged')
 
 function Resolve-TokenList {
@@ -234,6 +236,7 @@ function Get-ProviderModulePath {
     param([string] $EngineName)
 
     $moduleName = switch ($EngineName) {
+        'ModuleFast' { 'ModuleFast' }
         'PSResourceGet' { 'Microsoft.PowerShell.PSResourceGet' }
         'PowerShellGet' { 'PowerShellGet' }
         default { $null }
@@ -336,6 +339,8 @@ function Invoke-IsolatedInstallHost {
         (Get-ManagedRepositorySource)
         '-RepositoryName'
         $RepositoryName
+        '-ModuleFastSource'
+        $ModuleFastSource
         '-Destination'
         $Destination
         '-ModuleBinary'
@@ -574,6 +579,9 @@ function Invoke-FindScenario {
     param([string] $EngineName, [int] $Iteration)
 
     switch ($EngineName) {
+        'ModuleFast' {
+            return New-SkippedRow -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast does not expose an equivalent find command.'
+        }
         'Managed' {
             Invoke-TimedOperation -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -OutputRoot '' -DetailPath '' -ScriptBlock {
                 Find-ManagedModule -Name $ModuleName -Repository (Get-ManagedRepositorySource) -RepositoryName $RepositoryName
@@ -607,6 +615,9 @@ function Invoke-SaveScenario {
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
 
     switch ($EngineName) {
+        'ModuleFast' {
+            return New-SkippedRow -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast does not expose an equivalent save command.'
+        }
         'Managed' {
             Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
                 $parameters = @{
@@ -672,6 +683,18 @@ function Invoke-InstallScenario {
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
 
     switch ($EngineName) {
+        'ModuleFast' {
+            if ($PSVersionTable.PSEdition -eq 'Desktop' -or $PSVersionTable.PSVersion -lt [version]'7.2') {
+                return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast requires PowerShell 7.2 or newer.'
+            }
+            if (-not (Get-ProviderModulePath -EngineName $EngineName)) {
+                return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast is not installed for this benchmark host.'
+            }
+
+            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath ''
+            }
+        }
         'Managed' {
             $detailPath = Join-Path $workRoot ("managed-install-details-{0}.json" -f $Iteration)
             Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
@@ -821,6 +844,7 @@ $metadata = [ordered]@{
     Version = $Version
     Repository = $Repository
     RepositoryName = $RepositoryName
+    ModuleFastSource = $ModuleFastSource
     AcceptLicense = $AcceptLicense.IsPresent
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     Suite = $Suite
