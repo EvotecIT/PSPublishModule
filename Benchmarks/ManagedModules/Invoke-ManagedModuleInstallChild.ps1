@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Managed', 'PSResourceGet', 'PowerShellGet')]
+    [ValidateSet('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')]
     [string] $EngineName,
 
     [Parameter(Mandatory)]
@@ -13,6 +13,8 @@ param(
 
     [Parameter(Mandatory)]
     [string] $RepositoryName,
+
+    [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
 
     [Parameter(Mandatory)]
     [string] $Destination,
@@ -172,7 +174,45 @@ function Import-BenchmarkProviderModule {
     Import-Module -Name $Name -Force -ErrorAction Stop
 }
 
+function Ensure-PowerShellGetRepository {
+    param([string] $Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return
+    }
+
+    if (-not (Get-PSRepository -Name $Name -ErrorAction SilentlyContinue)) {
+        Register-PSRepository -Default -ErrorAction Stop
+    }
+
+    Set-PSRepository -Name $Name -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+}
+
 switch ($EngineName) {
+    'ModuleFast' {
+        if ($PSVersionTable.PSEdition -eq 'Desktop' -or $PSVersionTable.PSVersion -lt [version]'7.2') {
+            throw 'ModuleFast requires PowerShell 7.2 or newer.'
+        }
+
+        Import-BenchmarkProviderModule -Name 'ModuleFast' -Path $ProviderModulePath
+        $specification = if ([string]::IsNullOrWhiteSpace($Version)) {
+            $ModuleName
+        } else {
+            '{0}={1}' -f $ModuleName, $Version
+        }
+
+        $parameters = @{
+            Specification = $specification
+            Destination = $Destination
+            Source = $ModuleFastSource
+            DestinationOnly = $true
+            NoPSModulePathUpdate = $true
+            NoProfileUpdate = $true
+            Update = $true
+            PassThru = $true
+        }
+        Install-ModuleFast @parameters
+    }
     'Managed' {
         if ([string]::IsNullOrWhiteSpace($ModuleBinary)) {
             throw 'ModuleBinary is required for the managed install benchmark.'
@@ -225,6 +265,7 @@ switch ($EngineName) {
             }
         }
         Import-BenchmarkProviderModule -Name 'PowerShellGet' -Path $ProviderModulePath
+        Ensure-PowerShellGetRepository -Name $RepositoryName
         $parameters = @{
             Name = $ModuleName
             Repository = $RepositoryName
