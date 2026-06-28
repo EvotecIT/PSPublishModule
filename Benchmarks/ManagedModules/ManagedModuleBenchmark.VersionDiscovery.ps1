@@ -192,13 +192,15 @@ function Resolve-ManagedModuleBenchmarkUpdateBaseline {
 function Initialize-ManagedModuleBenchmarkUpdateBaseline {
     param(
         [string[]] $Operations,
+        [string[]] $RepairScenarios = @(),
         [string] $CurrentBaselineVersion,
         [string] $ModuleName,
         [string] $RequestedVersion,
         [string] $RepositorySource
     )
 
-    $requiresBaseline = ($Operations -contains 'Update') -or ($Operations -contains 'RepairPlan')
+    $repairNeedsBaseline = ($Operations -contains 'RepairPlan') -and ($RepairScenarios -contains 'StaleVersion')
+    $requiresBaseline = ($Operations -contains 'Update') -or $repairNeedsBaseline
     if (-not $requiresBaseline -or -not [string]::IsNullOrWhiteSpace($CurrentBaselineVersion)) {
         return [pscustomobject]@{
             BaselineVersion = $CurrentBaselineVersion

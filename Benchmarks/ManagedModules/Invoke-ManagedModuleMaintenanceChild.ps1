@@ -13,6 +13,8 @@ param(
 
     [string] $MaintenanceReceiptPath,
 
+    [string[]] $Family,
+
     [switch] $Latest,
 
     [switch] $AcceptLicense,
@@ -99,6 +101,9 @@ if ($Latest.IsPresent) {
 }
 if (-not [string]::IsNullOrWhiteSpace($MaintenanceReceiptPath)) {
     $parameters.MaintenanceReceiptPath = $MaintenanceReceiptPath
+}
+if ($Family -and $Family.Count -gt 0) {
+    $parameters.Family = $Family
 }
 if ($AcceptLicense.IsPresent) {
     $parameters.AcceptLicense = $true

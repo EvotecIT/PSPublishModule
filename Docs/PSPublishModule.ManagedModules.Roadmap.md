@@ -348,6 +348,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: The benchmark harness now has an initial managed `RepairPlan` lane. It stages a stale module root outside the timed window, then times `Invoke-ModuleState -Installed -Latest -Repair` planning without executing changes. PowerShell 7 planned stale `ThreadJob` 2.0.3 -> 2.1.0 in 1604 ms; Windows PowerShell 5.1 planned the same stale root in 2660 ms. The detail artifacts recorded one planned maintenance action and no findings. ModuleFast, PSResourceGet, and PowerShellGet are explicit skips for this operation because they do not expose equivalent estate repair planning.
 - [x] 2026-06-28: The `RepairPlan` benchmark now supports scenario-specific rows. `-RepairScenario SourceDrift` installs the target version outside the timed window, stamps disposable module metadata with a different source, writes a maintenance receipt expecting the requested repository, and times repair planning without applying changes. Managed-only `ThreadJob` source-drift smoke measured 643 ms on PowerShell 7 and 1088 ms on Windows PowerShell 5.1; the detail artifacts recorded a forced repair install targeting `PSGallery`.
 - [x] 2026-06-28: The `RepairPlan` benchmark now includes `-RepairScenario ScopeDrift`. It installs the target version outside the timed window, writes a maintenance receipt expecting `CurrentUser`, and times repair planning without applying changes. Managed-only `ThreadJob` scope-drift smoke measured 734 ms on PowerShell 7 and 665 ms on Windows PowerShell 5.1; the detail artifacts recorded a repair install targeting `CurrentUser`.
+- [x] 2026-06-28: The `RepairPlan` benchmark now includes `-RepairScenario FamilyCoherence`. It seeds lightweight synthetic `Microsoft.Graph.Authentication` 2.36.0 and `Microsoft.Graph.Users` 2.38.0 manifests, passes the built-in Graph family policy, and times repair planning without applying changes. Managed-only smoke measured 654 ms on PowerShell 7 and 826 ms on Windows PowerShell 5.1; the detail artifacts recorded a repair update for `Microsoft.Graph.Authentication` to `=2.38.0`.
 
 ### Next Optimization Targets
 
@@ -361,7 +362,8 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Add an initial repair-plan benchmark lane for stale versions.
 - [x] Add a repair-plan benchmark lane for source drift.
 - [x] Add a repair-plan benchmark lane for scope drift.
-- [ ] Add repair benchmark lanes for family coherence, loaded-module safety, and cleanup planning before optimizing repair-specific behavior.
+- [x] Add a repair-plan benchmark lane for family coherence.
+- [ ] Add repair benchmark lanes for loaded-module safety and cleanup planning before optimizing repair-specific behavior.
 - [x] Add explicit heavy update baseline versions or a baseline-discovery mode to the suite runner so Graph/Az/Teams/Exchange update scenarios do not silently skip when no `-UpdateBaselineVersion` is supplied.
 
 ### Compatibility Semantics Gates
