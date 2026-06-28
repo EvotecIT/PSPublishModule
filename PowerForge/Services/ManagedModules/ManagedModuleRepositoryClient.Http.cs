@@ -67,7 +67,7 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             RecordRequestAttempt();
             var response = _options.RequestTimeout is null
-                ? await _httpClient.SendAsync(current, cancellationToken).ConfigureAwait(false)
+                ? await _httpClient.SendAsync(current, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false)
                 : await SendWithTimeoutAsync(current, cancellationToken).ConfigureAwait(false);
             if (!IsRedirect(response.StatusCode) || response.Headers.Location is null || !CanRedirect(current.Method))
                 return response;
@@ -91,11 +91,11 @@ public sealed partial class ManagedModuleRepositoryClient
         CancellationToken cancellationToken)
     {
         if (_options.RequestTimeout is null)
-            return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_options.RequestTimeout.Value);
-        return await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
+        return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
     }
 
     private static HttpRequestMessage CreateRedirectRequest(HttpRequestMessage source, Uri redirectUri)
