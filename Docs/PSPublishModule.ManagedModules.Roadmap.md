@@ -27,7 +27,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Keep the managed command names as the public contract and do not export unreleased public/private alias families.
 - [x] Introduce `Get-ManagedModule` as the PowerShell-native installed inventory surface.
 - [x] Introduce `Repair-ManagedModule` as the one-stop stale/drift/family/source maintenance surface.
-- [ ] Remove unreleased `Get-ModuleState`, `Get-ModuleStatePlan`, `Test-ModuleState`, `Invoke-ModuleStatePlan`, and `Invoke-ModuleState` public exports once the managed command family exposes the needed inventory, plan, test, and apply workflows.
+- [x] Remove unreleased `Get-ModuleState`, `Get-ModuleStatePlan`, `Test-ModuleState`, `Invoke-ModuleStatePlan`, and `Invoke-ModuleState` public exports; the clean public state workflow is `Get-ManagedModule`, `Update-ManagedModule`, and `Repair-ManagedModule -Plan`.
 - [x] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
 - [x] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed install delivery when `-Transport ManagedModule` is selected.
 - [x] Keep `Update-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed update delivery when `-Transport ManagedModule` is selected.
@@ -129,7 +129,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - Managed publish configuration can name a private required-module upstream and provide `RequiredModuleSourceRepositoryUri` for the managed source.
 - Managed required-module mirroring publishes package dependency metadata transitively before the package that requires it.
 - Named private upstream profiles can be used as managed required-module sources; publish configuration resolves the profile into the repository name and source URI.
-- Direct `Publish-ManagedModule` dependency validation honors `PrivateData.PSData.ExternalModuleDependencies` from the module manifest, so external runtime dependencies do not have to exist in the publish target feed.
+- Direct `Publish-ManagedModule` and existing repository publish dependency validation honor `PrivateData.PSData.ExternalModuleDependencies` from the module manifest, so external runtime dependencies do not have to exist in the publish target feed.
 
 ## Phase 2: Managed Repository Client
 
