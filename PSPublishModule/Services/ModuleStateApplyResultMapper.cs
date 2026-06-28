@@ -32,6 +32,7 @@ internal static class ModuleStateApplyResultMapper
                 ModuleName = command.ModuleName,
                 VersionPolicy = command.VersionPolicy,
                 IsRepair = command.IsRepair,
+                Force = command.Force,
                 CommandName = command.CommandName,
                 Arguments = command.Arguments,
                 CommandText = command.CommandText

@@ -239,8 +239,8 @@ internal sealed class ModuleStateApplyService
             arguments.Add(action.ExpectedPackageSha256!);
         }
 
-        if ((deliveryOptions.Force || action.Force) &&
-            action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Save)
+        var effectiveForce = deliveryOptions.Force || action.Force;
+        if (effectiveForce && IsDeliveryAction(action.Kind))
         {
             arguments.Add("-Force");
         }
@@ -250,7 +250,7 @@ internal sealed class ModuleStateApplyService
             action.ModuleName,
             action.VersionPolicy,
             action.IsRepair,
-            action.Force,
+            effectiveForce,
             commandName,
             arguments.ToArray(),
             commandName + " " + string.Join(" ", FormatArguments(arguments)));

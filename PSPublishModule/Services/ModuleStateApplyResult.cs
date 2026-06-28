@@ -82,6 +82,11 @@ public sealed class ModuleStateDeliveryCommandResult
     public bool IsRepair { get; set; }
 
     /// <summary>
+    /// Gets or sets whether the prepared delivery command will force replacement or reinstall behavior.
+    /// </summary>
+    public bool Force { get; set; }
+
+    /// <summary>
     /// Gets or sets the private-module command name.
     /// </summary>
     public string CommandName { get; set; } = string.Empty;
