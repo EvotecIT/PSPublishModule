@@ -362,6 +362,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Benchmark JSON and Markdown reports now include typed provider-support evidence so compatibility fallback readiness can be audited beside transition gates.
 - [x] 2026-06-28: Auto transport selection now uses a reusable `ManagedModuleTransportPolicy` contract, so compatibility fallback decisions are explicit, provider-limited when applicable, and shared by private-module workflows.
 - [x] 2026-06-28: Benchmark results now include a typed compatibility-retirement summary that combines transition gates and provider support before compatibility transport can be marked legacy.
+- [x] 2026-06-28: `Measure-ManagedModule -RequireCompatibilityRetirementReady` now fails closed unless the compatibility-retirement summary proves all required operations and providers are ready.
 
 ## Benchmark Scenarios
 

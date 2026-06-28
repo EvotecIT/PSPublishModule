@@ -89,6 +89,7 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.True(command.Parameters.ContainsKey("ValidateImport"));
         Assert.True(command.Parameters.ContainsKey("ImportHost"));
         Assert.True(command.Parameters.ContainsKey("RequireTransitionReady"));
+        Assert.True(command.Parameters.ContainsKey("RequireCompatibilityRetirementReady"));
         Assert.True(command.Parameters.ContainsKey("EnableNativeInstallUpdateBenchmark"));
         Assert.True(command.Parameters.ContainsKey("MaximumManagedSlowdownRatio"));
         Assert.True(command.Parameters.ContainsKey("MaximumManagedSlowdownMilliseconds"));
@@ -124,6 +125,36 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.Contains("Managed module transition gate is not ready", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Missing successful compatibility baseline", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("## Transition Gates", File.ReadAllText(markdownPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MeasureManagedModule_RequireCompatibilityRetirementReady_FailsWhenRequiredOperationsAreMissing()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var reportRoot = new TemporaryDirectory();
+        var markdownPath = Path.Combine(reportRoot.Path, "benchmark.md");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Measure-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Operation", ManagedModuleBenchmarkOperation.Install)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("MarkdownReportPath", markdownPath)
+            .AddParameter("RequireCompatibilityRetirementReady");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("compatibility retirement gate is not ready", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Missing transition gate", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("## Compatibility Retirement", File.ReadAllText(markdownPath), StringComparison.Ordinal);
     }
 
     [Fact]
