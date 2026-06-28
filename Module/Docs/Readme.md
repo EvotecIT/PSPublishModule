@@ -1,8 +1,8 @@
-﻿---
+---
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.38
+Help Version: 3.0.39
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -69,6 +69,9 @@ Reads App Store version localizations from App Store Connect.
 
 ### [Get-ConfigurationBoolean](Get-ConfigurationBoolean.md)
 Resolves a boolean configuration value from an environment variable with a script-defined default.
+
+### [Get-ManagedModule](Get-ManagedModule.md)
+Gets installed PowerShell modules from managed module inventory.
 
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
@@ -182,8 +185,6 @@ Executes a repository-wide .NET build/release pipeline from a JSON configuration
 
 ### [Invoke-ProjectRelease](Invoke-ProjectRelease.md)
 Executes a PowerShell-authored project release object through the unified PowerForge release engine.
-
-Measures managed module lifecycle scenarios through the managed C# module engine.
 
 ### [New-AppleAppArchive](New-AppleAppArchive.md)
 Creates an Apple app .xcarchive using xcodebuild.
@@ -394,6 +395,9 @@ Removes a saved private module repository profile.
 
 ### [Remove-ProjectFiles](Remove-ProjectFiles.md)
 Removes specific files and folders from a project directory with safety features.
+
+### [Repair-ManagedModule](Repair-ManagedModule.md)
+Repairs installed PowerShell modules through the managed module-state engine.
 
 ### [Save-ManagedModule](Save-ManagedModule.md)
 Saves modules from a managed repository to an explicit module root.

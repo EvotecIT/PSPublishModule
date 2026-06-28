@@ -29,9 +29,9 @@ Baseline references:
 ## Public Surface Decisions
 
 - `Get-ManagedModule` is the PowerShell-native installed inventory surface. Use `-AsInventory` when an advanced ModuleState inventory object is needed for planning or support bundles.
-- `Repair-ManagedModule` is planned as the day-to-day stale/drift/family/source maintenance surface. Until it lands, use `Invoke-ModuleState` for one-stop maintenance and the lower-level ModuleState plan/apply cmdlets for inspectable repair workflows.
+- `Repair-ManagedModule` is the day-to-day stale/drift/family/source maintenance surface. Use `-Plan` for preview. The lower-level ModuleState cmdlets remain available when inventory, plan, test, and apply need to be inspected independently.
 - `Register-ManagedModuleRepository` is not planned now. Use `Set-ModuleRepositoryProfile`, `Get-ModuleRepositoryProfile`, `Connect-ModuleRepository`, and `Register-ModuleRepository` for repository profiles and compatibility registration. Managed commands can also use direct `-Repository` values.
-- `Install-PrivateModule` and `Update-PrivateModule` stay as convenience wrappers. The reusable path is `Install-ManagedModule`, `Save-ManagedModule`, `Update-ManagedModule`, `Publish-ManagedModule`, and `Invoke-ModuleState`.
+- `Install-PrivateModule` and `Update-PrivateModule` stay as convenience wrappers. The reusable path is `Install-ManagedModule`, `Save-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, `Publish-ManagedModule`, and advanced ModuleState cmdlets.
 - Public and private command aliases are allowed only when they point to the same managed command implementation. New command families need a distinct operator purpose.
 
 ## Switching Examples
@@ -71,6 +71,14 @@ Install-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -ProfileName Co
 Update-ManagedModule -Repository PSGallery
 Update-ManagedModule -Name Company.Tools -Repository PSGallery
 Update-ManagedModule -Name Company.Tools -VersionPolicy '>=1.2.0 <2.0.0' -ProfileName CompanyModules
+```
+
+### Repair
+
+```powershell
+Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
+Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary
+Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -Repository CompanyModules -Plan
 ```
 
 ### Installed Inventory
@@ -154,7 +162,8 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] Expose semantically equivalent migration aliases such as `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` where they map cleanly to managed cmdlet behavior.
 - [ ] Decide whether to add explicit `-TrustRepository` and `-SkipPublisherCheck` compatibility parameters. They should not be aliases unless their behavior is intentionally defined because repository trust and publisher checks are different safety concepts in the managed engine.
 - [ ] Document unsupported non-module resource use cases explicitly: scripts, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
-- [ ] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, family coherence, loaded-module safety, and cleanup planning.
+- [x] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, and family coherence.
+- [ ] Add repair/maintenance benchmark lanes for loaded-module safety and cleanup planning.
 
 ## Model Contracts
 

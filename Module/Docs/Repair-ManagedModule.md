@@ -4,31 +4,39 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Install-ManagedModule
+# Repair-ManagedModule
 ## SYNOPSIS
-Installs PowerShell modules through the managed C# module engine.
+Repairs installed PowerShell modules through the managed module-state engine.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Install-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Repair-ManagedModule [[-Name] <string[]>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Latest] [-Version <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-AllowConflict] [-Plan] [-ShowSummary] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This command is the first managed install surface. It uses PowerForge repository lookup, package download, and
-safe archive extraction directly instead of invoking PowerShellGet or PSResourceGet.
+This command is the managed operator surface for module estate maintenance. It
+inventories installed modules, plans stale-version, receipt-drift, source,
+scope, family, and cleanup actions, and can apply the plan through the
+managed delivery engine.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Install-ManagedModule -Name Company.Tools
+Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
 ```
 
 
 ### EXAMPLE 2
 ```powershell
-Install-ManagedModule -Name Company.Tools -Version 1.2.0 -Repository C:\Packages -Scope Custom -ModuleRoot C:\Modules
+Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary
+```
+
+
+### EXAMPLE 3
+```powershell
+Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -ProfileName CompanyModules -AcceptLicense
 ```
 
 
@@ -51,7 +59,7 @@ Accept wildcard characters: True
 ```
 
 ### -AllowClobber
-Allow command exports to overlap with other modules in the target root.
+Allow managed delivery to overwrite exported command conflicts.
 
 ```yaml
 Type: SwitchParameter
@@ -66,13 +74,13 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -AllowedAuthor
-Allowed package author values from package metadata.
+### -AllowConflict
+Allow apply preparation to continue when the plan contains error findings.
 
 ```yaml
-Type: String[]
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
-Aliases: RequiredAuthor, TrustedAuthor
+Aliases: None
 Possible values:
 
 Required: False
@@ -82,14 +90,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -AuthenticodeCheck
-Validate Authenticode signatures for signable package files before promotion.
+### -Cleanup
+Optional cleanup planning for managed modules.
 
 ```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: None, OldVersions
 
 Required: False
 Position: named
@@ -162,14 +170,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ExpectedPackageSha256
-Expected SHA256 hash of the root package before it is extracted and promoted.
+### -Family
+Built-in module family policies to include in repair planning.
 
 ```yaml
-Type: String
+Type: String[]
 Parameter Sets: __AllParameterSets
-Aliases: PackageSha256, Sha256
-Possible values:
+Aliases: None
+Possible values: MicrosoftGraph, Graph, Az, ExchangeOnline, Teams
 
 Required: False
 Position: named
@@ -179,7 +187,7 @@ Accept wildcard characters: True
 ```
 
 ### -Force
-Reinstall the module version when it already exists.
+Force reinstall when repair selects the same installed version.
 
 ```yaml
 Type: SwitchParameter
@@ -194,11 +202,75 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -MaximumVersion
-Maximum package version to install when Version is omitted.
+### -IncludeLoaded
+Include modules loaded in the current runspace as inventory evidence.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Inventory
+Existing inventory object. When omitted, local module paths are inventoried.
+
+```yaml
+Type: ModuleStateInventoryResult
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: True (ByValue)
+Accept wildcard characters: True
+```
+
+### -InventoryPath
+Path to a previously written inventory JSON artifact.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Latest
+Plan latest-version repair/update delivery for selected installed modules.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MaintenanceReceiptPath
+Optional module-state maintenance receipt artifacts used for drift checks.
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -211,7 +283,7 @@ Accept wildcard characters: True
 ```
 
 ### -MinimumVersion
-Minimum package version to install when Version is omitted.
+Minimum version used when repairing named modules.
 
 ```yaml
 Type: String
@@ -226,8 +298,24 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -ModulePath
+Explicit module roots to inventory. When omitted, PSModulePath is used.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -ModuleRoot
-Explicit module root. Use with Scope Custom.
+Custom module root for managed delivery.
 
 ```yaml
 Type: String
@@ -243,7 +331,7 @@ Accept wildcard characters: True
 ```
 
 ### -Name
-Module names to install.
+Optional module names to repair. When omitted, all installed modules in scope are considered.
 
 ```yaml
 Type: String[]
@@ -251,31 +339,15 @@ Parameter Sets: __AllParameterSets
 Aliases: ModuleName
 Possible values:
 
-Required: True
+Required: False
 Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName)
 Accept wildcard characters: True
 ```
 
-### -PackageCacheDirectory
-Optional package cache directory.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -Plan
-Return an inspectable install plan without writing files.
+Return the repair plan without applying install/update actions.
 
 ```yaml
 Type: SwitchParameter
@@ -291,7 +363,7 @@ Accept wildcard characters: True
 ```
 
 ### -Prerelease
-Include prerelease versions when resolving the latest version.
+Include prerelease versions during managed delivery.
 
 ```yaml
 Type: SwitchParameter
@@ -307,7 +379,7 @@ Accept wildcard characters: True
 ```
 
 ### -ProfileName
-Saved repository profile name.
+Saved repository profile used by managed delivery.
 
 ```yaml
 Type: String
@@ -323,44 +395,12 @@ Accept wildcard characters: True
 ```
 
 ### -Repository
-Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.
+Repository source or registered repository name used by managed delivery.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: Source, RepositoryUri
-Possible values:
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -RepositoryName
-Friendly repository name used in output.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -RequireTrustedRepository
-Require the selected repository profile to be marked trusted.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
 Possible values:
 
 Required: False
@@ -371,29 +411,13 @@ Accept wildcard characters: True
 ```
 
 ### -Scope
-Install scope used when ModuleRoot is not supplied.
+Target installation scope used when selecting installed baseline modules.
 
 ```yaml
-Type: ManagedModuleInstallScope
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: CurrentUser, AllUsers, Custom
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ShellEdition
-PowerShell path family used when resolving default CurrentUser or AllUsers module roots.
-
-```yaml
-Type: ManagedModuleShellEdition
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: Auto, Desktop, Core
+Possible values: CurrentUser, AllUsers
 
 Required: False
 Position: named
@@ -403,7 +427,7 @@ Accept wildcard characters: True
 ```
 
 ### -ShowSummary
-Write a compact Spectre.Console summary for each plan or result.
+Write a compact Spectre.Console summary.
 
 ```yaml
 Type: SwitchParameter
@@ -418,30 +442,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -SkipDependencyCheck
-Skip installing dependencies declared by the package.
+### -Transport
+Delivery transport used for install/update repair actions.
 
 ```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: SkipDependenciesCheck
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -TrustPolicy
-Optional typed repository/package trust policy.
-
-```yaml
-Type: ManagedModuleTrustPolicy
+Type: ModuleStateDeliveryTransport
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: PrivateModule, ManagedModule, Auto
 
 Required: False
 Position: named
@@ -451,7 +459,7 @@ Accept wildcard characters: True
 ```
 
 ### -Version
-Exact package version to install. When omitted, the latest repository version is used.
+Exact required version used when repairing named modules.
 
 ```yaml
 Type: String
@@ -467,7 +475,7 @@ Accept wildcard characters: True
 ```
 
 ### -VersionPolicy
-NuGet-style version range policy used when Version is omitted.
+NuGet-style version range policy used when repairing named modules.
 
 ```yaml
 Type: String
@@ -487,12 +495,12 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-- `System.String[]`
+- `System.String[]
+PSPublishModule.ModuleStateInventoryResult`
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModuleInstallResult
-PowerForge.ManagedModuleInstallPlan`
+- `PSPublishModule.ModuleStateWorkflowResult` — PowerShell-facing result for a complete module-state management workflow.
 
 ## RELATED LINKS
 

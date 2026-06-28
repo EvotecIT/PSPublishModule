@@ -11,7 +11,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Keep PowerShellGet and PSResourceGet as compatibility baselines and temporary fallbacks, not as the long-term engine.
 - [x] Preserve easy migration from existing `Install-Module`, `Save-Module`, `Publish-Module`, `Install-PSResource`, `Save-PSResource`, and `Publish-PSResource` usage.
 - [x] Keep `Install-PrivateModule` and `Update-PrivateModule` as thin compatibility/convenience wrappers with opt-in managed transport.
-- [ ] Make `Get-ManagedModule`, `Update-ManagedModule`, and `Repair-ManagedModule` the day-to-day estate maintenance entrypoints while keeping ModuleState plan objects internal/advanced.
+- [x] Make `Get-ManagedModule`, `Update-ManagedModule`, and `Repair-ManagedModule` the day-to-day estate maintenance entrypoints while keeping ModuleState plan objects internal/advanced.
 - [x] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
 - [x] Write receipts and evidence only after successful delivery.
 - [x] Treat destructive cleanup as a separately proven and explicitly gated capability.
@@ -26,7 +26,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Introduce `Publish-ManagedModule`.
 - [x] Add non-conflicting public aliases for the managed find/save/install/update/publish commands.
 - [x] Introduce `Get-ManagedModule` as the PowerShell-native installed inventory surface.
-- [ ] Introduce `Repair-ManagedModule` as the one-stop stale/drift/family/source maintenance surface.
+- [x] Introduce `Repair-ManagedModule` as the one-stop stale/drift/family/source maintenance surface.
 - [ ] Keep `Get-ModuleState`, `Get-ModuleStatePlan`, `Test-ModuleState`, `Invoke-ModuleStatePlan`, and `Invoke-ModuleState` as advanced compatibility surfaces until the managed naming family fully replaces them.
 - [x] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
 - [x] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed install delivery when `-Transport ManagedModule` is selected.
@@ -68,7 +68,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 
 - [x] `Get-ManagedModule` inventories installed modules and returns module rows by default.
 - [x] `Update-ManagedModule` updates named modules or, when no name is supplied, all discovered modules in the selected scope/root.
-- [ ] `Repair-ManagedModule` plans and applies estate maintenance: stale versions, source drift, scope drift, family version coherence, loaded-module safety, and old-version cleanup.
+- [x] `Repair-ManagedModule` plans and applies estate maintenance through the ModuleState engine with managed delivery as the default transport.
+- [ ] Finish `Repair-ManagedModule` proof for loaded-module safety and old-version cleanup.
 - [ ] `-Plan` remains the non-mutating inspection switch across install, update, and repair flows.
 - [ ] `-WhatIf` remains the operator safety gate for mutations.
 - [ ] Destructive cleanup remains separately gated instead of being implied by update.

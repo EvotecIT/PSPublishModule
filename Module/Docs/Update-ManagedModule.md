@@ -1,4 +1,4 @@
-﻿---
+---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
@@ -11,7 +11,7 @@ Updates installed PowerShell modules through the managed C# module engine.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Update-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-FamilyPolicy <ManagedModuleFamilyPolicy>] [-FamilyName <string>] [-FamilyModuleNamePrefix <string>] [-FamilyModuleName <string[]>] [-SourcePolicy <ManagedModuleSourcePolicy>] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-ManagedModule [[-Name] <string[]>] [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-FamilyPolicy <ManagedModuleFamilyPolicy>] [-FamilyName <string>] [-FamilyModuleNamePrefix <string>] [-FamilyModuleName <string[]>] [-SourcePolicy <ManagedModuleSourcePolicy>] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -84,6 +84,22 @@ Accept wildcard characters: True
 
 ### -AllowLoadedModuleUpdate
 Allow updating even when matching loaded module evidence is supplied.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AuthenticodeCheck
+Validate Authenticode signatures for signable package files before promotion.
 
 ```yaml
 Type: SwitchParameter
@@ -331,7 +347,7 @@ Parameter Sets: __AllParameterSets
 Aliases: ModuleName
 Possible values:
 
-Required: True
+Required: False
 Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName)
