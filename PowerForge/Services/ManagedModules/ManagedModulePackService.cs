@@ -41,7 +41,9 @@ public sealed class ManagedModulePackService
         {
             AddTextEntry(archive, $"{name}.nuspec", metadata.ToString(SaveOptions.DisableFormatting));
             AddTextEntry(archive, "[Content_Types].xml", CreateContentTypes());
-            AddTextEntry(archive, "_rels/.rels", CreateRelationships());
+            var corePropertiesPath = $"package/services/metadata/core-properties/{name}.{version}.psmdcp";
+            AddTextEntry(archive, "_rels/.rels", CreateRelationships(name, corePropertiesPath));
+            AddTextEntry(archive, corePropertiesPath, CreateCoreProperties(name, version, request, manifestPath, manifestText).ToString(SaveOptions.DisableFormatting));
 
             foreach (var file in EnumerateModuleFiles(modulePath))
             {
@@ -135,21 +137,29 @@ public sealed class ManagedModulePackService
 
     private static XDocument CreateNuspec(string name, string version, ManagedModulePackRequest request, string manifestPath, string manifestText)
     {
-        var ns = XNamespace.Get("http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd");
+        var ns = XNamespace.Get("http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd");
         var authors = FirstNonEmpty(request.Authors, ReadManifestString(manifestText, "Author"), ReadManifestString(manifestText, "CompanyName"), "Unknown");
         var description = FirstNonEmpty(request.Description, ReadManifestString(manifestText, "Description"), $"{name} PowerShell module.");
-        var tags = request.Tags is { Count: > 0 }
+        var sourceTags = request.Tags is { Count: > 0 }
             ? request.Tags
             : ModuleManifestValueReader.ReadPsDataStringOrArray(manifestPath, "Tags");
+        var tags = NormalizePackageTags(sourceTags);
+        var copyright = FirstNonEmpty(
+            ReadManifestString(manifestText, "Copyright"),
+            authors.Equals("Unknown", StringComparison.OrdinalIgnoreCase) ? null : $"(c) {authors}. All rights reserved.");
 
         var metadata = new XElement(ns + "metadata",
             new XElement(ns + "id", name),
             new XElement(ns + "version", version),
             new XElement(ns + "authors", authors),
+            new XElement(ns + "owners", authors),
+            new XElement(ns + "requireLicenseAcceptance", "false"),
             new XElement(ns + "description", description));
 
         if (!string.IsNullOrWhiteSpace(request.ProjectUrl))
             metadata.Add(new XElement(ns + "projectUrl", request.ProjectUrl));
+        if (!string.IsNullOrWhiteSpace(copyright))
+            metadata.Add(new XElement(ns + "copyright", copyright));
         if (tags.Count > 0)
             metadata.Add(new XElement(ns + "tags", string.Join(" ", tags)));
         var dependencies = ReadPackageDependencies(manifestPath);
@@ -224,6 +234,22 @@ public sealed class ManagedModulePackService
     private static string FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 
+    private static IReadOnlyList<string> NormalizePackageTags(IReadOnlyList<string> tags)
+    {
+        var normalized = new List<string> { "PSModule" };
+        foreach (var tag in tags)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+                continue;
+            if (normalized.Contains(tag.Trim(), StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            normalized.Add(tag.Trim());
+        }
+
+        return normalized;
+    }
+
     private static IEnumerable<string> EnumerateModuleFiles(string modulePath)
         => Directory.EnumerateFiles(modulePath, "*", SearchOption.AllDirectories)
             .Where(static file => !IsIgnoredPath(file))
@@ -259,6 +285,8 @@ public sealed class ManagedModulePackService
         => "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
            "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
            "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\" />" +
+           "<Default Extension=\"psmdcp\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\" />" +
+           "<Default Extension=\"nuspec\" ContentType=\"application/octet\" />" +
            "<Default Extension=\"psd1\" ContentType=\"application/octet\" />" +
            "<Default Extension=\"psm1\" ContentType=\"application/octet\" />" +
            "<Default Extension=\"ps1\" ContentType=\"application/octet\" />" +
@@ -266,7 +294,36 @@ public sealed class ManagedModulePackService
            "<Default Extension=\"xml\" ContentType=\"application/xml\" />" +
            "</Types>";
 
-    private static string CreateRelationships()
+    private static string CreateRelationships(string packageId, string corePropertiesPath)
         => "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
-           "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\" />";
+           "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+           $"<Relationship Type=\"http://schemas.microsoft.com/packaging/2010/07/manifest\" Target=\"/{packageId}.nuspec\" Id=\"RManifest\" />" +
+           $"<Relationship Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"/{corePropertiesPath}\" Id=\"RCoreProperties\" />" +
+           "</Relationships>";
+
+    private static XDocument CreateCoreProperties(
+        string name,
+        string version,
+        ManagedModulePackRequest request,
+        string manifestPath,
+        string manifestText)
+    {
+        var ns = XNamespace.Get("http://schemas.openxmlformats.org/package/2006/metadata/core-properties");
+        var dc = XNamespace.Get("http://purl.org/dc/elements/1.1/");
+        var authors = FirstNonEmpty(request.Authors, ReadManifestString(manifestText, "Author"), ReadManifestString(manifestText, "CompanyName"), "Unknown");
+        var description = FirstNonEmpty(request.Description, ReadManifestString(manifestText, "Description"), $"{name} PowerShell module.");
+        var sourceTags = request.Tags is { Count: > 0 }
+            ? request.Tags
+            : ModuleManifestValueReader.ReadPsDataStringOrArray(manifestPath, "Tags");
+        var tags = NormalizePackageTags(sourceTags);
+
+        return new XDocument(
+            new XElement(ns + "coreProperties",
+                new XAttribute(XNamespace.Xmlns + "dc", dc.NamespaceName),
+                new XElement(dc + "creator", authors),
+                new XElement(dc + "description", description),
+                new XElement(dc + "identifier", name),
+                new XElement(ns + "version", version),
+                new XElement(ns + "keywords", string.Join(" ", tags))));
+    }
 }
