@@ -66,8 +66,9 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
     Join-Path ([IO.Path]::GetTempPath()) 'pfmm'
 }
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
+$publishWorkRoot = Join-Path $tempWorkRoot ('PublishRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-$validOperations = @('Find', 'Save', 'SaveNoOp', 'SaveForce', 'Install', 'InstallManaged', 'InstallNoOp', 'InstallForce', 'Update', 'UpdateNoOp', 'UpdateForce', 'RepairPlan')
+$validOperations = @('Find', 'Save', 'SaveNoOp', 'SaveForce', 'Install', 'InstallManaged', 'InstallNoOp', 'InstallForce', 'Update', 'UpdateNoOp', 'UpdateForce', 'RepairPlan', 'Publish')
 $validRepairScenarios = @('StaleVersion', 'SourceDrift', 'ScopeDrift', 'FamilyCoherence', 'LoadedModuleSafety', 'CleanupPlanning')
 
 function Resolve-TokenList {
@@ -246,6 +247,7 @@ function Add-SwitchParameterIfSupported {
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ManagedDetails.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.OutputCleanup.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Publish.ps1')
 $repositorySource = Resolve-ManagedModuleBenchmarkRepositorySource -Repository $Repository -RepositoryName $RepositoryName
 
 function Get-InstalledModuleVersion {
@@ -788,11 +790,12 @@ foreach ($iteration in 1..$RepeatCount) {
                     'UpdateNoOp' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
                     'UpdateForce' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
                     'RepairPlan' { Invoke-RepairPlanScenario -EngineName $engineName -Iteration $iteration -ScenarioName $scenarioName }
+                    'Publish' { Invoke-PublishScenario -EngineName $engineName -Iteration $iteration -OperationName $operationName }
                 }
                 foreach ($item in @($row)) {
                     $results.Add($item)
                     if ($RemoveOutputRoots.IsPresent) {
-                        $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows @($item) -AllowedRoots @($workRoot, $installWorkRoot)
+                        $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows @($item) -AllowedRoots @($workRoot, $installWorkRoot, $publishWorkRoot)
                     }
                 }
             }
