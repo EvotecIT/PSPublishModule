@@ -54,6 +54,31 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_falls_back_to_powershellgallery_v2_when_v3_service_index_is_forbidden()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(
+            requests,
+            powerShellGalleryV3StatusCode: HttpStatusCode.Forbidden));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "PSGallery",
+            "https://www.powershellgallery.com/api/v3/index.json");
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Pester", includePrerelease: false);
+
+        Assert.Equal(new[] { "5.6.1", "5.7.0" }, versions.Select(version => version.Version));
+        Assert.All(versions, version =>
+        {
+            Assert.Equal("PSGallery", version.RepositoryName);
+            Assert.Equal("https://www.powershellgallery.com/api/v2", version.RepositorySource);
+            Assert.StartsWith("https://www.powershellgallery.com/api/v2/package/Pester/", version.PackageSource, StringComparison.OrdinalIgnoreCase);
+        });
+        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'");
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_uses_nuget_v2_find_packages_by_id()
     {
         var requests = new List<RecordedRequest>();
@@ -290,6 +315,30 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task DownloadPackageAsync_falls_back_to_powershellgallery_v2_when_v3_service_index_is_forbidden()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(
+            requests,
+            powerShellGalleryV3StatusCode: HttpStatusCode.Forbidden));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "PSGallery",
+            "https://www.powershellgallery.com/api/v3/index.json");
+
+        var result = await repositoryClient.DownloadPackageAsync(repository, "Pester", "5.7.0", temp.Path);
+
+        Assert.True(File.Exists(result.PackagePath));
+        Assert.Equal("Pester", result.Metadata!.Id);
+        Assert.Equal("5.7.0", result.Metadata.Version);
+        Assert.Equal("PSGallery", result.RepositoryName);
+        Assert.Equal("https://www.powershellgallery.com/api/v2/package/Pester/5.7.0", result.Source);
+        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0");
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_reuses_matching_cache_without_repository_request()
     {
         var requests = new List<RecordedRequest>();
@@ -500,6 +549,31 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_falls_back_to_powershellgallery_v2_when_v3_service_index_is_forbidden()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(
+            requests,
+            powerShellGalleryV3StatusCode: HttpStatusCode.Forbidden));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "PSGallery",
+            "https://www.powershellgallery.com/api/v3/index.json");
+
+        var results = await repositoryClient.SearchPackagesAsync(repository, "Pester");
+
+        var result = Assert.Single(results);
+        Assert.Equal("Pester", result.Name);
+        Assert.Equal("5.7.0", result.Version);
+        Assert.Equal("PSGallery", result.RepositoryName);
+        Assert.Equal("https://www.powershellgallery.com/api/v2", result.RepositorySource);
+        Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
+        Assert.Contains(
+            requests,
+            request => request.Url == "https://www.powershellgallery.com/api/v2/Packages()?$filter=substringof('Pester',Id)%20and%20IsLatestVersion&$top=100");
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_copies_package_from_local_folder_feed()
     {
         using var source = new TemporaryDirectory();
@@ -520,16 +594,19 @@ public sealed class ManagedModuleRepositoryClientTests
     {
         private readonly List<RecordedRequest> _requests;
         private readonly bool _conflictPublishes;
+        private readonly HttpStatusCode? _powerShellGalleryV3StatusCode;
         private int _serviceIndexFailures;
 
         public ManagedModuleHandler(
             List<RecordedRequest> requests,
             bool conflictPublishes = false,
-            int serviceIndexFailures = 0)
+            int serviceIndexFailures = 0,
+            HttpStatusCode? powerShellGalleryV3StatusCode = null)
         {
             _requests = requests;
             _conflictPublishes = conflictPublishes;
             _serviceIndexFailures = serviceIndexFailures;
+            _powerShellGalleryV3StatusCode = powerShellGalleryV3StatusCode;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -556,11 +633,16 @@ public sealed class ManagedModuleRepositoryClientTests
             }
 
             if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v3/index.json")
+            {
+                if (_powerShellGalleryV3StatusCode.HasValue)
+                    return Task.FromResult(new HttpResponseMessage(_powerShellGalleryV3StatusCode.Value));
+
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://psgallery.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
                             "{\"@id\":\"https://psgallery.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}," +
                             "{\"@id\":\"https://psgallery.test/publish/\",\"@type\":\"PackagePublish/2.0.0\"}" +
                             "]}");
+            }
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0-beta1\",\"1.1.0\"]}");
@@ -575,6 +657,15 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0-beta1</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>5.6.1</d:Version></m:properties></content></entry>" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>5.7.0-preview1</d:Version></m:properties></content></entry>" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>5.7.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Paged.Tools'")
@@ -602,6 +693,14 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties><d:Id>Other.Module</d:Id><d:Version>9.0.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
+            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/Packages()?$filter=substringof('Pester',Id)%20and%20IsLatestVersion&$top=100")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
+                    "<entry><content><m:properties><d:Id>Pester</d:Id><d:Version>5.7.0-preview1</d:Version></m:properties></content></entry>" +
+                    "<entry><content><m:properties><d:Id>Pester</d:Id><d:Version>5.7.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
             if (uri.AbsoluteUri == "https://example.test/packages/malformed.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\"");
 
@@ -622,6 +721,15 @@ public sealed class ManagedModuleRepositoryClientTests
                         Location = new Uri("https://cdn.example.test/packages/company.tools.1.1.0.nupkg")
                     }
                 });
+
+            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0")
+            {
+                var bytes = TestPackageFactory.CreateBytes("Pester", "5.7.0");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(bytes)
+                });
+            }
 
             if (uri.AbsoluteUri == "https://cdn.example.test/packages/company.tools.1.1.0.nupkg")
             {
