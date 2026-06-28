@@ -282,6 +282,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Write benchmark CSV/JSON artifacts under `Ignore\Benchmarks\ManagedModules`.
 - [x] Record host, runtime, repository, module, operation, engine, status, elapsed time, output count, installed version, and output path.
 - [x] Support comma-separated `-Engine` and `-Operation` arguments for quick matrix runs.
+- [x] Support named scenario selection for targeted heavy-suite reruns.
 - [x] Keep native install comparisons skipped by default until a separate disposable-host lane is added.
 - [ ] Add an explicit disposable-host lane for native `Install-Module`, `Install-PSResource`, `Update-Module`, and `Update-PSResource`.
 - [x] Add `-AcceptLicense` support to the benchmark harness and pass it only when explicitly requested.
@@ -300,6 +301,8 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: PowerShell 7 imported the local Release build and ran `ThreadJob` 2.1.0 through managed, PSResourceGet, and PowerShellGet find/save comparisons; managed was the fastest successful find and save engine in that run.
 - [x] 2026-06-28: PowerShell 7 imported the local Release build and ran `InstallManaged` for `ThreadJob` 2.1.0 into a custom root through the managed engine; native install rows were skipped because native custom-root isolation needs a disposable-host lane.
 - [x] 2026-06-28: PowerShell 7 ran a heavier `Microsoft.Graph.Authentication` find/save comparison; managed find succeeded, while managed save correctly required explicit license acceptance before saving the package.
+- [x] 2026-06-28: PowerShell 7 ran full `Microsoft.Graph` 2.38.0 find/save with license acceptance. Managed save completed in 41.03 seconds versus 64.89 seconds for PSResourceGet and 82.99 seconds for PowerShellGet over about 1.05 GB of saved output. The initial exact find path exposed a metadata lookup gap, so `Find-ManagedModule` now uses a latest-version query when `-AllVersions` is not requested. A rotated three-run full Graph find comparison then measured managed at 385 ms, PSResourceGet at 392 ms, and PowerShellGet at 1653 ms.
+- [x] 2026-06-28: Windows PowerShell 5.1 imported the local `net472` build and ran the full `Microsoft.Graph` find smoke through managed and PowerShellGet engines; managed returned version 2.38.0 in 347 ms and ranked first in that run.
 
 ## Benchmark Scenarios
 

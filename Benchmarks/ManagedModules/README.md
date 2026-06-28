@@ -30,6 +30,18 @@ Run Graph and Az save/find comparisons on PowerShell 7 and Windows PowerShell:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Graph,Az -HostName PowerShell7,WindowsPowerShell -Operation Find,Save
 ```
 
+Run one heavy scenario without paying for the whole suite:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Graph -ScenarioName Graph.Full -HostName PowerShell7 -Operation Find,Save
+```
+
+Use repeated, rotated engine order for fairer timing:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Graph -ScenarioName Graph.Full -HostName PowerShell7 -Operation Find -RepeatCount 3 -RotateEngineOrder
+```
+
 Compare selected engines:
 
 ```powershell
@@ -75,3 +87,5 @@ Suite runs write `suite-summary.csv`, `suite-summary.json`, `suite-hosts.csv`, a
 License acceptance is explicit. Use `-AcceptLicense` only when the benchmark scenario is allowed to accept the package license on behalf of the run.
 
 The suite runner enables license acceptance only for scenarios that require it, such as the full Graph package family. Keep that behavior explicit when adding new scenarios.
+
+Use `-RotateEngineOrder` with `-RepeatCount 3` or higher before making performance claims. Repository and host caches can otherwise make the second or third engine look faster than it really is.

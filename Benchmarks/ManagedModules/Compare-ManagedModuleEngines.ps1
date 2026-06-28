@@ -25,6 +25,8 @@ param(
 
     [switch] $AcceptLicense,
 
+    [switch] $RotateEngineOrder,
+
     [switch] $ListScenarios
 )
 
@@ -442,7 +444,7 @@ function Get-Median {
     }
 
     $sorted = @($Values | Sort-Object)
-    $middle = [int]($sorted.Count / 2)
+    $middle = [int][Math]::Floor($sorted.Count / 2)
     if ($sorted.Count % 2 -eq 1) {
         return [math]::Round($sorted[$middle], 2)
     }
@@ -495,6 +497,21 @@ function New-Comparison {
     }
 }
 
+function Get-IterationEngineOrder {
+    param([int] $Iteration)
+
+    if (-not $RotateEngineOrder.IsPresent -or $Engine.Count -lt 2) {
+        return $Engine
+    }
+
+    $offset = ($Iteration - 1) % $Engine.Count
+    if ($offset -eq 0) {
+        return $Engine
+    }
+
+    @($Engine[$offset..($Engine.Count - 1)] + $Engine[0..($offset - 1)])
+}
+
 $Operation = Resolve-OperationList -Value $Operation
 $Engine = Resolve-TokenList -Value $Engine -Allowed $validEngines -Label 'engine'
 
@@ -520,8 +537,9 @@ $moduleBinary = Import-LocalModule
 
 $results = [Collections.Generic.List[object]]::new()
 foreach ($iteration in 1..$RepeatCount) {
+    $engineOrder = Get-IterationEngineOrder -Iteration $iteration
     foreach ($operationName in $Operation) {
-        foreach ($engineName in $Engine) {
+        foreach ($engineName in $engineOrder) {
             $row = switch ($operationName) {
                 'Find' { Invoke-FindScenario -EngineName $engineName -Iteration $iteration }
                 'Save' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration }
@@ -540,6 +558,7 @@ $metadata = [ordered]@{
     Repository = $Repository
     RepositoryName = $RepositoryName
     AcceptLicense = $AcceptLicense.IsPresent
+    RotateEngineOrder = $RotateEngineOrder.IsPresent
     Suite = $Suite
     Engines = $Engine
     Operations = $Operation

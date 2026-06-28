@@ -75,6 +75,34 @@ public sealed partial class ManagedModuleRepositoryClient
             .ToArray();
     }
 
+    private async Task<ManagedModuleVersionInfo?> GetLatestNuGetV2VersionAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var document = await ReadNuGetV2XmlAsync(
+                repository,
+                BuildNuGetV2LatestPackageUri(repository.Source, packageId, includePrerelease),
+                credential,
+                "LatestVersionQuery",
+                $"Unable to query latest version for package '{packageId}'.",
+                $"Managed module NuGet v2 latest-version query for package '{packageId}' returned malformed XML.",
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+        XNamespace data = "http://schemas.microsoft.com/ado/2007/08/dataservices";
+        return document
+            .Descendants(atom + "entry")
+            .Select(entry => ReadNuGetV2SearchResult(repository, entry, data))
+            .Where(version => version is not null && version.Name.Equals(packageId, StringComparison.OrdinalIgnoreCase))
+            .Select(static version => version!)
+            .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
+            .LastOrDefault();
+    }
+
     private async Task<ManagedModuleDownloadResult> DownloadNuGetV2PackageAsync(
         ManagedModuleRepository repository,
         string packageId,
@@ -232,6 +260,15 @@ public sealed partial class ManagedModuleRepositoryClient
         return new Uri(
             new Uri(EnsureTrailingSlash(source)),
             $"Packages()?$filter={filter}&$top={Math.Max(1, take)}");
+    }
+
+    private static Uri BuildNuGetV2LatestPackageUri(string source, string packageId, bool includePrerelease)
+    {
+        var escapedId = Uri.EscapeDataString(packageId.Trim().Replace("'", "''"));
+        var latestPredicate = includePrerelease ? "IsAbsoluteLatestVersion" : "IsLatestVersion";
+        return new Uri(
+            new Uri(EnsureTrailingSlash(source)),
+            $"Packages()?$filter=Id%20eq%20'{escapedId}'%20and%20{latestPredicate}&$top=1");
     }
 
     private static bool ShouldUsePrefixFilter(string pattern)

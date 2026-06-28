@@ -2,6 +2,8 @@ param(
     [ValidateSet('Smoke', 'Graph', 'Az', 'Enterprise', 'All')]
     [string[]] $Suite = @('Smoke'),
 
+    [string[]] $ScenarioName,
+
     [ValidateSet('Current', 'PowerShell7', 'WindowsPowerShell')]
     [string[]] $HostName = @('Current'),
 
@@ -19,6 +21,8 @@ param(
     [switch] $SkipBuild,
 
     [switch] $IncludeInstallManaged,
+
+    [switch] $RotateEngineOrder,
 
     [switch] $ListScenarios
 )
@@ -71,7 +75,21 @@ function Resolve-ScenarioList {
         $Suite
     }
 
-    @(Get-ScenarioCatalog | Where-Object { $selectedSuites -contains $_.Suite })
+    $scenarios = @(Get-ScenarioCatalog | Where-Object { $selectedSuites -contains $_.Suite })
+
+    if ($ScenarioName -and $ScenarioName.Count -gt 0) {
+        $selectedNames = @($ScenarioName | ForEach-Object {
+                foreach ($token in ($_ -split ',')) {
+                    $token.Trim()
+                }
+            } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $scenarios = @($scenarios | Where-Object { $selectedNames -contains $_.Name -or $selectedNames -contains $_.ModuleName })
+        if ($scenarios.Count -eq 0) {
+            throw "No benchmark scenarios matched '$($ScenarioName -join ', ')'. Use -ListScenarios to inspect available names."
+        }
+    }
+
+    $scenarios
 }
 
 function Resolve-HostExecutable {
@@ -163,6 +181,9 @@ function Invoke-ScenarioHostRun {
 
     if ($Scenario.AcceptLicense) {
         $arguments += '-AcceptLicense'
+    }
+    if ($RotateEngineOrder.IsPresent) {
+        $arguments += '-RotateEngineOrder'
     }
 
     Write-Host "Running $($Scenario.Name) on $HostLabel..."
@@ -263,11 +284,13 @@ $hostRows | Export-Csv -LiteralPath $hostsPath -NoTypeInformation
 
 $metadata = [ordered]@{
     Suites = $Suite
+    ScenarioNames = $ScenarioName
     Hosts = $HostName
     Engines = $Engine
     Operations = $Operation
     RepeatCount = $RepeatCount
     IncludeInstallManaged = $IncludeInstallManaged.IsPresent
+    RotateEngineOrder = $RotateEngineOrder.IsPresent
     OutputDirectory = $suiteRoot
 }
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
