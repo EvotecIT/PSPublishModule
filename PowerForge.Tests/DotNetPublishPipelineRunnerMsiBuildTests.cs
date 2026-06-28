@@ -49,6 +49,58 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void PrepareGeneratedInstallerBuildWorkspace_CopiesProjectToShortTempWorkspace()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var sourceDir = Path.Combine(
+                root,
+                "Artifacts",
+                "DotNetPublish",
+                "Msi",
+                "DesktopManager.App.MSI",
+                "DesktopManager.App",
+                "win-x64",
+                "net10.0-windows10.0.19041.0",
+                "PortableCompat",
+                "prepare",
+                "generated");
+            Directory.CreateDirectory(Path.Combine(sourceDir, "Fragments"));
+            var sourceProjectPath = Path.Combine(sourceDir, "DesktopManager_App_MSI.wixproj");
+            File.WriteAllText(sourceProjectPath, "<Project Sdk=\"WixToolset.Sdk/4.0.6\" />");
+            File.WriteAllText(Path.Combine(sourceDir, "Product.wxs"), "<Wix />");
+            File.WriteAllText(Path.Combine(sourceDir, "Fragments", "Payload.wxs"), "<Wix />");
+
+            var workspace = DotNetPublishPipelineRunner.PrepareGeneratedInstallerBuildWorkspace(
+                "DesktopManager.App.MSI",
+                sourceDir,
+                sourceProjectPath);
+            var tempRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PowerForge", "WixBuild"))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            try
+            {
+                Assert.StartsWith(tempRoot, workspace.WorkingDirectory, StringComparison.OrdinalIgnoreCase);
+                Assert.False(string.Equals(sourceDir, workspace.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
+                Assert.True(File.Exists(workspace.ProjectPath));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Product.wxs")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Fragments", "Payload.wxs")));
+            }
+            finally
+            {
+                var workingDirectory = workspace.WorkingDirectory;
+                workspace.Dispose();
+                Assert.False(Directory.Exists(workingDirectory));
+            }
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void BuildPublishMsBuildProperties_AppliesResolvedMsiVersion_WhenInstallerOptsIn()
     {
         var root = CreateTempRoot();

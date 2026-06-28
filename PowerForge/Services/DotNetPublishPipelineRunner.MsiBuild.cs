@@ -62,6 +62,7 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new FileNotFoundException($"Installer project path not found: {installerProjectPath}", installerProjectPath);
 
         var projectDir = Path.GetDirectoryName(installerProjectPath)!;
+        var buildProjectPath = installerProjectPath;
         var configuredOutputDir = ResolveInstallerOutputDirectory(
             plan,
             installerConfig,
@@ -77,18 +78,17 @@ public sealed partial class DotNetPublishPipelineRunner
         var skipOutputBinDirectoryFilter = isGeneratedInstallerProject || !string.IsNullOrWhiteSpace(configuredOutputDir);
         var before = SnapshotMsiOutputs(outputSearchDir, skipBinDirectoryFilter: skipOutputBinDirectoryFilter);
 
-        var args = new List<string>
+        using var generatedBuildWorkspace = isGeneratedInstallerProject
+            ? PrepareGeneratedInstallerBuildWorkspace(installerId, projectDir, installerProjectPath)
+            : null;
+        if (generatedBuildWorkspace is not null)
         {
-            "build",
-            installerProjectPath,
-            "-c",
-            plan.Configuration,
-            "--nologo"
-        };
+            _logger.Info(
+                $"Generated WiX installer project for '{installerId}' will build from short workspace '{generatedBuildWorkspace.WorkingDirectory}'.");
+            buildProjectPath = generatedBuildWorkspace.ProjectPath;
+        }
 
-        if (plan.Restore && !isGeneratedInstallerProject)
-            args.Add("--no-restore");
-
+        var configuredOutputName = ResolveInstallerOutputName(plan, installerConfig, step, versionResolution.Version);
         var installerMsBuildProperties = BuildInstallerMsBuildProperties(
             plan.MsBuildProperties,
             installerConfig?.MsBuildProperties,
@@ -96,44 +96,31 @@ public sealed partial class DotNetPublishPipelineRunner
             versionResolution.Version,
             licenseResolution.PropertyName,
             licenseResolution.Path);
-        args.AddRange(BuildMsBuildPropertyArgs(installerMsBuildProperties));
-        if (!string.IsNullOrWhiteSpace(configuredOutputDir))
-            args.Add($"/p:OutputPath={EnsureTrailingDirectorySeparator(configuredOutputDir!)}");
-        var configuredOutputName = ResolveInstallerOutputName(plan, installerConfig, step, versionResolution.Version);
-        if (!string.IsNullOrWhiteSpace(configuredOutputName))
-            args.Add($"/p:OutputName={configuredOutputName}");
-        args.Add($"/p:PowerForgeMsiInstallerId={installerId}");
-        args.Add($"/p:PowerForgeMsiPayloadDir={prepare.StagingDir}");
-        if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
-            args.Add($"/p:PowerForgeMsiPrepareManifest={prepare.ManifestPath}");
-        args.Add($"/p:PowerForgeMsiSourceTarget={prepare.Target}");
-        args.Add($"/p:PowerForgeMsiSourceFramework={prepare.Framework}");
-        args.Add($"/p:PowerForgeMsiSourceRuntime={prepare.Runtime}");
-        args.Add($"/p:PowerForgeMsiSourceStyle={prepare.Style}");
-        if (!string.IsNullOrWhiteSpace(prepare.HarvestPath))
-            args.Add($"/p:PowerForgeMsiHarvestPath={prepare.HarvestPath}");
-        if (!string.IsNullOrWhiteSpace(prepare.HarvestDirectoryRefId))
-            args.Add($"/p:PowerForgeMsiHarvestDirectoryRefId={prepare.HarvestDirectoryRefId}");
-        if (!string.IsNullOrWhiteSpace(prepare.HarvestComponentGroupId))
-            args.Add($"/p:PowerForgeMsiHarvestComponentGroupId={prepare.HarvestComponentGroupId}");
+        var args = BuildMsiBuildArguments(
+            plan,
+            step,
+            prepare,
+            installerId,
+            buildProjectPath,
+            configuredOutputDir,
+            configuredOutputName,
+            installerMsBuildProperties,
+            versionResolution,
+            licenseResolution,
+            isGeneratedInstallerProject);
+
         if (!string.IsNullOrWhiteSpace(versionResolution.Version) &&
             !string.IsNullOrWhiteSpace(versionResolution.PropertyName) &&
             !installerMsBuildProperties.ContainsKey(versionResolution.PropertyName!))
         {
-            args.Add($"/p:PowerForgeMsiVersion={versionResolution.Version}");
             _logger.Info(
                 $"MSI version for '{installerId}' resolved to {versionResolution.Version} ({versionResolution.PropertyName}).");
         }
         if (!string.IsNullOrWhiteSpace(licenseResolution.Path) &&
             !string.IsNullOrWhiteSpace(licenseResolution.PropertyName) &&
             !installerMsBuildProperties.ContainsKey(licenseResolution.PropertyName!))
-        {
-            args.Add($"/p:PowerForgeMsiClientLicensePath={licenseResolution.Path}");
-            if (!string.IsNullOrWhiteSpace(licenseResolution.ClientId))
-                args.Add($"/p:PowerForgeMsiClientId={licenseResolution.ClientId}");
             _logger.Info(
                 $"MSI client license for '{installerId}' resolved to '{licenseResolution.Path}' ({licenseResolution.PropertyName}).");
-        }
 
         _logger.Info(
             $"MSI build starting for '{installerId}' ({target}, {framework}, {runtime}, {style.Value}) -> {Path.GetFileName(installerProjectPath)}");
