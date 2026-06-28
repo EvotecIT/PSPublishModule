@@ -165,6 +165,10 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter RequireTransitionReady { get; set; }
 
+    /// <summary>Fail the command when managed engine evidence is missing or failed, even if compatibility baselines are still incomplete.</summary>
+    [Parameter]
+    public SwitchParameter RequireManagedEvidenceReady { get; set; }
+
     /// <summary>Fail the command when compatibility transport cannot yet be marked legacy.</summary>
     [Parameter]
     public SwitchParameter RequireCompatibilityRetirementReady { get; set; }
@@ -247,12 +251,43 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             new ManagedModuleImportValidationService().Validate(result, ImportHost);
 
         WriteReports(result, reportPath, markdownReportPath);
+        if (RequireManagedEvidenceReady.IsPresent)
+            AssertManagedEvidenceReady(result);
         if (RequireTransitionReady.IsPresent)
             AssertTransitionReady(result);
         if (RequireCompatibilityRetirementReady.IsPresent)
             AssertCompatibilityRetirementReady(result);
 
         WriteObject(result);
+    }
+
+    private void AssertManagedEvidenceReady(ManagedModuleBenchmarkResult result)
+    {
+        var gates = result.TransitionGates ?? Array.Empty<ManagedModuleBenchmarkTransitionGateResult>();
+        if (gates.Count == 0)
+        {
+            ThrowTerminatingError(new ErrorRecord(
+                new InvalidOperationException("No transition gates were evaluated. Measure install, save, update, or publish before requiring managed evidence readiness."),
+                "ManagedModuleEvidenceGateMissing",
+                ErrorCategory.InvalidResult,
+                result));
+            return;
+        }
+
+        var blocked = gates
+            .Where(static gate => !gate.ManagedEvidenceReady)
+            .ToArray();
+        if (blocked.Length == 0)
+            return;
+
+        var details = string.Join(
+            "; ",
+            blocked.Select(static gate => gate.Operation + " (" + string.Join("; ", gate.Reasons ?? Array.Empty<string>()) + ")"));
+        ThrowTerminatingError(new ErrorRecord(
+            new InvalidOperationException("Managed module evidence gate is not ready. " + details),
+            "ManagedModuleEvidenceGateNotReady",
+            ErrorCategory.InvalidResult,
+            result));
     }
 
     private void AddPowerShellEnvironment(ManagedModuleBenchmarkResult result)
