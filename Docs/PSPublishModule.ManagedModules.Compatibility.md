@@ -146,7 +146,7 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [ ] Decide whether public proxy parameters should be added to managed cmdlets or kept as repository/profile policy only. The managed repository client has proxy behavior, but `-Proxy` and `-ProxyCredential` are not currently public compatibility parameters.
 - [x] Define exact public semantics for `-Force` on install/save/update, including exact-version reinstall, no-op plans, rollback-protected replacement, downgrade blocking, and no implied cleanup.
 - [ ] Define exact public semantics for `-Force` in repair and maintenance flows, including receipt repair and cleanup interactions.
-- [ ] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts across scopes.
+- [x] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts in the selected target root.
 - [ ] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
 - [ ] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, and package hash policies instead of cloning PowerShellGet's publisher-check switch.
 - [ ] Add managed Authenticode/catalog validation equivalent to PSResourceGet `-AuthenticodeCheck`, including timestamped signatures and short-lived certificate chains.
@@ -201,6 +201,14 @@ Cmdlets should map parameters into these models and write result objects. They s
 - `Update-ManagedModule -Force` does not silently downgrade a newer installed version to an older selected version. Downgrade behavior needs a separate explicit policy so stale-version repair and operator mistakes do not collapse into the same switch.
 - `-Force` does not imply destructive old-version cleanup. Cleanup remains a separate maintenance/repair decision.
 - `Publish-ManagedModule -Force` bypasses managed preflight duplicate/version guards where the target repository supports replacement or accepts the pushed package. It does not guarantee that a remote feed will overwrite an existing package.
+
+### Clobber Semantics
+
+Managed install, save, and update are no-clobber by default. Before a staged package is promoted, the managed engine reads manifest-declared `FunctionsToExport`, `CmdletsToExport`, and `AliasesToExport` values and checks them against other installed modules in the selected target root. If another module exports the same function, cmdlet, or alias, the operation fails before writing the final module version.
+
+`-AllowClobber` is the explicit opt-in that permits those exported command conflicts. This maps to the PSResourceGet `-NoClobber` safety idea by making no-clobber the default in the managed engine, rather than adding a separate `-NoClobber` switch whose absence could imply less safe behavior.
+
+Same-name modules are skipped during conflict checks so side-by-side versions and exact-version reinstalls do not self-conflict. Wildcard exports such as `FunctionsToExport = '*'` are not treated as concrete conflicts because they cannot be reliably enumerated from the manifest alone. The check is target-root based; cross-scope conflicts remain a repair/maintenance policy concern rather than an install-time block across every module path on the machine.
 
 ## Transition Gates
 
