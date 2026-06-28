@@ -27,7 +27,7 @@ internal sealed class ModuleBuildPreparationService
         if (string.IsNullOrWhiteSpace(moduleName))
             throw new PSArgumentException("ModuleName is required.");
 
-        var (projectRoot, basePathForScaffold) = ResolveProjectPaths(request, moduleName!);
+        var (projectRoot, basePathForScaffold, workspaceRoot) = ResolveProjectPaths(request, moduleName!);
         var useLegacy = request.Legacy ||
                         string.Equals(request.ParameterSetName, "Configuration", StringComparison.Ordinal) ||
                         request.Settings is not null;
@@ -36,6 +36,7 @@ internal sealed class ModuleBuildPreparationService
                 ? LegacySegmentAdapter.CollectFromLegacyConfiguration(request.Configuration)
                 : LegacySegmentAdapter.CollectFromSettings(request.Settings))
             : Array.Empty<IConfigurationSegment>();
+        ResolveWorkspaceRelativeSegmentPaths(segments, workspaceRoot, projectRoot);
 
         var frameworks = useLegacy && !request.DotNetFrameworkWasBound
             ? Array.Empty<string>()
@@ -266,20 +267,104 @@ internal sealed class ModuleBuildPreparationService
         return baseVersion;
     }
 
-    private static (string ProjectRoot, string? BasePathForScaffold) ResolveProjectPaths(ModuleBuildPreparationRequest request, string moduleName)
+    private static (string ProjectRoot, string? BasePathForScaffold, string WorkspaceRoot) ResolveProjectPaths(ModuleBuildPreparationRequest request, string moduleName)
     {
         if (string.Equals(request.ParameterSetName, "Modern", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(request.InputPath))
         {
             var basePath = request.ResolvePath!(request.InputPath!);
             var fullProjectPath = Path.Combine(basePath, moduleName);
-            return (fullProjectPath, basePath);
+            return (fullProjectPath, basePath, basePath);
         }
 
         var rootToUse = !string.IsNullOrWhiteSpace(request.ScriptRoot)
             ? Path.GetFullPath(Path.Combine(request.ScriptRoot!, ".."))
             : request.CurrentPath;
 
-        return (rootToUse, null);
+        return (rootToUse, null, ResolveWorkspaceRoot(rootToUse, request.ScriptRoot));
+    }
+
+    private static string ResolveWorkspaceRoot(string projectRoot, string? scriptRoot)
+    {
+        if (string.IsNullOrWhiteSpace(scriptRoot))
+            return projectRoot;
+
+        var scriptDirectory = new DirectoryInfo(Path.GetFullPath(scriptRoot!));
+        var moduleDirectory = new DirectoryInfo(Path.GetFullPath(projectRoot));
+        if (!string.Equals(scriptDirectory.Name, "Build", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(moduleDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) ||
+            moduleDirectory.Parent is null)
+        {
+            return projectRoot;
+        }
+
+        return moduleDirectory.Parent.FullName;
+    }
+
+    private static void ResolveWorkspaceRelativeSegmentPaths(
+        IReadOnlyList<IConfigurationSegment> segments,
+        string workspaceRoot,
+        string projectRoot)
+    {
+        if (segments.Count == 0 || SamePath(workspaceRoot, projectRoot))
+            return;
+
+        foreach (var segment in segments)
+        {
+            switch (segment)
+            {
+                case ConfigurationBuildLibrariesSegment buildLibraries:
+                    var libraries = buildLibraries.BuildLibraries;
+                    libraries.NETProjectPath = ResolveWorkspacePath(workspaceRoot, libraries.NETProjectPath);
+                    libraries.DevelopmentBinariesPath = ResolveWorkspacePath(workspaceRoot, libraries.DevelopmentBinariesPath);
+                    libraries.NETDevelopmentBinariesPath = ResolveWorkspacePath(workspaceRoot, libraries.NETDevelopmentBinariesPath);
+                    break;
+                case ConfigurationProjectBuildSegment projectBuild:
+                    projectBuild.Configuration.ConfigPath = ResolveWorkspacePath(workspaceRoot, projectBuild.Configuration.ConfigPath) ?? string.Empty;
+                    break;
+                case ConfigurationPackageBuildSegment packageBuild:
+                    var package = packageBuild.Configuration;
+                    package.RootPath = ResolveWorkspacePath(workspaceRoot, package.RootPath);
+                    package.OutputPath = ResolveWorkspacePath(workspaceRoot, package.OutputPath);
+                    package.ReleaseZipOutputPath = ResolveWorkspacePath(workspaceRoot, package.ReleaseZipOutputPath);
+                    package.StagingPath = ResolveWorkspacePath(workspaceRoot, package.StagingPath);
+                    package.PlanOutputPath = ResolveWorkspacePath(workspaceRoot, package.PlanOutputPath);
+                    break;
+                case ConfigurationReleaseSegment release:
+                    release.Configuration.StageRoot = ResolveWorkspacePath(workspaceRoot, release.Configuration.StageRoot);
+                    break;
+                case ConfigurationAppleAppSegment appleApp:
+                    appleApp.Configuration.ProjectPath = ResolveWorkspacePath(workspaceRoot, appleApp.Configuration.ProjectPath) ?? string.Empty;
+                    break;
+                case ConfigurationXcodeProjectVersionSegment xcodeProject:
+                    xcodeProject.Configuration.Path = ResolveWorkspacePath(workspaceRoot, xcodeProject.Configuration.Path) ?? string.Empty;
+                    break;
+                case ConfigurationArtefactSegment artefact:
+                    ResolveWorkspaceRelativeArtefactPaths(artefact.Configuration, workspaceRoot);
+                    break;
+            }
+        }
+    }
+
+    private static void ResolveWorkspaceRelativeArtefactPaths(ArtefactConfiguration configuration, string workspaceRoot)
+    {
+        configuration.Path = ResolveWorkspacePath(workspaceRoot, configuration.Path);
+    }
+
+    private static string? ResolveWorkspacePath(string workspaceRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path))
+            return path;
+
+        return PathValueResolver.Resolve(workspaceRoot, path!);
+    }
+
+    private static bool SamePath(string left, string right)
+    {
+        var normalizedLeft = Path.GetFullPath(left)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedRight = Path.GetFullPath(right)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string[] BuildStageExcludeFiles(string[]? excludeFiles, string moduleName)

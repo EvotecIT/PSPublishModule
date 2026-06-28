@@ -1,4 +1,6 @@
 using System.Collections;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PowerForge;
@@ -39,6 +41,91 @@ public sealed class ModuleBuildPreparationServiceTests
             Assert.Contains(".gitignore", prepared.PipelineSpec.Build.ExcludeFiles);
             Assert.Contains("SampleModule.Tests.ps1", prepared.PipelineSpec.Build.ExcludeFiles);
             Assert.Equal(Path.Combine(root.FullName, "SampleModule", "powerforge.json"), prepared.JsonOutputPath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_from_module_build_script_resolves_repo_level_paths_from_workspace_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-workspace-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "DbaClientX.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+            var settings = ScriptBlock.Create("""
+[PowerForge.ConfigurationBuildLibrariesSegment]@{
+    BuildLibraries = [PowerForge.BuildLibrariesConfiguration]@{
+        NETProjectPath = 'DbaClientX.PowerShell/DbaClientX.PowerShell.csproj'
+        NETDevelopmentBinariesPath = 'DbaClientX.PowerShell/bin'
+    }
+}
+[PowerForge.ConfigurationProjectBuildSegment]@{
+    Configuration = [PowerForge.ProjectBuildConfigurationReference]@{
+        ConfigPath = 'Build/project.build.json'
+        BuildBeforeModule = $true
+    }
+}
+[PowerForge.ConfigurationArtefactSegment]@{
+    ArtefactType = [PowerForge.ArtefactType]::Packed
+    Configuration = [PowerForge.ArtefactConfiguration]@{
+        Path = 'Module/Artefacts/Packed'
+    }
+}
+[PowerForge.ConfigurationReleaseSegment]@{
+    Configuration = [PowerForge.ReleaseConfiguration]@{
+        StageRoot = 'Module/Artefacts/UploadReady'
+        VersionSource = [PowerForge.ReleaseVersionSource]::ProjectBuild
+    }
+}
+""");
+
+            using var runspace = RunspaceFactory.CreateRunspace();
+            runspace.Open();
+            var previousRunspace = Runspace.DefaultRunspace;
+            Runspace.DefaultRunspace = runspace;
+            try
+            {
+                var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+                {
+                    ParameterSetName = "Modern",
+                    ModuleName = "DbaClientX",
+                    Settings = settings,
+                    CurrentPath = root.FullName,
+                    ScriptRoot = scriptRoot.FullName,
+                    ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                    DotNetFramework = Array.Empty<string>(),
+                    ExcludeDirectories = Array.Empty<string>(),
+                    ExcludeFiles = Array.Empty<string>()
+                });
+
+                Assert.Equal(moduleRoot.FullName, prepared.ProjectRoot);
+                Assert.Null(prepared.BasePathForScaffold);
+                Assert.Equal(moduleRoot.FullName, prepared.PipelineSpec.Build.SourcePath);
+
+                var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(prepared.PipelineSpec.Segments[0]);
+                Assert.Equal(Path.Combine(root.FullName, "DbaClientX.PowerShell", "DbaClientX.PowerShell.csproj"), buildLibraries.BuildLibraries.NETProjectPath);
+                Assert.Equal(Path.Combine(root.FullName, "DbaClientX.PowerShell", "bin"), buildLibraries.BuildLibraries.NETDevelopmentBinariesPath);
+
+                var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(prepared.PipelineSpec.Segments[1]);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "project.build.json"), projectBuild.Configuration.ConfigPath);
+
+                var artefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[2]);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed"), artefact.Configuration.Path);
+
+                var release = Assert.IsType<ConfigurationReleaseSegment>(prepared.PipelineSpec.Segments[3]);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "UploadReady"), release.Configuration.StageRoot);
+            }
+            finally
+            {
+                Runspace.DefaultRunspace = previousRunspace;
+            }
         }
         finally
         {
