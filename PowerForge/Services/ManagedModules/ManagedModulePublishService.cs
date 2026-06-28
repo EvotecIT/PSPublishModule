@@ -85,9 +85,18 @@ public sealed class ManagedModulePublishService
         if (request.SkipDependenciesCheck || metadata.ManifestDependencies.Count == 0)
             return;
 
+        var externalDependencies = metadata.ManifestExternalModuleDependencies.Count == 0
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : metadata.ManifestExternalModuleDependencies
+                .Where(static dependency => !string.IsNullOrWhiteSpace(dependency))
+                .Select(static dependency => dependency.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missing = new List<string>();
         foreach (var dependency in metadata.ManifestDependencies)
         {
+            if (externalDependencies.Contains(dependency.Id))
+                continue;
+
             var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
             if (!await RepositoryHasDependencyAsync(request, dependency, range, cancellationToken).ConfigureAwait(false))
                 missing.Add(FormatDependency(dependency, range));

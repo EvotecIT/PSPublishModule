@@ -253,19 +253,48 @@ public sealed class ManagedModulePackServiceTests
         Assert.True(result.Published);
     }
 
+    [Fact]
+    public async Task Publish_skips_external_module_dependencies_from_manifest_repository_check()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'External.Dependency'; RequiredVersion = '2.0.0' })",
+            externalModuleDependencies: "            ExternalModuleDependencies = @('external.dependency')");
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Local", feed.Path)
+        });
+
+        Assert.True(result.Published);
+        Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(result.PackagePath);
+        Assert.Contains("External.Dependency", metadata.ManifestDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("external.dependency", metadata.ManifestExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+    }
+
     private static void CreateModule(
         string root,
         string name,
         string version,
         string? prerelease,
-        string? requiredModules = null)
+        string? requiredModules = null,
+        string? externalModuleDependencies = null)
     {
         Directory.CreateDirectory(root);
         File.WriteAllText(Path.Combine(root, name + ".psm1"), "function Get-CompanyTool { 'ok' }");
-        File.WriteAllText(Path.Combine(root, name + ".psd1"), CreateManifest(name, version, prerelease, requiredModules));
+        File.WriteAllText(Path.Combine(root, name + ".psd1"), CreateManifest(name, version, prerelease, requiredModules, externalModuleDependencies));
     }
 
-    private static string CreateManifest(string name, string version, string? prerelease, string? requiredModules)
+    private static string CreateManifest(string name, string version, string? prerelease, string? requiredModules, string? externalModuleDependencies)
     {
         var prereleaseLine = string.IsNullOrWhiteSpace(prerelease)
             ? string.Empty
@@ -273,6 +302,9 @@ public sealed class ManagedModulePackServiceTests
         var requiredModulesLine = string.IsNullOrWhiteSpace(requiredModules)
             ? string.Empty
             : requiredModules + Environment.NewLine;
+        var externalDependenciesLine = string.IsNullOrWhiteSpace(externalModuleDependencies)
+            ? string.Empty
+            : externalModuleDependencies + Environment.NewLine;
 
         return $$"""
 @{
@@ -284,6 +316,7 @@ public sealed class ManagedModulePackServiceTests
     PrivateData = @{
         PSData = @{
             Tags = @('company', 'automation')
+{{externalDependenciesLine}}
 {{prereleaseLine}}
         }
     }

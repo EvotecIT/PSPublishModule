@@ -7,7 +7,7 @@ public sealed partial class ManagedModuleInstallService
         string version,
         string moduleRoot)
     {
-        if (request.Force || request.Credential is not null)
+        if (request.Force || request.Credential is not null || request.Repository is null)
             return null;
 
         return string.Join(
@@ -54,5 +54,5 @@ public sealed partial class ManagedModuleInstallService
     private static string NormalizeCoalescingValue(string? value)
         => string.IsNullOrWhiteSpace(value)
             ? string.Empty
-            : value.Trim().Trim('"');
+            : value!.Trim().Trim('"');
 }

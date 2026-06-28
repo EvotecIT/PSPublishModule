@@ -85,6 +85,7 @@ public sealed class ManagedModulePackageReader
             ModuleManifestVersion = manifest.Version,
             ModuleManifestPrerelease = manifest.Prerelease,
             ManifestDependencies = manifest.Dependencies,
+            ManifestExternalModuleDependencies = manifest.ExternalModuleDependencies,
             PackagePath = fullPath
         };
 
@@ -146,12 +147,19 @@ public sealed class ManagedModulePackageReader
             : null;
         var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "Prerelease").FirstOrDefault();
         var dependencies = ReadManifestDependencies(manifestText);
+        var externalDependencies = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "ExternalModuleDependencies")
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         return new ManifestMetadata(
             NormalizePackagePath(manifest.FullName),
             version,
             prerelease,
-            dependencies);
+            dependencies,
+            externalDependencies);
     }
 
     private static ZipArchiveEntry? SelectManifestEntry(ZipArchive archive, string packageId)
@@ -322,11 +330,22 @@ public sealed class ManagedModulePackageReader
             string? version,
             string? prerelease,
             IReadOnlyList<ManagedModuleDependencyInfo> dependencies)
+            : this(path, version, prerelease, dependencies, Array.Empty<string>())
+        {
+        }
+
+        public ManifestMetadata(
+            string? path,
+            string? version,
+            string? prerelease,
+            IReadOnlyList<ManagedModuleDependencyInfo> dependencies,
+            IReadOnlyList<string> externalModuleDependencies)
         {
             Path = path;
             Version = version;
             Prerelease = prerelease;
             Dependencies = dependencies;
+            ExternalModuleDependencies = externalModuleDependencies;
         }
 
         public string? Path { get; }
@@ -337,10 +356,13 @@ public sealed class ManagedModulePackageReader
 
         public IReadOnlyList<ManagedModuleDependencyInfo> Dependencies { get; }
 
+        public IReadOnlyList<string> ExternalModuleDependencies { get; }
+
         public static ManifestMetadata Empty { get; } = new(
             null,
             null,
             null,
-            Array.Empty<ManagedModuleDependencyInfo>());
+            Array.Empty<ManagedModuleDependencyInfo>(),
+            Array.Empty<string>());
     }
 }
