@@ -43,6 +43,10 @@ function New-Summary {
             MedianOutputBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'OutputBytes' } else { 0 }
             MedianManagedPackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageCount' } else { 0 }
             MedianManagedDependencyCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDependencyCount' } else { 0 }
+            MedianManagedUniquePackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedUniquePackageCount' } else { 0 }
+            MedianManagedUniqueDependencyCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedUniqueDependencyCount' } else { 0 }
+            MedianManagedInstalledPackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedInstalledPackageCount' } else { 0 }
+            MedianManagedAlreadyInstalledPackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedAlreadyInstalledPackageCount' } else { 0 }
             MedianManagedRootDependencyMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyMilliseconds' } else { 0 }
             MedianManagedDownloadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDownloadMilliseconds' } else { 0 }
             MedianManagedExtractionMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionMilliseconds' } else { 0 }
@@ -80,6 +84,10 @@ function New-Comparison {
             }
             ManagedPackageCount = if ($managed.Count) { [double] $managed[0].MedianManagedPackageCount } else { 0 }
             ManagedDependencyCount = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyCount } else { 0 }
+            ManagedUniquePackageCount = if ($managed.Count) { [double] $managed[0].MedianManagedUniquePackageCount } else { 0 }
+            ManagedUniqueDependencyCount = if ($managed.Count) { [double] $managed[0].MedianManagedUniqueDependencyCount } else { 0 }
+            ManagedInstalledPackageCount = if ($managed.Count) { [double] $managed[0].MedianManagedInstalledPackageCount } else { 0 }
+            ManagedAlreadyInstalledPackageCount = if ($managed.Count) { [double] $managed[0].MedianManagedAlreadyInstalledPackageCount } else { 0 }
             ManagedRepositoryRequests = if ($managed.Count) { [double] $managed[0].MedianManagedRepositoryRequests } else { 0 }
             ManagedPackageRepositoryRequests = if ($managed.Count) { [double] $managed[0].MedianManagedPackageRepositoryRequests } else { 0 }
             ManagedDownloadBytes = if ($managed.Count) { [double] $managed[0].MedianManagedDownloadBytes } else { 0 }

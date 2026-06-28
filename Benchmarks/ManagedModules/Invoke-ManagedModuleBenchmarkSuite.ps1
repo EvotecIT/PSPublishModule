@@ -311,6 +311,10 @@ function Add-SummaryRows {
                 ManagedVsFastest = $row.ManagedVsFastest
                 ManagedPackageCount = $row.ManagedPackageCount
                 ManagedDependencyCount = $row.ManagedDependencyCount
+                ManagedUniquePackageCount = $row.ManagedUniquePackageCount
+                ManagedUniqueDependencyCount = $row.ManagedUniqueDependencyCount
+                ManagedInstalledPackageCount = $row.ManagedInstalledPackageCount
+                ManagedAlreadyInstalledPackageCount = $row.ManagedAlreadyInstalledPackageCount
                 ManagedRepositoryRequests = $row.ManagedRepositoryRequests
                 ManagedPackageRepositoryRequests = $row.ManagedPackageRepositoryRequests
                 ManagedDownloadBytes = $row.ManagedDownloadBytes
