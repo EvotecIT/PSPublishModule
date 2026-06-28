@@ -198,6 +198,31 @@ function Get-InstalledModuleVersion {
     $null
 }
 
+function Get-OutputRootMetrics {
+    param([string] $Root)
+
+    if ([string]::IsNullOrWhiteSpace($Root) -or -not (Test-Path -LiteralPath $Root)) {
+        return [pscustomobject]@{
+            DirectoryCount = 0
+            FileCount = 0
+            TotalBytes = 0L
+        }
+    }
+
+    $directories = @(Get-ChildItem -LiteralPath $Root -Directory -Recurse -ErrorAction SilentlyContinue)
+    $files = @(Get-ChildItem -LiteralPath $Root -File -Recurse -ErrorAction SilentlyContinue)
+    $bytes = 0L
+    foreach ($file in $files) {
+        $bytes += [long]$file.Length
+    }
+
+    [pscustomobject]@{
+        DirectoryCount = $directories.Count
+        FileCount = $files.Count
+        TotalBytes = $bytes
+    }
+}
+
 function Invoke-TimedOperation {
     param(
         [string] $OperationName,
@@ -212,6 +237,7 @@ function Invoke-TimedOperation {
     $errorText = ''
     $versionText = $null
     $outputCount = 0
+    $metrics = $null
 
     try {
         $output = @(& $ScriptBlock)
@@ -225,7 +251,22 @@ function Invoke-TimedOperation {
         $status = 'Failed'
         $errorText = $_.Exception.Message
     } finally {
+        if ($OutputRoot) {
+            $metrics = Get-OutputRootMetrics -Root $OutputRoot
+            if (-not $versionText) {
+                $versionText = Get-InstalledModuleVersion -Root $OutputRoot -Name $ModuleName
+            }
+        }
+
         $timer.Stop()
+    }
+
+    if (-not $metrics) {
+        $metrics = [pscustomobject]@{
+            DirectoryCount = 0
+            FileCount = 0
+            TotalBytes = 0L
+        }
     }
 
     [pscustomobject]@{
@@ -237,6 +278,9 @@ function Invoke-TimedOperation {
         Version = $versionText
         ElapsedMilliseconds = [math]::Round($timer.Elapsed.TotalMilliseconds, 2)
         OutputCount = $outputCount
+        OutputDirectoryCount = $metrics.DirectoryCount
+        OutputFileCount = $metrics.FileCount
+        OutputBytes = $metrics.TotalBytes
         OutputRoot = $OutputRoot
         Error = $errorText
     }
@@ -259,6 +303,9 @@ function New-SkippedRow {
         Version = $null
         ElapsedMilliseconds = 0
         OutputCount = 0
+        OutputDirectoryCount = 0
+        OutputFileCount = 0
+        OutputBytes = 0
         OutputRoot = ''
         Error = $Reason
     }

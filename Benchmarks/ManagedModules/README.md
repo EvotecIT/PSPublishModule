@@ -12,6 +12,24 @@ Fast sanity run:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 -Suite Smoke
 ```
 
+List benchmark suite scenarios:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite All -ListScenarios
+```
+
+Run the smoke suite on the current host:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Smoke
+```
+
+Run Graph and Az save/find comparisons on PowerShell 7 and Windows PowerShell:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Graph,Az -HostName PowerShell7,WindowsPowerShell -Operation Find,Save
+```
+
 Compare selected engines:
 
 ```powershell
@@ -48,8 +66,12 @@ Every run writes:
 
 Start with `managed-module-comparison.csv` for a quick scoreboard, then inspect `managed-module-results.csv` when a competitor is skipped or failed.
 
+Suite runs write `suite-summary.csv`, `suite-summary.json`, `suite-hosts.csv`, and per-scenario child run folders.
+
 ## Notes
 
 `Find` and `Save` are safe to compare directly because each engine can run against isolated output folders. `InstallManaged` intentionally measures only the managed install command because normal `Install-Module` and `Install-PSResource` do not provide a reliable custom module-root isolation contract. Native install/update comparison should be added as a separate disposable-host lane before it is treated as a fair scoreboard.
 
 License acceptance is explicit. Use `-AcceptLicense` only when the benchmark scenario is allowed to accept the package license on behalf of the run.
+
+The suite runner enables license acceptance only for scenarios that require it, such as the full Graph package family. Keep that behavior explicit when adding new scenarios.
