@@ -3,6 +3,9 @@ param(
     [ValidateSet('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')]
     [string] $EngineName,
 
+    [ValidateSet('Install', 'Update')]
+    [string] $Operation = 'Install',
+
     [Parameter(Mandatory)]
     [string] $ModuleName,
 
@@ -193,6 +196,9 @@ switch ($EngineName) {
         if ($PSVersionTable.PSEdition -eq 'Desktop' -or $PSVersionTable.PSVersion -lt [version]'7.2') {
             throw 'ModuleFast requires PowerShell 7.2 or newer.'
         }
+        if ($Operation -eq 'Update') {
+            throw 'ModuleFast does not expose an equivalent update command.'
+        }
 
         Import-BenchmarkProviderModule -Name 'ModuleFast' -Path $ProviderModulePath
         $specification = if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -226,15 +232,24 @@ switch ($EngineName) {
             Scope = 'Custom'
             ModuleRoot = $Destination
             AllowClobber = $true
-            Force = $true
+        }
+        if ($Operation -eq 'Install') {
+            $parameters.Force = $true
         }
         if (-not [string]::IsNullOrWhiteSpace($Version)) {
             $parameters.Version = $Version
         }
 
-        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Install-ManagedModule' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
-        $result = Install-ManagedModule @parameters
-        Write-ManagedInstallDetail -Result $result -Path $ResultPath
+        $commandName = if ($Operation -eq 'Update') { 'Update-ManagedModule' } else { 'Install-ManagedModule' }
+        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+        $result = if ($Operation -eq 'Update') {
+            Update-ManagedModule @parameters
+        } else {
+            Install-ManagedModule @parameters
+        }
+        if ($Operation -eq 'Install') {
+            Write-ManagedInstallDetail -Result $result -Path $ResultPath
+        }
         $result
     }
     'PSResourceGet' {
@@ -250,13 +265,18 @@ switch ($EngineName) {
             Scope = 'CurrentUser'
             TrustRepository = $true
         }
-        foreach ($entry in (Get-VersionParameter -CommandName 'Install-PSResource' -ExactVersion $Version).GetEnumerator()) {
+        $commandName = if ($Operation -eq 'Update') { 'Update-PSResource' } else { 'Install-PSResource' }
+        foreach ($entry in (Get-VersionParameter -CommandName $commandName -ExactVersion $Version).GetEnumerator()) {
             $parameters[$entry.Key] = $entry.Value
         }
 
-        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Install-PSResource' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
-        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Install-PSResource' -ParameterName 'Reinstall' -Enabled $true
-        Install-PSResource @parameters
+        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+        if ($Operation -eq 'Install') {
+            Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'Reinstall' -Enabled $true
+            Install-PSResource @parameters
+        } else {
+            Update-PSResource @parameters
+        }
     }
     'PowerShellGet' {
         foreach ($dependencyPath in @($ProviderDependencyModulePath)) {
@@ -268,17 +288,24 @@ switch ($EngineName) {
         Ensure-PowerShellGetRepository -Name $RepositoryName
         $parameters = @{
             Name = $ModuleName
-            Repository = $RepositoryName
             Scope = 'CurrentUser'
-            Force = $true
-            AllowClobber = $true
         }
-        foreach ($entry in (Get-VersionParameter -CommandName 'Install-Module' -ExactVersion $Version).GetEnumerator()) {
+        if ($Operation -eq 'Install') {
+            $parameters.Repository = $RepositoryName
+            $parameters.AllowClobber = $true
+            $parameters.Force = $true
+        }
+        $commandName = if ($Operation -eq 'Update') { 'Update-Module' } else { 'Install-Module' }
+        foreach ($entry in (Get-VersionParameter -CommandName $commandName -ExactVersion $Version).GetEnumerator()) {
             $parameters[$entry.Key] = $entry.Value
         }
 
-        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Install-Module' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
-        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Install-Module' -ParameterName 'SkipPublisherCheck' -Enabled $true
-        Install-Module @parameters
+        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
+        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName $commandName -ParameterName 'SkipPublisherCheck' -Enabled $true
+        if ($Operation -eq 'Update') {
+            Update-Module @parameters
+        } else {
+            Install-Module @parameters
+        }
     }
 }

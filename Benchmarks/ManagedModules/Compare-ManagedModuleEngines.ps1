@@ -6,6 +6,8 @@ param(
 
     [string] $Version = '',
 
+    [string] $UpdateBaselineVersion = '',
+
     [string] $Repository = 'PSGallery',
 
     [string] $RepositoryName = 'PSGallery',
@@ -48,7 +50,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 }
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-$validOperations = @('Find', 'Save', 'Install', 'InstallManaged')
+$validOperations = @('Find', 'Save', 'Install', 'InstallManaged', 'Update')
 
 function Resolve-TokenList {
     param(
@@ -316,7 +318,9 @@ function Invoke-IsolatedInstallHost {
     param(
         [string] $EngineName,
         [string] $Destination,
-        [string] $DetailPath
+        [string] $DetailPath,
+        [string] $OperationName = 'Install',
+        [string] $VersionOverride = $Version
     )
 
     $childScript = Join-Path $PSScriptRoot 'Invoke-ManagedModuleInstallChild.ps1'
@@ -333,6 +337,8 @@ function Invoke-IsolatedInstallHost {
         $childScript
         '-EngineName'
         $EngineName
+        '-Operation'
+        $OperationName
         '-ModuleName'
         $ModuleName
         '-Repository'
@@ -346,10 +352,10 @@ function Invoke-IsolatedInstallHost {
         '-ModuleBinary'
         (Resolve-ModuleBinary)
     )
-    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+    if (-not [string]::IsNullOrWhiteSpace($VersionOverride)) {
         $arguments += @(
             '-Version'
-            $Version
+            $VersionOverride
         )
     }
     if (-not [string]::IsNullOrWhiteSpace($providerModulePath)) {
@@ -375,6 +381,7 @@ function Invoke-IsolatedInstallHost {
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $hostPath
     $startInfo.Arguments = ($arguments | ForEach-Object { Join-CommandLineArgument $_ }) -join ' '
+    $startInfo.WorkingDirectory = $Destination
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
@@ -388,7 +395,7 @@ function Invoke-IsolatedInstallHost {
         $stderr = $process.StandardError.ReadToEnd()
         $process.WaitForExit()
         if ($process.ExitCode -ne 0) {
-            throw "Install benchmark child host failed with exit code $($process.ExitCode).`n$stdout`n$stderr"
+            throw "$OperationName benchmark child host failed with exit code $($process.ExitCode).`n$stdout`n$stderr"
         }
     } finally {
         $tempPath = $environment['TEMP']
@@ -409,30 +416,36 @@ function Get-InstalledModuleVersion {
         $Root
     ) | Select-Object -Unique
 
-    $manifest = $null
+    $versions = [Collections.Generic.List[object]]::new()
     foreach ($searchRoot in $searchRoots) {
         if (-not (Test-Path -LiteralPath $searchRoot)) {
             continue
         }
 
-        $manifest = Get-ChildItem -LiteralPath $searchRoot -Filter "$Name.psd1" -Recurse -File -ErrorAction SilentlyContinue |
-            Sort-Object FullName |
-            Select-Object -First 1
-        if ($manifest) {
-            break
+        foreach ($manifest in @(Get-ChildItem -LiteralPath $searchRoot -Filter "$Name.psd1" -Recurse -File -ErrorAction SilentlyContinue)) {
+            $text = Get-Content -LiteralPath $manifest.FullName -Raw
+            if ($text -notmatch "ModuleVersion\s*=\s*['""]([^'""]+)['""]") {
+                continue
+            }
+
+            $versionText = $Matches[1]
+            $parsedVersion = $null
+            if (-not [version]::TryParse($versionText, [ref] $parsedVersion)) {
+                continue
+            }
+
+            $versions.Add([pscustomobject]@{
+                Text = $versionText
+                Parsed = $parsedVersion
+            })
         }
     }
 
-    if (-not $manifest) {
+    if ($versions.Count -eq 0) {
         return $null
     }
 
-    $text = Get-Content -LiteralPath $manifest.FullName -Raw
-    if ($text -match "ModuleVersion\s*=\s*['""]([^'""]+)['""]") {
-        return $Matches[1]
-    }
-
-    $null
+    ($versions | Sort-Object Parsed -Descending | Select-Object -First 1).Text
 }
 
 function Get-OutputRootMetrics {
@@ -573,6 +586,21 @@ function New-SkippedRow {
         ManagedCacheHitCount = 0
         Error = $Reason
     }
+}
+
+function New-FailedRow {
+    param(
+        [string] $OperationName,
+        [string] $EngineName,
+        [int] $Iteration,
+        [string] $Reason,
+        [string] $OutputRoot = ''
+    )
+
+    $row = New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $Reason
+    $row.Status = 'Failed'
+    $row.OutputRoot = $OutputRoot
+    $row
 }
 
 function Invoke-FindScenario {
@@ -722,6 +750,50 @@ function Invoke-InstallScenario {
     }
 }
 
+function Invoke-UpdateScenario {
+    param([string] $EngineName, [int] $Iteration)
+
+    if ([string]::IsNullOrWhiteSpace($UpdateBaselineVersion)) {
+        return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason 'UpdateBaselineVersion is required for update benchmarks.'
+    }
+
+    if ($EngineName -eq 'ModuleFast') {
+        return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason 'ModuleFast does not expose an equivalent update command.'
+    }
+
+    switch ($EngineName) {
+        'PSResourceGet' {
+            if (-not (Test-CommandAvailable 'Update-PSResource')) {
+                return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason 'Update-PSResource is not available.'
+            }
+        }
+        'PowerShellGet' {
+            if (-not (Test-CommandAvailable 'Update-Module')) {
+                return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason 'Update-Module is not available.'
+            }
+        }
+    }
+
+    $destination = Join-Path $installWorkRoot ("update-{0}-{1}" -f $EngineName, $Iteration)
+    New-Item -Path $destination -ItemType Directory -Force | Out-Null
+
+    try {
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $UpdateBaselineVersion
+    } catch {
+        return New-FailedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason "Baseline install failed: $($_.Exception.Message)" -OutputRoot $destination
+    }
+
+    $detailPath = if ($EngineName -eq 'Managed') {
+        Join-Path $workRoot ("managed-update-details-{0}.json" -f $Iteration)
+    } else {
+        ''
+    }
+
+    Invoke-TimedOperation -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Update'
+    }
+}
+
 function Get-Median {
     param([double[]] $Values)
 
@@ -831,6 +903,7 @@ foreach ($iteration in 1..$RepeatCount) {
                 'Save' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration }
                 'Install' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
                 'InstallManaged' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
+                'Update' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration }
             }
             $results.Add($row)
         }
@@ -842,6 +915,7 @@ $comparison = @(New-Comparison -SummaryRows $summary)
 $metadata = [ordered]@{
     ModuleName = $ModuleName
     Version = $Version
+    UpdateBaselineVersion = $UpdateBaselineVersion
     Repository = $Repository
     RepositoryName = $RepositoryName
     ModuleFastSource = $ModuleFastSource
