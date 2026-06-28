@@ -37,15 +37,15 @@ try {
     Force = $true
     ErrorAction = 'Stop'
     SkipPublisherCheck = $true
-    AcceptLicense = $true
   }
   if ([string]::IsNullOrWhiteSpace($Scope)) { $params.Scope = 'CurrentUser' } else { $params.Scope = $Scope }
   if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
   if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
   elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }
+  $installModuleCommand = Get-Command -Name Install-Module -ErrorAction Stop
+  if ($installModuleCommand.Parameters.ContainsKey('AcceptLicense')) { $params.AcceptLicense = $true }
   if (-not [string]::IsNullOrWhiteSpace($MaximumVersion)) { $params.MaximumVersion = $MaximumVersion }
   if ($PrereleaseFlag -eq '1') {
-    $installModuleCommand = Get-Command -Name Install-Module -ErrorAction Stop
     if ($installModuleCommand.Parameters.ContainsKey('AllowPrerelease')) {
       $params.AllowPrerelease = $true
     }

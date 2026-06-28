@@ -374,6 +374,7 @@ Benchmark Markdown reports include a neutral scenario summary grouped by scenari
 - [x] 2026-06-28: Auto transport compatibility fallback now records typed evidence when fallback is caused by provider limitations versus unresolved repository source evidence.
 - [x] 2026-06-28: Native compatibility install/update hosts now isolate `TEMP` and `TMP` into the disposable benchmark sandbox. A rerun of the public `ThreadJob` 1.0.0 to 2.1.0 update benchmark still left only the PowerShellGet native seed/install path failing with `End of Central Directory record could not be found`, so the public update gate remains incomplete for that provider.
 - [x] 2026-06-28: Transition gates now distinguish managed engine readiness from legacy compatibility provider failures. Benchmark JSON and Markdown can show `ManagedEvidenceReady` and `LegacyCompatibilityProviderFailureObserved` when managed passes but an old compatibility baseline fails.
+- [x] 2026-06-28: Native compatibility Windows PowerShell hosts now pre-seed the disposable PowerShellGet profile with the default PSGallery repository instead of relying on `Register-PSRepository -Default` bootstrap. A public `ThreadJob` 1.0.0 to 2.1.0 update rerun against `C:\Users\przemyslaw.klys.EVOTEC\AppData\Local\Temp\pf-public-update-e18fc1f0c0b94c89ba44761591b3053f` validated managed and PSResourceGet updates to 2.1.0, while PowerShellGet reached its native install path and still failed with `End of Central Directory record could not be found`.
 
 ## Benchmark Scenarios
 

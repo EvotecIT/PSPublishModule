@@ -19,6 +19,11 @@ public sealed class ManagedModuleNativeCompatibilityBenchmarkRunnerTests
             {
                 requests.Add(request);
                 scripts.Add(File.ReadAllText(request.ScriptPath!));
+                if (scripts[^1].Contains("Register-PSRepository", StringComparison.Ordinal))
+                {
+                    return new PowerShellRunResult(0, "PFPWSGET::REPO::CREATED::1", string.Empty, "powershell.exe");
+                }
+
                 return new PowerShellRunResult(0, "PFMOD::INSTALL::OK", string.Empty, "powershell.exe");
             }),
             new NullLogger());
@@ -34,16 +39,30 @@ public sealed class ManagedModuleNativeCompatibilityBenchmarkRunnerTests
             },
             ManagedModuleBenchmarkEngine.PowerShellGet);
 
-        Assert.Single(requests);
+        Assert.Equal(2, requests.Count);
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
-        Assert.Equal(moduleRoot.Path, requests[0].WorkingDirectory);
-        Assert.Contains("PSGallery", requests[0].Arguments);
-        Assert.Equal(Path.Combine(moduleRoot.Path, "temp"), requests[0].EnvironmentVariables!["TEMP"]);
-        Assert.Equal(Path.Combine(moduleRoot.Path, "temp"), requests[0].EnvironmentVariables!["TMP"]);
+        Assert.All(requests, request => Assert.Equal(moduleRoot.Path, request.WorkingDirectory));
+        Assert.All(requests, request => Assert.Contains("PSGallery", request.Arguments));
+        Assert.All(requests, request => Assert.Equal(Path.Combine(moduleRoot.Path, "temp"), request.EnvironmentVariables!["TEMP"]));
+        Assert.All(requests, request => Assert.Equal(Path.Combine(moduleRoot.Path, "temp"), request.EnvironmentVariables!["TMP"]));
+        Assert.Contains(scripts, script => script.Contains("Register-PSRepository", StringComparison.Ordinal));
+        Assert.Contains(scripts, script => script.Contains("Install-Module", StringComparison.Ordinal));
         Assert.Contains(scripts, script => script.Contains("SecurityProtocol", StringComparison.Ordinal) && script.Contains("Tls12", StringComparison.Ordinal));
+        Assert.Contains(scripts, script => script.Contains("Parameters.ContainsKey('AcceptLicense')", StringComparison.Ordinal));
+        var repositoryFile = Path.Combine(
+            moduleRoot.Path,
+            "home",
+            "AppData",
+            "Local",
+            "Microsoft",
+            "Windows",
+            "PowerShell",
+            "PowerShellGet",
+            "PSRepositories.xml");
+        Assert.Contains("https://www.powershellgallery.com/api/v2", File.ReadAllText(repositoryFile), StringComparison.Ordinal);
         if (Path.DirectorySeparatorChar == '\\')
         {
-            Assert.Contains("powershell.exe", requests[0].ExecutableOverride!, StringComparison.OrdinalIgnoreCase);
+            Assert.All(requests, request => Assert.Contains("powershell.exe", request.ExecutableOverride!, StringComparison.OrdinalIgnoreCase));
         }
     }
 

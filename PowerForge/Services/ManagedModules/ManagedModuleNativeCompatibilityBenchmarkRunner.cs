@@ -152,8 +152,6 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
     {
         if (string.IsNullOrWhiteSpace(repositoryName))
             return;
-        if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
-            return;
 
         var source = scenario.Repository.Source;
         if (string.IsNullOrWhiteSpace(source))
@@ -211,6 +209,7 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
         var tempRoot = Path.Combine(sandboxRoot, "temp");
         var moduleRoot = Path.Combine(fakeHome, "Documents", "WindowsPowerShell", "Modules");
         CreateProfileDirectories(fakeHome, moduleRoot, tempRoot);
+        SeedPowerShellGetDefaultRepository(fakeHome);
 
         var paths = new List<string> { moduleRoot };
         AddIfDirectory(paths, Path.Combine(GetDocumentsPath(), "WindowsPowerShell", "Modules"));
@@ -392,6 +391,69 @@ internal sealed class ManagedModuleNativeCompatibilityBenchmarkRunner : IManaged
         Directory.CreateDirectory(Path.Combine(fakeHome, "Documents", "PowerShell", "Modules"));
         Directory.CreateDirectory(Path.Combine(fakeHome, "Documents", "WindowsPowerShell", "Modules"));
         Directory.CreateDirectory(Path.Combine(fakeHome, ".local", "share", "powershell", "Modules"));
+    }
+
+    private static void SeedPowerShellGetDefaultRepository(string fakeHome)
+    {
+        var repositoryDirectory = Path.Combine(fakeHome, "AppData", "Local", "Microsoft", "Windows", "PowerShell", "PowerShellGet");
+        Directory.CreateDirectory(repositoryDirectory);
+        var repositoryFile = Path.Combine(repositoryDirectory, "PSRepositories.xml");
+        if (File.Exists(repositoryFile))
+            return;
+
+        File.WriteAllText(
+            repositoryFile,
+            """
+            <Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">
+              <Obj RefId="0">
+                <TN RefId="0">
+                  <T>System.Collections.Hashtable</T>
+                  <T>System.Object</T>
+                </TN>
+                <DCT>
+                  <En>
+                    <S N="Key">PSGallery</S>
+                    <Obj N="Value" RefId="1">
+                      <TN RefId="1">
+                        <T>Deserialized.Microsoft.PowerShell.Commands.PSRepository</T>
+                        <T>Deserialized.System.Management.Automation.PSCustomObject</T>
+                        <T>Deserialized.System.Object</T>
+                      </TN>
+                      <MS>
+                        <S N="Name">PSGallery</S>
+                        <S N="SourceLocation">https://www.powershellgallery.com/api/v2</S>
+                        <S N="PublishLocation">https://www.powershellgallery.com/api/v2/package/</S>
+                        <S N="ScriptSourceLocation">https://www.powershellgallery.com/api/v2/items/psscript</S>
+                        <S N="ScriptPublishLocation">https://www.powershellgallery.com/api/v2/package/</S>
+                        <Obj N="Trusted" RefId="2">
+                          <TN RefId="2">
+                            <T>System.Management.Automation.SwitchParameter</T>
+                            <T>System.ValueType</T>
+                            <T>System.Object</T>
+                          </TN>
+                          <ToString>True</ToString>
+                          <Props>
+                            <B N="IsPresent">true</B>
+                          </Props>
+                        </Obj>
+                        <B N="Registered">true</B>
+                        <S N="InstallationPolicy">Trusted</S>
+                        <S N="PackageManagementProvider">NuGet</S>
+                        <Obj N="ProviderOptions" RefId="3">
+                          <TN RefId="3">
+                            <T>Deserialized.System.Collections.Hashtable</T>
+                            <T>System.Object</T>
+                          </TN>
+                          <DCT />
+                        </Obj>
+                      </MS>
+                    </Obj>
+                  </En>
+                </DCT>
+              </Obj>
+            </Objs>
+            """,
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
 
     private static string ResolveCoreCurrentUserModuleRoot(string fakeHome)
