@@ -21,6 +21,11 @@ public sealed class ManagedModuleBenchmarkTransitionGateResult
     public bool ReadyForDefaultManagedTransport { get; set; }
 
     /// <summary>
+    /// True when the managed engine evidence passed before compatibility coverage is considered.
+    /// </summary>
+    public bool ManagedEvidenceReady { get; set; }
+
+    /// <summary>
     /// True when compatibility fallback is still required for this operation.
     /// </summary>
     public bool CompatibilityFallbackRequired { get; set; }
@@ -34,6 +39,11 @@ public sealed class ManagedModuleBenchmarkTransitionGateResult
     /// Compatibility provider failures that explain why fallback remains required.
     /// </summary>
     public IReadOnlyList<string> CompatibilityProviderLimitations { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// True when the managed engine passed but a legacy compatibility provider failed its baseline.
+    /// </summary>
+    public bool LegacyCompatibilityProviderFailureObserved { get; set; }
 
     /// <summary>
     /// True when native install/update comparison needs an isolated disposable host before it can be trusted.
