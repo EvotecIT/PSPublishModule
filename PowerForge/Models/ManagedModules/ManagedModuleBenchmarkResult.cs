@@ -21,6 +21,11 @@ public sealed class ManagedModuleBenchmarkResult
     public IReadOnlyList<ManagedModuleBenchmarkRunResult> Runs { get; set; } = Array.Empty<ManagedModuleBenchmarkRunResult>();
 
     /// <summary>
+    /// Runtime and host metadata describing where this benchmark result was produced.
+    /// </summary>
+    public ManagedModuleBenchmarkEnvironment Environment { get; set; } = ManagedModuleBenchmarkEnvironment.Capture();
+
+    /// <summary>
     /// Operation-level evidence gates used when deciding whether the managed engine can replace compatibility defaults.
     /// </summary>
     public IReadOnlyList<ManagedModuleBenchmarkTransitionGateResult> TransitionGates { get; set; } = Array.Empty<ManagedModuleBenchmarkTransitionGateResult>();

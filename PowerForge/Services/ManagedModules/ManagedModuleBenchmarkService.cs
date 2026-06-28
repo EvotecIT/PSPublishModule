@@ -122,6 +122,7 @@ public sealed partial class ManagedModuleBenchmarkService
         {
             StartedAtUtc = started,
             CompletedAtUtc = DateTimeOffset.UtcNow,
+            Environment = ManagedModuleBenchmarkEnvironment.Capture(),
             Runs = runs,
             TransitionGates = ManagedModuleBenchmarkTransitionGateEvaluator.Evaluate(
                 runs,
