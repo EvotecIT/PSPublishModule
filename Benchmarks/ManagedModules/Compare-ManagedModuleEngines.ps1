@@ -62,7 +62,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 $validOperations = @('Find', 'Save', 'Install', 'InstallManaged', 'Update', 'RepairPlan')
-$validRepairScenarios = @('StaleVersion', 'SourceDrift', 'ScopeDrift', 'FamilyCoherence')
+$validRepairScenarios = @('StaleVersion', 'SourceDrift', 'ScopeDrift', 'FamilyCoherence', 'LoadedModuleSafety', 'CleanupPlanning')
 
 function Resolve-TokenList {
     param(
