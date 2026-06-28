@@ -311,6 +311,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: PowerShell 7 ran disposable-host full `Az` 16.0.0 managed install with explicit license acceptance. Managed installed 2790 files and about 623 MB in 115.31 seconds, giving the first whole-Az baseline for the next optimization pass.
 - [x] 2026-06-28: Windows PowerShell 5.1 reran disposable-host `ThreadJob` managed install after the archive extraction optimization; managed completed in 2.96 seconds.
 - [x] 2026-06-28: PowerShell 7 reran full `Az` 16.0.0 managed install with package-level detail output. The run completed in 121.48 seconds; the managed detail artifact reported 204 packages, 203 dependencies, 119.15 seconds spent in root dependency delivery, 78.14 seconds summed package download time, 2.42 seconds summed extraction time, and 0.41 seconds summed promotion time. This identifies dependency scheduling and repository delivery as the next optimization target; extraction is no longer the dominant cost for Az.
+- [x] 2026-06-28: Managed package download/copy streams now use a larger async sequential buffer. PowerShell 7 reran full `Az` 16.0.0 managed install in 98.84 seconds; summed package download time dropped to 65.96 seconds over the same 204 packages and 137.5 MB of downloaded package bytes. PowerShell 7 reran full `Microsoft.Graph` 2.38.0 managed install in 40.03 seconds with 78 packages, 37.22 seconds summed download time, and about 186.5 MB of downloaded package bytes.
 
 ### Next Optimization Targets
 
