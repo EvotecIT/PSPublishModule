@@ -25,8 +25,7 @@ public sealed partial class ManagedModuleBenchmarkService
     {
         var evidence = new CompatibilityEvidence
         {
-            ExpectedVersion = result.ResolvedVersion,
-            FinalDiskBytes = MeasureDirectoryBytes(scenario.ModuleRoot)
+            ExpectedVersion = result.ResolvedVersion
         };
         var manifest = FindCompatibilityManifest(scenario.ModuleRoot, scenario.Name, result.ResolvedVersion);
         if (manifest is null)
@@ -37,6 +36,7 @@ public sealed partial class ManagedModuleBenchmarkService
 
         evidence.ModulePath = manifest.DirectoryName;
         evidence.FileCount = CountFiles(manifest.DirectoryName);
+        evidence.FinalDiskBytes = MeasureDirectoryBytes(manifest.DirectoryName);
         evidence.ValidatedVersion = ReadManifestVersion(manifest.FullName);
         if (string.IsNullOrWhiteSpace(result.ResolvedVersion) || string.IsNullOrWhiteSpace(evidence.ValidatedVersion))
         {
