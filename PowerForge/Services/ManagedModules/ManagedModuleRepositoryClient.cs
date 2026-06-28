@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -68,7 +69,7 @@ public sealed partial class ManagedModuleRepositoryClient
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => GetLocalVersions(repository, packageId, includePrerelease),
-            ManagedModuleRepositoryKind.NuGetV3 => await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV3 => await GetNuGetVersionsWithFallbackAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await GetNuGetV2VersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
@@ -100,7 +101,7 @@ public sealed partial class ManagedModuleRepositoryClient
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take),
-            ManagedModuleRepositoryKind.NuGetV3 => await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV3 => await SearchNuGetPackagesWithFallbackAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
@@ -141,7 +142,7 @@ public sealed partial class ManagedModuleRepositoryClient
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => await CopyLocalPackageAsync(repository, packageId, version, destinationDirectory, cancellationToken).ConfigureAwait(false),
-            ManagedModuleRepositoryKind.NuGetV3 => await DownloadNuGetPackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV3 => await DownloadNuGetPackageWithFallbackAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await DownloadNuGetV2PackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
@@ -154,6 +155,65 @@ public sealed partial class ManagedModuleRepositoryClient
     /// <returns>Package metadata.</returns>
     public ManagedModulePackageMetadata ReadPackageMetadata(string packagePath)
         => _packageReader.ReadMetadata(packagePath);
+
+    private async Task<IReadOnlyList<ManagedModuleVersionInfo>> GetNuGetVersionsWithFallbackAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ShouldFallbackToPowerShellGalleryV2(repository, ex))
+        {
+            var fallback = CreatePowerShellGalleryV2Fallback(repository);
+            _logger.Verbose("PowerShell Gallery v3 metadata was unavailable; falling back to NuGet v2 package version lookup.");
+            return await GetNuGetV2VersionsAsync(fallback, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchNuGetPackagesWithFallbackAsync(
+        ManagedModuleRepository repository,
+        string query,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ShouldFallbackToPowerShellGalleryV2(repository, ex))
+        {
+            var fallback = CreatePowerShellGalleryV2Fallback(repository);
+            _logger.Verbose("PowerShell Gallery v3 search metadata was unavailable; falling back to NuGet v2 package search.");
+            return await SearchNuGetV2PackagesAsync(fallback, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<ManagedModuleDownloadResult> DownloadNuGetPackageWithFallbackAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        string version,
+        string destinationDirectory,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await DownloadNuGetPackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ShouldFallbackToPowerShellGalleryV2(repository, ex))
+        {
+            var fallback = CreatePowerShellGalleryV2Fallback(repository);
+            _logger.Verbose("PowerShell Gallery v3 package base metadata was unavailable; falling back to NuGet v2 package download.");
+            return await DownloadNuGetV2PackageAsync(fallback, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     private ManagedModuleDownloadResult? TryUseCachedPackage(
         ManagedModuleRepository repository,
@@ -669,6 +729,47 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static string EnsureTrailingSlash(string value)
         => value.EndsWith("/", StringComparison.Ordinal) ? value : value + "/";
+
+    private static bool ShouldFallbackToPowerShellGalleryV2(ManagedModuleRepository repository, Exception exception)
+    {
+        if (!IsPowerShellGalleryV3Index(repository.Source))
+            return false;
+
+        return exception switch
+        {
+            ManagedModuleRepositoryException repositoryException
+                => IsServiceDiscoveryOperation(repositoryException.Operation) &&
+                   IsFallbackServiceIndexStatus(repositoryException.StatusCode),
+            HttpRequestException => true,
+            TimeoutException => true,
+            _ => false
+        };
+    }
+
+    private static ManagedModuleRepository CreatePowerShellGalleryV2Fallback(ManagedModuleRepository repository)
+        => new(repository.Name, "https://www.powershellgallery.com/api/v2", ManagedModuleRepositoryKind.NuGetV2, repository.Trusted);
+
+    private static bool IsPowerShellGalleryV3Index(string source)
+    {
+        var normalized = source.Trim().TrimEnd('/');
+        return normalized.Equals("https://www.powershellgallery.com/api/v3/index.json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsServiceDiscoveryOperation(string operation)
+        => operation.Equals("ServiceIndex", StringComparison.OrdinalIgnoreCase) ||
+           operation.Equals("SearchServiceDiscovery", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFallbackServiceIndexStatus(int? statusCode)
+    {
+        if (!statusCode.HasValue)
+            return true;
+
+        return statusCode.Value == (int)HttpStatusCode.Forbidden ||
+               statusCode.Value == (int)HttpStatusCode.NotFound ||
+               statusCode.Value == (int)HttpStatusCode.RequestTimeout ||
+               statusCode.Value == 429 ||
+               statusCode.Value >= 500;
+    }
 
     private static Task<Stream> ReadContentStreamAsync(HttpContent content, CancellationToken cancellationToken)
 #if NET472
