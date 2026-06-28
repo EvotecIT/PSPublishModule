@@ -100,13 +100,9 @@ function Resolve-OperationList {
     @('Find', 'Save', 'Install')
 }
 
-function Get-ManagedRepositorySource {
-    if ([string]::IsNullOrWhiteSpace($Repository) -or $Repository -eq 'PSGallery' -or $Repository -eq $RepositoryName) {
-        return 'https://www.powershellgallery.com/api/v3/index.json'
-    }
-
-    $Repository
-}
+$script:ResolvedUpdateBaselineVersion = $UpdateBaselineVersion
+$script:ResolvedUpdateTargetVersion = $Version
+$script:UpdateBaselineResolutionError = ''
 
 function Resolve-ModuleBinary {
     $frameworks = if ($PSVersionTable.PSEdition -eq 'Desktop') {
@@ -251,6 +247,9 @@ function Get-BenchmarkHostPath {
 }
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ImportValidation.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.VersionDiscovery.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ResultRows.ps1')
+$repositorySource = Resolve-ManagedModuleBenchmarkRepositorySource -Repository $Repository -RepositoryName $RepositoryName
 
 function Get-ProviderModulePath {
     param([string] $EngineName)
@@ -361,7 +360,7 @@ function Invoke-IsolatedInstallHost {
         '-ModuleName'
         $ModuleName
         '-Repository'
-        (Get-ManagedRepositorySource)
+        $repositorySource
         '-RepositoryName'
         $RepositoryName
         '-ModuleFastSource'
@@ -563,6 +562,8 @@ function Invoke-TimedOperation {
         Status = $status
         ModuleName = $ModuleName
         Version = $versionText
+        UpdateBaselineVersion = if ($OperationName -eq 'Update') { $script:ResolvedUpdateBaselineVersion } else { '' }
+        UpdateTargetVersion = if ($OperationName -eq 'Update') { $script:ResolvedUpdateTargetVersion } else { '' }
         ElapsedMilliseconds = [math]::Round($timer.Elapsed.TotalMilliseconds, 2)
         OutputCount = $outputCount
         OutputDirectoryCount = $metrics.DirectoryCount
@@ -588,61 +589,6 @@ function Invoke-TimedOperation {
     }
 }
 
-function New-SkippedRow {
-    param(
-        [string] $OperationName,
-        [string] $EngineName,
-        [int] $Iteration,
-        [string] $Reason
-    )
-
-    [pscustomobject]@{
-        Operation = $OperationName
-        Engine = $EngineName
-        Iteration = $Iteration
-        Status = 'Skipped'
-        ModuleName = $ModuleName
-        Version = $null
-        ElapsedMilliseconds = 0
-        OutputCount = 0
-        OutputDirectoryCount = 0
-        OutputFileCount = 0
-        OutputBytes = 0
-        OutputRoot = ''
-        DetailPath = ''
-        ManagedPackageCount = 0
-        ManagedDependencyCount = 0
-        ManagedRootDependencyMilliseconds = 0
-        ManagedTotalDownloadMilliseconds = 0
-        ManagedTotalExtractionMilliseconds = 0
-        ManagedTotalPromotionMilliseconds = 0
-        ManagedRepositoryRequestCount = 0
-        ManagedDownloadBytes = 0
-        ManagedCacheHitCount = 0
-        ImportStatus = ''
-        ImportVersion = ''
-        ImportMilliseconds = 0
-        ImportManifestPath = ''
-        ImportError = ''
-        Error = $Reason
-    }
-}
-
-function New-FailedRow {
-    param(
-        [string] $OperationName,
-        [string] $EngineName,
-        [int] $Iteration,
-        [string] $Reason,
-        [string] $OutputRoot = ''
-    )
-
-    $row = New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $Reason
-    $row.Status = 'Failed'
-    $row.OutputRoot = $OutputRoot
-    $row
-}
-
 function Invoke-FindScenario {
     param([string] $EngineName, [int] $Iteration)
 
@@ -652,7 +598,7 @@ function Invoke-FindScenario {
         }
         'Managed' {
             Invoke-TimedOperation -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -OutputRoot '' -DetailPath '' -ScriptBlock {
-                Find-ManagedModule -Name $ModuleName -Repository (Get-ManagedRepositorySource) -RepositoryName $RepositoryName
+                Find-ManagedModule -Name $ModuleName -Repository $repositorySource -RepositoryName $RepositoryName
             }
         }
         'PSResourceGet' {
@@ -691,7 +637,7 @@ function Invoke-SaveScenario {
                 $parameters = @{
                     Name = $ModuleName
                     Path = $destination
-                    Repository = Get-ManagedRepositorySource
+                    Repository = $repositorySource
                     RepositoryName = $RepositoryName
                     AllowClobber = $true
                     Force = $true
@@ -793,8 +739,14 @@ function Invoke-InstallScenario {
 function Invoke-UpdateScenario {
     param([string] $EngineName, [int] $Iteration)
 
-    if ([string]::IsNullOrWhiteSpace($UpdateBaselineVersion)) {
-        return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason 'UpdateBaselineVersion is required for update benchmarks.'
+    if ([string]::IsNullOrWhiteSpace($script:ResolvedUpdateBaselineVersion)) {
+        $reason = if ([string]::IsNullOrWhiteSpace($script:UpdateBaselineResolutionError)) {
+            'UpdateBaselineVersion could not be resolved for update benchmarks.'
+        } else {
+            $script:UpdateBaselineResolutionError
+        }
+
+        return New-SkippedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason $reason
     }
 
     if ($EngineName -eq 'ModuleFast') {
@@ -823,7 +775,7 @@ function Invoke-UpdateScenario {
     }
 
     try {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $UpdateBaselineVersion -PackageCacheDirectory $packageCacheDirectory
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $script:ResolvedUpdateBaselineVersion -PackageCacheDirectory $packageCacheDirectory
     } catch {
         return New-FailedRow -OperationName 'Update' -EngineName $EngineName -Iteration $Iteration -Reason "Baseline install failed: $($_.Exception.Message)" -OutputRoot $destination
     }
@@ -940,6 +892,15 @@ if ($ListScenarios.IsPresent) {
 New-Item -Path $workRoot -ItemType Directory -Force | Out-Null
 Invoke-LocalBuild
 $moduleBinary = Import-LocalModule
+$updateBaselineResolution = Initialize-ManagedModuleBenchmarkUpdateBaseline -Operations $Operation -CurrentBaselineVersion $UpdateBaselineVersion -ModuleName $ModuleName -RequestedVersion $Version -RepositorySource $repositorySource
+$script:ResolvedUpdateBaselineVersion = [string]$updateBaselineResolution.BaselineVersion
+$script:ResolvedUpdateTargetVersion = [string]$updateBaselineResolution.TargetVersion
+$script:UpdateBaselineResolutionError = [string]$updateBaselineResolution.Error
+if (-not [string]::IsNullOrWhiteSpace([string]$updateBaselineResolution.Message)) {
+    Write-Host ([string]$updateBaselineResolution.Message)
+} elseif (-not [string]::IsNullOrWhiteSpace($script:UpdateBaselineResolutionError)) {
+    Write-Warning $script:UpdateBaselineResolutionError
+}
 
 $results = [Collections.Generic.List[object]]::new()
 foreach ($iteration in 1..$RepeatCount) {
@@ -963,7 +924,11 @@ $comparison = @(New-Comparison -SummaryRows $summary)
 $metadata = [ordered]@{
     ModuleName = $ModuleName
     Version = $Version
-    UpdateBaselineVersion = $UpdateBaselineVersion
+    UpdateBaselineVersion = $script:ResolvedUpdateBaselineVersion
+    RequestedUpdateBaselineVersion = $UpdateBaselineVersion
+    ResolvedUpdateBaselineVersion = $script:ResolvedUpdateBaselineVersion
+    ResolvedUpdateTargetVersion = $script:ResolvedUpdateTargetVersion
+    UpdateBaselineResolutionError = $script:UpdateBaselineResolutionError
     Repository = $Repository
     RepositoryName = $RepositoryName
     ModuleFastSource = $ModuleFastSource

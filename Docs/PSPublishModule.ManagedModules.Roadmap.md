@@ -340,6 +340,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: Repeated rotated PowerShell 7 `ThreadJob` save with `-ValidateImport -RepeatCount 3` stabilized the prior small-save concern. Managed median was 1929 ms, PSResourceGet median was 2422 ms, and PowerShellGet median was 3146 ms; every successful output imported version 2.1.0. ModuleFast remained an explicit save skip.
 - [x] 2026-06-28: Managed repository reads now coalesce concurrent anonymous remote version, latest-version, and search queries so parallel dependency delivery can share identical in-flight metadata requests. Credentialed and cancellable requests intentionally remain independent to avoid mixing private-feed authorization or cancellation semantics. Focused tests cover coalesced version/search reads and the credentialed non-coalescing path.
 - [x] 2026-06-28: PowerShell 7 reran a managed-only full `Microsoft.Graph` 2.38.0 install after repository read coalescing. The run succeeded in 26.25 seconds with 78 packages, 77 dependencies, 81 repository requests, 186.5 MB downloaded package bytes, and about 1.05 GB of output. This confirms the optimization is safe in a heavy public-gallery run, but it did not reduce the Graph request count in this scenario; the next heavy optimization should be chosen from measured package delivery/extraction/promotion detail rather than assuming metadata coalescing helps every family.
+- [x] 2026-06-28: The benchmark harness now resolves update baselines automatically when `Update` is requested without `-UpdateBaselineVersion`. The resolver chooses the latest stable package version lower than the requested target, records the resolved baseline/target in child metadata and result rows, and the suite summary carries those values forward. PSGallery discovery uses the public NuGet v2 read feed because the current host receives 403 responses from PSGallery v3 metadata endpoints; generic NuGet v3 feeds still use v3 package-base metadata. PowerShell 7 proved the no-baseline path with `ThreadJob` 2.0.3 -> 2.1.0 in 3009 ms and suite-level `Microsoft.Graph.Authentication` 2.37.0 -> 2.38.0 in 4229 ms, both with successful import validation. Windows PowerShell 5.1 proved the same baseline resolver returns `ThreadJob` 2.0.3 -> 2.1.0.
 
 ### Next Optimization Targets
 
@@ -350,7 +351,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Stabilize Windows PowerShell 5.1 stale small-module update evidence with repeated rotated cold/warm runs.
 - [x] Stabilize PowerShell 7 small-module save evidence with repeated rotated import-gated runs.
 - [ ] Measure heavy Graph/Az/Teams/Exchange update and repair scenarios on PowerShell 7 and Windows PowerShell 5.1, then optimize the slowest proven managed lane.
-- [ ] Add explicit heavy update baseline versions or a baseline-discovery mode to the suite runner so Graph/Az/Teams/Exchange update scenarios do not silently skip when no `-UpdateBaselineVersion` is supplied.
+- [x] Add explicit heavy update baseline versions or a baseline-discovery mode to the suite runner so Graph/Az/Teams/Exchange update scenarios do not silently skip when no `-UpdateBaselineVersion` is supplied.
 
 ## Benchmark Scenarios
 
