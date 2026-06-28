@@ -5,6 +5,56 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleBenchmarkFailureEvidenceTests
 {
     [Fact]
+    public async Task RunAsync_MeasuresNativeCompatibilityDiskEvidenceFromValidatedModuleDirectory()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var modulePath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var sourcePath = Path.Combine(moduleRoot.Path, "source");
+        Directory.CreateDirectory(modulePath);
+        Directory.CreateDirectory(sourcePath);
+        File.WriteAllText(Path.Combine(modulePath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        File.WriteAllText(Path.Combine(modulePath, "Company.Tools.psm1"), "module-content");
+        File.WriteAllText(Path.Combine(sourcePath, "large-source.bin"), new string('x', 4096));
+        var expectedBytes = Directory.EnumerateFiles(modulePath, "*", SearchOption.AllDirectories)
+            .Sum(static path => new FileInfo(path).Length);
+        var service = new ManagedModuleBenchmarkService(
+            new NullLogger(),
+            compatibilityRunner: (scenario, engine) => new ModuleDependencyInstallResult(
+                scenario.Name,
+                installedVersion: null,
+                resolvedVersion: "1.0.0",
+                requestedVersion: scenario.Version,
+                ModuleDependencyInstallStatus.Installed,
+                engine.ToString(),
+                message: null));
+
+        var result = await service.RunAsync(new ManagedModuleBenchmarkRequest
+        {
+            ContinueOnError = true,
+            Engines = new[] { ManagedModuleBenchmarkEngine.PSResourceGet },
+            Scenarios = new[]
+            {
+                new ManagedModuleBenchmarkScenario
+                {
+                    Id = "native-module-evidence",
+                    Operation = ManagedModuleBenchmarkOperation.Install,
+                    Repository = new ManagedModuleRepository("PSGallery", "https://www.powershellgallery.com/api/v2"),
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    Scope = ManagedModuleInstallScope.Custom,
+                    ModuleRoot = moduleRoot.Path
+                }
+            }
+        });
+
+        var run = Assert.Single(result.Runs);
+        Assert.True(run.Succeeded);
+        Assert.Equal(modulePath, run.ModulePath);
+        Assert.Equal(2, run.FileCount);
+        Assert.Equal(expectedBytes, run.FinalDiskBytes);
+    }
+
+    [Fact]
     public async Task RunAsync_RecordsNativeCompatibilityDiskEvidenceWhenRunnerFailsAfterWritingModule()
     {
         using var moduleRoot = new TemporaryDirectory();
