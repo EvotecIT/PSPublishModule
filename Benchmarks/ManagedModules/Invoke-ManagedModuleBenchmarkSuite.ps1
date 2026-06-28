@@ -55,6 +55,7 @@ $validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'Publish
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.HostComparison.ps1')
 
 function Resolve-TokenList {
     param(
@@ -499,13 +500,18 @@ foreach ($hostLabel in $HostName) {
 
 $summaryPath = Join-Path $suiteRoot 'suite-summary.csv'
 $summaryJsonPath = Join-Path $suiteRoot 'suite-summary.json'
+$hostComparisonPath = Join-Path $suiteRoot 'suite-host-comparison.csv'
+$hostComparisonJsonPath = Join-Path $suiteRoot 'suite-host-comparison.json'
 $hostsPath = Join-Path $suiteRoot 'suite-hosts.csv'
 $gatePath = Join-Path $suiteRoot 'suite-gate.csv'
 $metadataPath = Join-Path $suiteRoot 'metadata.json'
 $gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -UseScenarioGates:$UseScenarioGates.IsPresent)
+$hostComparisonRows = @(New-ManagedHostComparison -Rows @($summaryRows))
 
 $summaryRows | Export-Csv -LiteralPath $summaryPath -NoTypeInformation
 $summaryRows | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryJsonPath -Encoding UTF8
+$hostComparisonRows | Export-Csv -LiteralPath $hostComparisonPath -NoTypeInformation
+$hostComparisonRows | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $hostComparisonJsonPath -Encoding UTF8
 $hostRows | Export-Csv -LiteralPath $hostsPath -NoTypeInformation
 if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0 -or $UseScenarioGates.IsPresent) {
     $gateViolations | Export-Csv -LiteralPath $gatePath -NoTypeInformation
@@ -546,6 +552,7 @@ $metadata = [ordered]@{
     ManagedMaxVsFastest = $ManagedMaxVsFastest
     UseScenarioGates = $UseScenarioGates.IsPresent
     ManagedPerformanceGatePassed = $gateViolations.Count -eq 0
+    HostComparisonPath = $hostComparisonPath
     RemoveOutputRoots = $RemoveOutputRoots.IsPresent
     OutputDirectory = $suiteRoot
 }
