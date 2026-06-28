@@ -144,7 +144,8 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] PSResourceGet-style semantic version ranges are supported through `-VersionPolicy`.
 - [x] PSResourceGet-style `-TrustRepository` behavior maps to trusted repository profiles and `-RequireTrustedRepository` policy instead of hidden prompts.
 - [ ] Decide whether public proxy parameters should be added to managed cmdlets or kept as repository/profile policy only. The managed repository client has proxy behavior, but `-Proxy` and `-ProxyCredential` are not currently public compatibility parameters.
-- [ ] Define exact public semantics for `-Force`, including reinstall, downgrade, no-op, side-by-side, overwrite, receipt repair, and cleanup interactions.
+- [x] Define exact public semantics for `-Force` on install/save/update, including exact-version reinstall, no-op plans, rollback-protected replacement, downgrade blocking, and no implied cleanup.
+- [ ] Define exact public semantics for `-Force` in repair and maintenance flows, including receipt repair and cleanup interactions.
 - [ ] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts across scopes.
 - [ ] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
 - [ ] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, and package hash policies instead of cloning PowerShellGet's publisher-check switch.
@@ -185,10 +186,21 @@ Cmdlets should map parameters into these models and write result objects. They s
 - Credentials are resolved before managed repository access. The core engine receives credential values or no credential; it does not call external credential helpers.
 - Retries, timeouts, cancellation, proxy behavior, endpoint selection, and HTTP error messages belong in the managed repository client. The public PowerShell Gallery default resolves read operations through its NuGet v2 endpoint to avoid slow or blocked v3 service-index probes.
 - Side-by-side versions are valid when version policies ask for exact or compatible copies. Forced replacement stages first and rolls back on promotion failure.
-- Downgrades require explicit policy through the selected version/range and force behavior.
+- Downgrades require a dedicated explicit downgrade policy; `-Force` alone is not a downgrade request.
 - Loaded modules can block unsafe updates unless the caller explicitly allows that risk.
 - Cross-scope repairs must target the requested scope and must not treat a satisfying copy in another scope as equivalent.
 - Prerelease labels are semantic-version labels. Stable versions do not satisfy prerelease-only requests unless the policy allows that outcome.
+
+### Force Semantics
+
+`-Force` is intentionally narrow in the managed engine:
+
+- `Install-ManagedModule -Force` and `Save-ManagedModule -Force` replace the exact selected module version when that version already exists in the target root.
+- Without `-Force`, installing or saving an exact version that already exists is a no-op plan and does not write files.
+- `Update-ManagedModule -Force` reinstalls the selected target version when the selected target is already the installed version.
+- `Update-ManagedModule -Force` does not silently downgrade a newer installed version to an older selected version. Downgrade behavior needs a separate explicit policy so stale-version repair and operator mistakes do not collapse into the same switch.
+- `-Force` does not imply destructive old-version cleanup. Cleanup remains a separate maintenance/repair decision.
+- `Publish-ManagedModule -Force` bypasses managed preflight duplicate/version guards where the target repository supports replacement or accepts the pushed package. It does not guarantee that a remote feed will overwrite an existing package.
 
 ## Transition Gates
 
