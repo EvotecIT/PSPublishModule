@@ -273,7 +273,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add tests for package creation.
 - [x] Add tests for duplicate publish classification.
 - [x] Add tests for private-feed publish request shaping.
-- [x] Benchmark against `Publish-Module` and `Publish-PSResource`.
+- [x] Benchmark local-folder publish against `Publish-Module` and `Publish-PSResource`.
 - [x] Validate local-feed publish smoke on Windows PowerShell 5.1.
 - [x] Validate local-feed publish smoke on PowerShell 7+.
 

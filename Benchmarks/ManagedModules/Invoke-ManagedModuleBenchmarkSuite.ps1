@@ -49,7 +49,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('S{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), $PID)
-$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'SpeedGate', 'All')
+$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'PublishGate', 'SpeedGate', 'All')
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
@@ -125,13 +125,14 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'Teams' -ModuleName 'MicrosoftTeams'
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'ExchangeOnlineManagement' -ModuleName 'ExchangeOnlineManagement'
         New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'ThreadJob.InstallSave.NoOpForce' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce')
+        New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json'
     )
 }
 
 function Resolve-ScenarioList {
     $selectedSuites = if ($Suite -contains 'All') {
-        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'SpeedGate')
+        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'PublishGate', 'SpeedGate')
     } else {
         $Suite
     }
