@@ -147,7 +147,7 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] Define exact public semantics for `-Force` on install/save/update, including exact-version reinstall, no-op plans, rollback-protected replacement, downgrade blocking, and no implied cleanup.
 - [ ] Define exact public semantics for `-Force` in repair and maintenance flows, including receipt repair and cleanup interactions.
 - [x] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts in the selected target root.
-- [ ] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
+- [x] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
 - [ ] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, and package hash policies instead of cloning PowerShellGet's publisher-check switch.
 - [ ] Add managed Authenticode/catalog validation equivalent to PSResourceGet `-AuthenticodeCheck`, including timestamped signatures and short-lived certificate chains.
 - [x] Expose semantically equivalent migration aliases such as `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` where they map cleanly to managed cmdlet behavior.
@@ -209,6 +209,14 @@ Managed install, save, and update are no-clobber by default. Before a staged pac
 `-AllowClobber` is the explicit opt-in that permits those exported command conflicts. This maps to the PSResourceGet `-NoClobber` safety idea by making no-clobber the default in the managed engine, rather than adding a separate `-NoClobber` switch whose absence could imply less safe behavior.
 
 Same-name modules are skipped during conflict checks so side-by-side versions and exact-version reinstalls do not self-conflict. Wildcard exports such as `FunctionsToExport = '*'` are not treated as concrete conflicts because they cannot be reliably enumerated from the manifest alone. The check is target-root based; cross-scope conflicts remain a repair/maintenance policy concern rather than an install-time block across every module path on the machine.
+
+### License Acceptance Semantics
+
+Managed install, save, update, and ModuleState managed delivery never prompt for license acceptance. If the selected package or any dependency package declares `requireLicenseAcceptance=true`, the operation fails unless the caller passes `-AcceptLicense`.
+
+`-AcceptLicense` applies to the whole dependency closure for that operation. This is intentional for unattended estate maintenance: either the operator or automation policy accepts the package licenses up front, or no package that requires acceptance is promoted. A license-required dependency blocks the parent package before the parent is promoted.
+
+Plan operations do not accept licenses or write license receipts. They only describe the intended action. The caller must pass `-AcceptLicense` again when invoking the mutating install, save, update, or ModuleState apply operation.
 
 ## Transition Gates
 
