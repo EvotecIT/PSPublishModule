@@ -72,6 +72,9 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var importedBuildProps = Path.Combine(root, "Build", "Props", "Generated.props");
             Directory.CreateDirectory(Path.GetDirectoryName(importedBuildProps)!);
             File.WriteAllText(importedBuildProps, "<Project />");
+            var outerBuildTargets = Path.Combine(root, "Artifacts", "Outer.targets");
+            Directory.CreateDirectory(Path.GetDirectoryName(outerBuildTargets)!);
+            File.WriteAllText(outerBuildTargets, "<Project />");
             File.WriteAllText(
                 Path.Combine(root, "Directory.Build.props"),
                 "<Project><Import Project=\"$(MSBuildThisFileDirectory)Build\\**\\*.props\" /></Project>");
@@ -90,7 +93,9 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "generated");
             var nestedConfigPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Directory.Build.targets");
             Directory.CreateDirectory(Path.GetDirectoryName(nestedConfigPath)!);
-            File.WriteAllText(nestedConfigPath, "<Project />");
+            File.WriteAllText(
+                nestedConfigPath,
+                "<Project><Import Project=\"$([MSBuild]::GetPathOfFileAbove('Outer.targets', '$(MSBuildThisFileDirectory)..'))\" /></Project>");
             Directory.CreateDirectory(Path.Combine(sourceDir, "Fragments"));
             var sourceProjectPath = Path.Combine(sourceDir, "DesktopManager_App_MSI.wixproj");
             var stagingDir = Path.Combine(root, "Payload", "DesktopManager.App", "win-x64", "net10.0-windows10.0.19041.0", "PortableCompat");
@@ -103,6 +108,19 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Directory.CreateDirectory(Path.GetDirectoryName(secondExternalAsset)!);
             File.WriteAllText(firstExternalAsset, "one");
             File.WriteAllText(secondExternalAsset, "two");
+            var includeCaseDistinctAssets = IsCurrentFileSystemCaseSensitive(root);
+            var firstCaseDistinctAsset = Path.Combine(root, "External", "Case", "asset.txt");
+            var secondCaseDistinctAsset = Path.Combine(root, "External", "Case", "ASSET.txt");
+            var caseDistinctFileEntries = string.Empty;
+            if (includeCaseDistinctAssets)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(firstCaseDistinctAsset)!);
+                File.WriteAllText(firstCaseDistinctAsset, "lower");
+                File.WriteAllText(secondCaseDistinctAsset, "upper");
+                caseDistinctFileEntries =
+                    $"<File Id=\"CaseLower\" Source=\"{firstCaseDistinctAsset}\" />" +
+                    $"<File Id=\"CaseUpper\" Source=\"{secondCaseDistinctAsset}\" />";
+            }
             var licensePath = Path.Combine(root, "Build", "Installer", "DesktopManager-License.rtf");
             Directory.CreateDirectory(Path.GetDirectoryName(licensePath)!);
             File.WriteAllText(licensePath, "{\\rtf1 DesktopManager}");
@@ -134,6 +152,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 $"<File Id=\"LiteralPayloadExe\" Source=\"{payloadFile}\" />" +
                 $"<File Id=\"ExternalOne\" Source=\"{firstExternalAsset}\" />" +
                 $"<File Id=\"ExternalTwo\" Source=\"{secondExternalAsset}\" />" +
+                caseDistinctFileEntries +
                 "</Package></Wix>");
             File.WriteAllText(Path.Combine(sourceDir, "Fragments", "Payload.wxs"), "<Wix />");
 
@@ -164,9 +183,19 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Fragments", "Payload.wxs")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "NuGet.config")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.props")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
-                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Artifacts", "DotNetPublish", "Directory.Build.targets")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Build", "Props", "Generated.props")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Artifacts", "Outer.targets")));
+                var copiedNestedTargets = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets"));
+                var copiedNestedImport = copiedNestedTargets
+                    .Descendants()
+                    .Single(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("Project")!
+                    .Value;
+                Assert.DoesNotContain("GetPathOfFileAbove", copiedNestedImport, StringComparison.OrdinalIgnoreCase);
+                var copiedOuterTargetPath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, copiedNestedImport));
+                Assert.True(File.Exists(copiedOuterTargetPath));
                 var copiedNuGetConfig = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "NuGet.config"));
                 var localPackageSource = copiedNuGetConfig
                     .Descendants()
@@ -266,6 +295,25 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     Path.GetDirectoryName(externalSources[0]),
                     Path.GetDirectoryName(externalSources[1]),
                     StringComparer.OrdinalIgnoreCase);
+                if (includeCaseDistinctAssets)
+                {
+                    var caseDistinctSources = product
+                        .Descendants(wix + "File")
+                        .Where(element =>
+                        {
+                            var id = (string?)element.Attribute("Id");
+                            return string.Equals(id, "CaseLower", StringComparison.Ordinal) ||
+                                string.Equals(id, "CaseUpper", StringComparison.Ordinal);
+                        })
+                        .Select(element => Path.GetFullPath(Path.Combine(
+                            workspace.WorkingDirectory,
+                            element.Attribute("Source")!.Value)))
+                        .ToArray();
+                    Assert.Equal(2, caseDistinctSources.Length);
+                    Assert.NotEqual(caseDistinctSources[0], caseDistinctSources[1], StringComparer.Ordinal);
+                    Assert.Contains(caseDistinctSources, path => string.Equals(File.ReadAllText(path), "lower", StringComparison.Ordinal));
+                    Assert.Contains(caseDistinctSources, path => string.Equals(File.ReadAllText(path), "upper", StringComparison.Ordinal));
+                }
             }
             finally
             {
@@ -1733,6 +1781,16 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static bool IsCurrentFileSystemCaseSensitive(string root)
+    {
+        var directory = Path.Combine(root, "CaseSensitivityProbe");
+        Directory.CreateDirectory(directory);
+        var lowerPath = Path.Combine(directory, "caseprobe");
+        var upperPath = Path.Combine(directory, "CASEPROBE");
+        File.WriteAllText(lowerPath, string.Empty);
+        return !File.Exists(upperPath);
     }
 
     private static string[] InvokeFindChangedMsiOutputs(string root, bool skipBinDirectoryFilter)
