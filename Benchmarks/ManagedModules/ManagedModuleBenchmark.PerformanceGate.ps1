@@ -36,6 +36,18 @@ function Get-ManagedPerformanceGateViolation {
     foreach ($row in @($Rows)) {
         $managedRank = [int] $row.ManagedRank
         if ($managedRank -le 0) {
+            [pscustomobject]@{
+                Suite = if ($row.PSObject.Properties['Suite']) { [string] $row.Suite } else { '' }
+                Scenario = if ($row.PSObject.Properties['Scenario']) { [string] $row.Scenario } else { '' }
+                Host = if ($row.PSObject.Properties['Host']) { [string] $row.Host } else { '' }
+                Operation = [string] $row.Operation
+                FastestEngine = [string] $row.FastestEngine
+                FastestMs = [double] $row.FastestMs
+                ManagedMs = [double] $row.ManagedMs
+                ManagedRank = $managedRank
+                ManagedVsFastest = [string] $row.ManagedVsFastest
+                Reason = 'managed did not produce a successful benchmark result'
+            }
             continue
         }
 

@@ -74,6 +74,59 @@ public sealed class ManagedModuleBenchmarkGateScriptTests
     }
 
     [Fact]
+    public void GateForSuite_FailsScenarioGateWhenManagedDidNotSucceed()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $row = [pscustomobject]@{
+                Suite = 'SaveGate'
+                Scenario = 'Graph.Authentication.Save'
+                Host = 'PowerShell7'
+                Operation = 'Save'
+                FastestEngine = 'PSResourceGet'
+                FastestMs = 1000
+                ManagedMs = 0
+                ManagedRank = 0
+                ManagedVsFastest = ''
+                GateManagedMaxRank = 0
+                GateManagedMaxVsFastest = 1.05
+            }
+
+            Get-ManagedPerformanceGateViolationForSuite -Rows @($row) -MaxRank 0 -MaxVsFastest 0 -UseScenarioGates
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var violation = Assert.Single(results);
+        Assert.Contains("did not produce", Property(violation, "Reason"), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("0", Property(violation, "ManagedRank"));
+    }
+
+    [Fact]
+    public void GateForComparison_FailsExplicitGateWhenManagedDidNotSucceed()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $row = [pscustomobject]@{
+                Operation = 'Save'
+                Scenario = ''
+                FastestEngine = 'PSResourceGet'
+                FastestMs = 1000
+                ManagedMs = 0
+                ManagedRank = 0
+                ManagedVsFastest = ''
+            }
+
+            Get-ManagedPerformanceGateViolation -Rows @($row) -MaxRank 1 -MaxVsFastest 0
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var violation = Assert.Single(results);
+        Assert.Contains("did not produce", Property(violation, "Reason"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void GateForSuite_ExplicitThresholdsOverrideScenarioOwnedThresholds()
     {
         using var ps = CreateBenchmarkPowerShell("""
@@ -137,7 +190,7 @@ public sealed class ManagedModuleBenchmarkGateScriptTests
     }
 
     private static string Property(PSObject value, string name)
-        => (string)value.Properties[name].Value;
+        => value.Properties[name].Value?.ToString() ?? string.Empty;
 
     private static void AssertNoErrors(PowerShell ps)
     {
