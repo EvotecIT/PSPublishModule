@@ -42,6 +42,26 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1);
         Assert.Contains(rows, row =>
+            Property(row, "Suite") == "HeavyLifecycleGate" &&
+            Property(row, "Name") == "Graph.Full.InstallExact.NoOpForce" &&
+            Property(row, "ModuleName") == "Microsoft.Graph" &&
+            Property(row, "Version") == "2.38.0" &&
+            Property(row, "Repository") == "https://pwsh.gallery/index.json" &&
+            Property(row, "RepositoryName") == "PWSHGallery" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "InstallNoOp", "InstallForce" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "HeavyLifecycleGate" &&
+            Property(row, "Name") == "Az.Full.InstallExact.NoOpForce" &&
+            Property(row, "ModuleName") == "Az" &&
+            Property(row, "Version") == "16.0.0" &&
+            Property(row, "Repository") == "https://pwsh.gallery/index.json" &&
+            Property(row, "RepositoryName") == "PWSHGallery" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "InstallNoOp", "InstallForce" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
             Property(row, "Name") == "Az.Accounts.SaveExact.NoOpForce" &&
             Property(row, "Version") == "5.5.0" &&
             StringArrayProperty(row, "Operations").SequenceEqual(new[] { "SaveNoOp", "SaveForce" }) &&
@@ -59,7 +79,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         process.StartInfo.ArgumentList.Add("Bypass");
         process.StartInfo.ArgumentList.Add("-Command");
         process.StartInfo.ArgumentList.Add(
-            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
+            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.UseShellExecute = false;
