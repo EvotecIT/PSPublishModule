@@ -49,7 +49,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('Suite-{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
-$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'All')
+$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'SpeedGate', 'All')
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
@@ -91,7 +91,11 @@ function New-BenchmarkScenario {
         [string] $Version = '',
         [string] $UpdateBaselineVersion = '',
         [bool] $AcceptLicense = $false,
-        [string[]] $Operations = $Operation
+        [string[]] $Operations = $Operation,
+        [string[]] $Engines = $Engine,
+        [string] $Repository = '',
+        [string] $RepositoryName = '',
+        [string] $ScenarioModuleFastSource = ''
     )
 
     [pscustomobject]@{
@@ -102,6 +106,10 @@ function New-BenchmarkScenario {
         UpdateBaselineVersion = $UpdateBaselineVersion
         AcceptLicense = $AcceptLicense
         Operations = $Operations
+        Engines = $Engines
+        Repository = $Repository
+        RepositoryName = $RepositoryName
+        ModuleFastSource = $ScenarioModuleFastSource
     }
 }
 
@@ -116,12 +124,13 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Full' -ModuleName 'Az' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'Teams' -ModuleName 'MicrosoftTeams'
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'ExchangeOnlineManagement' -ModuleName 'ExchangeOnlineManagement'
+        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json'
     )
 }
 
 function Resolve-ScenarioList {
     $selectedSuites = if ($Suite -contains 'All') {
-        @('Smoke', 'Graph', 'Az', 'Enterprise')
+        @('Smoke', 'Graph', 'Az', 'Enterprise', 'SpeedGate')
     } else {
         $Suite
     }
@@ -196,6 +205,46 @@ function Get-ScenarioOperations {
     $operations
 }
 
+function Get-ScenarioEngines {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['Engines'] -and $Scenario.Engines -and @($Scenario.Engines).Count -gt 0) {
+        return @($Scenario.Engines)
+    }
+
+    $Engine
+}
+
+function Get-ScenarioRepository {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['Repository'] -and -not [string]::IsNullOrWhiteSpace($Scenario.Repository)) {
+        return [string]$Scenario.Repository
+    }
+
+    ''
+}
+
+function Get-ScenarioRepositoryName {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['RepositoryName'] -and -not [string]::IsNullOrWhiteSpace($Scenario.RepositoryName)) {
+        return [string]$Scenario.RepositoryName
+    }
+
+    ''
+}
+
+function Get-ScenarioModuleFastSource {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['ModuleFastSource'] -and -not [string]::IsNullOrWhiteSpace($Scenario.ModuleFastSource)) {
+        return [string]$Scenario.ModuleFastSource
+    }
+
+    $ModuleFastSource
+}
+
 function Invoke-ScenarioHostRun {
     param(
         [object] $Scenario,
@@ -218,9 +267,9 @@ function Invoke-ScenarioHostRun {
         '-Operation',
         ((Get-ScenarioOperations -Scenario $Scenario) -join ','),
         '-Engine',
-        ($Engine -join ','),
+        ((Get-ScenarioEngines -Scenario $Scenario) -join ','),
         '-ModuleFastSource',
-        $ModuleFastSource,
+        (Get-ScenarioModuleFastSource -Scenario $Scenario),
         '-RepeatCount',
         ([string]$RepeatCount),
         '-OutputDirectory',
@@ -231,6 +280,14 @@ function Invoke-ScenarioHostRun {
         $CacheMode,
         '-SkipBuild'
     )
+    $scenarioRepository = Get-ScenarioRepository -Scenario $Scenario
+    if (-not [string]::IsNullOrWhiteSpace($scenarioRepository)) {
+        $arguments += @('-Repository', $scenarioRepository)
+    }
+    $scenarioRepositoryName = Get-ScenarioRepositoryName -Scenario $Scenario
+    if (-not [string]::IsNullOrWhiteSpace($scenarioRepositoryName)) {
+        $arguments += @('-RepositoryName', $scenarioRepositoryName)
+    }
     if ($RemoveOutputRoots.IsPresent) {
         $arguments += '-RemoveOutputRoots'
     }
@@ -311,6 +368,10 @@ function Add-SummaryRows {
                 Suite = $Scenario.Suite
                 Scenario = $Scenario.Name
                 ModuleName = $Scenario.ModuleName
+                Engines = (Get-ScenarioEngines -Scenario $Scenario) -join ','
+                Repository = Get-ScenarioRepository -Scenario $Scenario
+                RepositoryName = Get-ScenarioRepositoryName -Scenario $Scenario
+                ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $Scenario
                 UpdateBaselineVersion = $resolvedBaseline
                 UpdateTargetVersion = $resolvedTarget
                 Host = $HostLabel
@@ -348,7 +409,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations
+    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, Engines, Repository, RepositoryName, ModuleFastSource
     return
 }
 
@@ -400,6 +461,21 @@ if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
 $metadata = [ordered]@{
     Suites = $Suite
     ScenarioNames = $ScenarioName
+    SelectedScenarios = @($scenarios | ForEach-Object {
+            [ordered]@{
+                Suite = $_.Suite
+                Name = $_.Name
+                ModuleName = $_.ModuleName
+                Version = $_.Version
+                UpdateBaselineVersion = $_.UpdateBaselineVersion
+                AcceptLicense = $_.AcceptLicense
+                Operations = @(Get-ScenarioOperations -Scenario $_)
+                Engines = @(Get-ScenarioEngines -Scenario $_)
+                Repository = Get-ScenarioRepository -Scenario $_
+                RepositoryName = Get-ScenarioRepositoryName -Scenario $_
+                ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $_
+            }
+        })
     Hosts = $HostName
     Engines = $Engine
     ModuleFastSource = $ModuleFastSource
