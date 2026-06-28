@@ -40,8 +40,9 @@ internal sealed class ManagedModuleReceiptStore
         };
 
         var receiptPath = GetReceiptPath(result.ModulePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(receiptPath)!);
-        File.WriteAllText(receiptPath, JsonSerializer.Serialize(receipt, JsonOptions));
+        var fileSystemReceiptPath = GetFileSystemPath(receiptPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(fileSystemReceiptPath)!);
+        File.WriteAllText(fileSystemReceiptPath, JsonSerializer.Serialize(receipt, JsonOptions));
 
         result.Receipt = receipt;
         result.ReceiptPath = receiptPath;
@@ -51,12 +52,13 @@ internal sealed class ManagedModuleReceiptStore
     public ManagedModuleReceipt? TryReadReceipt(string modulePath)
     {
         var receiptPath = GetReceiptPath(modulePath);
-        if (!File.Exists(receiptPath))
+        var fileSystemReceiptPath = GetFileSystemPath(receiptPath);
+        if (!File.Exists(fileSystemReceiptPath))
             return null;
 
         try
         {
-            return JsonSerializer.Deserialize<ManagedModuleReceipt>(File.ReadAllText(receiptPath));
+            return JsonSerializer.Deserialize<ManagedModuleReceipt>(File.ReadAllText(fileSystemReceiptPath));
         }
         catch (JsonException)
         {
@@ -68,5 +70,19 @@ internal sealed class ManagedModuleReceiptStore
     {
         var normalized = ReceiptRelativePath.Replace('/', Path.DirectorySeparatorChar);
         return Path.Combine(modulePath, normalized);
+    }
+
+    private static string GetFileSystemPath(string path)
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return path;
+
+        var fullPath = Path.GetFullPath(path);
+        if (fullPath.StartsWith(@"\\?\", StringComparison.Ordinal))
+            return fullPath;
+        if (fullPath.StartsWith(@"\\", StringComparison.Ordinal))
+            return @"\\?\UNC\" + fullPath.Substring(2);
+
+        return @"\\?\" + fullPath;
     }
 }
