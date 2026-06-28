@@ -87,12 +87,6 @@ Gets module manifest information from a project directory.
 ### [Get-ModuleRepositoryProfile](Get-ModuleRepositoryProfile.md)
 Gets saved private module repository profiles.
 
-### [Get-ModuleState](Get-ModuleState.md)
-Gets module-state inventory from the local machine or an inventory artifact.
-
-### [Get-ModuleStatePlan](Get-ModuleStatePlan.md)
-Builds a module-state plan from module-state objects or artifacts.
-
 ### [Get-ModuleTestFailures](Get-ModuleTestFailures.md)
 Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.
 
@@ -158,12 +152,6 @@ Repository-wide .NET package release workflow (discover, version, pack, publish)
 
 ### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
 Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
-
-### [Invoke-ModuleState](Invoke-ModuleState.md)
-Runs the one-stop module-state management workflow.
-
-### [Invoke-ModuleStatePlan](Invoke-ModuleStatePlan.md)
-Prepares private-module delivery commands and an optional receipt from a module-state plan.
 
 ### [Invoke-ModuleTestSuite](Invoke-ModuleTestSuite.md)
 Complete module testing suite that handles dependencies, imports, and test execution.
@@ -462,9 +450,6 @@ Validates a curated isolated module profile without importing it.
 
 ### [Test-ModuleRepositoryProfile](Test-ModuleRepositoryProfile.md)
 Tests saved private module repository profiles and local authentication prerequisites.
-
-### [Test-ModuleState](Test-ModuleState.md)
-Tests module state against a desired state or an existing plan.
 
 ### [Update-ManagedModule](Update-ManagedModule.md)
 Updates installed PowerShell modules through the managed C# module engine.

@@ -94,6 +94,36 @@ public sealed class ModulePublisherRequiredModulesTests
     }
 
     [Fact]
+    public void GetExternalModulesForPublish_ReadsManifestPsDataBeforePlanFallback()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(
+                root.FullName,
+                moduleName,
+                "1.0.0",
+                "            ExternalModuleDependencies = @('external.dependency', 'External.Dependency')");
+            var buildResult = new ModuleBuildResult(
+                stagingPath: root.FullName,
+                manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+            var plan = CreatePlan(externalModuleDependencies: new[] { "Plan.Only" });
+
+            var externalModules = RequiredModuleRepositoryValidator.GetExternalModulesForPublish(buildResult, plan);
+
+            Assert.Contains("external.dependency", externalModules, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Plan.Only", externalModules, StringComparer.OrdinalIgnoreCase);
+            Assert.Single(externalModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void SelectRequiredModuleVersionForPublish_PicksHighestMatchingVersion()
     {
         var required = new RequiredModuleReference(
@@ -324,7 +354,11 @@ public sealed class ModulePublisherRequiredModulesTests
         }
     }
 
-    private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
+    private static void WriteMinimalModule(
+        string moduleRoot,
+        string moduleName,
+        string version,
+        string? psDataLine = null)
     {
         Directory.CreateDirectory(moduleRoot);
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), string.Empty);
@@ -337,9 +371,73 @@ public sealed class ModulePublisherRequiredModulesTests
             "    FunctionsToExport = @()",
             "    CmdletsToExport = @()",
             "    AliasesToExport = @()",
+            "    PrivateData = @{",
+            "        PSData = @{",
+            string.IsNullOrWhiteSpace(psDataLine) ? string.Empty : psDataLine!,
+            "        }",
+            "    }",
             "}"
-        }) + Environment.NewLine;
+        }.Where(static line => line.Length > 0)) + Environment.NewLine;
 
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
+    }
+
+    private static ModulePipelinePlan CreatePlan(string[]? externalModuleDependencies = null)
+    {
+        return new ModulePipelinePlan(
+            moduleName: "TestModule",
+            projectRoot: @"C:\repo\TestModule",
+            expectedVersion: "1.0.0",
+            resolvedVersion: "1.0.0",
+            preRelease: null,
+            manifest: null,
+            buildSpec: new ModuleBuildSpec
+            {
+                Name = "TestModule",
+                SourcePath = @"C:\repo\TestModule",
+                Version = "1.0.0"
+            },
+            resolvedCsprojPath: null,
+            syncNETProjectVersion: false,
+            compatiblePSEditions: Array.Empty<string>(),
+            requiredModules: Array.Empty<RequiredModuleReference>(),
+            externalModuleDependencies: externalModuleDependencies ?? Array.Empty<string>(),
+            requiredModulesForPackaging: Array.Empty<RequiredModuleReference>(),
+            information: null,
+            documentation: null,
+            delivery: null,
+            documentationBuild: null,
+            compatibilitySettings: null,
+            fileConsistencySettings: null,
+            validationSettings: null,
+            formatting: null,
+            importModules: null,
+            placeHolders: Array.Empty<PlaceHolderReplacement>(),
+            placeHolderOption: null,
+            commandModuleDependencies: new Dictionary<string, string[]>(),
+            testsAfterMerge: Array.Empty<TestConfiguration>(),
+            actions: Array.Empty<ConfigurationActionSegment>(),
+            mergeModule: false,
+            mergeMissing: false,
+            doNotAttemptToFixRelativePaths: false,
+            approvedModules: Array.Empty<string>(),
+            moduleSkip: null,
+            signModule: false,
+            signing: null,
+            publishes: Array.Empty<ConfigurationPublishSegment>(),
+            artefacts: Array.Empty<ConfigurationArtefactSegment>(),
+            installEnabled: false,
+            installStrategy: InstallationStrategy.AutoRevision,
+            installKeepVersions: 3,
+            installRoots: Array.Empty<string>(),
+            installLegacyFlatHandling: LegacyFlatModuleHandling.Warn,
+            installPreserveVersions: Array.Empty<string>(),
+            installMissingModules: false,
+            installMissingModulesForce: false,
+            installMissingModulesPrerelease: false,
+            installMissingModulesRepository: null,
+            installMissingModulesCredential: null,
+            stagingWasGenerated: true,
+            deleteGeneratedStagingAfterRun: true);
     }
 }
