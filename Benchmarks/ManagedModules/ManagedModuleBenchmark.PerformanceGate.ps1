@@ -68,3 +68,34 @@ function Get-ManagedPerformanceGateViolation {
         }
     }
 }
+
+function Get-ManagedPerformanceGateViolationForSuite {
+    param(
+        [object[]] $Rows,
+        [int] $MaxRank,
+        [double] $MaxVsFastest,
+        [switch] $UseScenarioGates
+    )
+
+    if ($MaxRank -gt 0 -or $MaxVsFastest -gt 0) {
+        return @(Get-ManagedPerformanceGateViolation -Rows @($Rows) -MaxRank $MaxRank -MaxVsFastest $MaxVsFastest)
+    }
+
+    if (-not $UseScenarioGates.IsPresent) {
+        return @()
+    }
+
+    foreach ($row in @($Rows)) {
+        $scenarioMaxRank = 0
+        if ($row.PSObject.Properties['GateManagedMaxRank']) {
+            $scenarioMaxRank = [int] $row.GateManagedMaxRank
+        }
+
+        $scenarioMaxVsFastest = 0.0
+        if ($row.PSObject.Properties['GateManagedMaxVsFastest']) {
+            $scenarioMaxVsFastest = [double] $row.GateManagedMaxVsFastest
+        }
+
+        Get-ManagedPerformanceGateViolation -Rows @($row) -MaxRank $scenarioMaxRank -MaxVsFastest $scenarioMaxVsFastest
+    }
+}

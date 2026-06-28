@@ -502,16 +502,7 @@ $summaryJsonPath = Join-Path $suiteRoot 'suite-summary.json'
 $hostsPath = Join-Path $suiteRoot 'suite-hosts.csv'
 $gatePath = Join-Path $suiteRoot 'suite-gate.csv'
 $metadataPath = Join-Path $suiteRoot 'metadata.json'
-$gateViolations = if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
-    @(Get-ManagedPerformanceGateViolation -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest)
-} elseif ($UseScenarioGates.IsPresent) {
-    @($summaryRows | ForEach-Object {
-            Get-ManagedPerformanceGateViolation -Rows @($_) -MaxRank ([int]$_.GateManagedMaxRank) -MaxVsFastest ([double]$_.GateManagedMaxVsFastest)
-        })
-} else {
-    @()
-}
-$gateViolations = @($gateViolations)
+$gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -UseScenarioGates:$UseScenarioGates.IsPresent)
 
 $summaryRows | Export-Csv -LiteralPath $summaryPath -NoTypeInformation
 $summaryRows | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryJsonPath -Encoding UTF8
