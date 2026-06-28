@@ -56,7 +56,7 @@ internal sealed class PrivateModuleWorkflowService
         if (usePrivateGallery && UsesManagedPrivateGalleryPath(request, managedRepositorySource))
         {
             _privateGalleryService.EnsureProviderSupported(request.Provider);
-            var providerSupport = ManagedModuleProviderSupportEvaluator.Evaluate(request.Provider);
+            var transportDecision = ManagedModuleTransportPolicy.Resolve(CreateTransportPolicyInput(request, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource));
 
             var endpoint = PrivateGalleryRepositoryEndpoints.Create(
                 request.Provider,
@@ -73,8 +73,8 @@ internal sealed class PrivateModuleWorkflowService
 
             repositoryName = endpoint.RepositoryName;
             managedRepositorySource = endpoint.PSResourceGetUri;
-            effectiveTransport = ModuleStateDeliveryTransport.ManagedModule;
-            transportReason = CreateManagedPrivateGalleryTransportReason(providerSupport);
+            effectiveTransport = transportDecision.EffectiveTransport;
+            transportReason = transportDecision.Reason;
             credential = _privateGalleryService.ResolveOptionalCredential(
                 repositoryName,
                 request.CredentialUserName,
@@ -153,7 +153,7 @@ internal sealed class PrivateModuleWorkflowService
                     OperationPerformed = false,
                     RepositoryName = registration.RepositoryName,
                     RequestedTransport = request.DeliveryTransport,
-                    EffectiveTransport = skippedTransport.Transport,
+                    EffectiveTransport = skippedTransport.EffectiveTransport,
                     DeliveryTransportReason = skippedTransport.Reason,
                     DependencyResults = Array.Empty<ModuleDependencyInstallResult>()
                 };
@@ -219,7 +219,7 @@ internal sealed class PrivateModuleWorkflowService
                     OperationPerformed = false,
                     RepositoryName = registration.RepositoryName,
                     RequestedTransport = request.DeliveryTransport,
-                    EffectiveTransport = skippedTransport.Transport,
+                    EffectiveTransport = skippedTransport.EffectiveTransport,
                     DeliveryTransportReason = skippedTransport.Reason,
                     DependencyResults = Array.Empty<ModuleDependencyInstallResult>()
                 };
@@ -243,8 +243,8 @@ internal sealed class PrivateModuleWorkflowService
         }
         if (effectiveTransport == ModuleStateDeliveryTransport.Auto)
         {
-            var resolution = ResolveAutoTransport(request.Provider, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource);
-            effectiveTransport = resolution.Transport;
+            var resolution = ResolveAutoTransport(request.Provider, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource, HasManagedOnlyOptionsRequested(request));
+            effectiveTransport = resolution.EffectiveTransport;
             transportReason = resolution.Reason;
         }
 
@@ -322,40 +322,23 @@ internal sealed class PrivateModuleWorkflowService
         };
     }
 
-    private static ModuleDeliveryTransportResolution ResolveAutoTransport(
+    private static ManagedModuleTransportDecision ResolveAutoTransport(
         PrivateGalleryProvider provider,
         bool usePrivateGallery,
         bool useMicrosoftArtifactRegistry,
-        string? managedRepositorySource)
-    {
-        if (usePrivateGallery)
+        string? managedRepositorySource,
+        bool hasManagedOnlyOptions)
+        => ManagedModuleTransportPolicy.Resolve(new ManagedModuleTransportPolicyInput
         {
-            var providerSupport = ManagedModuleProviderSupportEvaluator.Evaluate(provider);
-            return new ModuleDeliveryTransportResolution(
-                ModuleStateDeliveryTransport.PrivateModule,
-                "Auto selected compatibility transport because " + FormatProviderFallbackReason(providerSupport));
-        }
+            RequestedTransport = ModuleStateDeliveryTransport.Auto,
+            UsesPrivateGalleryProvider = usePrivateGallery,
+            PrivateGalleryProvider = provider,
+            UsesMicrosoftArtifactRegistry = useMicrosoftArtifactRegistry,
+            HasRepositorySource = !string.IsNullOrWhiteSpace(managedRepositorySource),
+            HasManagedOnlyOptions = hasManagedOnlyOptions
+        });
 
-        if (useMicrosoftArtifactRegistry)
-        {
-            return new ModuleDeliveryTransportResolution(
-                ModuleStateDeliveryTransport.PrivateModule,
-                "Auto selected compatibility transport because Microsoft Artifact Registry registration is currently provided by the existing repository workflow.");
-        }
-
-        if (string.IsNullOrWhiteSpace(managedRepositorySource))
-        {
-            return new ModuleDeliveryTransportResolution(
-                ModuleStateDeliveryTransport.PrivateModule,
-                "Auto selected compatibility transport because the repository input resolved to a registered repository name rather than a repository source URI or local feed path.");
-        }
-
-        return new ModuleDeliveryTransportResolution(
-            ModuleStateDeliveryTransport.ManagedModule,
-            "Auto selected managed transport because a repository source URI or local feed path was resolved.");
-    }
-
-    private static ModuleDeliveryTransportResolution ResolvePendingTransport(
+    private static ManagedModuleTransportDecision ResolvePendingTransport(
         PrivateGalleryProvider provider,
         ModuleStateDeliveryTransport effectiveTransport,
         bool usePrivateGallery,
@@ -363,24 +346,13 @@ internal sealed class PrivateModuleWorkflowService
         string? managedRepositorySource,
         string transportReason)
         => effectiveTransport == ModuleStateDeliveryTransport.Auto
-            ? ResolveAutoTransport(provider, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource)
-            : new ModuleDeliveryTransportResolution(effectiveTransport, transportReason);
-
-    private static string CreateManagedPrivateGalleryTransportReason(ManagedModuleProviderSupport providerSupport)
-        => providerSupport.CompatibilityFallbackRecommended
-            ? "Managed transport selected explicitly for " + providerSupport.Summary + "."
-            : "Managed transport selected because " + providerSupport.Provider + " is supported by the managed engine.";
-
-    private static string FormatProviderFallbackReason(ManagedModuleProviderSupport providerSupport)
-    {
-        if (providerSupport.Level == ManagedModuleProviderSupportLevel.Supported)
-            return providerSupport.Provider + " is supported, but repository registration and access probing are running through the existing provider workflow.";
-
-        var limitations = providerSupport.Limitations.Count == 0
-            ? "provider support is incomplete"
-            : string.Join("; ", providerSupport.Limitations);
-        return providerSupport.Provider + " managed support is " + providerSupport.Level + ": " + limitations;
-    }
+            ? ResolveAutoTransport(provider, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource, hasManagedOnlyOptions: false)
+            : new ManagedModuleTransportDecision
+            {
+                RequestedTransport = effectiveTransport,
+                EffectiveTransport = effectiveTransport,
+                Reason = transportReason
+            };
 
     private IReadOnlyList<ModuleDependencyInstallResult> ExecuteManagedDependencies(
         PrivateModuleWorkflowRequest request,
@@ -477,17 +449,26 @@ internal sealed class PrivateModuleWorkflowService
             : ManagedModuleInstallScope.Custom;
 
     private static bool UsesManagedPrivateGalleryPath(PrivateModuleWorkflowRequest request, string? managedRepositorySource)
-    {
-        if (request.DeliveryTransport == ModuleStateDeliveryTransport.ManagedModule)
-            return true;
-        if (request.DeliveryTransport != ModuleStateDeliveryTransport.Auto)
-            return false;
+        => ManagedModuleTransportPolicy.ShouldUseManagedPrivateGalleryPath(CreateTransportPolicyInput(
+            request,
+            usePrivateGallery: true,
+            useMicrosoftArtifactRegistry: false,
+            managedRepositorySource));
 
-        var providerSupport = ManagedModuleProviderSupportEvaluator.Evaluate(request.Provider);
-        return providerSupport.Level == ManagedModuleProviderSupportLevel.Supported ||
-               HasManagedOnlyOptionsRequested(request) ||
-               !string.IsNullOrWhiteSpace(managedRepositorySource);
-    }
+    private static ManagedModuleTransportPolicyInput CreateTransportPolicyInput(
+        PrivateModuleWorkflowRequest request,
+        bool usePrivateGallery,
+        bool useMicrosoftArtifactRegistry,
+        string? managedRepositorySource)
+        => new()
+        {
+            RequestedTransport = request.DeliveryTransport,
+            UsesPrivateGalleryProvider = usePrivateGallery,
+            PrivateGalleryProvider = request.Provider,
+            UsesMicrosoftArtifactRegistry = useMicrosoftArtifactRegistry,
+            HasRepositorySource = !string.IsNullOrWhiteSpace(managedRepositorySource),
+            HasManagedOnlyOptions = HasManagedOnlyOptionsRequested(request)
+        };
 
     private static ModuleDependencyInstallResult MapInstallResult(ManagedModuleInstallResult result)
         => new(
@@ -610,16 +591,4 @@ internal sealed class PrivateModuleWorkflowService
         return "Update private modules";
     }
 
-    private readonly struct ModuleDeliveryTransportResolution
-    {
-        internal ModuleDeliveryTransportResolution(ModuleStateDeliveryTransport transport, string reason)
-        {
-            Transport = transport;
-            Reason = reason;
-        }
-
-        internal ModuleStateDeliveryTransport Transport { get; }
-
-        internal string Reason { get; }
-    }
 }
