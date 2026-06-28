@@ -36,10 +36,17 @@ $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
 [Threading.Thread]::CurrentThread.CurrentCulture = $invariantCulture
 [Threading.Thread]::CurrentThread.CurrentUICulture = $invariantCulture
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-$workRoot = Join-Path $OutputDirectory ('Run-{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$workRoot = Join-Path $OutputDirectory ('Run-{0}-{1}' -f $runStamp, $PID)
+$installWorkRoot = Join-Path $repoRoot ('Ignore\Benchmarks\ManagedModules\InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
+$tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    Join-Path ([IO.Path]::GetPathRoot($repoRoot)) 'Temp\PFMM'
+} else {
+    Join-Path ([IO.Path]::GetTempPath()) 'pfmm'
+}
 $validEngines = @('Managed', 'PSResourceGet', 'PowerShellGet')
-$validOperations = @('Find', 'Save', 'InstallManaged')
+$validOperations = @('Find', 'Save', 'Install', 'InstallManaged')
 
 function Resolve-TokenList {
     param(
@@ -78,10 +85,10 @@ function Resolve-OperationList {
     }
 
     if ($Suite -eq 'Smoke') {
-        return @('Find', 'Save', 'InstallManaged')
+        return @('Find', 'Save', 'Install')
     }
 
-    @('Find', 'Save', 'InstallManaged')
+    @('Find', 'Save', 'Install')
 }
 
 function Get-ManagedRepositorySource {
@@ -174,20 +181,225 @@ function Add-SwitchParameterIfSupported {
     }
 }
 
+function Get-IsolatedInstallEnvironment {
+    param(
+        [string] $SandboxRoot,
+        [string[]] $ProviderModuleSearchPaths
+    )
+
+    $homeRoot = Join-Path $SandboxRoot 'Home'
+    $appDataRoot = Join-Path $SandboxRoot 'AppData\Roaming'
+    $localAppDataRoot = Join-Path $SandboxRoot 'AppData\Local'
+    $tempRoot = Join-Path $tempWorkRoot ("{0}-{1}" -f (Split-Path $SandboxRoot -Leaf), [Guid]::NewGuid().ToString("N"))
+    $modulesRoot = Join-Path $SandboxRoot 'Modules'
+    $documentsPowerShellRoot = Join-Path $homeRoot 'Documents\PowerShell\Modules'
+    $documentsWindowsPowerShellRoot = Join-Path $homeRoot 'Documents\WindowsPowerShell\Modules'
+
+    foreach ($path in @($homeRoot, $appDataRoot, $localAppDataRoot, $tempRoot, $modulesRoot, $documentsPowerShellRoot, $documentsWindowsPowerShellRoot)) {
+        New-Item -Path $path -ItemType Directory -Force | Out-Null
+    }
+
+    $separator = [IO.Path]::PathSeparator
+    $modulePathEntries = @(
+            $modulesRoot
+            $documentsPowerShellRoot
+            $documentsWindowsPowerShellRoot
+        ) + @($ProviderModuleSearchPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+    @{
+        USERPROFILE = $homeRoot
+        HOME = $homeRoot
+        APPDATA = $appDataRoot
+        LOCALAPPDATA = $localAppDataRoot
+        TEMP = $tempRoot
+        TMP = $tempRoot
+        PSModulePath = $modulePathEntries -join $separator
+    }
+}
+
+function Get-BenchmarkHostPath {
+    $process = Get-Process -Id $PID
+    if (-not [string]::IsNullOrWhiteSpace($process.Path)) {
+        return $process.Path
+    }
+
+    if ($PSVersionTable.PSEdition -eq 'Desktop') {
+        return (Get-Command powershell.exe -ErrorAction Stop).Source
+    }
+
+    (Get-Command pwsh -ErrorAction Stop).Source
+}
+
+function Get-ProviderModulePath {
+    param([string] $EngineName)
+
+    $moduleName = switch ($EngineName) {
+        'PSResourceGet' { 'Microsoft.PowerShell.PSResourceGet' }
+        'PowerShellGet' { 'PowerShellGet' }
+        default { $null }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($moduleName)) {
+        return @()
+    }
+
+    $module = Get-Module -ListAvailable -Name $moduleName | Sort-Object Version -Descending | Select-Object -First 1
+    if (-not $module) {
+        return @()
+    }
+
+    $module.Path
+}
+
+function Get-ProviderDependencyModulePath {
+    param([string] $EngineName)
+
+    $moduleNames = switch ($EngineName) {
+        'PowerShellGet' { @('PackageManagement') }
+        default { @() }
+    }
+
+    foreach ($moduleName in $moduleNames) {
+        $module = Get-Module -ListAvailable -Name $moduleName | Sort-Object Version -Descending | Select-Object -First 1
+        if ($module) {
+            $module.Path
+        }
+    }
+}
+
+function Get-ProviderModuleSearchPath {
+    $profileRoots = @($env:USERPROFILE, $env:HOME) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $userModuleRoots = foreach ($profileRoot in $profileRoots) {
+        Join-Path $profileRoot 'Documents\PowerShell\Modules'
+        Join-Path $profileRoot 'Documents\WindowsPowerShell\Modules'
+    }
+    $userModuleRoots = @($userModuleRoots | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd('\', '/') } | Select-Object -Unique)
+
+    foreach ($entry in ($env:PSModulePath -split [Regex]::Escape([IO.Path]::PathSeparator))) {
+        if ([string]::IsNullOrWhiteSpace($entry)) {
+            continue
+        }
+
+        $fullEntry = [IO.Path]::GetFullPath($entry).TrimEnd('\', '/')
+        $isUserRoot = $false
+        foreach ($root in $userModuleRoots) {
+            if ($fullEntry.Equals($root, [StringComparison]::OrdinalIgnoreCase)) {
+                $isUserRoot = $true
+                break
+            }
+        }
+
+        if (-not $isUserRoot) {
+            $fullEntry
+        }
+    }
+}
+
+function Join-CommandLineArgument {
+    param([string] $Value)
+
+    if ($null -eq $Value) {
+        return '""'
+    }
+
+    if ($Value -notmatch '[\s"]') {
+        return $Value
+    }
+
+    '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Invoke-IsolatedInstallHost {
+    param(
+        [string] $EngineName,
+        [string] $Destination
+    )
+
+    $childScript = Join-Path $PSScriptRoot 'Invoke-ManagedModuleInstallChild.ps1'
+    $hostPath = Get-BenchmarkHostPath
+    $providerModulePath = Get-ProviderModulePath -EngineName $EngineName
+    $providerDependencyModulePath = @(Get-ProviderDependencyModulePath -EngineName $EngineName)
+    $environment = Get-IsolatedInstallEnvironment -SandboxRoot $Destination -ProviderModuleSearchPaths (Get-ProviderModuleSearchPath)
+    $arguments = @(
+        '-NoLogo'
+        '-NoProfile'
+        '-ExecutionPolicy'
+        'Bypass'
+        '-File'
+        $childScript
+        '-EngineName'
+        $EngineName
+        '-ModuleName'
+        $ModuleName
+        '-Version'
+        $Version
+        '-Repository'
+        (Get-ManagedRepositorySource)
+        '-RepositoryName'
+        $RepositoryName
+        '-Destination'
+        $Destination
+        '-ModuleBinary'
+        (Resolve-ModuleBinary)
+    )
+    if (-not [string]::IsNullOrWhiteSpace($providerModulePath)) {
+        $arguments += @(
+            '-ProviderModulePath'
+            $providerModulePath
+        )
+    }
+    if ($providerDependencyModulePath.Count -gt 0) {
+        $arguments += '-ProviderDependencyModulePath'
+        $arguments += $providerDependencyModulePath
+    }
+    if ($AcceptLicense.IsPresent) {
+        $arguments += '-AcceptLicense'
+    }
+
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $hostPath
+    $startInfo.Arguments = ($arguments | ForEach-Object { Join-CommandLineArgument $_ }) -join ' '
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($entry in $environment.GetEnumerator()) {
+        $startInfo.Environment[$entry.Key] = $entry.Value
+    }
+
+    $process = [Diagnostics.Process]::Start($startInfo)
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) {
+        throw "Install benchmark child host failed with exit code $($process.ExitCode).`n$stdout`n$stderr"
+    }
+}
+
 function Get-InstalledModuleVersion {
     param(
         [string] $Root,
         [string] $Name
     )
 
-    $moduleDirectory = Join-Path $Root $Name
-    if (-not (Test-Path -LiteralPath $moduleDirectory)) {
-        return $null
+    $searchRoots = @(
+        (Join-Path $Root $Name)
+        $Root
+    ) | Select-Object -Unique
+
+    $manifest = $null
+    foreach ($searchRoot in $searchRoots) {
+        if (-not (Test-Path -LiteralPath $searchRoot)) {
+            continue
+        }
+
+        $manifest = Get-ChildItem -LiteralPath $searchRoot -Filter "$Name.psd1" -Recurse -File -ErrorAction SilentlyContinue |
+            Sort-Object FullName |
+            Select-Object -First 1
+        if ($manifest) {
+            break
+        }
     }
 
-    $manifest = Get-ChildItem -LiteralPath $moduleDirectory -Filter "$Name.psd1" -Recurse -File -ErrorAction SilentlyContinue |
-        Sort-Object FullName |
-        Select-Object -First 1
     if (-not $manifest) {
         return $null
     }
@@ -408,31 +620,36 @@ function Invoke-SaveScenario {
     }
 }
 
-function Invoke-ManagedInstallScenario {
+function Invoke-InstallScenario {
     param([string] $EngineName, [int] $Iteration)
 
-    if ($EngineName -ne 'Managed') {
-        return New-SkippedRow -OperationName 'InstallManaged' -EngineName $EngineName -Iteration $Iteration -Reason 'Native install comparison needs a separate disposable-host lane.'
-    }
-
-    $destination = Join-Path $workRoot ("install-{0}-{1}" -f $EngineName, $Iteration)
+    $destination = Join-Path $installWorkRoot ("install-{0}-{1}" -f $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
 
-    Invoke-TimedOperation -OperationName 'InstallManaged' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
-        $parameters = @{
-            Name = $ModuleName
-            Repository = Get-ManagedRepositorySource
-            RepositoryName = $RepositoryName
-            Scope = 'Custom'
-            ModuleRoot = $destination
-            AllowClobber = $true
-            Force = $true
+    switch ($EngineName) {
+        'Managed' {
+            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination
+            }
         }
-        if (-not [string]::IsNullOrWhiteSpace($Version)) {
-            $parameters.Version = $Version
+        'PSResourceGet' {
+            if (-not (Test-CommandAvailable 'Install-PSResource')) {
+                return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'Install-PSResource is not available.'
+            }
+
+            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination
+            }
         }
-        Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Install-ManagedModule' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
-        Install-ManagedModule @parameters
+        'PowerShellGet' {
+            if (-not (Test-CommandAvailable 'Install-Module')) {
+                return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'Install-Module is not available.'
+            }
+
+            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination
+            }
+        }
     }
 }
 
@@ -543,7 +760,8 @@ foreach ($iteration in 1..$RepeatCount) {
             $row = switch ($operationName) {
                 'Find' { Invoke-FindScenario -EngineName $engineName -Iteration $iteration }
                 'Save' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration }
-                'InstallManaged' { Invoke-ManagedInstallScenario -EngineName $engineName -Iteration $iteration }
+                'Install' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
+                'InstallManaged' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
             }
             $results.Add($row)
         }

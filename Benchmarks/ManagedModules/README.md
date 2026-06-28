@@ -42,6 +42,12 @@ Use repeated, rotated engine order for fairer timing:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Graph -ScenarioName Graph.Full -HostName PowerShell7 -Operation Find -RepeatCount 3 -RotateEngineOrder
 ```
 
+Compare install behavior in disposable module/profile roots:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Smoke -HostName PowerShell7 -Operation Install
+```
+
 Compare selected engines:
 
 ```powershell
@@ -82,7 +88,7 @@ Suite runs write `suite-summary.csv`, `suite-summary.json`, `suite-hosts.csv`, a
 
 ## Notes
 
-`Find` and `Save` are safe to compare directly because each engine can run against isolated output folders. `InstallManaged` intentionally measures only the managed install command because normal `Install-Module` and `Install-PSResource` do not provide a reliable custom module-root isolation contract. Native install/update comparison should be added as a separate disposable-host lane before it is treated as a fair scoreboard.
+`Find` and `Save` are safe to compare directly because each engine can run against isolated output folders. `Install` runs each engine in a disposable child PowerShell host with benchmark-owned profile, cache, temp, and module path environment variables. Install output roots are recorded in the CSV/JSON rows and may point at the short `Ignore\Benchmarks\ManagedModules\InstallRoots` folder to keep Windows PowerShell 5.1 below legacy path-length limits.
 
 License acceptance is explicit. Use `-AcceptLicense` only when the benchmark scenario is allowed to accept the package license on behalf of the run.
 
