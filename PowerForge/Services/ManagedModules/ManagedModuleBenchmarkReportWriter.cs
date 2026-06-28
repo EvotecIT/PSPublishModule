@@ -67,6 +67,8 @@ public sealed class ManagedModuleBenchmarkReportWriter
         markdown.AppendLine($"Succeeded: `{successful}`");
         markdown.AppendLine($"Failed: `{failed}`");
         markdown.AppendLine();
+        AppendEnvironment(markdown, result.Environment);
+        markdown.AppendLine();
         AppendSummary(markdown, runs);
         markdown.AppendLine();
         AppendTransitionGates(markdown, result.TransitionGates ?? Array.Empty<ManagedModuleBenchmarkTransitionGateResult>());
@@ -118,6 +120,40 @@ public sealed class ManagedModuleBenchmarkReportWriter
         }
 
         return markdown.ToString();
+    }
+
+    private static void AppendEnvironment(StringBuilder markdown, ManagedModuleBenchmarkEnvironment? environment)
+    {
+        markdown.AppendLine("## Environment");
+        markdown.AppendLine();
+        if (environment is null)
+        {
+            markdown.AppendLine("_No runtime environment metadata was recorded._");
+            return;
+        }
+
+        markdown.AppendLine("| Field | Value |");
+        markdown.AppendLine("| --- | --- |");
+        AppendEnvironmentRow(markdown, "PowerShell version", environment.PowerShellVersion);
+        AppendEnvironmentRow(markdown, "PowerShell edition", environment.PowerShellEdition);
+        AppendEnvironmentRow(markdown, "PowerShell host", environment.PowerShellHostName);
+        AppendEnvironmentRow(markdown, "PowerShell host version", environment.PowerShellHostVersion);
+        AppendEnvironmentRow(markdown, ".NET runtime", environment.RuntimeDescription);
+        AppendEnvironmentRow(markdown, "Runtime identifier", environment.RuntimeIdentifier);
+        AppendEnvironmentRow(markdown, "Operating system", environment.OperatingSystemDescription);
+        AppendEnvironmentRow(markdown, "Process architecture", environment.ProcessArchitecture);
+    }
+
+    private static void AppendEnvironmentRow(StringBuilder markdown, string field, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        markdown.Append("| ")
+            .Append(Escape(field))
+            .Append(" | ")
+            .Append(Escape(value))
+            .AppendLine(" |");
     }
 
     private static void AppendSummary(StringBuilder markdown, IReadOnlyList<ManagedModuleBenchmarkRunResult> runs)

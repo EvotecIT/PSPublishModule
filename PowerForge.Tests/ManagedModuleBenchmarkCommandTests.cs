@@ -47,12 +47,15 @@ public sealed class ManagedModuleBenchmarkCommandTests
         Assert.Equal("1.0.0", run.ValidatedVersion);
         Assert.True(run.VersionValidationSucceeded);
         Assert.True(run.FinalDiskBytes > 0);
+        Assert.False(string.IsNullOrWhiteSpace(result.Environment.RuntimeDescription));
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
         Assert.Contains("\"ScenarioId\": \"Install:Company.Tools\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
+        Assert.Contains("\"Environment\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"FinalDiskBytes\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"RepositoryRequestCount\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("\"TransitionGates\"", File.ReadAllText(jsonPath), StringComparison.Ordinal);
         Assert.Contains("# Managed Module Benchmark Report", File.ReadAllText(markdownPath), StringComparison.Ordinal);
+        Assert.Contains("## Environment", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("## Transition Gates", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Default ready", File.ReadAllText(markdownPath), StringComparison.Ordinal);
         Assert.Contains("Fallback", File.ReadAllText(markdownPath), StringComparison.Ordinal);

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
@@ -233,6 +234,7 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
                 MaximumManagedSlowdownRatio = MaximumManagedSlowdownRatio,
                 MaximumManagedSlowdownMilliseconds = MaximumManagedSlowdownMilliseconds
             }).GetAwaiter().GetResult();
+        AddPowerShellEnvironment(result);
 
         if (ValidateImport.IsPresent)
             new ManagedModuleImportValidationService().Validate(result, ImportHost);
@@ -242,6 +244,16 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             AssertTransitionReady(result);
 
         WriteObject(result);
+    }
+
+    private void AddPowerShellEnvironment(ManagedModuleBenchmarkResult result)
+    {
+        result.Environment ??= ManagedModuleBenchmarkEnvironment.Capture();
+        var psVersionTable = SessionState?.PSVariable?.GetValue("PSVersionTable") as Hashtable;
+        result.Environment.PowerShellVersion = psVersionTable?["PSVersion"]?.ToString();
+        result.Environment.PowerShellEdition = psVersionTable?["PSEdition"]?.ToString();
+        result.Environment.PowerShellHostName = Host?.Name;
+        result.Environment.PowerShellHostVersion = Host?.Version?.ToString();
     }
 
     private void AssertTransitionReady(ManagedModuleBenchmarkResult result)
