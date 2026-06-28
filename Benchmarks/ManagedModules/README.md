@@ -79,6 +79,12 @@ Run the exact-version Graph and Az install lifecycle gates when optimizing force
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite LifecycleGate -ScenarioName Graph.Authentication.InstallExact.NoOpForce,Az.Accounts.InstallExact.NoOpForce -HostName PowerShell7 -RepeatCount 3 -RotateEngineOrder -CacheMode Warm -UseScenarioGates -RemoveOutputRoots -SkipBuild
 ```
 
+Run the exact-version Graph and Az save lifecycle gates when optimizing no-op and force save behavior. ModuleFast is included as an explicit skipped row because it has no equivalent save command; PSResourceGet participates in `SaveNoOp` and is skipped for `SaveForce` because it has no force/reinstall save parameter on the inspected hosts:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite LifecycleGate -ScenarioName Graph.Authentication.SaveExact.NoOpForce,Az.Accounts.SaveExact.NoOpForce -HostName PowerShell7,WindowsPowerShell -RepeatCount 3 -RotateEngineOrder -CacheMode Warm -UseScenarioGates -RemoveOutputRoots -SkipBuild
+```
+
 Run the publish evidence lane against local folder feeds. The fixture module and feed are synthetic and benchmark-owned, repository registration happens outside the timed publish operation, and ModuleFast is kept as an explicit skipped row because it has no publish command:
 
 ```powershell
@@ -222,8 +228,8 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModule
 
 Every run writes:
 
-- `managed-module-results.csv`: raw per-run rows, including repair scenario and optional import validation columns.
-- `managed-module-results.json`: raw per-run rows as JSON.
+- `managed-module-results.csv`: raw per-run rows, including repair scenario, skipped/failed reason, and optional import validation columns.
+- `managed-module-results.json`: raw per-run rows as JSON, including the same skipped/failed reason text as the CSV.
 - `managed-module-summary.csv`: grouped median/min/max rows by operation, scenario, and engine, including output size and managed detail medians when detail artifacts are present.
 - `managed-module-comparison.csv`: fastest successful engine per operation and scenario, plus managed rank, ratio, and managed package/request/download/extract/promotion medians. `ManagedMs` is the wall-clock benchmark time. `ManagedRootElapsedMs` is the managed command result elapsed time from the detail artifact, and `ManagedHarnessOverheadMs` is the wall-clock remainder from child host startup, module import, wrapper work, and output processing. `ManagedPackageCount` is the package tree row count, so shared dependencies can appear more than once. `ManagedUniquePackageCount` counts unique module output paths from the detail artifact. `ManagedInstalledPackageCount` and `ManagedAlreadyInstalledPackageCount` count package tree rows by status, which makes coalesced shared dependencies visible. `ManagedRepositoryRequests` is the whole managed operation request total; `ManagedPackageRepositoryRequests` is the package-delivery subset and excludes dependency version-resolution requests. `ManagedPackageRepositoryRedirects` counts HTTP redirects followed during package delivery, which is useful when comparing repository/CDN source behavior. `ManagedMaintenanceActions` and `ManagedMaintenanceFindings` are repair-plan metrics; package metrics are expected to be zero for repair-plan rows because no packages are downloaded during planning.
 - `managed-module-gate.csv`: optional managed performance gate violations, written when `-ManagedMaxRank` or `-ManagedMaxVsFastest` is supplied.
@@ -302,5 +308,6 @@ Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's Pow
 - `SaveGate` now owns a strict managed-rank threshold. A repeated rotated strict run on 2026-06-29 passed on both hosts with managed rank 1: PowerShell 7 measured managed at 1122.16 ms and Windows PowerShell 5.1 measured managed at 1756.28 ms. Suite summary rows now show the effective gate threshold, so explicit strict runs no longer look like looser scenario-gated runs in the artifacts.
 - Managed install no-op now checks installed versions before remote latest/range resolution. PowerShell 7 repeated rotated exact-version install lifecycle gates passed for `Microsoft.Graph.Authentication` 2.38.0 and `Az.Accounts` 5.5.0 with `-ManagedMaxRank 1`, ModuleFast, and PSResourceGet included. Graph.Authentication measured managed first for `InstallNoOp` at 513.14 ms and `InstallForce` at 674.82 ms; Az.Accounts measured managed first for `InstallNoOp` at 565.95 ms and `InstallForce` at 736.04 ms. Managed detail rows recorded zero repository requests for both no-op and warm forced install rows.
 - Setup/preseed retries are now explicit benchmark metadata and apply only before timed operations. With the retry-enabled setup path, the combined Windows PowerShell 5.1 exact Graph/Az lifecycle gate passed under scenario gates: Graph.Authentication measured managed first for `InstallNoOp` at 440.03 ms and `InstallForce` at 947.20 ms; Az.Accounts measured managed first for `InstallNoOp` at 562.51 ms and `InstallForce` at 814.03 ms. Managed timed rows still recorded zero repository requests.
+- Exact-version Graph/Az save lifecycle scenarios now sit beside the install lifecycle gates. A PowerShell 7 and Windows PowerShell 5.1 trial measured managed first for Graph.Authentication `SaveNoOp` and `SaveForce`, and for Az.Accounts `SaveNoOp` and `SaveForce`; the final Windows PowerShell Az rerun measured managed `SaveNoOp` at 199.01 ms and `SaveForce` at 375.97 ms with zero timed repository requests. Earlier failed setup rows showed public-gallery transport variance before timing, not a managed timed-operation regression.
 
 Treat these numbers as a local baseline, not a release claim. Re-run the same commands after installer changes and compare the emitted CSV/JSON files before deciding whether an optimization is real.

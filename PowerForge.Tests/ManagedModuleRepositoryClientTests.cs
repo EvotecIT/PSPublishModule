@@ -302,6 +302,26 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_transport_failure_reports_request_uri()
+    {
+        using var client = new HttpClient(new FailingHandler());
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: new ManagedModuleRepositoryClientOptions
+            {
+                MaxRetries = 0
+            });
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            repositoryClient.GetVersionsAsync(repository, "Company.Tools"));
+
+        Assert.Contains("GET https://example.test/v3/index.json", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("socket unavailable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void CreateDefaultHttpMessageHandler_applies_explicit_proxy_options()
     {
         var proxyAddress = new Uri("http://proxy.example.test:8080");
@@ -932,6 +952,12 @@ public sealed class ManagedModuleRepositoryClientTests
             await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
+    }
+
+    private sealed class FailingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => throw new HttpRequestException("socket unavailable");
     }
 
     private sealed class RecordedRequest
