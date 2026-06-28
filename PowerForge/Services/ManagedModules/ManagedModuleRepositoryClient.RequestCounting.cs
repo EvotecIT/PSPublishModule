@@ -19,11 +19,18 @@ public sealed partial class ManagedModuleRepositoryClient
             scope.Increment();
     }
 
+    private void RecordRedirectFollowed()
+    {
+        for (var scope = _requestScope.Value; scope is not null; scope = scope.Parent)
+            scope.IncrementRedirect();
+    }
+
     internal sealed class RepositoryRequestScope : IDisposable
     {
         private readonly ManagedModuleRepositoryClient _owner;
         private readonly RepositoryRequestScope? _parent;
         private long _count;
+        private long _redirectCount;
         private bool _disposed;
 
         internal RepositoryRequestScope(ManagedModuleRepositoryClient owner, RepositoryRequestScope? parent)
@@ -36,8 +43,13 @@ public sealed partial class ManagedModuleRepositoryClient
 
         internal long Count => System.Threading.Interlocked.Read(ref _count);
 
+        internal long RedirectCount => System.Threading.Interlocked.Read(ref _redirectCount);
+
         internal void Increment()
             => System.Threading.Interlocked.Increment(ref _count);
+
+        internal void IncrementRedirect()
+            => System.Threading.Interlocked.Increment(ref _redirectCount);
 
         public void Dispose()
         {

@@ -50,9 +50,11 @@ function Add-ManagedInstallDetail {
         PromotionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.PromotionElapsed
         RepositoryRequestCount = [long] $Result.RepositoryRequestCount
         PackageRepositoryRequestCount = [long] (Get-NumericPropertyValue -InputObject $Result -Name 'PackageRepositoryRequestCount')
+        PackageRepositoryRedirectCount = [long] (Get-NumericPropertyValue -InputObject $Result -Name 'PackageRepositoryRedirectCount')
         FileCount = [int] $Result.FileCount
         ExtractedBytes = [long] $Result.ExtractedBytes
         DownloadBytes = if ($download) { [long] $download.BytesWritten } else { 0L }
+        DownloadRedirectCount = if ($download) { [long] (Get-NumericPropertyValue -InputObject $download -Name 'RedirectCount') } else { 0L }
         DownloadFromCache = if ($download) { [bool] $download.FromCache } else { $false }
         AuthenticodeCheckedFiles = if ($authenticode) { [int] $authenticode.CheckedFiles } else { 0 }
         AuthenticodeFiles = if ($authenticode) { @($authenticode.Files) } else { @() }
@@ -103,6 +105,8 @@ function Write-ManagedInstallDetail {
         TotalPromotionMilliseconds = [math]::Round((($packages | Measure-Object PromotionMilliseconds -Sum).Sum), 2)
         TotalRepositoryRequestCount = [long] $Result.RepositoryRequestCount
         TotalPackageRepositoryRequestCount = [long] (($packages | Measure-Object PackageRepositoryRequestCount -Sum).Sum)
+        TotalPackageRepositoryRedirectCount = [long] (($packages | Measure-Object PackageRepositoryRedirectCount -Sum).Sum)
+        TotalDownloadRedirectCount = [long] (($packages | Measure-Object DownloadRedirectCount -Sum).Sum)
         TotalDownloadBytes = [long] (($packages | Measure-Object DownloadBytes -Sum).Sum)
         CacheHitCount = @($packages | Where-Object DownloadFromCache).Count
     }

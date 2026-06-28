@@ -44,6 +44,7 @@ function New-SkippedRow {
         ManagedTotalPromotionMilliseconds = 0
         ManagedRepositoryRequestCount = 0
         ManagedPackageRepositoryRequestCount = 0
+        ManagedPackageRepositoryRedirectCount = 0
         ManagedDownloadBytes = 0
         ManagedCacheHitCount = 0
         ManagedMaintenanceActionCount = 0

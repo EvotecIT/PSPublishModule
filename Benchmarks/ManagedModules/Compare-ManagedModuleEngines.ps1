@@ -433,6 +433,7 @@ function Invoke-TimedOperation {
         ManagedTotalPromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionMilliseconds')
         ManagedRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalRepositoryRequestCount')
         ManagedPackageRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPackageRepositoryRequestCount')
+        ManagedPackageRepositoryRedirectCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPackageRepositoryRedirectCount')
         ManagedDownloadBytes = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadBytes')
         ManagedCacheHitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'CacheHitCount')
         ManagedMaintenanceActionCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceActionCount')

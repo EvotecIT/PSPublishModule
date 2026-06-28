@@ -446,6 +446,7 @@ function Add-SummaryRows {
                 ManagedHarnessOverheadMs = $row.ManagedHarnessOverheadMs
                 ManagedRepositoryRequests = $row.ManagedRepositoryRequests
                 ManagedPackageRepositoryRequests = $row.ManagedPackageRepositoryRequests
+                ManagedPackageRepositoryRedirects = $row.ManagedPackageRepositoryRedirects
                 ManagedDownloadBytes = $row.ManagedDownloadBytes
                 ManagedCacheHits = $row.ManagedCacheHits
                 ManagedMaintenanceActions = $row.ManagedMaintenanceActions

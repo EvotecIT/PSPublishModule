@@ -36,6 +36,11 @@ public sealed class ManagedModuleDownloadResult
     public long BytesWritten { get; set; }
 
     /// <summary>
+    /// Number of HTTP redirects followed while delivering this package.
+    /// </summary>
+    public long RedirectCount { get; set; }
+
+    /// <summary>
     /// True when the package was reused from the destination cache without repository transfer.
     /// </summary>
     public bool FromCache { get; set; }
