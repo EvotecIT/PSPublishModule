@@ -18,6 +18,8 @@ param(
 
     [string[]] $Operation,
 
+    [string[]] $RepairScenario = @('StaleVersion'),
+
     [ValidateSet('Default', 'Cold', 'Warm')]
     [string] $CacheMode = 'Default',
 
@@ -60,6 +62,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 $validOperations = @('Find', 'Save', 'Install', 'InstallManaged', 'Update', 'RepairPlan')
+$validRepairScenarios = @('StaleVersion', 'SourceDrift')
 
 function Resolve-TokenList {
     param(
@@ -102,6 +105,32 @@ function Resolve-OperationList {
     }
 
     @('Find', 'Save', 'Install')
+}
+
+function Resolve-RepairScenarioList {
+    param([string[]] $Value)
+
+    if (-not $Value -or $Value.Count -eq 0) {
+        return @('StaleVersion')
+    }
+
+    $expanded = foreach ($item in @($Value)) {
+        foreach ($token in ($item -split ',')) {
+            $name = $token.Trim()
+            if ([string]::IsNullOrWhiteSpace($name)) {
+                continue
+            }
+
+            if ($name -eq 'All') {
+                $validRepairScenarios
+                continue
+            }
+
+            $name
+        }
+    }
+
+    Resolve-TokenList -Value @($expanded) -Allowed $validRepairScenarios -Label 'repair scenario'
 }
 
 $script:ResolvedUpdateBaselineVersion = $UpdateBaselineVersion
@@ -253,6 +282,7 @@ function Get-BenchmarkHostPath {
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ImportValidation.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.VersionDiscovery.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ResultRows.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Summary.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.RepairPlan.ps1')
 $repositorySource = Resolve-ManagedModuleBenchmarkRepositorySource -Repository $Repository -RepositoryName $RepositoryName
 
@@ -508,6 +538,7 @@ function Get-OutputRootMetrics {
 function Invoke-TimedOperation {
     param(
         [string] $OperationName,
+        [string] $ScenarioName = '',
         [string] $EngineName,
         [int] $Iteration,
         [scriptblock] $ScriptBlock,
@@ -565,6 +596,7 @@ function Invoke-TimedOperation {
 
     [pscustomobject]@{
         Operation = $OperationName
+        Scenario = $ScenarioName
         Engine = $EngineName
         Iteration = $Iteration
         Status = $status
@@ -804,67 +836,6 @@ function Invoke-UpdateScenario {
     }
 }
 
-function Get-Median {
-    param([double[]] $Values)
-
-    if (-not $Values -or $Values.Count -eq 0) {
-        return 0
-    }
-
-    $sorted = @($Values | Sort-Object)
-    $middle = [int][Math]::Floor($sorted.Count / 2)
-    if ($sorted.Count % 2 -eq 1) {
-        return [math]::Round($sorted[$middle], 2)
-    }
-
-    [math]::Round(($sorted[$middle - 1] + $sorted[$middle]) / 2, 2)
-}
-
-function New-Summary {
-    param([object[]] $Rows)
-
-    foreach ($group in ($Rows | Group-Object Operation, Engine)) {
-        $passed = @($group.Group | Where-Object Status -eq 'Succeeded')
-        [pscustomobject]@{
-            Operation = [string]$group.Group[0].Operation
-            Engine = [string]$group.Group[0].Engine
-            Runs = $group.Count
-            Succeeded = $passed.Count
-            Failed = @($group.Group | Where-Object Status -eq 'Failed').Count
-            Skipped = @($group.Group | Where-Object Status -eq 'Skipped').Count
-            MedianMs = Get-Median -Values @($passed | ForEach-Object { [double]$_.ElapsedMilliseconds })
-            MinMs = if ($passed.Count) { [math]::Round(($passed | Measure-Object ElapsedMilliseconds -Minimum).Minimum, 2) } else { 0 }
-            MaxMs = if ($passed.Count) { [math]::Round(($passed | Measure-Object ElapsedMilliseconds -Maximum).Maximum, 2) } else { 0 }
-        }
-    }
-}
-
-function New-Comparison {
-    param([object[]] $SummaryRows)
-
-    foreach ($operationGroup in ($SummaryRows | Group-Object Operation)) {
-        $successful = @($operationGroup.Group | Where-Object { $_.Succeeded -gt 0 -and $_.MedianMs -gt 0 } | Sort-Object MedianMs)
-        $managed = @($successful | Where-Object Engine -eq 'Managed' | Select-Object -First 1)
-        $fastest = @($successful | Select-Object -First 1)
-        [pscustomobject]@{
-            Operation = [string]$operationGroup.Name
-            FastestEngine = if ($fastest.Count) { [string]$fastest[0].Engine } else { '' }
-            FastestMs = if ($fastest.Count) { [double]$fastest[0].MedianMs } else { 0 }
-            ManagedMs = if ($managed.Count) { [double]$managed[0].MedianMs } else { 0 }
-            ManagedRank = if ($managed.Count -and $successful.Count) {
-                1 + @($successful | Where-Object { $_.MedianMs -lt $managed[0].MedianMs }).Count
-            } else {
-                0
-            }
-            ManagedVsFastest = if ($managed.Count -and $fastest.Count -and $fastest[0].MedianMs -gt 0) {
-                ('{0}x' -f ([math]::Round($managed[0].MedianMs / $fastest[0].MedianMs, 2)))
-            } else {
-                ''
-            }
-        }
-    }
-}
-
 function Get-IterationEngineOrder {
     param([int] $Iteration)
 
@@ -882,6 +853,7 @@ function Get-IterationEngineOrder {
 
 $Operation = Resolve-OperationList -Value $Operation
 $Engine = Resolve-TokenList -Value $Engine -Allowed $validEngines -Label 'engine'
+$RepairScenario = Resolve-RepairScenarioList -Value $RepairScenario
 
 if ($RepeatCount -lt 1) {
     throw 'RepeatCount must be greater than zero.'
@@ -889,10 +861,14 @@ if ($RepeatCount -lt 1) {
 
 if ($ListScenarios.IsPresent) {
     foreach ($operationName in $Operation) {
-        foreach ($engineName in $Engine) {
-            [pscustomobject]@{
-                Operation = $operationName
-                Engine = $engineName
+        $scenarioNames = if ($operationName -eq 'RepairPlan') { $RepairScenario } else { @('') }
+        foreach ($scenarioName in $scenarioNames) {
+            foreach ($engineName in $Engine) {
+                [pscustomobject]@{
+                    Operation = $operationName
+                    Scenario = $scenarioName
+                    Engine = $engineName
+                }
             }
         }
     }
@@ -916,16 +892,21 @@ $results = [Collections.Generic.List[object]]::new()
 foreach ($iteration in 1..$RepeatCount) {
     $engineOrder = Get-IterationEngineOrder -Iteration $iteration
     foreach ($operationName in $Operation) {
-        foreach ($engineName in $engineOrder) {
-            $row = switch ($operationName) {
-                'Find' { Invoke-FindScenario -EngineName $engineName -Iteration $iteration }
-                'Save' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration }
-                'Install' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
-                'InstallManaged' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
-                'Update' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration }
-                'RepairPlan' { Invoke-RepairPlanScenario -EngineName $engineName -Iteration $iteration }
+        $scenarioNames = if ($operationName -eq 'RepairPlan') { $RepairScenario } else { @('') }
+        foreach ($scenarioName in $scenarioNames) {
+            foreach ($engineName in $engineOrder) {
+                $row = switch ($operationName) {
+                    'Find' { Invoke-FindScenario -EngineName $engineName -Iteration $iteration }
+                    'Save' { Invoke-SaveScenario -EngineName $engineName -Iteration $iteration }
+                    'Install' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
+                    'InstallManaged' { Invoke-InstallScenario -EngineName $engineName -Iteration $iteration }
+                    'Update' { Invoke-UpdateScenario -EngineName $engineName -Iteration $iteration }
+                    'RepairPlan' { Invoke-RepairPlanScenario -EngineName $engineName -Iteration $iteration -ScenarioName $scenarioName }
+                }
+                foreach ($item in @($row)) {
+                    $results.Add($item)
+                }
             }
-            $results.Add($row)
         }
     }
 }
@@ -952,6 +933,7 @@ $metadata = [ordered]@{
     Suite = $Suite
     Engines = $Engine
     Operations = $Operation
+    RepairScenarios = $RepairScenario
     RepeatCount = $RepeatCount
     ModuleBinary = $moduleBinary
     OutputDirectory = $workRoot

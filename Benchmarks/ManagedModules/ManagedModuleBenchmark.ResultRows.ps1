@@ -7,6 +7,7 @@ function Test-BenchmarkOperationUsesUpdateBaseline {
 function New-SkippedRow {
     param(
         [string] $OperationName,
+        [string] $ScenarioName = '',
         [string] $EngineName,
         [int] $Iteration,
         [string] $Reason
@@ -14,6 +15,7 @@ function New-SkippedRow {
 
     [pscustomobject]@{
         Operation = $OperationName
+        Scenario = $ScenarioName
         Engine = $EngineName
         Iteration = $Iteration
         Status = 'Skipped'
@@ -49,13 +51,14 @@ function New-SkippedRow {
 function New-FailedRow {
     param(
         [string] $OperationName,
+        [string] $ScenarioName = '',
         [string] $EngineName,
         [int] $Iteration,
         [string] $Reason,
         [string] $OutputRoot = ''
     )
 
-    $row = New-SkippedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $Reason
+    $row = New-SkippedRow -OperationName $OperationName -ScenarioName $ScenarioName -EngineName $EngineName -Iteration $Iteration -Reason $Reason
     $row.Status = 'Failed'
     $row.OutputRoot = $OutputRoot
     $row

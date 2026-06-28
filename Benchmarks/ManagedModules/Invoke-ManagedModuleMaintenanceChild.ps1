@@ -11,6 +11,10 @@ param(
     [Parameter(Mandatory)]
     [string] $ModuleBinary,
 
+    [string] $MaintenanceReceiptPath,
+
+    [switch] $Latest,
+
     [switch] $AcceptLicense,
 
     [string] $ResultPath
@@ -84,12 +88,17 @@ Import-Module -Name $ModuleBinary -Force
 
 $parameters = @{
     Installed = $true
-    Latest = $true
     Repair = $true
     ModulePath = $Destination
     Repository = $Repository
     Transport = 'ManagedModule'
     ModuleRoot = $Destination
+}
+if ($Latest.IsPresent) {
+    $parameters.Latest = $true
+}
+if (-not [string]::IsNullOrWhiteSpace($MaintenanceReceiptPath)) {
+    $parameters.MaintenanceReceiptPath = $MaintenanceReceiptPath
 }
 if ($AcceptLicense.IsPresent) {
     $parameters.AcceptLicense = $true
