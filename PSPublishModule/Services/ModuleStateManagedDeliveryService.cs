@@ -63,6 +63,9 @@ internal sealed class ModuleStateManagedDeliveryService
             Operation = "Install",
             OperationPerformed = result.Status == ManagedModuleInstallStatus.Installed,
             RepositoryName = repository.Name,
+            RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
+            EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
+            DeliveryTransportReason = "Managed module delivery was requested explicitly for ModuleState execution.",
             DependencyResults = new[]
             {
                 new ModuleStateDependencyResult
@@ -95,6 +98,9 @@ internal sealed class ModuleStateManagedDeliveryService
             Operation = "Update",
             OperationPerformed = result.Status != ManagedModuleUpdateStatus.UpToDate,
             RepositoryName = repository.Name,
+            RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
+            EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
+            DeliveryTransportReason = "Managed module delivery was requested explicitly for ModuleState execution.",
             DependencyResults = new[]
             {
                 new ModuleStateDependencyResult
@@ -127,6 +133,9 @@ internal sealed class ModuleStateManagedDeliveryService
             Operation = "Save",
             OperationPerformed = result.Status == ManagedModuleInstallStatus.Installed,
             RepositoryName = repository.Name,
+            RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
+            EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
+            DeliveryTransportReason = "Managed module delivery was requested explicitly for ModuleState execution.",
             DependencyResults = new[]
             {
                 new ModuleStateDependencyResult
@@ -308,6 +317,9 @@ internal sealed class ModuleStateManagedDeliveryService
             Operation = operation,
             OperationPerformed = false,
             RepositoryName = repositoryName,
+            RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
+            EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
+            DeliveryTransportReason = "Managed module delivery was requested explicitly for ModuleState execution.",
             DependencyResults = new[]
             {
                 new ModuleStateDependencyResult

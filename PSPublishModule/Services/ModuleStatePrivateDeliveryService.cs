@@ -51,6 +51,9 @@ internal sealed class ModuleStatePrivateDeliveryService
                 Operation = group.Key.Kind.ToString(),
                 OperationPerformed = workflowResult.OperationPerformed,
                 RepositoryName = workflowResult.RepositoryName,
+                RequestedTransport = workflowResult.RequestedTransport,
+                EffectiveTransport = workflowResult.EffectiveTransport,
+                DeliveryTransportReason = workflowResult.DeliveryTransportReason,
                 DependencyResults = workflowResult.DependencyResults.Select(static dependency => new ModuleStateDependencyResult
                 {
                     Name = dependency.Name,
