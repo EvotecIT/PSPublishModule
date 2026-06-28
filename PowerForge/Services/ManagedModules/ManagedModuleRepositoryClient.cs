@@ -163,6 +163,12 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
+        if (ShouldUsePowerShellGalleryV2ReadApi(repository))
+        {
+            var fallback = CreatePowerShellGalleryV2Fallback(repository);
+            return await GetNuGetV2VersionsAsync(fallback, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
+        }
+
         try
         {
             return await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
@@ -183,6 +189,12 @@ public sealed partial class ManagedModuleRepositoryClient
         int take,
         CancellationToken cancellationToken)
     {
+        if (ShouldUsePowerShellGalleryV2ReadApi(repository))
+        {
+            var fallback = CreatePowerShellGalleryV2Fallback(repository);
+            return await SearchNuGetV2PackagesAsync(fallback, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
+        }
+
         try
         {
             return await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
@@ -203,6 +215,12 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
+        if (ShouldUsePowerShellGalleryV2ReadApi(repository))
+        {
+            var fallback = CreatePowerShellGalleryV2Fallback(repository);
+            return await DownloadNuGetV2PackageAsync(fallback, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
+        }
+
         try
         {
             return await DownloadNuGetPackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
@@ -748,6 +766,9 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static ManagedModuleRepository CreatePowerShellGalleryV2Fallback(ManagedModuleRepository repository)
         => new(repository.Name, "https://www.powershellgallery.com/api/v2", ManagedModuleRepositoryKind.NuGetV2, repository.Trusted);
+
+    private static bool ShouldUsePowerShellGalleryV2ReadApi(ManagedModuleRepository repository)
+        => IsPowerShellGalleryV3Index(repository.Source);
 
     private static bool IsPowerShellGalleryV3Index(string source)
     {

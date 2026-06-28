@@ -49,6 +49,7 @@ public sealed class ManagedModuleNativeCompatibilityBenchmarkRunnerTests
         Assert.Contains(scripts, script => script.Contains("Install-Module", StringComparison.Ordinal));
         Assert.Contains(scripts, script => script.Contains("SecurityProtocol", StringComparison.Ordinal) && script.Contains("Tls12", StringComparison.Ordinal));
         Assert.Contains(scripts, script => script.Contains("Parameters.ContainsKey('AcceptLicense')", StringComparison.Ordinal));
+        Assert.Contains(scripts, script => script.Contains("Install-PackageProvider", StringComparison.Ordinal) && script.Contains("Scope CurrentUser", StringComparison.Ordinal));
         var repositoryFile = Path.Combine(
             moduleRoot.Path,
             "home",
