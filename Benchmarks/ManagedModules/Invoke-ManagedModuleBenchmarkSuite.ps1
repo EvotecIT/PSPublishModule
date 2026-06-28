@@ -1,10 +1,8 @@
 param(
-    [ValidateSet('Smoke', 'Graph', 'Az', 'Enterprise', 'All')]
     [string[]] $Suite = @('Smoke'),
 
     [string[]] $ScenarioName,
 
-    [ValidateSet('Current', 'PowerShell7', 'WindowsPowerShell')]
     [string[]] $HostName = @('Current'),
 
     [string[]] $Engine = @('Managed', 'PSResourceGet', 'PowerShellGet'),
@@ -34,6 +32,37 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('Suite-{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
+$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'All')
+$validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
+
+function Resolve-TokenList {
+    param(
+        [string[]] $Value,
+        [string[]] $Allowed,
+        [string] $Label
+    )
+
+    $resolved = [Collections.Generic.List[string]]::new()
+    foreach ($item in @($Value)) {
+        foreach ($token in ($item -split ',')) {
+            $name = $token.Trim()
+            if ([string]::IsNullOrWhiteSpace($name)) {
+                continue
+            }
+
+            $match = @($Allowed | Where-Object { $_ -eq $name })
+            if ($match.Count -eq 0) {
+                throw "Unknown $Label '$name'. Valid values: $($Allowed -join ', ')."
+            }
+
+            if (-not $resolved.Contains($match[0])) {
+                $resolved.Add($match[0])
+            }
+        }
+    }
+
+    , $resolved.ToArray()
+}
 
 function New-BenchmarkScenario {
     param(
@@ -237,6 +266,8 @@ function Add-SummaryRows {
     }
 }
 
+$Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
+$HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
     $scenarios | Select-Object Suite, Name, ModuleName, Version, AcceptLicense, Operations

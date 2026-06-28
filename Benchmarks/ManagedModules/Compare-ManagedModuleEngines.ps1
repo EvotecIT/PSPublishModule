@@ -331,8 +331,6 @@ function Invoke-IsolatedInstallHost {
         $EngineName
         '-ModuleName'
         $ModuleName
-        '-Version'
-        $Version
         '-Repository'
         (Get-ManagedRepositorySource)
         '-RepositoryName'
@@ -342,6 +340,12 @@ function Invoke-IsolatedInstallHost {
         '-ModuleBinary'
         (Resolve-ModuleBinary)
     )
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        $arguments += @(
+            '-Version'
+            $Version
+        )
+    }
     if (-not [string]::IsNullOrWhiteSpace($providerModulePath)) {
         $arguments += @(
             '-ProviderModulePath'
@@ -366,12 +370,19 @@ function Invoke-IsolatedInstallHost {
         $startInfo.Environment[$entry.Key] = $entry.Value
     }
 
-    $process = [Diagnostics.Process]::Start($startInfo)
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
-    if ($process.ExitCode -ne 0) {
-        throw "Install benchmark child host failed with exit code $($process.ExitCode).`n$stdout`n$stderr"
+    try {
+        $process = [Diagnostics.Process]::Start($startInfo)
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) {
+            throw "Install benchmark child host failed with exit code $($process.ExitCode).`n$stdout`n$stderr"
+        }
+    } finally {
+        $tempPath = $environment['TEMP']
+        if (-not [string]::IsNullOrWhiteSpace($tempPath) -and (Test-Path -LiteralPath $tempPath)) {
+            Remove-Item -LiteralPath $tempPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 

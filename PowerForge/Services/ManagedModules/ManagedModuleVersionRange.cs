@@ -30,6 +30,8 @@ internal sealed class ManagedModuleVersionRange
 
     public bool AllowsPrerelease { get; }
 
+    public bool IsUnbounded => ExactVersion is null && MinimumVersion is null && MaximumVersion is null;
+
     public static ManagedModuleVersionRange Any { get; } = new(null, false, null, false, null, false);
 
     public static ManagedModuleVersionRange FromBounds(string? minimumVersion, string? maximumVersion)

@@ -190,6 +190,20 @@ public sealed class ManagedModuleInstallService
             return request.Version!.Trim();
 
         var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
+        if (range.IsUnbounded)
+        {
+            var latestVersion = await _repositoryClient.GetLatestVersionAsync(
+                request.Repository,
+                request.Name,
+                request.IncludePrerelease,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false);
+            if (latestVersion is null)
+                throw new InvalidOperationException($"No versions of '{request.Name}' were found in repository '{request.Repository.Name}'.");
+
+            return latestVersion.Version;
+        }
+
         var versions = await _repositoryClient.GetVersionsAsync(
             request.Repository,
             request.Name,
@@ -266,6 +280,20 @@ public sealed class ManagedModuleInstallService
             return range.ExactVersion;
 
         var includePrerelease = request.IncludePrerelease || range.AllowsPrerelease;
+        if (range.IsUnbounded)
+        {
+            var latestVersion = await _repositoryClient.GetLatestVersionAsync(
+                request.Repository,
+                dependencyName,
+                includePrerelease,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false);
+            if (latestVersion is null)
+                throw new InvalidOperationException($"No dependency versions of '{dependencyName}' were found in repository '{request.Repository.Name}'.");
+
+            return latestVersion.Version;
+        }
+
         var versions = await _repositoryClient.GetVersionsAsync(
             request.Repository,
             dependencyName,
