@@ -368,6 +368,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.True(result.BytesWritten > 0);
         Assert.Equal(new FileInfo(result.PackagePath).Length, result.BytesWritten);
         Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
+        Assert.Equal(0, result.RedirectCount);
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
     }
 
@@ -389,6 +390,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.True(result.BytesWritten > 0);
         Assert.Equal(new FileInfo(result.PackagePath).Length, result.BytesWritten);
         Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
+        Assert.Equal(1, result.RedirectCount);
         Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/package/Company.Tools/1.1.0");
         Assert.Contains(requests, request => request.Url == "https://cdn.example.test/packages/company.tools.1.1.0.nupkg");
     }
@@ -431,6 +433,7 @@ public sealed class ManagedModuleRepositoryClientTests
 
         Assert.True(result.FromCache);
         Assert.Equal(0, result.BytesWritten);
+        Assert.Equal(0, result.RedirectCount);
         Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
         Assert.Equal("Company.Tools", result.Metadata!.Id);
         Assert.Empty(requests);

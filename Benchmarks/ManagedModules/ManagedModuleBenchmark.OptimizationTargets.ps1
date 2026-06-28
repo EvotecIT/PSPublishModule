@@ -15,6 +15,7 @@ function New-ManagedOptimizationTarget {
         $rootElapsedMs = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootElapsedMs
         $repositoryRequests = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRepositoryRequests
         $packageRequests = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageRepositoryRequests
+        $packageRedirects = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageRepositoryRedirects
         $downloadBytes = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadBytes
         $downloadMb = [math]::Round($downloadBytes / 1MB, 2)
 
@@ -35,6 +36,7 @@ function New-ManagedOptimizationTarget {
             PromotionMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPromotionMs), 2)
             RepositoryRequests = [math]::Round($repositoryRequests, 2)
             PackageRepositoryRequests = [math]::Round($packageRequests, 2)
+            PackageRepositoryRedirects = [math]::Round($packageRedirects, 2)
             DownloadMB = $downloadMb
             PackageCount = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageCount
             UniquePackageCount = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedUniquePackageCount

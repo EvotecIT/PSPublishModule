@@ -198,6 +198,7 @@ public sealed partial class ManagedModuleInstallService
             var downloadStopwatch = System.Diagnostics.Stopwatch.StartNew();
             ManagedModuleDownloadResult download;
             long packageRepositoryRequestCount;
+            long packageRepositoryRedirectCount;
             using (var packageRequestScope = _repositoryClient.BeginRequestScope())
             {
                 download = await _repositoryClient.DownloadPackageAsync(
@@ -208,6 +209,7 @@ public sealed partial class ManagedModuleInstallService
                     request.Credential,
                     cancellationToken).ConfigureAwait(false);
                 packageRepositoryRequestCount = packageRequestScope.Count;
+                packageRepositoryRedirectCount = packageRequestScope.RedirectCount;
             }
 
             downloadStopwatch.Stop();
@@ -279,6 +281,7 @@ public sealed partial class ManagedModuleInstallService
                 PromotionElapsed = promotionStopwatch.Elapsed,
                 RepositoryRequestCount = requestScope.Count,
                 PackageRepositoryRequestCount = packageRepositoryRequestCount,
+                PackageRepositoryRedirectCount = packageRepositoryRedirectCount,
                 DependencyResults = dependencyResults
             };
             _receiptStore.WriteReceipt(request.Repository, result);

@@ -81,6 +81,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 ? response.Headers.Location
                 : new Uri(current.RequestUri!, response.Headers.Location);
             response.Dispose();
+            RecordRedirectFollowed();
             current = CreateRedirectRequest(current, redirectUri);
         }
 

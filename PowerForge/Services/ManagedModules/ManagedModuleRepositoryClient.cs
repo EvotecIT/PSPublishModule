@@ -218,13 +218,16 @@ public sealed partial class ManagedModuleRepositoryClient
             if (cached is not null)
                 return cached;
 
-            return repository.Kind switch
+            using var downloadRequestScope = BeginRequestScope();
+            var result = repository.Kind switch
             {
                 ManagedModuleRepositoryKind.LocalFolder => await CopyLocalPackageAsync(repository, packageId, version, destinationDirectory, cancellationToken).ConfigureAwait(false),
                 ManagedModuleRepositoryKind.NuGetV3 => await DownloadNuGetPackageWithPowerShellGalleryReadApiAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
                 ManagedModuleRepositoryKind.NuGetV2 => await DownloadNuGetV2PackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
             };
+            result.RedirectCount = downloadRequestScope.RedirectCount;
+            return result;
         }
         finally
         {

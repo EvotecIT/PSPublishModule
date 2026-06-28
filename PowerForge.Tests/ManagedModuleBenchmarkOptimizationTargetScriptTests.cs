@@ -26,6 +26,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedPromotionMs = '25'
                     ManagedRepositoryRequests = '10'
                     ManagedPackageRepositoryRequests = '8'
+                    ManagedPackageRepositoryRedirects = '4'
                     ManagedDownloadBytes = '2097152'
                     ManagedPackageCount = '3'
                     ManagedUniquePackageCount = '3'
@@ -44,6 +45,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal("60%", Property(row, "BottleneckShare"));
         Assert.Equal(2.0, NumericProperty(row, "DownloadMB"));
         Assert.Equal(10.0, NumericProperty(row, "RepositoryRequests"));
+        Assert.Equal(4.0, NumericProperty(row, "PackageRepositoryRedirects"));
         Assert.Contains("download", Property(row, "NextQuestion"), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -69,6 +71,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedPromotionMs = '0'
                     ManagedRepositoryRequests = '0'
                     ManagedPackageRepositoryRequests = '0'
+                    ManagedPackageRepositoryRedirects = '0'
                     ManagedDownloadBytes = '0'
                     ManagedPackageCount = '0'
                     ManagedUniquePackageCount = '0'
@@ -118,6 +121,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedPromotionMs = '3'
                     ManagedRepositoryRequests = '2'
                     ManagedPackageRepositoryRequests = '1'
+                    ManagedPackageRepositoryRedirects = '0'
                     ManagedDownloadBytes = '100'
                     ManagedPackageCount = '1'
                     ManagedUniquePackageCount = '1'
