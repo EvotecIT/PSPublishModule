@@ -30,7 +30,11 @@ public sealed partial class DotNetPublishPipelineRunner
             "global.json"
         };
 
-        var copiedFiles = new Dictionary<string, string>(CreateCurrentFileSystemPathComparer());
+        var pathComparer = CreateCurrentFileSystemPathComparer();
+        var copiedFiles = new Dictionary<string, string>(pathComparer);
+        var plannedTargets = new Dictionary<string, string>(pathComparer);
+        var plannedSources = new List<string>();
+        var nuGetConfigs = new List<string>();
         var visibleConfigNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var queue = new Queue<string>();
         foreach (var directory in GetGeneratedInstallerBuildConfigurationDirectories(projectRootPath, sourceProjectPath))
@@ -38,20 +42,38 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (var file in Directory.EnumerateFiles(directory)
                 .Where(file => candidates.Contains(Path.GetFileName(file))))
             {
+                if (string.Equals(Path.GetFileName(file), "NuGet.config", StringComparison.OrdinalIgnoreCase))
+                {
+                    nuGetConfigs.Add(file);
+                    continue;
+                }
+
+                var sourceFullPath = Path.GetFullPath(file);
                 var targetPath = GetGeneratedInstallerVisibleBuildConfigurationTargetPath(
                     file,
                     workingDirectory,
                     visibleConfigNames);
-                CopyGeneratedInstallerBuildFile(file, projectRootPath, workingDirectory, copiedFiles, queue, targetPath);
+                if (!plannedTargets.ContainsKey(sourceFullPath))
+                {
+                    plannedTargets[sourceFullPath] = targetPath;
+                    plannedSources.Add(sourceFullPath);
+                }
             }
         }
+
+        foreach (var source in plannedSources)
+        {
+            CopyGeneratedInstallerBuildFile(source, projectRootPath, workingDirectory, copiedFiles, queue, plannedTargets);
+        }
+
+        CopyGeneratedInstallerNuGetConfiguration(nuGetConfigs, workingDirectory);
 
         while (queue.Count > 0)
         {
             var copiedSource = queue.Dequeue();
             foreach (var importPath in ResolveGeneratedInstallerBuildImports(copiedSource, projectRootPath))
             {
-                CopyGeneratedInstallerBuildFile(importPath, projectRootPath, workingDirectory, copiedFiles, queue);
+                CopyGeneratedInstallerBuildFile(importPath, projectRootPath, workingDirectory, copiedFiles, queue, plannedTargets);
             }
         }
     }
@@ -104,7 +126,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string workingDirectory,
         IDictionary<string, string> copiedFiles,
         Queue<string> queue,
-        string? targetPath = null)
+        IReadOnlyDictionary<string, string> plannedTargets)
     {
         var sourceFullPath = Path.GetFullPath(sourcePath);
         var projectRootDirectory = AppendDirectorySeparator(Path.GetFullPath(projectRoot));
@@ -115,12 +137,15 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         }
 
-        targetPath ??= GetGeneratedInstallerBuildFileTargetPath(sourceFullPath, projectRootDirectory, workingDirectory);
+        var targetPath = plannedTargets.TryGetValue(sourceFullPath, out var plannedTarget)
+            ? plannedTarget
+            : GetGeneratedInstallerBuildFileTargetPath(sourceFullPath, projectRootDirectory, workingDirectory);
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
         File.Copy(sourceFullPath, targetPath, overwrite: true);
         copiedFiles[sourceFullPath] = targetPath;
         RebaseNuGetConfigPaths(targetPath, Path.GetDirectoryName(sourceFullPath)!);
-        RewriteGeneratedInstallerBuildPropertyFunctionImports(targetPath, sourceFullPath, projectRootDirectory, workingDirectory, copiedFiles);
+        RewriteGeneratedInstallerBuildFileDirectoryProperties(targetPath, sourceFullPath);
+        RewriteGeneratedInstallerBuildPropertyFunctionImports(targetPath, sourceFullPath, projectRootDirectory, workingDirectory, copiedFiles, plannedTargets);
         queue.Enqueue(sourceFullPath);
     }
 
@@ -150,6 +175,14 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         }
 
+        if (RebaseNuGetConfigPaths(document, sourceDirectory))
+        {
+            document.Save(targetPath);
+        }
+    }
+
+    private static bool RebaseNuGetConfigPaths(XDocument document, string sourceDirectory)
+    {
         var changed = false;
         var pathAttributes = document
             .Descendants()
@@ -168,9 +201,89 @@ public sealed partial class DotNetPublishPipelineRunner
             changed = true;
         }
 
-        if (changed)
+        return changed;
+    }
+
+    private static void CopyGeneratedInstallerNuGetConfiguration(
+        IEnumerable<string> sourcePaths,
+        string workingDirectory)
+    {
+        var orderedSources = sourcePaths
+            .Select(Path.GetFullPath)
+            .Distinct(CreateCurrentFileSystemPathComparer())
+            .Reverse()
+            .ToArray();
+        if (orderedSources.Length == 0)
         {
-            document.Save(targetPath);
+            return;
+        }
+
+        var merged = new XDocument(new XElement("configuration"));
+        foreach (var sourcePath in orderedSources)
+        {
+            XDocument sourceDocument;
+            try
+            {
+                sourceDocument = XDocument.Load(sourcePath, LoadOptions.PreserveWhitespace);
+            }
+            catch
+            {
+                continue;
+            }
+
+            RebaseNuGetConfigPaths(sourceDocument, Path.GetDirectoryName(sourcePath)!);
+            MergeNuGetConfigDocument(merged, sourceDocument);
+        }
+
+        if (merged.Root is null ||
+            !merged.Root.HasElements)
+        {
+            return;
+        }
+
+        var targetPath = Path.Combine(workingDirectory, "NuGet.config");
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        merged.Save(targetPath);
+    }
+
+    private static void MergeNuGetConfigDocument(XDocument target, XDocument source)
+    {
+        if (target.Root is null ||
+            source.Root is null)
+        {
+            return;
+        }
+
+        foreach (var sourceSection in source.Root.Elements())
+        {
+            var targetSection = target.Root.Elements()
+                .FirstOrDefault(element => string.Equals(element.Name.LocalName, sourceSection.Name.LocalName, StringComparison.OrdinalIgnoreCase));
+            if (targetSection is null)
+            {
+                target.Root.Add(new XElement(sourceSection));
+                continue;
+            }
+
+            foreach (var sourceChild in sourceSection.Elements())
+            {
+                if (string.Equals(sourceChild.Name.LocalName, "clear", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetSection.RemoveNodes();
+                    continue;
+                }
+
+                var key = (string?)sourceChild.Attribute("key");
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    targetSection.Elements()
+                        .Where(element =>
+                            string.Equals(element.Name.LocalName, sourceChild.Name.LocalName, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals((string?)element.Attribute("key"), key, StringComparison.OrdinalIgnoreCase))
+                        .Remove();
+                }
+
+                targetSection.Add(new XElement(sourceChild));
+            }
         }
     }
 
@@ -465,7 +578,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string sourcePath,
         string projectRootDirectory,
         string workingDirectory,
-        IDictionary<string, string> copiedFiles)
+        IDictionary<string, string> copiedFiles,
+        IReadOnlyDictionary<string, string> plannedTargets)
     {
         XDocument document;
         try
@@ -501,9 +615,61 @@ public sealed partial class DotNetPublishPipelineRunner
             var resolvedFullPath = Path.GetFullPath(resolvedPath);
             var resolvedTargetPath = copiedFiles.TryGetValue(resolvedFullPath, out var existingTarget)
                 ? existingTarget
+                : plannedTargets.TryGetValue(resolvedFullPath, out var plannedTarget)
+                    ? plannedTarget
                 : GetGeneratedInstallerBuildFileTargetPath(resolvedFullPath, projectRootDirectory, workingDirectory);
-            projectAttribute.Value = GetRelativePathCompat(targetDirectory, resolvedTargetPath);
+            var rewrittenProject = GetRelativePathCompat(targetDirectory, resolvedTargetPath);
+            projectAttribute.Value = rewrittenProject;
+            var condition = projectAttribute.Parent?.Attribute("Condition");
+            if (condition is not null &&
+                condition.Value.IndexOf("[MSBuild]::GetPathOfFileAbove(", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                condition.Value = "Exists('" + rewrittenProject + "')";
+            }
+
             changed = true;
+        }
+
+        if (changed)
+        {
+            document.Save(targetPath);
+        }
+    }
+
+    private static void RewriteGeneratedInstallerBuildFileDirectoryProperties(
+        string targetPath,
+        string sourcePath)
+    {
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(targetPath, LoadOptions.PreserveWhitespace);
+        }
+        catch
+        {
+            return;
+        }
+
+        var sourceDirectory = EnsureTrailingDirectorySeparator(Path.GetDirectoryName(sourcePath)!);
+        var changed = false;
+        foreach (var element in document.Descendants()
+            .Where(element => !string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (var attribute in element.Attributes().ToArray())
+            {
+                if (attribute.Value.IndexOf("$(MSBuildThisFileDirectory)", StringComparison.Ordinal) >= 0)
+                {
+                    attribute.Value = attribute.Value.Replace("$(MSBuildThisFileDirectory)", sourceDirectory);
+                    changed = true;
+                }
+            }
+
+            if (!element.HasElements &&
+                element.Value.IndexOf("$(MSBuildThisFileDirectory)", StringComparison.Ordinal) >= 0)
+            {
+                element.Value = element.Value.Replace("$(MSBuildThisFileDirectory)", sourceDirectory);
+                changed = true;
+            }
         }
 
         if (changed)

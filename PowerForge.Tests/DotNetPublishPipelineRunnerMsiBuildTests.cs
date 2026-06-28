@@ -58,6 +58,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Directory.CreateDirectory(Path.Combine(root, "LocalPackages"));
             Directory.CreateDirectory(Path.Combine(root, "GlobalPackages"));
             Directory.CreateDirectory(Path.Combine(root, "LocalFallback"));
+            Directory.CreateDirectory(Path.Combine(root, "Artifacts", "DotNetPublish", "NestedPackages"));
             File.WriteAllText(
                 Path.Combine(root, "NuGet.config"),
                 "<configuration><config>" +
@@ -72,9 +73,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var importedBuildProps = Path.Combine(root, "Build", "Props", "Generated.props");
             Directory.CreateDirectory(Path.GetDirectoryName(importedBuildProps)!);
             File.WriteAllText(importedBuildProps, "<Project />");
-            var outerBuildTargets = Path.Combine(root, "Artifacts", "Outer.targets");
-            Directory.CreateDirectory(Path.GetDirectoryName(outerBuildTargets)!);
-            File.WriteAllText(outerBuildTargets, "<Project />");
+            var rootBuildTargets = Path.Combine(root, "Directory.Build.targets");
+            File.WriteAllText(rootBuildTargets, "<Project />");
             File.WriteAllText(
                 Path.Combine(root, "Directory.Build.props"),
                 "<Project><Import Project=\"$(MSBuildThisFileDirectory)Build\\**\\*.props\" /></Project>");
@@ -94,8 +94,18 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var nestedConfigPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Directory.Build.targets");
             Directory.CreateDirectory(Path.GetDirectoryName(nestedConfigPath)!);
             File.WriteAllText(
+                Path.Combine(root, "Artifacts", "DotNetPublish", "NuGet.config"),
+                "<configuration><packageSources>" +
+                "<add key=\"nested\" value=\"NestedPackages\" />" +
+                "</packageSources></configuration>");
+            File.WriteAllText(
                 nestedConfigPath,
-                "<Project><Import Project=\"$([MSBuild]::GetPathOfFileAbove('Outer.targets', '$(MSBuildThisFileDirectory)..'))\" /></Project>");
+                "<Project><PropertyGroup>" +
+                "<RepoToolPath>$(MSBuildThisFileDirectory)Tools</RepoToolPath>" +
+                "</PropertyGroup>" +
+                "<Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))\" " +
+                "Condition=\"Exists('$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))')\" />" +
+                "</Project>");
             Directory.CreateDirectory(Path.Combine(sourceDir, "Fragments"));
             var sourceProjectPath = Path.Combine(sourceDir, "DesktopManager_App_MSI.wixproj");
             var stagingDir = Path.Combine(root, "Payload", "DesktopManager.App", "win-x64", "net10.0-windows10.0.19041.0", "PortableCompat");
@@ -186,16 +196,29 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Build", "Props", "Generated.props")));
-                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Artifacts", "Outer.targets")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "BuildConfig", "Directory.Build.targets")));
                 var copiedNestedTargets = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets"));
-                var copiedNestedImport = copiedNestedTargets
+                var copiedNestedImportElement = copiedNestedTargets
                     .Descendants()
-                    .Single(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase))
+                    .Single(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase));
+                var copiedNestedImport = copiedNestedImportElement
                     .Attribute("Project")!
                     .Value;
                 Assert.DoesNotContain("GetPathOfFileAbove", copiedNestedImport, StringComparison.OrdinalIgnoreCase);
                 var copiedOuterTargetPath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, copiedNestedImport));
                 Assert.True(File.Exists(copiedOuterTargetPath));
+                Assert.Contains("PowerForgeInputs", copiedNestedImport, StringComparison.OrdinalIgnoreCase);
+                var copiedNestedImportCondition = copiedNestedImportElement.Attribute("Condition")!.Value;
+                Assert.DoesNotContain("GetPathOfFileAbove", copiedNestedImportCondition, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains(copiedNestedImport, copiedNestedImportCondition, StringComparison.OrdinalIgnoreCase);
+                var repoToolPath = copiedNestedTargets
+                    .Descendants()
+                    .Single(element => string.Equals(element.Name.LocalName, "RepoToolPath", StringComparison.OrdinalIgnoreCase))
+                    .Value;
+                Assert.DoesNotContain("MSBuildThisFileDirectory", repoToolPath, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(
+                    Path.GetFullPath(Path.Combine(root, "Artifacts", "DotNetPublish", "Tools")),
+                    Path.GetFullPath(repoToolPath));
                 var copiedNuGetConfig = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "NuGet.config"));
                 var localPackageSource = copiedNuGetConfig
                     .Descendants()
@@ -214,6 +237,16 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     .Attribute("value")!
                     .Value;
                 Assert.Equal("file:///C:/packages", filePackageSource);
+                var nestedPackageSource = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "nested", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal(
+                    Path.GetFullPath(Path.Combine(root, "Artifacts", "DotNetPublish", "NestedPackages")),
+                    Path.GetFullPath(nestedPackageSource));
                 var globalPackagesFolder = copiedNuGetConfig
                     .Descendants()
                     .Single(element =>
