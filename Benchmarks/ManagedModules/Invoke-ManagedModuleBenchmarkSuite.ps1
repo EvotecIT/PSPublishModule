@@ -274,13 +274,31 @@ function Add-SummaryRows {
     )
 
     $comparisonPath = Join-Path $RunPath 'managed-module-comparison.csv'
+    $metadataPath = Join-Path $RunPath 'metadata.json'
+    $runMetadata = if (Test-Path -LiteralPath $metadataPath) {
+        Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    } else {
+        $null
+    }
+    $resolvedBaseline = if ($runMetadata -and $runMetadata.PSObject.Properties['ResolvedUpdateBaselineVersion']) {
+        [string]$runMetadata.ResolvedUpdateBaselineVersion
+    } else {
+        [string]$Scenario.UpdateBaselineVersion
+    }
+    $resolvedTarget = if ($runMetadata -and $runMetadata.PSObject.Properties['ResolvedUpdateTargetVersion']) {
+        [string]$runMetadata.ResolvedUpdateTargetVersion
+    } else {
+        [string]$Scenario.Version
+    }
+
     if (Test-Path -LiteralPath $comparisonPath) {
         foreach ($row in (Import-Csv -LiteralPath $comparisonPath)) {
             $Rows.Add([pscustomobject]@{
                 Suite = $Scenario.Suite
                 Scenario = $Scenario.Name
                 ModuleName = $Scenario.ModuleName
-                UpdateBaselineVersion = $Scenario.UpdateBaselineVersion
+                UpdateBaselineVersion = $resolvedBaseline
+                UpdateTargetVersion = $resolvedTarget
                 Host = $HostLabel
                 Operation = $row.Operation
                 FastestEngine = $row.FastestEngine
