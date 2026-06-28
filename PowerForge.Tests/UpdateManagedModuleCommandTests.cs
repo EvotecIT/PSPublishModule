@@ -7,6 +7,44 @@ namespace PowerForge.Tests;
 public sealed class UpdateManagedModuleCommandTests
 {
     [Fact]
+    public void UpdateManagedModule_WithoutName_UpdatesInstalledModulesInSelectedRoot()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        foreach (var name in new[] { "Company.Tools", "Company.Other" })
+        {
+            TestPackageFactory.Create(
+                Path.Combine(feed.Path, name + ".1.1.0.nupkg"),
+                name,
+                "1.1.0",
+                files: CreateModuleFiles(name, "1.1.0"));
+            var installedPath = Path.Combine(moduleRoot.Path, name, "1.0.0");
+            Directory.CreateDirectory(installedPath);
+            File.WriteAllText(Path.Combine(installedPath, name + ".psd1"), "@{ ModuleVersion = '1.0.0' }");
+        }
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Update-ManagedModule")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("AllowClobber");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var updateResults = results.Select(result => Assert.IsType<ManagedModuleUpdateResult>(result.BaseObject)).ToArray();
+        Assert.Equal(new[] { "Company.Other", "Company.Tools" }, updateResults.Select(result => result.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray());
+        Assert.All(updateResults, result =>
+        {
+            Assert.Equal("1.0.0", result.PreviousVersion);
+            Assert.Equal("1.1.0", result.TargetVersion);
+            Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        });
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Other", "1.1.0", "Company.Other.psd1")));
+    }
+
+    [Fact]
     public void UpdateManagedModule_blocks_loaded_module_update_by_default()
     {
         using var feed = new TemporaryDirectory();

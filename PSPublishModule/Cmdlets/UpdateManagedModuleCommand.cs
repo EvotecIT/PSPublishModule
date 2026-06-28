@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
@@ -28,7 +29,7 @@ namespace PSPublishModule;
 public sealed class UpdateManagedModuleCommand : PSCmdlet
 {
     /// <summary>Module names to update.</summary>
-    [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
+    [Parameter(Position = 0, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
@@ -207,53 +208,91 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
         var trustPolicy = ManagedModuleCommandSupport.CreateTrustPolicy(TrustPolicy, RequireTrustedRepository.IsPresent, AllowedAuthor);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var service = new ManagedModuleUpdateService(logger);
-
-        foreach (var moduleName in Name)
+        var targetScope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom;
+        var targetModuleRoot = ManagedModuleInstallRootResolver.Resolve(targetScope, ShellEdition, moduleRoot);
+        var moduleNames = ResolveModuleNames(targetModuleRoot).ToArray();
+        var updateAllInstalled = Name.Length == 0;
+        if (moduleNames.Length == 0)
         {
-            var request = new ManagedModuleUpdateRequest
-            {
-                Repository = repository,
-                Name = moduleName,
-                Version = Version,
-                MinimumVersion = MinimumVersion,
-                MaximumVersion = MaximumVersion,
-                VersionPolicy = VersionPolicy,
-                IncludePrerelease = Prerelease.IsPresent,
-                Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
-                ShellEdition = ShellEdition,
-                ModuleRoot = moduleRoot,
-                PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
-                ExpectedPackageSha256 = ExpectedPackageSha256,
-                TrustPolicy = trustPolicy,
-                Credential = credential,
-                Force = Force.IsPresent,
-                AllowClobber = AllowClobber.IsPresent,
-                AcceptLicense = AcceptLicense.IsPresent,
-                SkipDependencyCheck = SkipDependencyCheck.IsPresent,
-                LoadedModules = LoadedModule,
-                FamilyPolicy = ResolveFamilyPolicy(),
-                SourcePolicy = ResolveSourcePolicy(),
-                AllowLoadedModuleUpdate = AllowLoadedModuleUpdate.IsPresent
-            };
-
-            if (Plan.IsPresent)
-            {
-                var plan = service.PlanUpdateAsync(request).GetAwaiter().GetResult();
-                WriteObject(plan);
-                if (ShowSummary.IsPresent)
-                    ManagedModuleSummaryWriter.Write(plan);
-                continue;
-            }
-
-            if (!ShouldProcess(moduleName, $"Update managed module from repository '{repository.Name}'"))
-                continue;
-
-            var result = service.UpdateAsync(request).GetAwaiter().GetResult();
-
-            WriteObject(result);
-            if (ShowSummary.IsPresent)
-                ManagedModuleSummaryWriter.Write(result);
+            WriteVerbose($"No installed modules were found under '{targetModuleRoot}'.");
+            return;
         }
+
+        foreach (var moduleName in moduleNames)
+        {
+            try
+            {
+                var request = new ManagedModuleUpdateRequest
+                {
+                    Repository = repository,
+                    Name = moduleName,
+                    Version = Version,
+                    MinimumVersion = MinimumVersion,
+                    MaximumVersion = MaximumVersion,
+                    VersionPolicy = VersionPolicy,
+                    IncludePrerelease = Prerelease.IsPresent,
+                    Scope = targetScope,
+                    ShellEdition = ShellEdition,
+                    ModuleRoot = moduleRoot,
+                    PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                    ExpectedPackageSha256 = ExpectedPackageSha256,
+                    TrustPolicy = trustPolicy,
+                    Credential = credential,
+                    Force = Force.IsPresent,
+                    AllowClobber = AllowClobber.IsPresent,
+                    AcceptLicense = AcceptLicense.IsPresent,
+                    SkipDependencyCheck = SkipDependencyCheck.IsPresent,
+                    LoadedModules = LoadedModule,
+                    FamilyPolicy = ResolveFamilyPolicy(),
+                    SourcePolicy = ResolveSourcePolicy(),
+                    AllowLoadedModuleUpdate = AllowLoadedModuleUpdate.IsPresent
+                };
+
+                if (Plan.IsPresent)
+                {
+                    var plan = service.PlanUpdateAsync(request).GetAwaiter().GetResult();
+                    WriteObject(plan);
+                    if (ShowSummary.IsPresent)
+                        ManagedModuleSummaryWriter.Write(plan);
+                    continue;
+                }
+
+                if (!ShouldProcess(moduleName, $"Update managed module from repository '{repository.Name}'"))
+                    continue;
+
+                var result = service.UpdateAsync(request).GetAwaiter().GetResult();
+
+                WriteObject(result);
+                if (ShowSummary.IsPresent)
+                    ManagedModuleSummaryWriter.Write(result);
+            }
+            catch (Exception ex) when (updateAllInstalled)
+            {
+                WriteError(new ErrorRecord(ex, "UpdateManagedModuleFailed", ErrorCategory.NotSpecified, moduleName));
+            }
+        }
+    }
+
+    private string[] ResolveModuleNames(string moduleRoot)
+    {
+        if (Name.Length > 0)
+            return Name
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+        if (!Directory.Exists(moduleRoot))
+            return Array.Empty<string>();
+
+        return Directory.EnumerateDirectories(moduleRoot)
+            .Select(Path.GetFileName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name) &&
+                                  !name!.StartsWith(".", StringComparison.Ordinal))
+            .Select(static name => name!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private ManagedModuleFamilyPolicy? ResolveFamilyPolicy()
