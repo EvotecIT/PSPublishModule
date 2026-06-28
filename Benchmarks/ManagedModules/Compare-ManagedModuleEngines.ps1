@@ -296,6 +296,7 @@ function Get-BenchmarkHostPath {
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ResultRows.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Summary.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.RepairPlan.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ManagedDetails.ps1')
 $repositorySource = Resolve-ManagedModuleBenchmarkRepositorySource -Repository $Repository -RepositoryName $RepositoryName
 
 function Get-ProviderModulePath {
@@ -706,7 +707,9 @@ function Invoke-SaveEngineCommand {
     param(
         [string] $EngineName,
         [string] $Destination,
-        [bool] $Force
+        [bool] $Force,
+        [string] $PackageCacheDirectory = '',
+        [string] $DetailPath = ''
     )
 
     switch ($EngineName) {
@@ -724,9 +727,14 @@ function Invoke-SaveEngineCommand {
             if (-not [string]::IsNullOrWhiteSpace($Version)) {
                 $parameters.Version = $Version
             }
+            if (-not [string]::IsNullOrWhiteSpace($PackageCacheDirectory)) {
+                $parameters.PackageCacheDirectory = $PackageCacheDirectory
+            }
             Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
             Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
-            Save-ManagedModule @parameters
+            $result = Save-ManagedModule @parameters
+            Write-ManagedInstallDetail -Result $result -Path $DetailPath
+            $result
         }
         'PSResourceGet' {
             $parameters = @{
@@ -766,6 +774,11 @@ function Invoke-SaveScenario {
     $destination = Join-Path $workRoot ("save-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
     $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
+    $packageCacheDirectory = if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
+        Join-Path $destination 'ManagedPackageCache'
+    } else {
+        ''
+    }
 
     switch ($EngineName) {
         'ModuleFast' {
@@ -789,14 +802,23 @@ function Invoke-SaveScenario {
 
     if (Test-BenchmarkOperationRequiresExistingTarget -OperationName $OperationName) {
         try {
-            Invoke-SaveEngineCommand -EngineName $EngineName -Destination $destination -Force $true | Out-Null
+            Invoke-SaveEngineCommand -EngineName $EngineName -Destination $destination -Force $true -PackageCacheDirectory $packageCacheDirectory | Out-Null
         } catch {
             return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason "Preseed save failed: $($_.Exception.Message)" -OutputRoot $destination
         }
+        if ($CacheMode -eq 'Cold') {
+            Clear-IsolatedPackageCaches -Destination $destination
+        }
     }
 
-    Invoke-TimedOperation -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
-        Invoke-SaveEngineCommand -EngineName $EngineName -Destination $destination -Force $force
+    $detailPath = if ($EngineName -eq 'Managed') {
+        Join-Path $workRoot ("managed-{0}-details-{1}.json" -f $OperationName, $Iteration)
+    } else {
+        ''
+    }
+
+    Invoke-TimedOperation -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
+        Invoke-SaveEngineCommand -EngineName $EngineName -Destination $destination -Force $force -PackageCacheDirectory $packageCacheDirectory -DetailPath $detailPath
     }
 }
 
@@ -806,6 +828,11 @@ function Invoke-InstallScenario {
     $destination = Join-Path $installWorkRoot ("install-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
     $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
+    $packageCacheDirectory = if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
+        Join-Path $destination 'ManagedPackageCache'
+    } else {
+        ''
+    }
 
     switch ($EngineName) {
         'ModuleFast' {
@@ -830,9 +857,12 @@ function Invoke-InstallScenario {
 
     if (Test-BenchmarkOperationRequiresExistingTarget -OperationName $OperationName) {
         try {
-            Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -Force $true
+            Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -PackageCacheDirectory $packageCacheDirectory -Force $true
         } catch {
             return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason "Preseed install failed: $($_.Exception.Message)" -OutputRoot $destination
+        }
+        if ($CacheMode -eq 'Cold') {
+            Clear-IsolatedPackageCaches -Destination $destination
         }
     }
 
@@ -843,7 +873,7 @@ function Invoke-InstallScenario {
     }
 
     Invoke-TimedOperation -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Install' -Force $force
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Install' -PackageCacheDirectory $packageCacheDirectory -Force $force
     }
 }
 
