@@ -22,6 +22,9 @@ public sealed partial class ManagedModuleRepositoryClient
     private readonly ConcurrentDictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _packagePublishAddressCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _packageDownloadLocks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<ManagedModuleVersionInfo>>>> _versionQueryTasks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleVersionInfo?>>> _latestVersionQueryTasks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<ManagedModuleVersionInfo>>>> _searchQueryTasks = new(StringComparer.OrdinalIgnoreCase);
     private long _requestCount;
 
     /// <summary>
@@ -72,8 +75,20 @@ public sealed partial class ManagedModuleRepositoryClient
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => GetLocalVersions(repository, packageId, includePrerelease),
-            ManagedModuleRepositoryKind.NuGetV3 => await GetNuGetVersionsWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
-            ManagedModuleRepositoryKind.NuGetV2 => await GetNuGetV2VersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV3 => await ExecuteCoalescedVersionQueryAsync(
+                repository,
+                packageId,
+                includePrerelease,
+                credential,
+                cancellationToken,
+                () => GetNuGetVersionsWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, cancellationToken)).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedVersionQueryAsync(
+                repository,
+                packageId,
+                includePrerelease,
+                credential,
+                cancellationToken,
+                () => GetNuGetV2VersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken)).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -102,8 +117,20 @@ public sealed partial class ManagedModuleRepositoryClient
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => GetLocalVersions(repository, packageId, includePrerelease).LastOrDefault(),
-            ManagedModuleRepositoryKind.NuGetV3 => await GetLatestNuGetVersionWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
-            ManagedModuleRepositoryKind.NuGetV2 => await GetLatestNuGetV2VersionAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV3 => await ExecuteCoalescedLatestVersionQueryAsync(
+                repository,
+                packageId,
+                includePrerelease,
+                credential,
+                cancellationToken,
+                () => GetLatestNuGetVersionWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, cancellationToken)).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedLatestVersionQueryAsync(
+                repository,
+                packageId,
+                includePrerelease,
+                credential,
+                cancellationToken,
+                () => GetLatestNuGetV2VersionAsync(repository, packageId, includePrerelease, credential, cancellationToken)).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -134,8 +161,22 @@ public sealed partial class ManagedModuleRepositoryClient
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take),
-            ManagedModuleRepositoryKind.NuGetV3 => await SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
-            ManagedModuleRepositoryKind.NuGetV2 => await SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV3 => await ExecuteCoalescedSearchQueryAsync(
+                repository,
+                query,
+                includePrerelease,
+                take,
+                credential,
+                cancellationToken,
+                () => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, cancellationToken)).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedSearchQueryAsync(
+                repository,
+                query,
+                includePrerelease,
+                take,
+                credential,
+                cancellationToken,
+                () => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken)).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
