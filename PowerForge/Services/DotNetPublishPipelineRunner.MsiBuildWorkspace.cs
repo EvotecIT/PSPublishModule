@@ -185,16 +185,17 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(prepare.HarvestPath) &&
             File.Exists(prepare.HarvestPath))
         {
+            var prepareHarvestPath = prepare.HarvestPath!;
             Directory.CreateDirectory(inputsDirectory);
-            harvestPath = Path.Combine(inputsDirectory, Path.GetFileName(prepare.HarvestPath));
-            File.Copy(prepare.HarvestPath, harvestPath, overwrite: true);
+            harvestPath = Path.Combine(inputsDirectory, Path.GetFileName(prepareHarvestPath));
+            File.Copy(prepareHarvestPath, harvestPath, overwrite: true);
 
             if (!string.IsNullOrWhiteSpace(payloadDirectory))
             {
-                RewriteHarvestSourcePaths(harvestPath, prepare.StagingDir, payloadDirectory);
+                RewriteHarvestSourcePaths(harvestPath, prepare.StagingDir, payloadDirectory!);
             }
 
-            RewriteWixProjectSourceIncludes(projectPath, prepare.HarvestPath, harvestPath);
+            RewriteWixProjectSourceIncludes(projectPath, prepareHarvestPath, harvestPath);
         }
 
         return new GeneratedInstallerExternalFiles(payloadDirectory, harvestPath);
@@ -329,5 +330,16 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private sealed record GeneratedInstallerExternalFiles(string? PayloadDirectory, string? HarvestPath);
+    private sealed class GeneratedInstallerExternalFiles
+    {
+        public GeneratedInstallerExternalFiles(string? payloadDirectory, string? harvestPath)
+        {
+            PayloadDirectory = payloadDirectory;
+            HarvestPath = harvestPath;
+        }
+
+        public string? PayloadDirectory { get; }
+
+        public string? HarvestPath { get; }
+    }
 }
