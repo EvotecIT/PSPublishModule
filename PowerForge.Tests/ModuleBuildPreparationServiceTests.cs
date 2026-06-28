@@ -57,6 +57,8 @@ public sealed class ModuleBuildPreparationServiceTests
         {
             var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
             var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
+            File.WriteAllText(Path.Combine(root.FullName, "Build", "header.ps1"), "Write-Output 'header'");
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "DbaClientX.psd1"), "@{ ModuleVersion = '1.0.0' }");
 
             var settings = ScriptBlock.Create("""
@@ -151,14 +153,47 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         VersionSource = [PowerForge.ReleaseVersionSource]::ProjectBuild
     }
 }
+[PowerForge.ConfigurationValidationSegment]@{
+    Settings = [PowerForge.ModuleValidationSettings]@{
+        Enable = $true
+        Tests = [PowerForge.TestSuiteValidationSettings]@{
+            Enable = $true
+            TestPath = 'Tests'
+        }
+    }
+}
+[PowerForge.ConfigurationDocumentationSegment]@{
+    Configuration = [PowerForge.DocumentationConfiguration]@{
+        Path = 'Module/Docs'
+        PathReadme = 'README.md'
+    }
+}
+[PowerForge.ConfigurationBuildDocumentationSegment]@{
+    Configuration = [PowerForge.BuildDocumentationConfiguration]@{
+        Enable = $true
+        AboutTopicsSourcePath = @('Module/Docs/About')
+    }
+}
+[PowerForge.ArtefactConfigurationFactory]::new([PowerForge.NullLogger]::new()).Create([PowerForge.ArtefactConfigurationRequest]@{
+    Type = [PowerForge.ArtefactType]::Packed
+    EnableSpecified = $true
+    Enable = $true
+    Path = 'Module/Artefacts/FileBacked'
+    PreScriptMergePath = 'Build/header.ps1'
+})
 """);
 
+            var outsideRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-outside-" + Guid.NewGuid().ToString("N")));
+            var previousCurrentDirectory = Directory.GetCurrentDirectory();
             using var runspace = RunspaceFactory.CreateRunspace();
             runspace.Open();
             var previousRunspace = Runspace.DefaultRunspace;
             Runspace.DefaultRunspace = runspace;
             try
             {
+                Directory.SetCurrentDirectory(outsideRoot.FullName);
+                runspace.SessionStateProxy.Path.SetLocation(outsideRoot.FullName);
+
                 var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
                 {
                     ParameterSetName = "Modern",
@@ -167,6 +202,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                     CurrentPath = root.FullName,
                     ScriptRoot = scriptRoot.FullName,
                     ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                    StagingPath = "Artefacts/Staging",
+                    CsprojPath = "Sources/TopLevel/TopLevel.csproj",
+                    DiagnosticsBaselinePath = "Build/diagnostics.json",
                     DotNetFramework = Array.Empty<string>(),
                     ExcludeDirectories = Array.Empty<string>(),
                     ExcludeFiles = Array.Empty<string>()
@@ -175,6 +213,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(moduleRoot.FullName, prepared.ProjectRoot);
                 Assert.Null(prepared.BasePathForScaffold);
                 Assert.Equal(moduleRoot.FullName, prepared.PipelineSpec.Build.SourcePath);
+                Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Staging"), prepared.PipelineSpec.Build.StagingPath);
+                Assert.Equal(Path.Combine(root.FullName, "Sources", "TopLevel", "TopLevel.csproj"), prepared.PipelineSpec.Build.CsprojPath);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "diagnostics.json"), prepared.PipelineSpec.Diagnostics.BaselinePath);
 
                 var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(prepared.PipelineSpec.Segments[0]);
                 Assert.Equal(Path.Combine(root.FullName, "DbaClientX.PowerShell", "DbaClientX.PowerShell.csproj"), buildLibraries.BuildLibraries.NETProjectPath);
@@ -224,10 +265,26 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 
                 var release = Assert.IsType<ConfigurationReleaseSegment>(prepared.PipelineSpec.Segments[9]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "UploadReady"), release.Configuration.StageRoot);
+
+                var validation = Assert.IsType<ConfigurationValidationSegment>(prepared.PipelineSpec.Segments[10]);
+                Assert.Equal(Path.Combine(root.FullName, "Tests"), validation.Settings.Tests.TestPath);
+
+                var documentation = Assert.IsType<ConfigurationDocumentationSegment>(prepared.PipelineSpec.Segments[11]);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Docs"), documentation.Configuration.Path);
+                Assert.Equal(Path.Combine(root.FullName, "README.md"), documentation.Configuration.PathReadme);
+
+                var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(prepared.PipelineSpec.Segments[12]);
+                Assert.Equal(new[] { Path.Combine(root.FullName, "Module", "Docs", "About") }, buildDocumentation.Configuration.AboutTopicsSourcePath);
+
+                var fileBackedArtefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[13]);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "FileBacked"), fileBackedArtefact.Configuration.Path);
+                Assert.Contains("Write-Output", fileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
             }
             finally
             {
+                try { Directory.SetCurrentDirectory(previousCurrentDirectory); } catch { }
                 Runspace.DefaultRunspace = previousRunspace;
+                try { outsideRoot.Delete(recursive: true); } catch { }
             }
         }
         finally
@@ -492,6 +549,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         {
             var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
             var projectConfig = Path.Combine(root.FullName, "Build", "project.build.json");
+            var buildStagingPath = Path.Combine(root.FullName, "Artifacts", "Module", "Staging");
+            var buildCsprojPath = Path.Combine(root.FullName, "Sources", "TopLevel", "TopLevel.csproj");
+            var diagnosticsBaselinePath = Path.Combine(root.FullName, "Build", "diagnostics.json");
             var netProject = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "SampleModule.PowerShell.csproj");
             var developmentBinaries = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "bin");
             var packageRoot = Path.Combine(root.FullName, "Sources");
@@ -505,6 +565,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var actionWorkingDirectory = Path.Combine(root.FullName, "Build");
             var testsPath = Path.Combine(root.FullName, "Tests");
             var signingPfxPath = Path.Combine(root.FullName, "Build", "cert.pfx");
+            var documentationPath = Path.Combine(root.FullName, "Module", "Docs");
+            var documentationReadmePath = Path.Combine(root.FullName, "README.md");
+            var aboutTopicsPath = Path.Combine(root.FullName, "Module", "Docs", "About");
             var copyDirectorySource = Path.Combine(root.FullName, "Build", "Templates");
             var copyFileSource = Path.Combine(root.FullName, "Build", "NOTICE.txt");
             var projectOptionsOutputPath = Path.Combine(root.FullName, "Artifacts", "ProjectBuild", "options");
@@ -516,7 +579,13 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Build = new ModuleBuildSpec
                 {
                     Name = "SampleModule",
-                    SourcePath = root.FullName
+                    SourcePath = root.FullName,
+                    StagingPath = buildStagingPath,
+                    CsprojPath = buildCsprojPath
+                },
+                Diagnostics = new ModulePipelineDiagnosticsOptions
+                {
+                    BaselinePath = diagnosticsBaselinePath
                 },
                 Segments = new IConfigurationSegment[]
                 {
@@ -605,6 +674,34 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                             }
                         }
                     },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = documentationPath,
+                            PathReadme = documentationReadmePath
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            AboutTopicsSourcePath = new[] { aboutTopicsPath }
+                        }
+                    },
+                    new ConfigurationValidationSegment
+                    {
+                        Settings = new ModuleValidationSettings
+                        {
+                            Enable = true,
+                            Tests = new TestSuiteValidationSettings
+                            {
+                                Enable = true,
+                                TestPath = testsPath
+                            }
+                        }
+                    },
                     new ConfigurationPublishSegment
                     {
                         Configuration = new PublishConfiguration
@@ -636,6 +733,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             service.WritePipelineSpecJson(spec, jsonPath);
 
             var json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"StagingPath\": \"../Artifacts/Module/Staging\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"CsprojPath\": \"../Sources/TopLevel/TopLevel.csproj\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"BaselinePath\": \"../Build/diagnostics.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"ConfigPath\": \"Build/project.build.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"NETProjectPath\": \"Sources/SampleModule.PowerShell/SampleModule.PowerShell.csproj\"", json, StringComparison.Ordinal);
             Assert.Contains("\"NETDevelopmentBinariesPath\": \"Sources/SampleModule.PowerShell/bin\"", json, StringComparison.Ordinal);
@@ -656,6 +756,11 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"Source\": \"Build/NOTICE.txt\"", json, StringComparison.Ordinal);
             Assert.Contains("\"TestsPath\": \"Tests\"", json, StringComparison.Ordinal);
             Assert.Contains("\"CertificatePFXPath\": \"Build/cert.pfx\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Path\": \"Module/Docs\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"PathReadme\": \"README.md\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"TestPath\": \"Tests\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"AboutTopicsSourcePath\": [", json, StringComparison.Ordinal);
+            Assert.Contains("\"Module/Docs/About\"", json, StringComparison.Ordinal);
             Assert.Contains("\"ApiKeyFilePath\": \"Build/psgallery.key\"", json, StringComparison.Ordinal);
             Assert.Contains("\"FilePath\": \"Build/Test-ReleaseReady.ps1\"", json, StringComparison.Ordinal);
             Assert.Contains("\"WorkingDirectory\": \"Build\"", json, StringComparison.Ordinal);
@@ -665,15 +770,21 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.NotNull(jsonSpec);
 
             service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
+            Assert.Equal(buildStagingPath, jsonSpec!.Build.StagingPath);
+            Assert.Equal(buildCsprojPath, jsonSpec.Build.CsprojPath);
+            Assert.Equal(diagnosticsBaselinePath, jsonSpec.Diagnostics!.BaselinePath);
             var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(jsonSpec!.Segments[0]);
             var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(jsonSpec.Segments[1]);
             var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(jsonSpec.Segments[2]);
             var artefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec.Segments[3]);
             var test = Assert.IsType<ConfigurationTestSegment>(jsonSpec.Segments[4]);
             var options = Assert.IsType<ConfigurationOptionsSegment>(jsonSpec.Segments[5]);
-            var publish = Assert.IsType<ConfigurationPublishSegment>(jsonSpec.Segments[6]);
-            var action = Assert.IsType<ConfigurationActionSegment>(jsonSpec.Segments[7]);
-            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[8]);
+            var documentation = Assert.IsType<ConfigurationDocumentationSegment>(jsonSpec.Segments[6]);
+            var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(jsonSpec.Segments[7]);
+            var validation = Assert.IsType<ConfigurationValidationSegment>(jsonSpec.Segments[8]);
+            var publish = Assert.IsType<ConfigurationPublishSegment>(jsonSpec.Segments[9]);
+            var action = Assert.IsType<ConfigurationActionSegment>(jsonSpec.Segments[10]);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[11]);
             Assert.Equal(projectConfig, projectBuild.Configuration.ConfigPath);
             Assert.Equal(projectOptionsOutputPath, projectBuild.Configuration.Options!["OutputPath"]);
             Assert.Equal(projectOptionsPlanPath, projectBuild.Configuration.Options["PlanOutputPath"]);
@@ -695,6 +806,10 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal("NOTICE.txt", artefact.Configuration.FilesOutput[0].Destination);
             Assert.Equal(testsPath, test.Configuration.TestsPath);
             Assert.Equal(signingPfxPath, options.Options.Signing!.CertificatePFXPath);
+            Assert.Equal(documentationPath, documentation.Configuration.Path);
+            Assert.Equal(documentationReadmePath, documentation.Configuration.PathReadme);
+            Assert.Equal(new[] { aboutTopicsPath }, buildDocumentation.Configuration.AboutTopicsSourcePath);
+            Assert.Equal(testsPath, validation.Settings.Tests.TestPath);
             Assert.Equal(publishKey, publish.Configuration.ApiKeyFilePath);
             Assert.Equal(actionFile, action.Configuration.FilePath);
             Assert.Equal(actionWorkingDirectory, action.Configuration.WorkingDirectory);

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.IO;
 using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -46,7 +47,7 @@ internal sealed class ModuleBuildPreparationService
         var segments = useLegacy
             ? (string.Equals(request.ParameterSetName, "Configuration", StringComparison.Ordinal)
                 ? LegacySegmentAdapter.CollectFromLegacyConfiguration(request.Configuration)
-                : LegacySegmentAdapter.CollectFromSettings(request.Settings))
+                : CollectSettingsFromWorkspace(request.Settings, workspaceRoot))
             : Array.Empty<IConfigurationSegment>();
         ResolveWorkspaceRelativeSegmentPaths(segments, workspaceRoot, projectRoot);
 
@@ -60,8 +61,8 @@ internal sealed class ModuleBuildPreparationService
             {
                 Name = moduleName!,
                 SourcePath = projectRoot,
-                StagingPath = request.StagingPath,
-                CsprojPath = request.CsprojPath,
+                StagingPath = ResolveWorkspacePath(workspaceRoot, request.StagingPath),
+                CsprojPath = ResolveWorkspacePath(workspaceRoot, request.CsprojPath),
                 Version = "1.0.0",
                 Configuration = request.DotNetConfiguration,
                 Frameworks = frameworks,
@@ -81,7 +82,7 @@ internal sealed class ModuleBuildPreparationService
             },
             Diagnostics = new ModulePipelineDiagnosticsOptions
             {
-                BaselinePath = request.DiagnosticsBaselinePath,
+                BaselinePath = ResolveWorkspacePath(workspaceRoot, request.DiagnosticsBaselinePath),
                 GenerateBaseline = request.GenerateDiagnosticsBaseline,
                 UpdateBaseline = request.UpdateDiagnosticsBaseline,
                 FailOnNewDiagnostics = request.FailOnNewDiagnostics,
@@ -240,11 +241,33 @@ internal sealed class ModuleBuildPreparationService
             ResolvePackageBuildOptionPaths(cfg.Options, projectRoot);
         }
 
+        foreach (var segment in spec.Segments?.OfType<ConfigurationDocumentationSegment>() ?? Enumerable.Empty<ConfigurationDocumentationSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.Path = ResolveConfigPathNullable(projectRoot, cfg.Path) ?? string.Empty;
+            cfg.PathReadme = ResolveConfigPathNullable(projectRoot, cfg.PathReadme) ?? string.Empty;
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationBuildDocumentationSegment>() ?? Enumerable.Empty<ConfigurationBuildDocumentationSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.AboutTopicsSourcePath = ResolveConfigPaths(projectRoot, cfg.AboutTopicsSourcePath);
+        }
+
         foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.TestsPath)) continue;
             cfg.TestsPath = ResolveConfigPath(projectRoot, cfg.TestsPath);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationValidationSegment>() ?? Enumerable.Empty<ConfigurationValidationSegment>())
+        {
+            var settings = segment.Settings;
+            if (settings is null) continue;
+            settings.Tests.TestPath = ResolveConfigPathNullable(projectRoot, settings.Tests.TestPath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationOptionsSegment>() ?? Enumerable.Empty<ConfigurationOptionsSegment>())
@@ -400,8 +423,18 @@ internal sealed class ModuleBuildPreparationService
                     package.GitHubAccessTokenFilePath = ResolveWorkspacePath(workspaceRoot, package.GitHubAccessTokenFilePath);
                     ResolvePackageBuildOptionPaths(package.Options, workspaceRoot);
                     break;
+                case ConfigurationDocumentationSegment documentation:
+                    documentation.Configuration.Path = ResolveWorkspacePath(workspaceRoot, documentation.Configuration.Path) ?? string.Empty;
+                    documentation.Configuration.PathReadme = ResolveWorkspacePath(workspaceRoot, documentation.Configuration.PathReadme) ?? string.Empty;
+                    break;
+                case ConfigurationBuildDocumentationSegment buildDocumentation:
+                    buildDocumentation.Configuration.AboutTopicsSourcePath = ResolveWorkspacePaths(workspaceRoot, buildDocumentation.Configuration.AboutTopicsSourcePath);
+                    break;
                 case ConfigurationTestSegment test:
                     test.Configuration.TestsPath = ResolveWorkspacePath(workspaceRoot, test.Configuration.TestsPath) ?? string.Empty;
+                    break;
+                case ConfigurationValidationSegment validation:
+                    validation.Settings.Tests.TestPath = ResolveWorkspacePath(workspaceRoot, validation.Settings.Tests.TestPath);
                     break;
                 case ConfigurationOptionsSegment options:
                     var signing = options.Options?.Signing;
@@ -446,6 +479,71 @@ internal sealed class ModuleBuildPreparationService
             return path;
 
         return PathValueResolver.Resolve(workspaceRoot, path!);
+    }
+
+    private static string[] ResolveWorkspacePaths(string workspaceRoot, string[]? paths)
+    {
+        if (paths is null || paths.Length == 0)
+            return Array.Empty<string>();
+
+        return paths
+            .Select(path => ResolveWorkspacePath(workspaceRoot, path) ?? string.Empty)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+    }
+
+    private static string[] ResolveConfigPaths(string rootPath, string[]? paths)
+    {
+        if (paths is null || paths.Length == 0)
+            return Array.Empty<string>();
+
+        return paths
+            .Select(path => ResolveConfigPathNullable(rootPath, path) ?? string.Empty)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+    }
+
+    private static IConfigurationSegment[] CollectSettingsFromWorkspace(ScriptBlock? settings, string workspaceRoot)
+    {
+        if (settings is null)
+            return Array.Empty<IConfigurationSegment>();
+
+        if (string.IsNullOrWhiteSpace(workspaceRoot) || !Directory.Exists(workspaceRoot))
+            return LegacySegmentAdapter.CollectFromSettings(settings);
+
+        var previousDirectory = Directory.GetCurrentDirectory();
+        var runspace = Runspace.DefaultRunspace;
+        var runspaceLocationChanged = false;
+        string? previousRunspaceLocation = null;
+
+        try
+        {
+            Directory.SetCurrentDirectory(workspaceRoot);
+            if (runspace is not null)
+            {
+                try
+                {
+                    previousRunspaceLocation = runspace.SessionStateProxy.Path.CurrentFileSystemLocation?.ProviderPath;
+                    runspace.SessionStateProxy.Path.SetLocation(workspaceRoot);
+                    runspaceLocationChanged = true;
+                }
+                catch
+                {
+                    runspaceLocationChanged = false;
+                }
+            }
+
+            return LegacySegmentAdapter.CollectFromSettings(settings);
+        }
+        finally
+        {
+            if (runspaceLocationChanged && !string.IsNullOrWhiteSpace(previousRunspaceLocation))
+            {
+                try { runspace!.SessionStateProxy.Path.SetLocation(previousRunspaceLocation!); } catch { }
+            }
+
+            try { Directory.SetCurrentDirectory(previousDirectory); } catch { }
+        }
     }
 
     private static void ResolvePackageBuildOptionPaths(Dictionary<string, object?>? options, string rootPath)
@@ -606,11 +704,33 @@ internal sealed class ModuleBuildPreparationService
             MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot);
         }
 
+        foreach (var segment in spec.Segments?.OfType<ConfigurationDocumentationSegment>() ?? Enumerable.Empty<ConfigurationDocumentationSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.Path = MakeRelativeForProjectRoot(projectRoot, cfg.Path) ?? string.Empty;
+            cfg.PathReadme = MakeRelativeForProjectRoot(projectRoot, cfg.PathReadme) ?? string.Empty;
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationBuildDocumentationSegment>() ?? Enumerable.Empty<ConfigurationBuildDocumentationSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.AboutTopicsSourcePath = MakePathsRelativeForProjectRoot(projectRoot, cfg.AboutTopicsSourcePath);
+        }
+
         foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.TestsPath)) continue;
             cfg.TestsPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.TestsPath));
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationValidationSegment>() ?? Enumerable.Empty<ConfigurationValidationSegment>())
+        {
+            var settings = segment.Settings;
+            if (settings is null) continue;
+            settings.Tests.TestPath = MakeRelativeForProjectRoot(projectRoot, settings.Tests.TestPath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationOptionsSegment>() ?? Enumerable.Empty<ConfigurationOptionsSegment>())
@@ -706,6 +826,17 @@ internal sealed class ModuleBuildPreparationService
 
             options[optionName] = MakeRelativeForProjectRoot(projectRoot, path);
         }
+    }
+
+    private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths)
+    {
+        if (paths is null || paths.Length == 0)
+            return Array.Empty<string>();
+
+        return paths
+            .Select(path => MakeRelativeForProjectRoot(projectRoot, path) ?? string.Empty)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
     }
 
     private static string? GetStringOptionValue(object? value)
