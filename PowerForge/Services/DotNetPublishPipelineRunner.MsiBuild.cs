@@ -79,7 +79,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var before = SnapshotMsiOutputs(outputSearchDir, skipBinDirectoryFilter: skipOutputBinDirectoryFilter);
 
         using var generatedBuildWorkspace = isGeneratedInstallerProject
-            ? PrepareGeneratedInstallerBuildWorkspace(installerId, projectDir, installerProjectPath, prepare)
+            ? PrepareGeneratedInstallerBuildWorkspace(installerId, projectDir, installerProjectPath, prepare, plan.ProjectRoot)
             : null;
         if (generatedBuildWorkspace is not null)
         {

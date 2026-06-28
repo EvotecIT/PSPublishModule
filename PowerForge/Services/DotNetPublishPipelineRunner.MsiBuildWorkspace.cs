@@ -105,7 +105,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string installerId,
         string sourceProjectDirectory,
         string sourceProjectPath,
-        DotNetPublishMsiPrepareResult? prepare = null)
+        DotNetPublishMsiPrepareResult? prepare = null,
+        string? projectRoot = null)
     {
         if (string.IsNullOrWhiteSpace(installerId))
         {
@@ -141,6 +142,7 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             DirectoryCopy(sourceDirectory, workingDirectory);
+            CopyGeneratedInstallerBuildConfiguration(workingDirectory, projectRoot);
             var projectPath = Path.Combine(workingDirectory, Path.GetFileName(sourcePath));
             if (!File.Exists(projectPath))
             {
@@ -162,6 +164,31 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static void CopyGeneratedInstallerBuildConfiguration(string workingDirectory, string? projectRoot)
+    {
+        if (string.IsNullOrWhiteSpace(projectRoot) ||
+            !Directory.Exists(projectRoot))
+        {
+            return;
+        }
+
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "NuGet.config",
+            "Directory.Build.props",
+            "Directory.Build.targets",
+            "Directory.Packages.props",
+            "Directory.Packages.targets",
+            "global.json"
+        };
+
+        foreach (var file in Directory.EnumerateFiles(projectRoot)
+            .Where(file => candidates.Contains(Path.GetFileName(file))))
+        {
+            File.Copy(file, Path.Combine(workingDirectory, Path.GetFileName(file)), overwrite: true);
+        }
+    }
+
     private static GeneratedInstallerExternalFiles PrepareGeneratedInstallerExternalFiles(
         string workingDirectory,
         string projectPath,
@@ -179,7 +206,16 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             payloadDirectory = Path.Combine(inputsDirectory, "Payload");
             DirectoryCopy(prepare.StagingDir, payloadDirectory);
+            RewriteWixProjectDefineConstants(
+                projectPath,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PayloadDir"] = payloadDirectory,
+                    ["PowerForgeMsiPayloadDir"] = payloadDirectory
+                });
         }
+
+        RewriteGeneratedInstallerAssetPaths(Path.Combine(workingDirectory, "Product.wxs"), inputsDirectory);
 
         string? harvestPath = null;
         if (!string.IsNullOrWhiteSpace(prepare.HarvestPath) &&
@@ -199,6 +235,128 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return new GeneratedInstallerExternalFiles(payloadDirectory, harvestPath);
+    }
+
+    private static void RewriteWixProjectDefineConstants(
+        string projectPath,
+        IReadOnlyDictionary<string, string> replacements)
+    {
+        if (replacements.Count == 0)
+        {
+            return;
+        }
+
+        var document = XDocument.Load(projectPath, LoadOptions.PreserveWhitespace);
+        var changed = false;
+
+        foreach (var element in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "DefineConstants", StringComparison.OrdinalIgnoreCase)))
+        {
+            var entries = element.Value
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(entry => entry.Trim())
+                .Where(entry => entry.Length > 0)
+                .ToArray();
+            var rewrittenEntries = new List<string>(entries.Length);
+            foreach (var entry in entries)
+            {
+                var separatorIndex = entry.IndexOf('=');
+                if (separatorIndex <= 0)
+                {
+                    rewrittenEntries.Add(entry);
+                    continue;
+                }
+
+                var key = entry.Substring(0, separatorIndex).Trim();
+                if (replacements.TryGetValue(key, out var replacement))
+                {
+                    rewrittenEntries.Add(key + "=" + replacement);
+                    changed = true;
+                    continue;
+                }
+
+                rewrittenEntries.Add(entry);
+            }
+
+            if (changed)
+            {
+                element.Value = string.Join(";", rewrittenEntries);
+            }
+        }
+
+        if (changed)
+        {
+            document.Save(projectPath);
+        }
+    }
+
+    private static void RewriteGeneratedInstallerAssetPaths(string sourcePath, string inputsDirectory)
+    {
+        if (!File.Exists(sourcePath))
+        {
+            return;
+        }
+
+        var document = XDocument.Load(sourcePath, LoadOptions.PreserveWhitespace);
+        var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
+        var assetsDirectory = Path.Combine(inputsDirectory, "Assets");
+        var copiedAssets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var valueAttribute in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "WixVariable", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Value"))
+            .Where(attribute => attribute is not null))
+        {
+            var value = valueAttribute!.Value;
+            if (string.IsNullOrWhiteSpace(value) ||
+                !Path.IsPathRooted(value) ||
+                !File.Exists(value))
+            {
+                continue;
+            }
+
+            if (!copiedAssets.TryGetValue(value, out var copiedPath))
+            {
+                Directory.CreateDirectory(assetsDirectory);
+                copiedPath = GetUniqueAssetPath(assetsDirectory, Path.GetFileName(value));
+                File.Copy(value, copiedPath, overwrite: false);
+                copiedAssets[value] = copiedPath;
+            }
+
+            valueAttribute.Value = GetRelativePathCompat(sourceDirectory, copiedPath);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            document.Save(sourcePath);
+        }
+    }
+
+    private static string GetUniqueAssetPath(string directory, string fileName)
+    {
+        var safeName = string.IsNullOrWhiteSpace(fileName)
+            ? "asset"
+            : fileName;
+        var candidate = Path.Combine(directory, safeName);
+        if (!File.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(safeName);
+        var extension = Path.GetExtension(safeName);
+        for (var index = 1; ; index++)
+        {
+            candidate = Path.Combine(directory, $"{name}_{index}{extension}");
+            if (!File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
     }
 
     private static void RewriteWixProjectSourceIncludes(

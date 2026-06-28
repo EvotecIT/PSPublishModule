@@ -55,6 +55,9 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         var root = CreateTempRoot();
         try
         {
+            File.WriteAllText(Path.Combine(root, "NuGet.config"), "<configuration />");
+            File.WriteAllText(Path.Combine(root, "Directory.Build.props"), "<Project />");
+            File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project />");
             var sourceDir = Path.Combine(
                 root,
                 "Artifacts",
@@ -73,6 +76,9 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Directory.CreateDirectory(stagingDir);
             var payloadFile = Path.Combine(stagingDir, "DesktopManager.App.exe");
             File.WriteAllText(payloadFile, "payload");
+            var licensePath = Path.Combine(root, "Build", "Installer", "DesktopManager-License.rtf");
+            Directory.CreateDirectory(Path.GetDirectoryName(licensePath)!);
+            File.WriteAllText(licensePath, "{\\rtf1 DesktopManager}");
             var harvestPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Msi", "DesktopManager.App.MSI", "HarvestedPayload.wxs");
             Directory.CreateDirectory(Path.GetDirectoryName(harvestPath)!);
             File.WriteAllText(
@@ -84,11 +90,21 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "</Component></DirectoryRef></Fragment></Wix>");
             File.WriteAllText(
                 sourceProjectPath,
-                "<Project Sdk=\"WixToolset.Sdk/4.0.6\"><ItemGroup>" +
+                "<Project Sdk=\"WixToolset.Sdk/4.0.6\">" +
+                "<PropertyGroup>" +
+                $"<DefineConstants>PayloadDir={stagingDir};PowerForgeMsiPayloadDir={stagingDir};Other=1</DefineConstants>" +
+                "</PropertyGroup>" +
+                "<ItemGroup>" +
                 "<Compile Include=\"Product.wxs\" />" +
                 $"<Compile Include=\"{harvestPath}\" />" +
                 "</ItemGroup></Project>");
-            File.WriteAllText(Path.Combine(sourceDir, "Product.wxs"), "<Wix />");
+            File.WriteAllText(
+                Path.Combine(sourceDir, "Product.wxs"),
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">" +
+                "<Package Name=\"DesktopManager\">" +
+                $"<WixVariable Id=\"WixUILicenseRtf\" Value=\"{licensePath}\" />" +
+                "</Package></Wix>");
             File.WriteAllText(Path.Combine(sourceDir, "Fragments", "Payload.wxs"), "<Wix />");
 
             var workspace = DotNetPublishPipelineRunner.PrepareGeneratedInstallerBuildWorkspace(
@@ -104,7 +120,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     Style = DotNetPublishStyle.PortableCompat,
                     StagingDir = stagingDir,
                     HarvestPath = harvestPath
-                });
+                },
+                root);
             var tempRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PowerForge", "WixBuild"))
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
@@ -115,13 +132,19 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(workspace.ProjectPath));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Product.wxs")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Fragments", "Payload.wxs")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "NuGet.config")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.props")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
                 Assert.NotNull(workspace.PayloadDirectory);
                 Assert.NotNull(workspace.HarvestPath);
                 Assert.True(File.Exists(Path.Combine(workspace.PayloadDirectory!, "DesktopManager.App.exe")));
                 Assert.True(File.Exists(workspace.HarvestPath!));
 
-                var projectText = File.ReadAllText(workspace.ProjectPath);
+                var project = XDocument.Load(workspace.ProjectPath);
+                var projectText = project.ToString();
                 Assert.DoesNotContain(harvestPath, projectText, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(stagingDir, projectText, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains(workspace.PayloadDirectory!, projectText, StringComparison.OrdinalIgnoreCase);
                 Assert.Contains("PowerForgeInputs", projectText, StringComparison.OrdinalIgnoreCase);
 
                 XNamespace wix = "http://wixtoolset.org/schemas/v4/wxs";
@@ -134,6 +157,17 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.DoesNotContain(stagingDir, source, StringComparison.OrdinalIgnoreCase);
                 Assert.StartsWith(workspace.PayloadDirectory!, source, StringComparison.OrdinalIgnoreCase);
                 Assert.True(File.Exists(source));
+
+                var product = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "Product.wxs"));
+                var licenseValue = product
+                    .Descendants(wix + "WixVariable")
+                    .Single()
+                    .Attribute("Value")!
+                    .Value;
+                Assert.DoesNotContain(licensePath, licenseValue, StringComparison.OrdinalIgnoreCase);
+                var copiedLicensePath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, licenseValue));
+                Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedLicensePath, StringComparison.OrdinalIgnoreCase);
+                Assert.True(File.Exists(copiedLicensePath));
             }
             finally
             {
