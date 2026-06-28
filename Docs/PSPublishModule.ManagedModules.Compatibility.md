@@ -149,7 +149,8 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts in the selected target root.
 - [x] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
 - [ ] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, and package hash policies instead of cloning PowerShellGet's publisher-check switch.
-- [ ] Add managed Authenticode/catalog validation equivalent to PSResourceGet `-AuthenticodeCheck`, including timestamped signatures and short-lived certificate chains.
+- [ ] Complete managed Authenticode/catalog validation parity with PSResourceGet `-AuthenticodeCheck`, including explicit catalog policy evidence and timestamped short-lived certificate chains.
+- [x] Add initial managed `-AuthenticodeCheck` support for install/save/update on Windows using native WinTrust validation of extracted signable files before promotion.
 - [x] Expose semantically equivalent migration aliases such as `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` where they map cleanly to managed cmdlet behavior.
 - [ ] Decide whether to add explicit `-TrustRepository` and `-SkipPublisherCheck` compatibility parameters. They should not be aliases unless their behavior is intentionally defined because repository trust and publisher checks are different safety concepts in the managed engine.
 - [ ] Document unsupported non-module resource use cases explicitly: scripts, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
@@ -217,6 +218,14 @@ Managed install, save, update, and ModuleState managed delivery never prompt for
 `-AcceptLicense` applies to the whole dependency closure for that operation. This is intentional for unattended estate maintenance: either the operator or automation policy accepts the package licenses up front, or no package that requires acceptance is promoted. A license-required dependency blocks the parent package before the parent is promoted.
 
 Plan operations do not accept licenses or write license receipts. They only describe the intended action. The caller must pass `-AcceptLicense` again when invoking the mutating install, save, update, or ModuleState apply operation.
+
+### Authenticode Semantics
+
+`-AuthenticodeCheck` is an explicit opt-in on managed install, save, and update. When supplied, the managed engine extracts the package to a staging directory and validates signable files with native Windows WinTrust before dependency delivery and before the staged module is promoted to the target root. Unsigned or invalid signable files block the operation before the final module version is written.
+
+The initial managed gate covers common signable module artifacts such as `.ps1`, `.psm1`, `.psd1`, `.ps1xml`, `.pssc`, `.psrc`, `.dll`, `.exe`, and `.cat`. Dependency installs inherit the same check. Plan output records that Authenticode validation would be required, but plan mode does not download or validate signatures.
+
+This check is currently Windows-only. Calling it on non-Windows hosts fails clearly instead of silently skipping the safety check. Full PSResourceGet parity still needs catalog-specific evidence and timestamp/short-lived-certificate behavior documented with live signed fixtures.
 
 ## Transition Gates
 

@@ -76,6 +76,11 @@ public sealed class ManagedModuleInstallPlan
     public string? ExpectedPackageSha256 { get; set; }
 
     /// <summary>
+    /// True when the mutating operation would require Authenticode validation before promotion.
+    /// </summary>
+    public bool AuthenticodeCheck { get; set; }
+
+    /// <summary>
     /// True when the caller required the repository to be trusted.
     /// </summary>
     public bool RequireTrustedRepository { get; set; }

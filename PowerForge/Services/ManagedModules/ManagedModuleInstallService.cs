@@ -10,6 +10,7 @@ public sealed class ManagedModuleInstallService
     private readonly ILogger _logger;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
     private readonly ManagedModuleArchiveExtractor _extractor;
+    private readonly ManagedModuleAuthenticodeVerifier _authenticodeVerifier;
     private readonly ManagedModuleReceiptStore _receiptStore;
 
     /// <summary>
@@ -22,6 +23,7 @@ public sealed class ManagedModuleInstallService
         _logger = logger ?? new NullLogger();
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(_logger);
         _extractor = new ManagedModuleArchiveExtractor();
+        _authenticodeVerifier = new ManagedModuleAuthenticodeVerifier();
         _receiptStore = new ManagedModuleReceiptStore();
     }
 
@@ -73,6 +75,7 @@ public sealed class ManagedModuleInstallService
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
             ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            AuthenticodeCheck = request.AuthenticodeCheck,
             RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
             AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors)
         };
@@ -133,6 +136,9 @@ public sealed class ManagedModuleInstallService
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
             var extraction = _extractor.ExtractPackage(download.PackagePath, stageModulePath);
+            var authenticode = request.AuthenticodeCheck
+                ? _authenticodeVerifier.VerifyDirectory(stageModulePath)
+                : null;
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
             var dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -185,6 +191,7 @@ public sealed class ManagedModuleInstallService
                 Elapsed = stopwatch.Elapsed,
                 VersionResolutionElapsed = versionResolutionStopwatch.Elapsed,
                 Download = download,
+                AuthenticodeVerification = authenticode,
                 DownloadElapsed = downloadStopwatch.Elapsed,
                 FileCount = extraction.FileCount,
                 ExtractedBytes = extraction.BytesWritten,
@@ -361,6 +368,7 @@ public sealed class ManagedModuleInstallService
                     Force = false,
                     AllowClobber = request.AllowClobber,
                     AcceptLicense = request.AcceptLicense,
+                    AuthenticodeCheck = request.AuthenticodeCheck,
                     SkipDependencyCheck = false
                 },
                 context,
@@ -404,7 +412,8 @@ public sealed class ManagedModuleInstallService
                 Credential = request.Credential,
                 Force = false,
                 AllowClobber = request.AllowClobber,
-                AcceptLicense = request.AcceptLicense
+                AcceptLicense = request.AcceptLicense,
+                AuthenticodeCheck = request.AuthenticodeCheck
             },
             installedVersion,
             moduleRoot,

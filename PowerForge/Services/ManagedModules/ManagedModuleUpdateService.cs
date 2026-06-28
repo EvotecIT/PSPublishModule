@@ -70,6 +70,7 @@ public sealed class ManagedModuleUpdateService
                 MaximumVersion = request.MaximumVersion,
                 VersionPolicy = request.VersionPolicy,
                 ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+                AuthenticodeCheck = request.AuthenticodeCheck,
                 RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
                 AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
                 ModuleRoot = moduleRoot,
@@ -108,6 +109,7 @@ public sealed class ManagedModuleUpdateService
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
             ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            AuthenticodeCheck = request.AuthenticodeCheck,
             RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
             AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
             ModuleRoot = moduleRoot,
@@ -167,6 +169,7 @@ public sealed class ManagedModuleUpdateService
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
             ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            AuthenticodeCheck = request.AuthenticodeCheck,
             RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
             AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
             SourcePolicySatisfied = sourceEvaluation.IsSatisfied,
@@ -203,6 +206,7 @@ public sealed class ManagedModuleUpdateService
                 Force = true,
                 AllowClobber = request.AllowClobber,
                 AcceptLicense = request.AcceptLicense,
+                AuthenticodeCheck = request.AuthenticodeCheck,
                 SkipDependencyCheck = request.SkipDependencyCheck
             },
             cancellationToken).ConfigureAwait(false);
