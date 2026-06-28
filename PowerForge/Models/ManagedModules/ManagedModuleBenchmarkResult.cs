@@ -26,6 +26,11 @@ public sealed class ManagedModuleBenchmarkResult
     public ManagedModuleBenchmarkEnvironment Environment { get; set; } = ManagedModuleBenchmarkEnvironment.Capture();
 
     /// <summary>
+    /// Provider-support evidence for repositories used by the benchmark scenarios.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleProviderSupport> ProviderSupport { get; set; } = Array.Empty<ManagedModuleProviderSupport>();
+
+    /// <summary>
     /// Operation-level evidence gates used when deciding whether the managed engine can replace compatibility defaults.
     /// </summary>
     public IReadOnlyList<ManagedModuleBenchmarkTransitionGateResult> TransitionGates { get; set; } = Array.Empty<ManagedModuleBenchmarkTransitionGateResult>();
