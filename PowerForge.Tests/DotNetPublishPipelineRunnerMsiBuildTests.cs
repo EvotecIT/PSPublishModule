@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Xml.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -68,14 +69,42 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "generated");
             Directory.CreateDirectory(Path.Combine(sourceDir, "Fragments"));
             var sourceProjectPath = Path.Combine(sourceDir, "DesktopManager_App_MSI.wixproj");
-            File.WriteAllText(sourceProjectPath, "<Project Sdk=\"WixToolset.Sdk/4.0.6\" />");
+            var stagingDir = Path.Combine(root, "Payload", "DesktopManager.App", "win-x64", "net10.0-windows10.0.19041.0", "PortableCompat");
+            Directory.CreateDirectory(stagingDir);
+            var payloadFile = Path.Combine(stagingDir, "DesktopManager.App.exe");
+            File.WriteAllText(payloadFile, "payload");
+            var harvestPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Msi", "DesktopManager.App.MSI", "HarvestedPayload.wxs");
+            Directory.CreateDirectory(Path.GetDirectoryName(harvestPath)!);
+            File.WriteAllText(
+                harvestPath,
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">" +
+                "<Fragment><DirectoryRef Id=\"INSTALLFOLDER\"><Component Id=\"Payload\" Guid=\"*\">" +
+                $"<File Id=\"DesktopManagerAppExe\" Source=\"{payloadFile}\" KeyPath=\"yes\" />" +
+                "</Component></DirectoryRef></Fragment></Wix>");
+            File.WriteAllText(
+                sourceProjectPath,
+                "<Project Sdk=\"WixToolset.Sdk/4.0.6\"><ItemGroup>" +
+                "<Compile Include=\"Product.wxs\" />" +
+                $"<Compile Include=\"{harvestPath}\" />" +
+                "</ItemGroup></Project>");
             File.WriteAllText(Path.Combine(sourceDir, "Product.wxs"), "<Wix />");
             File.WriteAllText(Path.Combine(sourceDir, "Fragments", "Payload.wxs"), "<Wix />");
 
             var workspace = DotNetPublishPipelineRunner.PrepareGeneratedInstallerBuildWorkspace(
                 "DesktopManager.App.MSI",
                 sourceDir,
-                sourceProjectPath);
+                sourceProjectPath,
+                new DotNetPublishMsiPrepareResult
+                {
+                    InstallerId = "DesktopManager.App.MSI",
+                    Target = "DesktopManager.App",
+                    Framework = "net10.0-windows10.0.19041.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    StagingDir = stagingDir,
+                    HarvestPath = harvestPath
+                });
             var tempRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PowerForge", "WixBuild"))
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
@@ -86,6 +115,25 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(workspace.ProjectPath));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Product.wxs")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Fragments", "Payload.wxs")));
+                Assert.NotNull(workspace.PayloadDirectory);
+                Assert.NotNull(workspace.HarvestPath);
+                Assert.True(File.Exists(Path.Combine(workspace.PayloadDirectory!, "DesktopManager.App.exe")));
+                Assert.True(File.Exists(workspace.HarvestPath!));
+
+                var projectText = File.ReadAllText(workspace.ProjectPath);
+                Assert.DoesNotContain(harvestPath, projectText, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("PowerForgeInputs", projectText, StringComparison.OrdinalIgnoreCase);
+
+                XNamespace wix = "http://wixtoolset.org/schemas/v4/wxs";
+                var harvest = XDocument.Load(workspace.HarvestPath!);
+                var source = harvest
+                    .Descendants(wix + "File")
+                    .Single()
+                    .Attribute("Source")!
+                    .Value;
+                Assert.DoesNotContain(stagingDir, source, StringComparison.OrdinalIgnoreCase);
+                Assert.StartsWith(workspace.PayloadDirectory!, source, StringComparison.OrdinalIgnoreCase);
+                Assert.True(File.Exists(source));
             }
             finally
             {

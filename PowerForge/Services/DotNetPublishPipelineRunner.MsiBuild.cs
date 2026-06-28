@@ -79,7 +79,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var before = SnapshotMsiOutputs(outputSearchDir, skipBinDirectoryFilter: skipOutputBinDirectoryFilter);
 
         using var generatedBuildWorkspace = isGeneratedInstallerProject
-            ? PrepareGeneratedInstallerBuildWorkspace(installerId, projectDir, installerProjectPath)
+            ? PrepareGeneratedInstallerBuildWorkspace(installerId, projectDir, installerProjectPath, prepare)
             : null;
         if (generatedBuildWorkspace is not null)
         {
@@ -107,7 +107,9 @@ public sealed partial class DotNetPublishPipelineRunner
             installerMsBuildProperties,
             versionResolution,
             licenseResolution,
-            isGeneratedInstallerProject);
+            isGeneratedInstallerProject,
+            generatedBuildWorkspace?.PayloadDirectory,
+            generatedBuildWorkspace?.HarvestPath);
 
         if (!string.IsNullOrWhiteSpace(versionResolution.Version) &&
             !string.IsNullOrWhiteSpace(versionResolution.PropertyName) &&

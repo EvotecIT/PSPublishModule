@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -17,7 +19,9 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> installerMsBuildProperties,
         MsiVersionResolution versionResolution,
         MsiClientLicenseResolution licenseResolution,
-        bool isGeneratedInstallerProject)
+        bool isGeneratedInstallerProject,
+        string? payloadDirectoryOverride = null,
+        string? harvestPathOverride = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (step is null) throw new ArgumentNullException(nameof(step));
@@ -55,7 +59,7 @@ public sealed partial class DotNetPublishPipelineRunner
             args.Add($"/p:OutputName={configuredOutputName}");
         }
         args.Add($"/p:PowerForgeMsiInstallerId={installerId}");
-        args.Add($"/p:PowerForgeMsiPayloadDir={prepare.StagingDir}");
+        args.Add($"/p:PowerForgeMsiPayloadDir={payloadDirectoryOverride ?? prepare.StagingDir}");
         if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
         {
             args.Add($"/p:PowerForgeMsiPrepareManifest={prepare.ManifestPath}");
@@ -64,9 +68,10 @@ public sealed partial class DotNetPublishPipelineRunner
         args.Add($"/p:PowerForgeMsiSourceFramework={prepare.Framework}");
         args.Add($"/p:PowerForgeMsiSourceRuntime={prepare.Runtime}");
         args.Add($"/p:PowerForgeMsiSourceStyle={prepare.Style}");
-        if (!string.IsNullOrWhiteSpace(prepare.HarvestPath))
+        var harvestPath = harvestPathOverride ?? prepare.HarvestPath;
+        if (!string.IsNullOrWhiteSpace(harvestPath))
         {
-            args.Add($"/p:PowerForgeMsiHarvestPath={prepare.HarvestPath}");
+            args.Add($"/p:PowerForgeMsiHarvestPath={harvestPath}");
         }
         if (!string.IsNullOrWhiteSpace(prepare.HarvestDirectoryRefId))
         {
@@ -99,7 +104,8 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static GeneratedInstallerBuildWorkspace PrepareGeneratedInstallerBuildWorkspace(
         string installerId,
         string sourceProjectDirectory,
-        string sourceProjectPath)
+        string sourceProjectPath,
+        DotNetPublishMsiPrepareResult? prepare = null)
     {
         if (string.IsNullOrWhiteSpace(installerId))
         {
@@ -141,12 +147,137 @@ public sealed partial class DotNetPublishPipelineRunner
                 throw new FileNotFoundException($"Temporary generated WiX project file not found: {projectPath}", projectPath);
             }
 
-            return new GeneratedInstallerBuildWorkspace(workingDirectory, projectPath);
+            var externalFiles = PrepareGeneratedInstallerExternalFiles(workingDirectory, projectPath, prepare);
+
+            return new GeneratedInstallerBuildWorkspace(
+                workingDirectory,
+                projectPath,
+                externalFiles.PayloadDirectory,
+                externalFiles.HarvestPath);
         }
         catch
         {
             TryDeleteGeneratedInstallerBuildWorkspace(workingDirectory);
             throw;
+        }
+    }
+
+    private static GeneratedInstallerExternalFiles PrepareGeneratedInstallerExternalFiles(
+        string workingDirectory,
+        string projectPath,
+        DotNetPublishMsiPrepareResult? prepare)
+    {
+        if (prepare is null)
+        {
+            return new GeneratedInstallerExternalFiles(null, null);
+        }
+
+        var inputsDirectory = Path.Combine(workingDirectory, "PowerForgeInputs");
+        string? payloadDirectory = null;
+        if (!string.IsNullOrWhiteSpace(prepare.StagingDir) &&
+            Directory.Exists(prepare.StagingDir))
+        {
+            payloadDirectory = Path.Combine(inputsDirectory, "Payload");
+            DirectoryCopy(prepare.StagingDir, payloadDirectory);
+        }
+
+        string? harvestPath = null;
+        if (!string.IsNullOrWhiteSpace(prepare.HarvestPath) &&
+            File.Exists(prepare.HarvestPath))
+        {
+            Directory.CreateDirectory(inputsDirectory);
+            harvestPath = Path.Combine(inputsDirectory, Path.GetFileName(prepare.HarvestPath));
+            File.Copy(prepare.HarvestPath, harvestPath, overwrite: true);
+
+            if (!string.IsNullOrWhiteSpace(payloadDirectory))
+            {
+                RewriteHarvestSourcePaths(harvestPath, prepare.StagingDir, payloadDirectory);
+            }
+
+            RewriteWixProjectSourceIncludes(projectPath, prepare.HarvestPath, harvestPath);
+        }
+
+        return new GeneratedInstallerExternalFiles(payloadDirectory, harvestPath);
+    }
+
+    private static void RewriteWixProjectSourceIncludes(
+        string projectPath,
+        string sourcePath,
+        string targetPath)
+    {
+        var document = XDocument.Load(projectPath, LoadOptions.PreserveWhitespace);
+        var projectDirectory = Path.GetDirectoryName(projectPath)!;
+        var sourceFullPath = Path.GetFullPath(sourcePath);
+        var targetRelativePath = GetRelativePathCompat(projectDirectory, targetPath);
+        var changed = false;
+
+        foreach (var include in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "Compile", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Include"))
+            .Where(attribute => attribute is not null))
+        {
+            var value = include!.Value;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var includePath = Path.IsPathRooted(value)
+                ? Path.GetFullPath(value)
+                : Path.GetFullPath(Path.Combine(projectDirectory, value));
+            if (!string.Equals(includePath, sourceFullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            include.Value = targetRelativePath;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            document.Save(projectPath);
+        }
+    }
+
+    private static void RewriteHarvestSourcePaths(
+        string harvestPath,
+        string sourcePayloadDirectory,
+        string targetPayloadDirectory)
+    {
+        var document = XDocument.Load(harvestPath, LoadOptions.PreserveWhitespace);
+        var sourceDirectory = AppendDirectorySeparator(Path.GetFullPath(sourcePayloadDirectory));
+        var targetDirectory = Path.GetFullPath(targetPayloadDirectory);
+        var changed = false;
+
+        foreach (var sourceAttribute in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "File", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Source"))
+            .Where(attribute => attribute is not null))
+        {
+            var value = sourceAttribute!.Value;
+            if (string.IsNullOrWhiteSpace(value) ||
+                !Path.IsPathRooted(value))
+            {
+                continue;
+            }
+
+            var fullPath = Path.GetFullPath(value);
+            if (!fullPath.StartsWith(sourceDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var relativePath = fullPath.Substring(sourceDirectory.Length);
+            sourceAttribute.Value = Path.Combine(targetDirectory, relativePath);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            document.Save(harvestPath);
         }
     }
 
@@ -172,19 +303,31 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal sealed class GeneratedInstallerBuildWorkspace : IDisposable
     {
-        public GeneratedInstallerBuildWorkspace(string workingDirectory, string projectPath)
+        public GeneratedInstallerBuildWorkspace(
+            string workingDirectory,
+            string projectPath,
+            string? payloadDirectory,
+            string? harvestPath)
         {
             WorkingDirectory = workingDirectory;
             ProjectPath = projectPath;
+            PayloadDirectory = payloadDirectory;
+            HarvestPath = harvestPath;
         }
 
         public string WorkingDirectory { get; }
 
         public string ProjectPath { get; }
 
+        public string? PayloadDirectory { get; }
+
+        public string? HarvestPath { get; }
+
         public void Dispose()
         {
             TryDeleteGeneratedInstallerBuildWorkspace(WorkingDirectory);
         }
     }
+
+    private sealed record GeneratedInstallerExternalFiles(string? PayloadDirectory, string? HarvestPath);
 }
