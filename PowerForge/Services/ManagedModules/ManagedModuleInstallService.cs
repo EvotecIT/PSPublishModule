@@ -3,9 +3,9 @@ namespace PowerForge;
 /// <summary>
 /// Installs PowerShell module packages using managed repository and archive operations.
 /// </summary>
-public sealed class ManagedModuleInstallService
+public sealed partial class ManagedModuleInstallService
 {
-    private const int MaxDependencyInstallConcurrency = 8;
+    private const int MaxDependencyInstallConcurrency = 32;
 
     private readonly ILogger _logger;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
@@ -98,6 +98,78 @@ public sealed class ManagedModuleInstallService
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
         using var dependencyScope = context.Enter(request.Name);
 
+        var coalescingKey = TryCreateInstallCoalescingKey(request, version, moduleRoot);
+        if (coalescingKey is not null)
+        {
+            if (!context.TryBeginInstall(coalescingKey, out var existingInstall, out var pendingInstall, out var runIndependently))
+            {
+                if (!runIndependently)
+                {
+                    using (context.EnterInstallWait(coalescingKey))
+                    {
+                        var completed = await existingInstall.ConfigureAwait(false);
+                        return CreateAlreadyInstalledResult(
+                            request,
+                            completed.Version,
+                            moduleRoot,
+                            modulePath,
+                            stopwatch.Elapsed,
+                            versionResolutionStopwatch.Elapsed,
+                            requestScope.Count);
+                    }
+                }
+            }
+            else
+            {
+                using (pendingInstall)
+                {
+                    try
+                    {
+                        var result = await InstallResolvedAsync(
+                            request,
+                            context,
+                            cancellationToken,
+                            stopwatch,
+                            requestScope,
+                            versionResolutionStopwatch.Elapsed,
+                            version,
+                            moduleRoot,
+                            modulePath).ConfigureAwait(false);
+                        pendingInstall.Complete(result);
+                        return result;
+                    }
+                    catch (Exception exception)
+                    {
+                        pendingInstall.Fail(exception);
+                        throw;
+                    }
+                }
+            }
+        }
+
+        return await InstallResolvedAsync(
+            request,
+            context,
+            cancellationToken,
+            stopwatch,
+            requestScope,
+            versionResolutionStopwatch.Elapsed,
+            version,
+            moduleRoot,
+            modulePath).ConfigureAwait(false);
+    }
+
+    private async Task<ManagedModuleInstallResult> InstallResolvedAsync(
+        ManagedModuleInstallRequest request,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken,
+        System.Diagnostics.Stopwatch stopwatch,
+        ManagedModuleRepositoryClient.RepositoryRequestScope requestScope,
+        TimeSpan versionResolutionElapsed,
+        string version,
+        string moduleRoot,
+        string modulePath)
+    {
         var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
         var cacheDirectory = ownsCache
             ? Path.Combine(Path.GetTempPath(), "PFMM.C", NewShortId())
@@ -118,7 +190,7 @@ public sealed class ManagedModuleInstallService
                         moduleRoot,
                         modulePath,
                         stopwatch.Elapsed,
-                        versionResolutionStopwatch.Elapsed,
+                        versionResolutionElapsed,
                         requestScope.Count);
                 }
             }
@@ -169,7 +241,7 @@ public sealed class ManagedModuleInstallService
                         moduleRoot,
                         modulePath,
                         stopwatch.Elapsed,
-                        versionResolutionStopwatch.Elapsed,
+                        versionResolutionElapsed,
                         requestScope.Count);
                 }
 
@@ -196,7 +268,7 @@ public sealed class ManagedModuleInstallService
                 ModuleRoot = moduleRoot,
                 ModulePath = modulePath,
                 Elapsed = stopwatch.Elapsed,
-                VersionResolutionElapsed = versionResolutionStopwatch.Elapsed,
+                VersionResolutionElapsed = versionResolutionElapsed,
                 Download = download,
                 AuthenticodeVerification = authenticode,
                 DownloadElapsed = downloadStopwatch.Elapsed,

@@ -1,21 +1,36 @@
+using System.Collections.Concurrent;
+
 namespace PowerForge;
 
 internal sealed class ManagedModuleInstallContext
 {
     private readonly HashSet<string> _active;
+    private readonly HashSet<string> _ownedInstallKeys;
+    private readonly ConcurrentDictionary<string, ManagedModuleInstallPending> _inFlightInstalls;
 
     public ManagedModuleInstallContext()
-        : this(new HashSet<string>(StringComparer.OrdinalIgnoreCase))
+        : this(
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new ConcurrentDictionary<string, ManagedModuleInstallPending>(StringComparer.OrdinalIgnoreCase))
     {
     }
 
-    private ManagedModuleInstallContext(HashSet<string> active)
+    private ManagedModuleInstallContext(
+        HashSet<string> active,
+        HashSet<string> ownedInstallKeys,
+        ConcurrentDictionary<string, ManagedModuleInstallPending> inFlightInstalls)
     {
         _active = active;
+        _ownedInstallKeys = ownedInstallKeys;
+        _inFlightInstalls = inFlightInstalls;
     }
 
     public ManagedModuleInstallContext CreateBranch()
-        => new(new HashSet<string>(_active, StringComparer.OrdinalIgnoreCase));
+        => new(
+            new HashSet<string>(_active, StringComparer.OrdinalIgnoreCase),
+            new HashSet<string>(_ownedInstallKeys, StringComparer.OrdinalIgnoreCase),
+            _inFlightInstalls);
 
     public IDisposable Enter(string moduleName)
     {
@@ -24,6 +39,81 @@ internal sealed class ManagedModuleInstallContext
             throw new InvalidOperationException($"Managed module dependency cycle detected for '{moduleName}'.");
 
         return new PopOnDispose(_active, normalized);
+    }
+
+    public bool TryBeginInstall(
+        string key,
+        out Task<ManagedModuleInstallResult> existingInstall,
+        out ManagedModuleInstallPending pendingInstall,
+        out bool runIndependently)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Install coalescing key is required.", nameof(key));
+
+        runIndependently = false;
+        while (true)
+        {
+            var pending = new ManagedModuleInstallPending(_inFlightInstalls, _ownedInstallKeys, key);
+            if (_inFlightInstalls.TryAdd(key, pending))
+            {
+                _ownedInstallKeys.Add(key);
+                existingInstall = pending.Task;
+                pendingInstall = pending;
+                return true;
+            }
+
+            if (_inFlightInstalls.TryGetValue(key, out var existing))
+            {
+                if (WouldCreateWaitCycle(existing))
+                {
+                    existingInstall = existing.Task;
+                    pendingInstall = null!;
+                    runIndependently = true;
+                    return false;
+                }
+
+                existingInstall = existing.Task;
+                pendingInstall = null!;
+                return false;
+            }
+        }
+    }
+
+    public IDisposable EnterInstallWait(string key)
+    {
+        var ownedPending = GetOwnedPendingInstalls().ToArray();
+        foreach (var pending in ownedPending)
+            pending.SetWaitingFor(key);
+
+        return new ClearWaitOnDispose(ownedPending);
+    }
+
+    private bool WouldCreateWaitCycle(ManagedModuleInstallPending pending)
+    {
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var waitingFor = pending.WaitingForKey;
+        while (!string.IsNullOrWhiteSpace(waitingFor))
+        {
+            if (_ownedInstallKeys.Contains(waitingFor))
+                return true;
+            if (!visited.Add(waitingFor))
+                return true;
+            if (!_inFlightInstalls.TryGetValue(waitingFor, out var nextPending))
+                return false;
+
+            waitingFor = nextPending.WaitingForKey;
+        }
+
+        return false;
+    }
+
+    private IEnumerable<ManagedModuleInstallPending> GetOwnedPendingInstalls()
+    {
+        foreach (var ownedKey in _ownedInstallKeys)
+        {
+            if (_inFlightInstalls.TryGetValue(ownedKey, out var pending))
+                yield return pending;
+        }
     }
 
     private sealed class PopOnDispose : IDisposable
@@ -41,5 +131,90 @@ internal sealed class ManagedModuleInstallContext
         {
             _active.Remove(_moduleName);
         }
+    }
+
+    private sealed class ClearWaitOnDispose : IDisposable
+    {
+        private readonly IReadOnlyList<ManagedModuleInstallPending> _pendingInstalls;
+
+        public ClearWaitOnDispose(IReadOnlyList<ManagedModuleInstallPending> pendingInstalls)
+        {
+            _pendingInstalls = pendingInstalls;
+        }
+
+        public void Dispose()
+        {
+            foreach (var pending in _pendingInstalls)
+                pending.SetWaitingFor(null);
+        }
+    }
+}
+
+internal sealed class ManagedModuleInstallPending : IDisposable
+{
+    private readonly ConcurrentDictionary<string, ManagedModuleInstallPending> _owner;
+    private readonly HashSet<string> _ownedInstallKeys;
+    private readonly string _key;
+    private readonly TaskCompletionSource<ManagedModuleInstallResult> _completion;
+    private readonly object _syncRoot = new();
+    private string? _waitingForKey;
+    private bool _disposed;
+
+    public ManagedModuleInstallPending(
+        ConcurrentDictionary<string, ManagedModuleInstallPending> owner,
+        HashSet<string> ownedInstallKeys,
+        string key)
+    {
+        _owner = owner;
+        _ownedInstallKeys = ownedInstallKeys;
+        _key = key;
+        _completion = new TaskCompletionSource<ManagedModuleInstallResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    public Task<ManagedModuleInstallResult> Task => _completion.Task;
+
+    public string? WaitingForKey
+    {
+        get
+        {
+            lock (_syncRoot)
+            {
+                return _waitingForKey;
+            }
+        }
+    }
+
+    public void SetWaitingFor(string? key)
+    {
+        lock (_syncRoot)
+        {
+            _waitingForKey = key;
+        }
+    }
+
+    public void Complete(ManagedModuleInstallResult result)
+        => _completion.TrySetResult(result);
+
+    public void Fail(Exception exception)
+    {
+        if (exception is OperationCanceledException)
+        {
+            _completion.TrySetCanceled();
+            return;
+        }
+
+        _completion.TrySetException(exception);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        ((ICollection<KeyValuePair<string, ManagedModuleInstallPending>>)_owner)
+            .Remove(new KeyValuePair<string, ManagedModuleInstallPending>(_key, this));
+        _ownedInstallKeys.Remove(_key);
     }
 }

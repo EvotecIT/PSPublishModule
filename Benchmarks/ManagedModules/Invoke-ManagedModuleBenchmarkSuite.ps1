@@ -38,7 +38,9 @@ param(
 
     [double] $ManagedMaxVsFastest = 0,
 
-    [switch] $ListScenarios
+    [switch] $ListScenarios,
+
+    [switch] $RemoveOutputRoots
 )
 
 Set-StrictMode -Version Latest
@@ -229,6 +231,9 @@ function Invoke-ScenarioHostRun {
         $CacheMode,
         '-SkipBuild'
     )
+    if ($RemoveOutputRoots.IsPresent) {
+        $arguments += '-RemoveOutputRoots'
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($Scenario.Version)) {
         $arguments += @('-Version', $Scenario.Version)
@@ -409,6 +414,7 @@ $metadata = [ordered]@{
     ManagedMaxRank = $ManagedMaxRank
     ManagedMaxVsFastest = $ManagedMaxVsFastest
     ManagedPerformanceGatePassed = $gateViolations.Count -eq 0
+    RemoveOutputRoots = $RemoveOutputRoots.IsPresent
     OutputDirectory = $suiteRoot
 }
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
