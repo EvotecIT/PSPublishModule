@@ -55,7 +55,13 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         var root = CreateTempRoot();
         try
         {
-            File.WriteAllText(Path.Combine(root, "NuGet.config"), "<configuration />");
+            Directory.CreateDirectory(Path.Combine(root, "LocalPackages"));
+            File.WriteAllText(
+                Path.Combine(root, "NuGet.config"),
+                "<configuration><packageSources>" +
+                "<add key=\"local\" value=\"LocalPackages\" />" +
+                "<add key=\"nuget\" value=\"https://api.nuget.org/v3/index.json\" />" +
+                "</packageSources></configuration>");
             var importedBuildProps = Path.Combine(root, "Build", "Props", "Generated.props");
             Directory.CreateDirectory(Path.GetDirectoryName(importedBuildProps)!);
             File.WriteAllText(importedBuildProps, "<Project />");
@@ -142,6 +148,16 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Build", "Props", "Generated.props")));
+                var copiedNuGetConfig = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "NuGet.config"));
+                var localPackageSource = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "local", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal(Path.GetFullPath(Path.Combine(root, "LocalPackages")), Path.GetFullPath(localPackageSource));
+                Assert.DoesNotContain(workspace.WorkingDirectory, localPackageSource, StringComparison.OrdinalIgnoreCase);
                 Assert.NotNull(workspace.PayloadDirectory);
                 Assert.NotNull(workspace.HarvestPath);
                 Assert.True(File.Exists(Path.Combine(workspace.PayloadDirectory!, "DesktopManager.App.exe")));

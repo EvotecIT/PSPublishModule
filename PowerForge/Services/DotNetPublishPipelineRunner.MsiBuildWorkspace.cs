@@ -221,7 +221,70 @@ public sealed partial class DotNetPublishPipelineRunner
         var targetPath = Path.Combine(workingDirectory, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
         File.Copy(sourceFullPath, targetPath, overwrite: true);
+        RebaseNuGetConfigPackageSources(targetPath, Path.GetDirectoryName(sourceFullPath)!);
         queue.Enqueue(sourceFullPath);
+    }
+
+    private static void RebaseNuGetConfigPackageSources(string targetPath, string sourceDirectory)
+    {
+        if (!string.Equals(Path.GetFileName(targetPath), "NuGet.config", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(targetPath, LoadOptions.PreserveWhitespace);
+        }
+        catch
+        {
+            return;
+        }
+
+        var changed = false;
+        foreach (var valueAttribute in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "packageSources", StringComparison.OrdinalIgnoreCase))
+            .Elements()
+            .Where(element => string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("value"))
+            .Where(attribute => attribute is not null))
+        {
+            var value = valueAttribute!.Value;
+            if (string.IsNullOrWhiteSpace(value) ||
+                IsUriPackageSource(value) ||
+                IsRootedPackageSource(value) ||
+                value.IndexOf('$') >= 0 ||
+                value.IndexOf('%') >= 0)
+            {
+                continue;
+            }
+
+            valueAttribute.Value = Path.GetFullPath(Path.Combine(sourceDirectory, NormalizeRelativePathSeparators(value)));
+            changed = true;
+        }
+
+        if (changed)
+        {
+            document.Save(targetPath);
+        }
+    }
+
+    private static bool IsUriPackageSource(string value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+            !string.IsNullOrWhiteSpace(uri.Scheme) &&
+            !string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRootedPackageSource(string value)
+    {
+        return Path.IsPathRooted(value) ||
+            (value.Length >= 3 &&
+             char.IsLetter(value[0]) &&
+             value[1] == ':' &&
+             (value[2] == '\\' || value[2] == '/'));
     }
 
     private static IEnumerable<string> ResolveGeneratedInstallerBuildImports(string sourcePath, string projectRoot)
