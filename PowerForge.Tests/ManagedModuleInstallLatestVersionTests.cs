@@ -6,6 +6,85 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleInstallLatestVersionTests
 {
     [Fact]
+    public async Task PlanInstallAsync_skips_installed_unbounded_version_without_repository_lookup()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new LatestPackageHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+        using var moduleRoot = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.2.0"));
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2"),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.2.0", plan.Version);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Empty(requests);
+    }
+
+    [Fact]
+    public async Task InstallAsync_skips_installed_unbounded_version_without_repository_lookup()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new LatestPackageHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+        using var moduleRoot = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.2.0"));
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2"),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
+        Assert.Equal("1.2.0", result.Version);
+        Assert.Equal(TimeSpan.Zero, result.VersionResolutionElapsed);
+        Assert.Equal(0, result.RepositoryRequestCount);
+        Assert.Empty(requests);
+    }
+
+    [Fact]
+    public async Task InstallAsync_skips_highest_installed_version_within_requested_bounds_without_repository_lookup()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new LatestPackageHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+        using var moduleRoot = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.2.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.4.0"));
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2"),
+            Name = "Company.Tools",
+            MinimumVersion = "1.1.0",
+            MaximumVersion = "1.3.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
+        Assert.Equal("1.2.0", result.Version);
+        Assert.Equal(0, result.RepositoryRequestCount);
+        Assert.Empty(requests);
+    }
+
+    [Fact]
     public async Task PlanInstallAsync_uses_latest_endpoint_for_unbounded_nuget_v2_request()
     {
         var requests = new List<RecordedRequest>();

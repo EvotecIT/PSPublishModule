@@ -51,10 +51,35 @@ public sealed partial class ManagedModuleInstallService
         Validate(request);
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
 
-        var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
+        if (TrySelectInstalledNoOpVersion(request, moduleRoot, out var installedVersion))
+        {
+            var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), installedVersion);
+            return CreateInstallPlan(
+                request,
+                installedVersion,
+                moduleRoot,
+                installedModulePath,
+                exists: true);
+        }
+
+        var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
-        var exists = Directory.Exists(modulePath);
+        return CreateInstallPlan(
+            request,
+            version,
+            moduleRoot,
+            modulePath,
+            Directory.Exists(modulePath));
+    }
+
+    private static ManagedModuleInstallPlan CreateInstallPlan(
+        ManagedModuleInstallRequest request,
+        string version,
+        string moduleRoot,
+        string modulePath,
+        bool exists)
+    {
         var action = exists
             ? request.Force ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
             : ManagedModuleInstallPlanAction.Install;
@@ -89,12 +114,29 @@ public sealed partial class ManagedModuleInstallService
         Validate(request);
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
+        using (ManagedModuleInstallLock.Acquire(moduleRoot, request.Name, cancellationToken))
+        {
+            if (TrySelectInstalledNoOpVersion(request, moduleRoot, out var installedVersion))
+            {
+                var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), installedVersion);
+                _logger.Verbose($"Managed module install skipped existing satisfying version: {installedModulePath}");
+                return CreateAlreadyInstalledResult(
+                    request,
+                    installedVersion,
+                    moduleRoot,
+                    installedModulePath,
+                    stopwatch.Elapsed,
+                    TimeSpan.Zero,
+                    repositoryRequestCount: 0);
+            }
+        }
+
         using var requestScope = _repositoryClient.BeginRequestScope();
 
         var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
         versionResolutionStopwatch.Stop();
-        var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
         using var dependencyScope = context.Enter(request.Name);
 
@@ -157,6 +199,39 @@ public sealed partial class ManagedModuleInstallService
             version,
             moduleRoot,
             modulePath).ConfigureAwait(false);
+    }
+
+    private static bool TrySelectInstalledNoOpVersion(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        out string version)
+    {
+        version = string.Empty;
+        if (request.Force)
+            return false;
+
+        var installedVersion = GetInstalledVersions(moduleRoot, request.Name)
+            .Where(candidate => AllowsInstalledNoOpVersion(candidate, request))
+            .LastOrDefault();
+        if (installedVersion is null)
+            return false;
+
+        version = installedVersion;
+        return true;
+    }
+
+    private static bool AllowsInstalledNoOpVersion(string version, ManagedModuleInstallRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Version))
+            return ManagedModuleVersionComparer.Instance.Compare(version, request.Version!.Trim()) == 0;
+
+        var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
+        if (ManagedModuleVersionComparer.IsPrerelease(version) &&
+            !request.IncludePrerelease &&
+            !range.AllowsPrerelease)
+            return false;
+
+        return range.IsSatisfiedBy(version);
     }
 
     private async Task<ManagedModuleInstallResult> InstallResolvedAsync(
