@@ -56,7 +56,12 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         try
         {
             File.WriteAllText(Path.Combine(root, "NuGet.config"), "<configuration />");
-            File.WriteAllText(Path.Combine(root, "Directory.Build.props"), "<Project />");
+            var importedBuildProps = Path.Combine(root, "Build", "Props", "Generated.props");
+            Directory.CreateDirectory(Path.GetDirectoryName(importedBuildProps)!);
+            File.WriteAllText(importedBuildProps, "<Project />");
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.props"),
+                "<Project><Import Project=\"Build\\Props\\Generated.props\" /></Project>");
             File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project />");
             var sourceDir = Path.Combine(
                 root,
@@ -104,6 +109,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">" +
                 "<Package Name=\"DesktopManager\">" +
                 $"<WixVariable Id=\"WixUILicenseRtf\" Value=\"{licensePath}\" />" +
+                $"<File Id=\"LiteralPayloadExe\" Source=\"{payloadFile}\" />" +
                 "</Package></Wix>");
             File.WriteAllText(Path.Combine(sourceDir, "Fragments", "Payload.wxs"), "<Wix />");
 
@@ -135,6 +141,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "NuGet.config")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Build", "Props", "Generated.props")));
                 Assert.NotNull(workspace.PayloadDirectory);
                 Assert.NotNull(workspace.HarvestPath);
                 Assert.True(File.Exists(Path.Combine(workspace.PayloadDirectory!, "DesktopManager.App.exe")));
@@ -168,6 +175,15 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 var copiedLicensePath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, licenseValue));
                 Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedLicensePath, StringComparison.OrdinalIgnoreCase);
                 Assert.True(File.Exists(copiedLicensePath));
+                var literalSource = product
+                    .Descendants(wix + "File")
+                    .Single()
+                    .Attribute("Source")!
+                    .Value;
+                Assert.DoesNotContain(stagingDir, literalSource, StringComparison.OrdinalIgnoreCase);
+                var copiedLiteralSource = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, literalSource));
+                Assert.StartsWith(workspace.PayloadDirectory!, copiedLiteralSource, StringComparison.OrdinalIgnoreCase);
+                Assert.True(File.Exists(copiedLiteralSource));
             }
             finally
             {

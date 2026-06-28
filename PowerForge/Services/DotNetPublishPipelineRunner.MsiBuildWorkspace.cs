@@ -171,6 +171,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return;
         }
+        var projectRootPath = projectRoot!;
 
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -182,11 +183,132 @@ public sealed partial class DotNetPublishPipelineRunner
             "global.json"
         };
 
-        foreach (var file in Directory.EnumerateFiles(projectRoot)
+        var copiedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<string>();
+        foreach (var file in Directory.EnumerateFiles(projectRootPath)
             .Where(file => candidates.Contains(Path.GetFileName(file))))
         {
-            File.Copy(file, Path.Combine(workingDirectory, Path.GetFileName(file)), overwrite: true);
+            CopyGeneratedInstallerBuildFile(file, projectRootPath, workingDirectory, copiedFiles, queue);
         }
+
+        while (queue.Count > 0)
+        {
+            var copiedSource = queue.Dequeue();
+            foreach (var importPath in ResolveGeneratedInstallerBuildImports(copiedSource, projectRootPath))
+            {
+                CopyGeneratedInstallerBuildFile(importPath, projectRootPath, workingDirectory, copiedFiles, queue);
+            }
+        }
+    }
+
+    private static void CopyGeneratedInstallerBuildFile(
+        string sourcePath,
+        string projectRoot,
+        string workingDirectory,
+        ISet<string> copiedFiles,
+        Queue<string> queue)
+    {
+        var sourceFullPath = Path.GetFullPath(sourcePath);
+        var projectRootDirectory = AppendDirectorySeparator(Path.GetFullPath(projectRoot));
+        if (!sourceFullPath.StartsWith(projectRootDirectory, StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(sourceFullPath) ||
+            !copiedFiles.Add(sourceFullPath))
+        {
+            return;
+        }
+
+        var relativePath = sourceFullPath.Substring(projectRootDirectory.Length);
+        var targetPath = Path.Combine(workingDirectory, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        File.Copy(sourceFullPath, targetPath, overwrite: true);
+        queue.Enqueue(sourceFullPath);
+    }
+
+    private static IEnumerable<string> ResolveGeneratedInstallerBuildImports(string sourcePath, string projectRoot)
+    {
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(sourcePath, LoadOptions.PreserveWhitespace);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
+        var projectRootDirectory = AppendDirectorySeparator(Path.GetFullPath(projectRoot));
+        foreach (var import in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Project"))
+            .Where(attribute => attribute is not null)
+            .Select(attribute => attribute!.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value)))
+        {
+            foreach (var path in ResolveGeneratedInstallerBuildImport(import, sourceDirectory, projectRootDirectory))
+            {
+                yield return path;
+            }
+        }
+    }
+
+    private static IEnumerable<string> ResolveGeneratedInstallerBuildImport(
+        string import,
+        string sourceDirectory,
+        string projectRootDirectory)
+    {
+        var expanded = ExpandGeneratedInstallerBuildImport(import, sourceDirectory, projectRootDirectory);
+        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
+        {
+            yield break;
+        }
+
+        var importPath = Path.IsPathRooted(expanded)
+            ? expanded
+            : Path.Combine(sourceDirectory, expanded);
+        var projectRoot = AppendDirectorySeparator(Path.GetFullPath(projectRootDirectory));
+        if (importPath.IndexOfAny(new[] { '*', '?' }) >= 0)
+        {
+            var directory = Path.GetDirectoryName(importPath);
+            var pattern = Path.GetFileName(importPath);
+            if (string.IsNullOrWhiteSpace(directory) ||
+                !Directory.Exists(directory))
+            {
+                yield break;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(directory, pattern, SearchOption.TopDirectoryOnly))
+            {
+                var fullPath = Path.GetFullPath(file);
+                if (fullPath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return fullPath;
+                }
+            }
+
+            yield break;
+        }
+
+        var fullImportPath = Path.GetFullPath(importPath);
+        if (fullImportPath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(fullImportPath))
+        {
+            yield return fullImportPath;
+        }
+    }
+
+    private static string ExpandGeneratedInstallerBuildImport(
+        string import,
+        string sourceDirectory,
+        string projectRootDirectory)
+    {
+        return import
+            .Replace("$(MSBuildThisFileDirectory)", EnsureTrailingDirectorySeparator(sourceDirectory))
+            .Replace("$(MSBuildProjectDirectory)", projectRootDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            .Replace("$(MSBuildProjectFullPath)", Path.Combine(projectRootDirectory, "PowerForge.Generated.wixproj"))
+            .Replace("$(MSBuildProjectExtension)", ".wixproj");
     }
 
     private static GeneratedInstallerExternalFiles PrepareGeneratedInstallerExternalFiles(
@@ -215,7 +337,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 });
         }
 
-        RewriteGeneratedInstallerAssetPaths(Path.Combine(workingDirectory, "Product.wxs"), inputsDirectory);
+        RewriteGeneratedInstallerAssetPaths(
+            Path.Combine(workingDirectory, "Product.wxs"),
+            inputsDirectory,
+            prepare.StagingDir,
+            payloadDirectory);
 
         string? harvestPath = null;
         if (!string.IsNullOrWhiteSpace(prepare.HarvestPath) &&
@@ -291,7 +417,11 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static void RewriteGeneratedInstallerAssetPaths(string sourcePath, string inputsDirectory)
+    private static void RewriteGeneratedInstallerAssetPaths(
+        string sourcePath,
+        string inputsDirectory,
+        string? sourcePayloadDirectory,
+        string? targetPayloadDirectory)
     {
         if (!File.Exists(sourcePath))
         {
@@ -310,30 +440,81 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(element => element.Attribute("Value"))
             .Where(attribute => attribute is not null))
         {
-            var value = valueAttribute!.Value;
-            if (string.IsNullOrWhiteSpace(value) ||
-                !Path.IsPathRooted(value) ||
-                !File.Exists(value))
+            if (TryRewriteGeneratedInstallerFileAttribute(
+                valueAttribute!,
+                sourceDirectory,
+                assetsDirectory,
+                copiedAssets,
+                sourcePayloadDirectory,
+                targetPayloadDirectory))
             {
-                continue;
+                changed = true;
             }
+        }
 
-            if (!copiedAssets.TryGetValue(value, out var copiedPath))
+        foreach (var sourceAttribute in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "File", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Source"))
+            .Where(attribute => attribute is not null))
+        {
+            if (TryRewriteGeneratedInstallerFileAttribute(
+                sourceAttribute!,
+                sourceDirectory,
+                assetsDirectory,
+                copiedAssets,
+                sourcePayloadDirectory,
+                targetPayloadDirectory))
             {
-                Directory.CreateDirectory(assetsDirectory);
-                copiedPath = GetUniqueAssetPath(assetsDirectory, Path.GetFileName(value));
-                File.Copy(value, copiedPath, overwrite: false);
-                copiedAssets[value] = copiedPath;
+                changed = true;
             }
-
-            valueAttribute.Value = GetRelativePathCompat(sourceDirectory, copiedPath);
-            changed = true;
         }
 
         if (changed)
         {
             document.Save(sourcePath);
         }
+    }
+
+    private static bool TryRewriteGeneratedInstallerFileAttribute(
+        XAttribute attribute,
+        string sourceDirectory,
+        string assetsDirectory,
+        IDictionary<string, string> copiedAssets,
+        string? sourcePayloadDirectory,
+        string? targetPayloadDirectory)
+    {
+        var value = attribute.Value;
+        if (string.IsNullOrWhiteSpace(value) ||
+            !Path.IsPathRooted(value) ||
+            !File.Exists(value))
+        {
+            return false;
+        }
+
+        var fullPath = Path.GetFullPath(value);
+        if (!string.IsNullOrWhiteSpace(sourcePayloadDirectory) &&
+            !string.IsNullOrWhiteSpace(targetPayloadDirectory))
+        {
+            var sourcePayload = AppendDirectorySeparator(Path.GetFullPath(sourcePayloadDirectory!));
+            if (fullPath.StartsWith(sourcePayload, StringComparison.OrdinalIgnoreCase))
+            {
+                var relativePayloadPath = fullPath.Substring(sourcePayload.Length);
+                attribute.Value = GetRelativePathCompat(sourceDirectory, Path.Combine(targetPayloadDirectory!, relativePayloadPath));
+                return true;
+            }
+        }
+
+        if (!copiedAssets.TryGetValue(fullPath, out var copiedPath))
+        {
+            Directory.CreateDirectory(assetsDirectory);
+            copiedPath = GetUniqueAssetPath(assetsDirectory, Path.GetFileName(fullPath));
+            File.Copy(fullPath, copiedPath, overwrite: false);
+            copiedAssets[fullPath] = copiedPath;
+        }
+
+        attribute.Value = GetRelativePathCompat(sourceDirectory, copiedPath);
+        return true;
     }
 
     private static string GetUniqueAssetPath(string directory, string fileName)
