@@ -43,10 +43,54 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         var row = Assert.Single(results);
         Assert.Equal("Download", Property(row, "Bottleneck"));
         Assert.Equal("60%", Property(row, "BottleneckShare"));
+        Assert.Equal(60.0, NumericProperty(row, "BottleneckShareRaw"));
+        Assert.Equal(string.Empty, Property(row, "TimingNote"));
         Assert.Equal(2.0, NumericProperty(row, "DownloadMB"));
         Assert.Equal(10.0, NumericProperty(row, "RepositoryRequests"));
         Assert.Equal(4.0, NumericProperty(row, "PackageRepositoryRedirects"));
         Assert.Contains("download", Property(row, "NextQuestion"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OptimizationTarget_MarksOverlappedPhaseTiming()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $rows = @(
+                [pscustomobject]@{
+                    Suite = 'SpeedGate'
+                    Scenario = 'Graph.Full.ProviderMatrix'
+                    ModuleName = 'Microsoft.Graph'
+                    Host = 'PowerShell7'
+                    Operation = 'Install'
+                    ManagedMs = '7213.3'
+                    ManagedRank = '1'
+                    ManagedVsFastest = '1x'
+                    ManagedRootElapsedMs = '6320.63'
+                    ManagedHarnessOverheadMs = '893'
+                    ManagedRootDependencyMs = '5445.89'
+                    ManagedDownloadMs = '71365.43'
+                    ManagedExtractionMs = '1196.52'
+                    ManagedPromotionMs = '379'
+                    ManagedRepositoryRequests = '80'
+                    ManagedPackageRepositoryRequests = '80'
+                    ManagedPackageRepositoryRedirects = '40'
+                    ManagedDownloadBytes = '186506621'
+                    ManagedPackageCount = '78'
+                    ManagedUniquePackageCount = '40'
+                    ManagedCacheHits = '0'
+                }
+            )
+
+            New-ManagedOptimizationTarget -Rows $rows
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var row = Assert.Single(results);
+        Assert.Equal(">100%", Property(row, "BottleneckShare"));
+        Assert.Equal(989.4, NumericProperty(row, "BottleneckShareRaw"));
+        Assert.Contains("overlap", Property(row, "TimingNote"), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

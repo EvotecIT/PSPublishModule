@@ -135,6 +135,9 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'ThreadJob.InstallSave.NoOpForce' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce') -ScenarioManagedMaxVsFastest 1.25
         New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.ProviderMatrix' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
+        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Accounts.ProviderMatrix' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
+        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Full.ProviderMatrix' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
         New-BenchmarkScenario -SuiteName 'SaveGate' -Name 'Graph.Authentication.Save' -ModuleName 'Microsoft.Graph.Authentication' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxVsFastest 1.05
     )
 }
