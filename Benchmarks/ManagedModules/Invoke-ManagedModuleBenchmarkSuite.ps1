@@ -30,6 +30,8 @@ param(
 
     [switch] $ValidateImport,
 
+    [int] $ImportTimeoutSeconds = 120,
+
     [switch] $RotateEngineOrder,
 
     [switch] $ListScenarios
@@ -238,6 +240,7 @@ function Invoke-ScenarioHostRun {
     }
     if ($ValidateImport.IsPresent) {
         $arguments += '-ValidateImport'
+        $arguments += @('-ImportTimeoutSeconds', ([string]$ImportTimeoutSeconds))
     }
     if ($RotateEngineOrder.IsPresent) {
         $arguments += '-RotateEngineOrder'
@@ -372,6 +375,7 @@ $metadata = [ordered]@{
     RepeatCount = $RepeatCount
     IncludeInstall = $IncludeInstall.IsPresent
     ValidateImport = $ValidateImport.IsPresent
+    ImportTimeoutSeconds = $ImportTimeoutSeconds
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     OutputDirectory = $suiteRoot
 }
