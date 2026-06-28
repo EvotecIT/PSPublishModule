@@ -115,6 +115,28 @@ function Ensure-PowerShellGetRepository {
     Set-PSRepository -Name $Name -InstallationPolicy Trusted -ErrorAction SilentlyContinue
 }
 
+function Ensure-PSResourceRepository {
+    param(
+        [string] $Name,
+        [string] $Uri
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return
+    }
+
+    if (Get-PSResourceRepository -Name $Name -ErrorAction SilentlyContinue) {
+        Set-PSResourceRepository -Name $Name -Trusted -ErrorAction SilentlyContinue
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Uri)) {
+        return
+    }
+
+    Register-PSResourceRepository -Name $Name -Uri $Uri -Trusted -Force -ErrorAction Stop | Out-Null
+}
+
 switch ($EngineName) {
     'ModuleFast' {
         if ($PSVersionTable.PSEdition -eq 'Desktop' -or $PSVersionTable.PSVersion -lt [version]'7.2') {
@@ -194,6 +216,7 @@ switch ($EngineName) {
             }
         }
         Import-BenchmarkProviderModule -Name 'Microsoft.PowerShell.PSResourceGet' -Path $ProviderModulePath
+        Ensure-PSResourceRepository -Name $RepositoryName -Uri $Repository
         $parameters = @{
             Name = $ModuleName
             Repository = $RepositoryName

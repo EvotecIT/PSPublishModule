@@ -1,3 +1,33 @@
+function Get-ManagedBottleneckShare {
+    param(
+        [double] $ManagedMilliseconds,
+        [double] $BottleneckMilliseconds
+    )
+
+    if ($ManagedMilliseconds -le 0 -or $BottleneckMilliseconds -le 0) {
+        return [pscustomobject]@{
+            Text = ''
+            Raw = 0.0
+            Note = ''
+        }
+    }
+
+    $rawShare = [math]::Round(($BottleneckMilliseconds / $ManagedMilliseconds) * 100, 1)
+    if ($rawShare -gt 100) {
+        return [pscustomobject]@{
+            Text = '>100%'
+            Raw = $rawShare
+            Note = 'Summed package and dependency phase timings overlap; use the raw share as parallel work evidence, not wall-clock percentage.'
+        }
+    }
+
+    [pscustomobject]@{
+        Text = ('{0}%' -f $rawShare.ToString('0.#', [Globalization.CultureInfo]::InvariantCulture))
+        Raw = $rawShare
+        Note = ''
+    }
+}
+
 function New-ManagedOptimizationTarget {
     param([object[]] $Rows)
 
@@ -18,6 +48,7 @@ function New-ManagedOptimizationTarget {
         $packageRedirects = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageRepositoryRedirects
         $downloadBytes = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadBytes
         $downloadMb = [math]::Round($downloadBytes / 1MB, 2)
+        $bottleneckShare = Get-ManagedBottleneckShare -ManagedMilliseconds $managedMs -BottleneckMilliseconds $bottleneckMs
 
         [pscustomobject]@{
             Suite = if ($row.PSObject.Properties['Suite']) { [string] $row.Suite } else { '' }
@@ -43,11 +74,9 @@ function New-ManagedOptimizationTarget {
             CacheHits = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedCacheHits
             Bottleneck = if ($bottleneckMs -gt 0) { [string] $bottleneck[0].Name } else { 'Uninstrumented' }
             BottleneckMs = [math]::Round($bottleneckMs, 2)
-            BottleneckShare = if ($managedMs -gt 0 -and $bottleneckMs -gt 0) {
-                ('{0}%' -f ([math]::Round(($bottleneckMs / $managedMs) * 100, 1)).ToString('0.#', [Globalization.CultureInfo]::InvariantCulture))
-            } else {
-                ''
-            }
+            BottleneckShare = [string] $bottleneckShare.Text
+            BottleneckShareRaw = [math]::Round([double] $bottleneckShare.Raw, 1)
+            TimingNote = [string] $bottleneckShare.Note
             NextQuestion = if ($bottleneckMs -gt 0) { [string] $bottleneck[0].Question } else { 'Add managed detail instrumentation before optimizing this row.' }
         }
     }
