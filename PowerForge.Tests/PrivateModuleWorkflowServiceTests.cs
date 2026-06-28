@@ -160,6 +160,70 @@ public sealed class PrivateModuleWorkflowServiceTests
     }
 
     [Fact]
+    public void Execute_AutoTransportWithSupportedPrivateProvider_ReportsManagedSupportReason()
+    {
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            _ => throw new InvalidOperationException("Compatibility executor should not run."));
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "Company.Tools" },
+                UseAzureArtifacts = true,
+                Provider = PrivateGalleryProvider.NuGet,
+                RepositoryName = "Company",
+                RepositoryUri = "https://nuget.example.test/v3/index.json",
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto
+            },
+            (_, _) => false);
+
+        Assert.False(result.OperationPerformed);
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, result.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.EffectiveTransport);
+        Assert.Contains("Generic NuGet private feed", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supported", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Execute_ExplicitManagedTransportWithPartialPrivateProvider_ReportsProviderLimitation()
+    {
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            _ => throw new InvalidOperationException("Compatibility executor should not run."));
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "Company.Tools" },
+                UseAzureArtifacts = true,
+                Provider = PrivateGalleryProvider.JFrog,
+                RepositoryName = "Company",
+                JFrogBaseUri = "https://company.jfrog.io/artifactory",
+                JFrogRepository = "powershell-virtual",
+                DeliveryTransport = ModuleStateDeliveryTransport.ManagedModule
+            },
+            (_, _) => false);
+
+        Assert.False(result.OperationPerformed);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.EffectiveTransport);
+        Assert.Contains("JFrog", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Partial", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("OIDC", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Execute_UpdateRepositoryMode_SkipsDependencyExecutionWhenShouldProcessDeclines()
     {
         var host = new FakePrivateGalleryHost();
