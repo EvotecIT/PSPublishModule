@@ -121,9 +121,9 @@ public sealed partial class ManagedModuleRepositoryClient
 
         long bytesWritten;
         using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
-        using (var destination = File.Create(destinationPath))
+        using (var destination = CreatePackageFileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            await source.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
+            await source.CopyToAsync(destination, PackageCopyBufferSize, cancellationToken).ConfigureAwait(false);
             bytesWritten = destination.Length;
         }
 
