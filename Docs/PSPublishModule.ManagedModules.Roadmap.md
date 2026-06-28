@@ -211,6 +211,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Implement publisher/trust checks where metadata is available.
 - [x] Implement license acceptance handling.
 - [x] Implement dependency installation order.
+- [x] Skip dependency delivery when an already installed dependency version satisfies a declared bounded range and no dependency package trust policy needs validation.
 - [x] Implement receipt creation after successful install.
 - [x] Emit typed install result objects.
 - [x] Add Spectre.Console summary output.
@@ -218,6 +219,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Add tests for scoped install.
 - [x] Add tests for exact side-by-side install.
 - [x] Add tests for failed extraction rollback.
+- [x] Add tests for installed dependency range satisfaction and trust-policy package-validation behavior.
 - [x] Add tests for clobber detection.
 - [x] Benchmark against `Install-Module` and `Install-PSResource`.
 - [x] Validate local-feed install smoke on Windows PowerShell 5.1.
@@ -333,6 +335,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: The benchmark harness now supports `-ValidateImport`, which imports the highest-version manifest from the benchmark output root after timed install/save/update operations and records import status separately from operation timing. PowerShell 7 validated `ThreadJob` install/update outputs from managed, ModuleFast install, PSResourceGet, and PowerShellGet; every successful row imported 2.1.0 from the output root. Windows PowerShell 5.1 validated the same managed, PSResourceGet, and PowerShellGet install outputs and managed/PSResourceGet update outputs; PowerShellGet update still failed in its own path before import. This exposed a small-module PS5.1 update optimization target: managed was correct but slower than PSResourceGet on the import-gated stale `ThreadJob` update.
 - [x] 2026-06-28: PowerShell 7 and Windows PowerShell 5.1 also ran import-gated `ThreadJob` save comparisons. Every successful saved output imported 2.1.0 from its benchmark output root. PowerShell 7 measured PSResourceGet at 2408 ms, managed at 2734 ms, and PowerShellGet at 23304 ms. Windows PowerShell 5.1 measured managed at 2200 ms, PSResourceGet at 2515 ms, and PowerShellGet at 14616 ms.
 - [x] 2026-06-28: The benchmark harness now supports explicit `-CacheMode Default|Cold|Warm` for update benchmarks. `Cold` clears disposable provider/package caches after the baseline install; `Warm` preserves native provider caches and gives managed delivery an explicit package cache folder. Windows PowerShell 5.1 import-gated `ThreadJob` update measured managed at 7978 ms versus PSResourceGet at 7519 ms in cold mode, and managed at 6861 ms versus PSResourceGet at 7449 ms in warm mode. PowerShell 7 measured managed at 4517 ms versus PSResourceGet at 4022 ms in cold mode, and managed at 4088 ms versus PSResourceGet at 3818 ms in warm mode. The managed warm detail artifact reported no package cache hits for this specific target/dependency combination, so these small-package numbers should be treated as close-run smoke evidence rather than a stable optimization claim.
+- [x] 2026-06-28: Managed dependency install now reuses an installed dependency version when it satisfies a bounded dependency range and no dependency trust policy needs package metadata validation. Focused tests prove both the skip and the trust-policy non-skip. PowerShell 7 reran import-gated warm `ThreadJob` update in 3449 ms with managed, 4213 ms with PSResourceGet, and 20898 ms with PowerShellGet. Windows PowerShell 5.1 reran the same lane in 4461 ms with managed and 5752 ms with PSResourceGet, while PowerShellGet failed its own update path. The managed detail artifacts still installed `Microsoft.PowerShell.ThreadJob` 2.2.0 in this scenario, so this public benchmark remains timing/import evidence rather than direct proof of the installed-dependency skip branch.
 
 ### Next Optimization Targets
 
@@ -340,7 +343,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Coordinate repository metadata caches and package-cache writes so parallel dependency delivery cannot corrupt shared cached packages.
 - [x] Re-measure full `Az` and full `Microsoft.Graph` install after dependency scheduling changes on PowerShell 7 and Windows PowerShell 5.1.
 - [ ] Add repository lookup/request coalescing for repeated transitive dependency checks; current package-cache coordination prevents file races but does not yet share in-flight metadata requests.
-- [ ] Optimize Windows PowerShell 5.1 stale small-module update with repeated cold/warm runs; one import-gated default smoke measured managed at 9910 ms versus PSResourceGet at 6974 ms, while explicit cold/warm cache-mode runs were much closer.
+- [ ] Stabilize Windows PowerShell 5.1 stale small-module update evidence with repeated rotated cold/warm runs; the latest warm smoke now has managed ahead, but a stable claim needs multiple runs and both cache modes.
 - [ ] Optimize PowerShell 7 small-module save; the import-gated `ThreadJob` save smoke measured managed at 2734 ms versus PSResourceGet at 2408 ms.
 
 ## Benchmark Scenarios
