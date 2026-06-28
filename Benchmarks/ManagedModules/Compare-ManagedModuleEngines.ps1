@@ -4,7 +4,7 @@ param(
 
     [string] $ModuleName = 'ThreadJob',
 
-    [string] $Version = '2.1.0',
+    [string] $Version = '',
 
     [string] $Repository = 'PSGallery',
 
@@ -39,12 +39,12 @@ $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $workRoot = Join-Path $OutputDirectory ('Run-{0}-{1}' -f $runStamp, $PID)
-$installWorkRoot = Join-Path $repoRoot ('Ignore\Benchmarks\ManagedModules\InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
     Join-Path ([IO.Path]::GetPathRoot($repoRoot)) 'Temp\PFMM'
 } else {
     Join-Path ([IO.Path]::GetTempPath()) 'pfmm'
 }
+$installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'PSResourceGet', 'PowerShellGet')
 $validOperations = @('Find', 'Save', 'Install', 'InstallManaged')
 
@@ -190,7 +190,7 @@ function Get-IsolatedInstallEnvironment {
     $homeRoot = Join-Path $SandboxRoot 'Home'
     $appDataRoot = Join-Path $SandboxRoot 'AppData\Roaming'
     $localAppDataRoot = Join-Path $SandboxRoot 'AppData\Local'
-    $tempRoot = Join-Path $tempWorkRoot ("{0}-{1}" -f (Split-Path $SandboxRoot -Leaf), [Guid]::NewGuid().ToString("N"))
+    $tempRoot = Join-Path $tempWorkRoot ('T\{0}' -f ([Guid]::NewGuid().ToString("N").Substring(0, 16)))
     $modulesRoot = Join-Path $SandboxRoot 'Modules'
     $documentsPowerShellRoot = Join-Path $homeRoot 'Documents\PowerShell\Modules'
     $documentsWindowsPowerShellRoot = Join-Path $homeRoot 'Documents\WindowsPowerShell\Modules'
@@ -673,7 +673,7 @@ function Invoke-InstallScenario {
 
     switch ($EngineName) {
         'Managed' {
-            $detailPath = Join-Path $destination 'managed-install-details.json'
+            $detailPath = Join-Path $workRoot ("managed-install-details-{0}.json" -f $Iteration)
             Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
                 Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath
             }

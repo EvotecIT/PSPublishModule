@@ -312,12 +312,15 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-28: Windows PowerShell 5.1 reran disposable-host `ThreadJob` managed install after the archive extraction optimization; managed completed in 2.96 seconds.
 - [x] 2026-06-28: PowerShell 7 reran full `Az` 16.0.0 managed install with package-level detail output. The run completed in 121.48 seconds; the managed detail artifact reported 204 packages, 203 dependencies, 119.15 seconds spent in root dependency delivery, 78.14 seconds summed package download time, 2.42 seconds summed extraction time, and 0.41 seconds summed promotion time. This identifies dependency scheduling and repository delivery as the next optimization target; extraction is no longer the dominant cost for Az.
 - [x] 2026-06-28: Managed package download/copy streams now use a larger async sequential buffer. PowerShell 7 reran full `Az` 16.0.0 managed install in 98.84 seconds; summed package download time dropped to 65.96 seconds over the same 204 packages and 137.5 MB of downloaded package bytes. PowerShell 7 reran full `Microsoft.Graph` 2.38.0 managed install in 40.03 seconds with 78 packages, 37.22 seconds summed download time, and about 186.5 MB of downloaded package bytes.
+- [x] 2026-06-28: Managed dependency installs now use bounded parallel delivery for independent direct dependencies while preserving per-branch cycle detection, per-module final promotion locks, and coordinated package-cache writes. PowerShell 7 reran full `Microsoft.Graph` 2.38.0 managed install in 13.26 seconds with 78 packages, 77 dependencies, 81 repository requests, and 186.5 MB of downloaded package bytes. PowerShell 7 reran full `Az` 16.0.0 managed install in 17.86 seconds with 204 packages, 203 dependencies, 411 repository requests, and 137.5 MB of downloaded package bytes. Summed package download/extraction time is now expected to exceed wall-clock time because dependency packages are delivered concurrently.
+- [x] 2026-06-28: Windows PowerShell 5.1 reran full latest-version managed install after shortening disposable benchmark roots and managed temp stage paths to avoid classic Windows path-length noise. `Microsoft.Graph` 2.38.0 installed in 15.63 seconds with 78 packages and 77 dependencies. `Az` 16.0.0 installed in 49.50 seconds with 204 packages and 203 dependencies. The corrected suite omits empty `-Version` arguments and the comparison runner now treats omitted version as latest, so PS5 and PS7 heavy-suite evidence measures the same current package versions.
 
 ### Next Optimization Targets
 
-- [ ] Design safe parallel dependency delivery for independent direct dependencies while preserving cycle detection, per-module install locks, source/trust/license policy, and deterministic failure reporting.
-- [ ] Add repository lookup/request de-duplication evidence for dependency-heavy installs before changing concurrency.
-- [ ] Re-measure full `Az` and full `Microsoft.Graph` install after dependency scheduling changes on PowerShell 7 and Windows PowerShell 5.1.
+- [x] Design safe parallel dependency delivery for independent direct dependencies while preserving cycle detection, per-module install locks, source/trust/license policy, and deterministic failure reporting.
+- [x] Coordinate repository metadata caches and package-cache writes so parallel dependency delivery cannot corrupt shared cached packages.
+- [x] Re-measure full `Az` and full `Microsoft.Graph` install after dependency scheduling changes on PowerShell 7 and Windows PowerShell 5.1.
+- [ ] Add repository lookup/request coalescing for repeated transitive dependency checks; current package-cache coordination prevents file races but does not yet share in-flight metadata requests.
 
 ## Benchmark Scenarios
 
