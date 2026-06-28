@@ -70,6 +70,128 @@ public sealed class ManagedModulePlanCommandTests
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
     }
 
+    [Fact]
+    public void InstallManagedModule_plan_skips_existing_exact_version_without_force()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.False(plan.WouldWriteFiles);
+        Assert.True(plan.ExistingVersionFound);
+    }
+
+    [Fact]
+    public void InstallManagedModule_plan_reinstalls_existing_exact_version_with_force()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan")
+            .AddParameter("Force");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleInstallPlanAction.Reinstall, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+        Assert.True(plan.ExistingVersionFound);
+    }
+
+    [Fact]
+    public void UpdateManagedModule_plan_reinstalls_selected_version_with_force_when_already_current()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Update-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan")
+            .AddParameter("Force");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleUpdatePlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleUpdatePlanAction.Reinstall, plan.Action);
+        Assert.Equal("1.0.0", plan.TargetVersion);
+        Assert.Equal("1.0.0", plan.PreviousVersion);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void UpdateManagedModule_plan_does_not_downgrade_newer_installed_version_with_force()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Update-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan")
+            .AddParameter("Force");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleUpdatePlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleUpdatePlanAction.SkipUpToDate, plan.Action);
+        Assert.Equal("1.0.0", plan.TargetVersion);
+        Assert.Equal("1.1.0", plan.PreviousVersion);
+        Assert.False(plan.WouldWriteFiles);
+        Assert.Equal(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0"), plan.ModulePath);
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
