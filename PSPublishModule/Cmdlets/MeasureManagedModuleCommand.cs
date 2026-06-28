@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
@@ -29,9 +30,10 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
 
-    /// <summary>Lifecycle operation to measure.</summary>
+    /// <summary>Lifecycle operation or operations to measure.</summary>
     [Parameter]
-    public ManagedModuleBenchmarkOperation Operation { get; set; } = ManagedModuleBenchmarkOperation.Install;
+    [ValidateNotNullOrEmpty]
+    public ManagedModuleBenchmarkOperation[] Operation { get; set; } = new[] { ManagedModuleBenchmarkOperation.Install };
 
     /// <summary>Delivery engines to measure for each scenario.</summary>
     [Parameter]
@@ -217,14 +219,15 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             ProfileName,
             MyInvocation.BoundParameters.ContainsKey(nameof(Repository)));
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
+        var operations = ResolveOperations();
         var scenarios = Name
             .Where(static moduleName => !string.IsNullOrWhiteSpace(moduleName))
-            .Select(moduleName => CreateScenario(moduleName, repository, moduleRoot, modulePath, manifestPath, packageCacheDirectory, packageOutputDirectory, credential))
+            .SelectMany(moduleName => operations.Select(operation => CreateScenario(operation, moduleName, repository, moduleRoot, modulePath, manifestPath, packageCacheDirectory, packageOutputDirectory, credential)))
             .ToArray();
 
         if (scenarios.Length == 0)
             return;
-        if (!ShouldProcess(string.Join(", ", scenarios.Select(static scenario => scenario.Name)), $"Measure module {Operation} with {string.Join(", ", Engine)}"))
+        if (!ShouldProcess(string.Join(", ", scenarios.Select(static scenario => scenario.Name).Distinct(StringComparer.OrdinalIgnoreCase)), $"Measure module {string.Join(", ", operations)} with {string.Join(", ", Engine)}"))
             return;
 
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
@@ -317,7 +320,13 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
             writer.WriteMarkdown(markdownReportPath!, result);
     }
 
+    private IReadOnlyList<ManagedModuleBenchmarkOperation> ResolveOperations()
+        => (Operation is { Length: > 0 } ? Operation : new[] { ManagedModuleBenchmarkOperation.Install })
+            .Distinct()
+            .ToArray();
+
     private ManagedModuleBenchmarkScenario CreateScenario(
+        ManagedModuleBenchmarkOperation operation,
         string moduleName,
         ManagedModuleRepository repository,
         string? moduleRoot,
@@ -328,8 +337,8 @@ public sealed class MeasureManagedModuleCommand : PSCmdlet
         RepositoryCredential? credential)
         => new()
         {
-            Id = Operation + ":" + moduleName.Trim(),
-            Operation = Operation,
+            Id = operation + ":" + moduleName.Trim(),
+            Operation = operation,
             Repository = repository,
             Name = moduleName.Trim(),
             Version = Version,

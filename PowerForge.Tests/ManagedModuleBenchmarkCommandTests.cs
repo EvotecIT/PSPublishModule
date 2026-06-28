@@ -158,6 +158,37 @@ public sealed class ManagedModuleBenchmarkCommandTests
     }
 
     [Fact]
+    public void MeasureManagedModule_AcceptsMultipleOperationsInOneBenchmarkResult()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Measure-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Operation", new[] { ManagedModuleBenchmarkOperation.Install, ManagedModuleBenchmarkOperation.Save })
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("AllowClobber");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleBenchmarkResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(2, result.Runs.Count);
+        Assert.Contains(result.Runs, run => run.Operation == ManagedModuleBenchmarkOperation.Install && run.Succeeded);
+        Assert.Contains(result.Runs, run => run.Operation == ManagedModuleBenchmarkOperation.Save && run.Succeeded);
+        Assert.Contains(result.TransitionGates, gate => gate.Operation == ManagedModuleBenchmarkOperation.Install);
+        Assert.Contains(result.TransitionGates, gate => gate.Operation == ManagedModuleBenchmarkOperation.Save);
+    }
+
+    [Fact]
     public void MeasureManagedModule_ReturnsBenchmarkResultForPublish()
     {
         using var feed = new TemporaryDirectory();
