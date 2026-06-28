@@ -10,7 +10,8 @@ public sealed partial class ManagedModuleInstallServiceTests
     public async Task InstallAsync_installs_latest_stable_package_to_versioned_module_path()
     {
         using var feed = new TemporaryDirectory();
-        using var moduleRoot = new TemporaryDirectory();
+        using var moduleRootContainer = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(moduleRootContainer.Path, "Modules");
         TestPackageFactory.Create(
             Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
             "Company.Tools",
@@ -33,15 +34,15 @@ public sealed partial class ManagedModuleInstallServiceTests
             Repository = new ManagedModuleRepository("Local", feed.Path),
             Name = "Company.Tools",
             Scope = ManagedModuleInstallScope.Custom,
-            ModuleRoot = moduleRoot.Path
+            ModuleRoot = moduleRoot
         });
 
         Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
         Assert.Equal("1.1.0", result.Version);
         Assert.True(result.Elapsed > TimeSpan.Zero);
-        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
-        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Public", "Get-CompanyTool.ps1")));
-        Assert.False(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.nuspec")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot, "Company.Tools", "1.1.0", "Public", "Get-CompanyTool.ps1")));
+        Assert.False(File.Exists(Path.Combine(moduleRoot, "Company.Tools", "1.1.0", "Company.Tools.nuspec")));
         Assert.Equal(2, result.FileCount);
         Assert.True(result.ExtractedBytes > 0);
         Assert.True(result.VersionResolutionElapsed >= TimeSpan.Zero);
@@ -57,6 +58,7 @@ public sealed partial class ManagedModuleInstallServiceTests
         Assert.Equal("1.1.0", result.Receipt.Version);
         Assert.Equal(64, result.Download?.PackageSha256.Length);
         Assert.Equal(result.Download?.PackageSha256, result.Receipt.PackageSha256);
+        AssertNoManagedStageDirectories(moduleRoot);
     }
 
     [Fact]
@@ -848,9 +850,10 @@ public sealed partial class ManagedModuleInstallServiceTests
     public async Task InstallAsync_failed_force_extraction_keeps_existing_version_without_receipt()
     {
         using var feed = new TemporaryDirectory();
-        using var moduleRoot = new TemporaryDirectory();
+        using var moduleRootContainer = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(moduleRootContainer.Path, "Modules");
         CreateDuplicateEntryPackage(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"), "Company.Tools", "1.0.0");
-        var existingPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var existingPath = Path.Combine(moduleRoot, "Company.Tools", "1.0.0");
         Directory.CreateDirectory(existingPath);
         File.WriteAllText(Path.Combine(existingPath, "marker.txt"), "keep");
         var service = new ManagedModuleInstallService(new NullLogger());
@@ -861,12 +864,13 @@ public sealed partial class ManagedModuleInstallServiceTests
             Name = "Company.Tools",
             Version = "1.0.0",
             Scope = ManagedModuleInstallScope.Custom,
-            ModuleRoot = moduleRoot.Path,
+            ModuleRoot = moduleRoot,
             Force = true
         }));
 
         Assert.Equal("keep", File.ReadAllText(Path.Combine(existingPath, "marker.txt")));
         Assert.False(File.Exists(Path.Combine(existingPath, ".powerforge", "managed-module-receipt.json")));
+        AssertNoManagedStageDirectories(moduleRoot);
     }
 
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
@@ -913,6 +917,21 @@ public sealed partial class ManagedModuleInstallServiceTests
         Assert.Equal(64, receipt.PackageSha256.Length);
         Assert.True(receipt.FileCount > 0);
         Assert.True(receipt.ExtractedBytes > 0);
+    }
+
+    private static void AssertNoManagedStageDirectories(string moduleRoot)
+    {
+        var roots = new[]
+        {
+            moduleRoot,
+            Path.GetDirectoryName(moduleRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+        };
+
+        foreach (var root in roots.Where(static root => !string.IsNullOrWhiteSpace(root)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (Directory.Exists(root))
+                Assert.Empty(Directory.EnumerateDirectories(root, ".pfmm-stage-*", SearchOption.TopDirectoryOnly));
+        }
     }
 
     private static void CreateDuplicateEntryPackage(string packagePath, string id, string version)

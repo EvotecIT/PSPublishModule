@@ -50,7 +50,17 @@ function Write-ManagedBenchmarkJson {
 
     $temporaryPath = New-ManagedBenchmarkTemporaryPath -Path $Path
     try {
-        $InputObject | ConvertTo-Json -Depth $Depth | Set-Content -LiteralPath $temporaryPath -Encoding UTF8
+        if ($null -eq $InputObject) {
+            Set-Content -LiteralPath $temporaryPath -Value 'null' -Encoding UTF8
+        } else {
+            $json = @($InputObject | ConvertTo-Json -Depth $Depth)
+            if ($json.Count -eq 0 -or [string]::IsNullOrWhiteSpace(($json -join [Environment]::NewLine))) {
+                $json = if ($InputObject -is [array] -and $InputObject.Count -eq 0) { '[]' } else { 'null' }
+            }
+
+            Set-Content -LiteralPath $temporaryPath -Value $json -Encoding UTF8
+        }
+
         Complete-ManagedBenchmarkArtifactWrite -TemporaryPath $temporaryPath -Path $Path
     } finally {
         if (Test-Path -LiteralPath $temporaryPath) {
