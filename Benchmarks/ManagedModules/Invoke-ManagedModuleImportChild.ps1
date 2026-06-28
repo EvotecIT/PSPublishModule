@@ -3,7 +3,9 @@ param(
     [string] $ModuleName,
 
     [Parameter(Mandatory)]
-    [string] $ModuleRoot
+    [string] $ModuleRoot,
+
+    [string] $ResultPath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -84,7 +86,7 @@ try {
     $timer.Stop()
 }
 
-[pscustomobject]@{
+$result = [pscustomobject]@{
     Status = $status
     ModuleName = $ModuleName
     ImportedModuleName = $importedName
@@ -92,4 +94,11 @@ try {
     ManifestPath = $manifestPath
     ElapsedMilliseconds = [math]::Round($timer.Elapsed.TotalMilliseconds, 2)
     Error = $errorText
-} | ConvertTo-Json -Depth 4 -Compress
+}
+
+$json = $result | ConvertTo-Json -Depth 4 -Compress
+if (-not [string]::IsNullOrWhiteSpace($ResultPath)) {
+    $json | Set-Content -LiteralPath $ResultPath -Encoding UTF8
+} else {
+    $json
+}

@@ -162,15 +162,15 @@ function Resolve-ManagedModuleBenchmarkUpdateBaseline {
         throw "Package '$ModuleName' does not have at least two stable versions in '$RepositorySource'."
     }
 
-    $target = if (-not [string]::IsNullOrWhiteSpace($RequestedVersion)) {
+    if (-not [string]::IsNullOrWhiteSpace($RequestedVersion)) {
         $requested = ConvertTo-ManagedModuleBenchmarkStableVersion -Version $RequestedVersion
         if (-not $requested) {
             throw "Requested update target '$RequestedVersion' is not a stable System.Version-compatible version."
         }
 
-        @($versions | Where-Object { $_.Version -eq $requested.Version } | Select-Object -First 1)
+        $target = @($versions | Where-Object { $_.Version -eq $requested.Version } | Select-Object -First 1)
     } else {
-        @($versions | Select-Object -Last 1)
+        $target = @($versions | Select-Object -Last 1)
     }
 
     if ($target.Count -eq 0) {

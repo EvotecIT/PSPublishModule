@@ -34,6 +34,8 @@ param(
 
     [switch] $ValidateImport,
 
+    [int] $ImportTimeoutSeconds = 120,
+
     [switch] $RotateEngineOrder,
 
     [switch] $ListScenarios
@@ -935,6 +937,7 @@ $metadata = [ordered]@{
     AcceptLicense = $AcceptLicense.IsPresent
     CacheMode = $CacheMode
     ValidateImport = $ValidateImport.IsPresent
+    ImportTimeoutSeconds = $ImportTimeoutSeconds
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     Suite = $Suite
     Engines = $Engine
