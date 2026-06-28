@@ -42,6 +42,10 @@ param(
 
     [switch] $RotateEngineOrder,
 
+    [int] $ManagedMaxRank = 0,
+
+    [double] $ManagedMaxVsFastest = 0,
+
     [switch] $ListScenarios
 )
 
@@ -297,6 +301,7 @@ function Get-BenchmarkHostPath {
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Summary.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.RepairPlan.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.ManagedDetails.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
 $repositorySource = Resolve-ManagedModuleBenchmarkRepositorySource -Repository $Repository -RepositoryName $RepositoryName
 
 function Get-ProviderModulePath {
@@ -1024,6 +1029,7 @@ foreach ($iteration in 1..$RepeatCount) {
 
 $summary = @(New-Summary -Rows $results)
 $comparison = @(New-Comparison -SummaryRows $summary)
+$gateViolations = @(Get-ManagedPerformanceGateViolation -Rows $comparison -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest)
 $metadata = [ordered]@{
     ModuleName = $ModuleName
     Version = $Version
@@ -1041,6 +1047,9 @@ $metadata = [ordered]@{
     ValidateImport = $ValidateImport.IsPresent
     ImportTimeoutSeconds = $ImportTimeoutSeconds
     RotateEngineOrder = $RotateEngineOrder.IsPresent
+    ManagedMaxRank = $ManagedMaxRank
+    ManagedMaxVsFastest = $ManagedMaxVsFastest
+    ManagedPerformanceGatePassed = $gateViolations.Count -eq 0
     Suite = $Suite
     Engines = $Engine
     Operations = $Operation
@@ -1058,13 +1067,20 @@ $resultsPath = Join-Path $workRoot 'managed-module-results.csv'
 $resultsJsonPath = Join-Path $workRoot 'managed-module-results.json'
 $summaryPath = Join-Path $workRoot 'managed-module-summary.csv'
 $comparisonPath = Join-Path $workRoot 'managed-module-comparison.csv'
+$gatePath = Join-Path $workRoot 'managed-module-gate.csv'
 $metadataPath = Join-Path $workRoot 'metadata.json'
 
 $results | Export-Csv -LiteralPath $resultsPath -NoTypeInformation
 $results | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $resultsJsonPath -Encoding UTF8
 $summary | Export-Csv -LiteralPath $summaryPath -NoTypeInformation
 $comparison | Export-Csv -LiteralPath $comparisonPath -NoTypeInformation
+if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
+    $gateViolations | Export-Csv -LiteralPath $gatePath -NoTypeInformation
+}
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
 $comparison
 Write-Host "Benchmark output: $workRoot"
+if ($gateViolations.Count -gt 0) {
+    throw "Managed performance gate failed for $($gateViolations.Count) row(s). See '$gatePath'."
+}
