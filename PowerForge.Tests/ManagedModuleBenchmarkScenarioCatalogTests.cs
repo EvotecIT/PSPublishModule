@@ -35,6 +35,18 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1 &&
             DoubleProperty(row, "ManagedMaxVsFastest") == 0);
+        Assert.Contains(rows, row =>
+            Property(row, "Name") == "Graph.Authentication.SaveExact.NoOpForce" &&
+            Property(row, "Version") == "2.38.0" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "SaveNoOp", "SaveForce" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
+            Property(row, "Name") == "Az.Accounts.SaveExact.NoOpForce" &&
+            Property(row, "Version") == "5.5.0" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "SaveNoOp", "SaveForce" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
     }
 
     private static JsonDocument InvokeScenarioList(string script)
@@ -47,7 +59,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         process.StartInfo.ArgumentList.Add("Bypass");
         process.StartInfo.ArgumentList.Add("-Command");
         process.StartInfo.ArgumentList.Add(
-            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
+            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.UseShellExecute = false;

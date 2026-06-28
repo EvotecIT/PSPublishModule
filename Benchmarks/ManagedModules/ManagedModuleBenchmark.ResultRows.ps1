@@ -54,6 +54,7 @@ function New-SkippedRow {
         ImportMilliseconds = 0
         ImportManifestPath = ''
         ImportError = ''
+        Reason = $Reason
         Error = $Reason
     }
 }

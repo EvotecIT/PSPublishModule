@@ -49,6 +49,10 @@ public sealed partial class ManagedModuleRepositoryClient
             {
                 await DelayBeforeRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
             }
+            catch (HttpRequestException ex)
+            {
+                throw CreateTransportException(request, ex);
+            }
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && attempt < attempts)
             {
                 _logger.Verbose($"Managed module repository request timed out on attempt {attempt}: {ex.Message}");
@@ -56,7 +60,7 @@ public sealed partial class ManagedModuleRepositoryClient
             }
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
-                throw new TimeoutException("Managed module repository request timed out.", ex);
+                throw CreateTimeoutException(request, ex);
             }
         }
 
@@ -140,6 +144,17 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static bool CanRedirect(HttpMethod method)
         => method == HttpMethod.Get || method == HttpMethod.Head;
+
+    private static HttpRequestException CreateTransportException(HttpRequestMessage request, HttpRequestException exception)
+        => new(
+            $"Managed module repository request failed: {FormatRequest(request)}. {exception.Message}",
+            exception);
+
+    private static TimeoutException CreateTimeoutException(HttpRequestMessage request, Exception exception)
+        => new($"Managed module repository request timed out: {FormatRequest(request)}.", exception);
+
+    private static string FormatRequest(HttpRequestMessage request)
+        => $"{request.Method} {request.RequestUri}";
 
     private static NetworkCredential? ToNetworkCredential(RepositoryCredential credential)
     {
