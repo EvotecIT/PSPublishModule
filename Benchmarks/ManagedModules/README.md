@@ -42,6 +42,12 @@ Use repeated, rotated engine order for fairer timing:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Graph -ScenarioName Graph.Full -HostName PowerShell7 -Operation Find -RepeatCount 3 -RotateEngineOrder
 ```
 
+Run the named same-source Graph install speed gate against ModuleFast:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SpeedGate -ScenarioName Graph.Full.SameSource -HostName PowerShell7 -RepeatCount 3 -RotateEngineOrder -ManagedMaxRank 1 -RemoveOutputRoots -SkipBuild
+```
+
 Fail a comparison when managed is not the fastest successful engine:
 
 ```powershell
@@ -208,20 +214,7 @@ Use `-RotateEngineOrder` with `-RepeatCount 3` or higher before making performan
 When comparing managed install with ModuleFast, track both the default-source lane and a same-source lane. The default comparison keeps each engine on its normal benchmark source, which means managed uses the `-Repository` value and ModuleFast uses `-ModuleFastSource`. A same-source gate removes repository-backend variance by passing the same NuGet v3 source to both:
 
 ```powershell
-.\Benchmarks\ManagedModules\Compare-ManagedModuleEngines.ps1 `
-    -ModuleName Microsoft.Graph `
-    -Version 2.38.0 `
-    -Operation Install `
-    -Engine Managed,ModuleFast `
-    -Repository https://pwsh.gallery/index.json `
-    -RepositoryName PWSHGallery `
-    -ModuleFastSource https://pwsh.gallery/index.json `
-    -RepeatCount 3 `
-    -RotateEngineOrder `
-    -AcceptLicense `
-    -ManagedMaxRank 1 `
-    -RemoveOutputRoots `
-    -SkipBuild
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SpeedGate -ScenarioName Graph.Full.SameSource -HostName PowerShell7 -RepeatCount 3 -RotateEngineOrder -ManagedMaxRank 1 -RemoveOutputRoots -SkipBuild
 ```
 
 ## Current Evidence
