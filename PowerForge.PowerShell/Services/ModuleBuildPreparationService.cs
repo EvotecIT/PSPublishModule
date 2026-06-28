@@ -203,6 +203,14 @@ internal sealed class ModuleBuildPreparationService
             cfg.ConfigPath = ResolveConfigPath(projectRoot, cfg.ConfigPath);
         }
 
+        foreach (var segment in spec.Segments?.OfType<ConfigurationBuildLibrariesSegment>() ?? Enumerable.Empty<ConfigurationBuildLibrariesSegment>())
+        {
+            var cfg = segment.BuildLibraries;
+            cfg.NETProjectPath = ResolveConfigPathNullable(projectRoot, cfg.NETProjectPath);
+            cfg.DevelopmentBinariesPath = ResolveConfigPathNullable(projectRoot, cfg.DevelopmentBinariesPath);
+            cfg.NETDevelopmentBinariesPath = ResolveConfigPathNullable(projectRoot, cfg.NETDevelopmentBinariesPath);
+        }
+
         foreach (var segment in spec.Segments?.OfType<ConfigurationPackageBuildSegment>() ?? Enumerable.Empty<ConfigurationPackageBuildSegment>())
         {
             var cfg = segment.Configuration;
@@ -212,6 +220,9 @@ internal sealed class ModuleBuildPreparationService
             cfg.ReleaseZipOutputPath = ResolveConfigPathNullable(projectRoot, cfg.ReleaseZipOutputPath);
             cfg.StagingPath = ResolveConfigPathNullable(projectRoot, cfg.StagingPath);
             cfg.PlanOutputPath = ResolveConfigPathNullable(projectRoot, cfg.PlanOutputPath);
+            cfg.PublishApiKeyFilePath = ResolveConfigPathNullable(projectRoot, cfg.PublishApiKeyFilePath);
+            cfg.NugetCredentialSecretFilePath = ResolveConfigPathNullable(projectRoot, cfg.NugetCredentialSecretFilePath);
+            cfg.GitHubAccessTokenFilePath = ResolveConfigPathNullable(projectRoot, cfg.GitHubAccessTokenFilePath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationReleaseSegment>() ?? Enumerable.Empty<ConfigurationReleaseSegment>())
@@ -219,6 +230,15 @@ internal sealed class ModuleBuildPreparationService
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.StageRoot)) continue;
             cfg.StageRoot = ResolveConfigPath(projectRoot, cfg.StageRoot);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationArtefactSegment>() ?? Enumerable.Empty<ConfigurationArtefactSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.Path = ResolveConfigPathNullable(projectRoot, cfg.Path);
+            cfg.RequiredModules.Path = ResolveConfigPathNullable(projectRoot, cfg.RequiredModules.Path);
+            cfg.RequiredModules.ModulesPath = ResolveConfigPathNullable(projectRoot, cfg.RequiredModules.ModulesPath);
         }
     }
 
@@ -273,7 +293,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var basePath = request.ResolvePath!(request.InputPath!);
             var fullProjectPath = Path.Combine(basePath, moduleName);
-            return (fullProjectPath, basePath, basePath);
+            return (fullProjectPath, basePath, fullProjectPath);
         }
 
         var rootToUse = !string.IsNullOrWhiteSpace(request.ScriptRoot)
@@ -328,6 +348,9 @@ internal sealed class ModuleBuildPreparationService
                     package.ReleaseZipOutputPath = ResolveWorkspacePath(workspaceRoot, package.ReleaseZipOutputPath);
                     package.StagingPath = ResolveWorkspacePath(workspaceRoot, package.StagingPath);
                     package.PlanOutputPath = ResolveWorkspacePath(workspaceRoot, package.PlanOutputPath);
+                    package.PublishApiKeyFilePath = ResolveWorkspacePath(workspaceRoot, package.PublishApiKeyFilePath);
+                    package.NugetCredentialSecretFilePath = ResolveWorkspacePath(workspaceRoot, package.NugetCredentialSecretFilePath);
+                    package.GitHubAccessTokenFilePath = ResolveWorkspacePath(workspaceRoot, package.GitHubAccessTokenFilePath);
                     break;
                 case ConfigurationReleaseSegment release:
                     release.Configuration.StageRoot = ResolveWorkspacePath(workspaceRoot, release.Configuration.StageRoot);
@@ -348,6 +371,8 @@ internal sealed class ModuleBuildPreparationService
     private static void ResolveWorkspaceRelativeArtefactPaths(ArtefactConfiguration configuration, string workspaceRoot)
     {
         configuration.Path = ResolveWorkspacePath(workspaceRoot, configuration.Path);
+        configuration.RequiredModules.Path = ResolveWorkspacePath(workspaceRoot, configuration.RequiredModules.Path);
+        configuration.RequiredModules.ModulesPath = ResolveWorkspacePath(workspaceRoot, configuration.RequiredModules.ModulesPath);
     }
 
     private static string? ResolveWorkspacePath(string workspaceRoot, string? path)
@@ -447,6 +472,14 @@ internal sealed class ModuleBuildPreparationService
             cfg.ConfigPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.ConfigPath));
         }
 
+        foreach (var segment in spec.Segments?.OfType<ConfigurationBuildLibrariesSegment>() ?? Enumerable.Empty<ConfigurationBuildLibrariesSegment>())
+        {
+            var cfg = segment.BuildLibraries;
+            cfg.NETProjectPath = MakeRelativeForProjectRoot(projectRoot, cfg.NETProjectPath);
+            cfg.DevelopmentBinariesPath = MakeRelativeForProjectRoot(projectRoot, cfg.DevelopmentBinariesPath);
+            cfg.NETDevelopmentBinariesPath = MakeRelativeForProjectRoot(projectRoot, cfg.NETDevelopmentBinariesPath);
+        }
+
         foreach (var segment in spec.Segments?.OfType<ConfigurationPackageBuildSegment>() ?? Enumerable.Empty<ConfigurationPackageBuildSegment>())
         {
             var cfg = segment.Configuration;
@@ -456,6 +489,9 @@ internal sealed class ModuleBuildPreparationService
             cfg.ReleaseZipOutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.ReleaseZipOutputPath);
             cfg.StagingPath = MakeRelativeForProjectRoot(projectRoot, cfg.StagingPath);
             cfg.PlanOutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.PlanOutputPath);
+            cfg.PublishApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.PublishApiKeyFilePath);
+            cfg.NugetCredentialSecretFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.NugetCredentialSecretFilePath);
+            cfg.GitHubAccessTokenFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.GitHubAccessTokenFilePath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationReleaseSegment>() ?? Enumerable.Empty<ConfigurationReleaseSegment>())
@@ -463,6 +499,15 @@ internal sealed class ModuleBuildPreparationService
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.StageRoot)) continue;
             cfg.StageRoot = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.StageRoot));
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationArtefactSegment>() ?? Enumerable.Empty<ConfigurationArtefactSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.Path = MakeRelativeForProjectRoot(projectRoot, cfg.Path);
+            cfg.RequiredModules.Path = MakeRelativeForProjectRoot(projectRoot, cfg.RequiredModules.Path);
+            cfg.RequiredModules.ModulesPath = MakeRelativeForProjectRoot(projectRoot, cfg.RequiredModules.ModulesPath);
         }
     }
 

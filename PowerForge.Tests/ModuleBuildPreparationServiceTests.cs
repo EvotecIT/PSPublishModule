@@ -76,6 +76,19 @@ public sealed class ModuleBuildPreparationServiceTests
     ArtefactType = [PowerForge.ArtefactType]::Packed
     Configuration = [PowerForge.ArtefactConfiguration]@{
         Path = 'Module/Artefacts/Packed'
+        RequiredModules = [PowerForge.ArtefactRequiredModulesConfiguration]@{
+            Path = 'Module/Artefacts/Packed/RequiredModules'
+            ModulesPath = 'Module/Artefacts/Packed/Modules'
+        }
+    }
+}
+[PowerForge.ConfigurationPackageBuildSegment]@{
+    Configuration = [PowerForge.PackageBuildConfiguration]@{
+        RootPath = 'Sources'
+        OutputPath = 'Artefacts/ProjectBuild/packages'
+        PublishApiKeyFilePath = 'Build/nuget.key'
+        NugetCredentialSecretFilePath = 'Build/nuget.secret'
+        GitHubAccessTokenFilePath = 'Build/github.token'
     }
 }
 [PowerForge.ConfigurationReleaseSegment]@{
@@ -119,8 +132,78 @@ public sealed class ModuleBuildPreparationServiceTests
                 var artefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[2]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed"), artefact.Configuration.Path);
 
-                var release = Assert.IsType<ConfigurationReleaseSegment>(prepared.PipelineSpec.Segments[3]);
+                var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(prepared.PipelineSpec.Segments[3]);
+                Assert.Equal(Path.Combine(root.FullName, "Sources"), packageBuild.Configuration.RootPath);
+                Assert.Equal(Path.Combine(root.FullName, "Artefacts", "ProjectBuild", "packages"), packageBuild.Configuration.OutputPath);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "nuget.key"), packageBuild.Configuration.PublishApiKeyFilePath);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "nuget.secret"), packageBuild.Configuration.NugetCredentialSecretFilePath);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "github.token"), packageBuild.Configuration.GitHubAccessTokenFilePath);
+
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "RequiredModules"), artefact.Configuration.RequiredModules.Path);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "Modules"), artefact.Configuration.RequiredModules.ModulesPath);
+
+                var release = Assert.IsType<ConfigurationReleaseSegment>(prepared.PipelineSpec.Segments[4]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "UploadReady"), release.Configuration.StageRoot);
+            }
+            finally
+            {
+                Runspace.DefaultRunspace = previousRunspace;
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_from_modern_path_keeps_segment_paths_relative_to_module_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-path-root-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "SampleModule"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "SampleModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+            var settings = ScriptBlock.Create("""
+[PowerForge.ConfigurationBuildLibrariesSegment]@{
+    BuildLibraries = [PowerForge.BuildLibrariesConfiguration]@{
+        NETProjectPath = 'Sources/Demo/Demo.csproj'
+    }
+}
+[PowerForge.ConfigurationArtefactSegment]@{
+    ArtefactType = [PowerForge.ArtefactType]::Packed
+    Configuration = [PowerForge.ArtefactConfiguration]@{
+        Path = 'Artefacts/Packed'
+    }
+}
+""");
+
+            using var runspace = RunspaceFactory.CreateRunspace();
+            runspace.Open();
+            var previousRunspace = Runspace.DefaultRunspace;
+            Runspace.DefaultRunspace = runspace;
+            try
+            {
+                var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+                {
+                    ParameterSetName = "Modern",
+                    ModuleName = "SampleModule",
+                    InputPath = root.FullName,
+                    Settings = settings,
+                    CurrentPath = root.FullName,
+                    ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                    DotNetFramework = Array.Empty<string>(),
+                    ExcludeDirectories = Array.Empty<string>(),
+                    ExcludeFiles = Array.Empty<string>()
+                });
+
+                var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(prepared.PipelineSpec.Segments[0]);
+                Assert.Equal("Sources/Demo/Demo.csproj", buildLibraries.BuildLibraries.NETProjectPath);
+
+                var artefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[1]);
+                Assert.Equal("Artefacts/Packed", artefact.Configuration.Path);
             }
             finally
             {
@@ -329,9 +412,14 @@ public sealed class ModuleBuildPreparationServiceTests
         {
             var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
             var projectConfig = Path.Combine(root.FullName, "Build", "project.build.json");
+            var netProject = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "SampleModule.PowerShell.csproj");
+            var developmentBinaries = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "bin");
             var packageRoot = Path.Combine(root.FullName, "Sources");
             var stagingRoot = Path.Combine(root.FullName, "Artifacts", "Packages", "Staging");
             var releaseRoot = Path.Combine(root.FullName, "Artifacts", "Release");
+            var artefactRoot = Path.Combine(root.FullName, "Module", "Artefacts", "Packed");
+            var artefactRequiredModules = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "RequiredModules");
+            var artefactModules = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "Modules");
             var spec = new ModulePipelineSpec
             {
                 Build = new ModuleBuildSpec
@@ -349,6 +437,14 @@ public sealed class ModuleBuildPreparationServiceTests
                             BuildBeforeModule = true
                         }
                     },
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            NETProjectPath = netProject,
+                            NETDevelopmentBinariesPath = developmentBinaries
+                        }
+                    },
                     new ConfigurationPackageBuildSegment
                     {
                         Configuration = new PackageBuildConfiguration
@@ -356,7 +452,23 @@ public sealed class ModuleBuildPreparationServiceTests
                             RootPath = packageRoot,
                             StagingPath = stagingRoot,
                             OutputPath = Path.Combine(root.FullName, "Artifacts", "Packages", "NuGet"),
-                            PlanOutputPath = Path.Combine(root.FullName, "Artifacts", "Packages", "plan.json")
+                            PlanOutputPath = Path.Combine(root.FullName, "Artifacts", "Packages", "plan.json"),
+                            PublishApiKeyFilePath = Path.Combine(root.FullName, "Build", "nuget.key"),
+                            NugetCredentialSecretFilePath = Path.Combine(root.FullName, "Build", "nuget.secret"),
+                            GitHubAccessTokenFilePath = Path.Combine(root.FullName, "Build", "github.token")
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Path = artefactRoot,
+                            RequiredModules = new ArtefactRequiredModulesConfiguration
+                            {
+                                Path = artefactRequiredModules,
+                                ModulesPath = artefactModules
+                            }
                         }
                     },
                     new ConfigurationReleaseSegment
@@ -375,9 +487,17 @@ public sealed class ModuleBuildPreparationServiceTests
 
             var json = File.ReadAllText(jsonPath);
             Assert.Contains("\"ConfigPath\": \"Build/project.build.json\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"NETProjectPath\": \"Sources/SampleModule.PowerShell/SampleModule.PowerShell.csproj\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"NETDevelopmentBinariesPath\": \"Sources/SampleModule.PowerShell/bin\"", json, StringComparison.Ordinal);
             Assert.Contains("\"RootPath\": \"Sources\"", json, StringComparison.Ordinal);
             Assert.Contains("\"StagingPath\": \"Artifacts/Packages/Staging\"", json, StringComparison.Ordinal);
             Assert.Contains("\"PlanOutputPath\": \"Artifacts/Packages/plan.json\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"PublishApiKeyFilePath\": \"Build/nuget.key\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"NugetCredentialSecretFilePath\": \"Build/nuget.secret\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"GitHubAccessTokenFilePath\": \"Build/github.token\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Path\": \"Module/Artefacts/Packed\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Path\": \"Module/Artefacts/Packed/RequiredModules\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"ModulesPath\": \"Module/Artefacts/Packed/Modules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"StageRoot\": \"Artifacts/Release\"", json, StringComparison.Ordinal);
 
             var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
@@ -385,11 +505,21 @@ public sealed class ModuleBuildPreparationServiceTests
 
             service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
             var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(jsonSpec!.Segments[0]);
-            var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(jsonSpec.Segments[1]);
-            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[2]);
+            var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(jsonSpec.Segments[1]);
+            var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(jsonSpec.Segments[2]);
+            var artefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec.Segments[3]);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[4]);
             Assert.Equal(projectConfig, projectBuild.Configuration.ConfigPath);
+            Assert.Equal(netProject, buildLibraries.BuildLibraries.NETProjectPath);
+            Assert.Equal(developmentBinaries, buildLibraries.BuildLibraries.NETDevelopmentBinariesPath);
             Assert.Equal(packageRoot, packageBuild.Configuration.RootPath);
             Assert.Equal(stagingRoot, packageBuild.Configuration.StagingPath);
+            Assert.Equal(Path.Combine(root.FullName, "Build", "nuget.key"), packageBuild.Configuration.PublishApiKeyFilePath);
+            Assert.Equal(Path.Combine(root.FullName, "Build", "nuget.secret"), packageBuild.Configuration.NugetCredentialSecretFilePath);
+            Assert.Equal(Path.Combine(root.FullName, "Build", "github.token"), packageBuild.Configuration.GitHubAccessTokenFilePath);
+            Assert.Equal(artefactRoot, artefact.Configuration.Path);
+            Assert.Equal(artefactRequiredModules, artefact.Configuration.RequiredModules.Path);
+            Assert.Equal(artefactModules, artefact.Configuration.RequiredModules.ModulesPath);
             Assert.Equal(releaseRoot, release.Configuration.StageRoot);
         }
         finally
