@@ -232,13 +232,30 @@ internal sealed class ModuleBuildPreparationService
             cfg.StageRoot = ResolveConfigPath(projectRoot, cfg.StageRoot);
         }
 
+        foreach (var segment in spec.Segments?.OfType<ConfigurationPublishSegment>() ?? Enumerable.Empty<ConfigurationPublishSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.ApiKeyFilePath = ResolveConfigPathNullable(projectRoot, cfg.ApiKeyFilePath);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationActionSegment>() ?? Enumerable.Empty<ConfigurationActionSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.FilePath = ResolveConfigPathNullable(projectRoot, cfg.FilePath);
+            cfg.WorkingDirectory = ResolveConfigPathNullable(projectRoot, cfg.WorkingDirectory);
+        }
+
         foreach (var segment in spec.Segments?.OfType<ConfigurationArtefactSegment>() ?? Enumerable.Empty<ConfigurationArtefactSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
             cfg.Path = ResolveConfigPathNullable(projectRoot, cfg.Path);
-            cfg.RequiredModules.Path = ResolveConfigPathNullable(projectRoot, cfg.RequiredModules.Path);
-            cfg.RequiredModules.ModulesPath = ResolveConfigPathNullable(projectRoot, cfg.RequiredModules.ModulesPath);
+            cfg.RequiredModules.Path = ResolveArtefactLayoutPath(projectRoot, cfg.Path, cfg.RequiredModules.Path);
+            cfg.RequiredModules.ModulesPath = ResolveArtefactLayoutPath(projectRoot, cfg.Path, cfg.RequiredModules.ModulesPath);
+            ResolveCopyMappingSources(cfg.DirectoryOutput, projectRoot);
+            ResolveCopyMappingSources(cfg.FilesOutput, projectRoot);
         }
     }
 
@@ -355,6 +372,13 @@ internal sealed class ModuleBuildPreparationService
                 case ConfigurationReleaseSegment release:
                     release.Configuration.StageRoot = ResolveWorkspacePath(workspaceRoot, release.Configuration.StageRoot);
                     break;
+                case ConfigurationPublishSegment publish:
+                    publish.Configuration.ApiKeyFilePath = ResolveWorkspacePath(workspaceRoot, publish.Configuration.ApiKeyFilePath);
+                    break;
+                case ConfigurationActionSegment action:
+                    action.Configuration.FilePath = ResolveWorkspacePath(workspaceRoot, action.Configuration.FilePath);
+                    action.Configuration.WorkingDirectory = ResolveWorkspacePath(workspaceRoot, action.Configuration.WorkingDirectory);
+                    break;
                 case ConfigurationAppleAppSegment appleApp:
                     appleApp.Configuration.ProjectPath = ResolveWorkspacePath(workspaceRoot, appleApp.Configuration.ProjectPath) ?? string.Empty;
                     break;
@@ -371,8 +395,10 @@ internal sealed class ModuleBuildPreparationService
     private static void ResolveWorkspaceRelativeArtefactPaths(ArtefactConfiguration configuration, string workspaceRoot)
     {
         configuration.Path = ResolveWorkspacePath(workspaceRoot, configuration.Path);
-        configuration.RequiredModules.Path = ResolveWorkspacePath(workspaceRoot, configuration.RequiredModules.Path);
-        configuration.RequiredModules.ModulesPath = ResolveWorkspacePath(workspaceRoot, configuration.RequiredModules.ModulesPath);
+        configuration.RequiredModules.Path = ResolveArtefactLayoutPath(workspaceRoot, configuration.Path, configuration.RequiredModules.Path);
+        configuration.RequiredModules.ModulesPath = ResolveArtefactLayoutPath(workspaceRoot, configuration.Path, configuration.RequiredModules.ModulesPath);
+        ResolveCopyMappingSources(configuration.DirectoryOutput, workspaceRoot);
+        ResolveCopyMappingSources(configuration.FilesOutput, workspaceRoot);
     }
 
     private static string? ResolveWorkspacePath(string workspaceRoot, string? path)
@@ -381,6 +407,32 @@ internal sealed class ModuleBuildPreparationService
             return path;
 
         return PathValueResolver.Resolve(workspaceRoot, path!);
+    }
+
+    private static string? ResolveArtefactLayoutPath(string rootPath, string? artefactPath, string? layoutPath)
+    {
+        if (string.IsNullOrWhiteSpace(layoutPath) || Path.IsPathRooted(layoutPath))
+            return layoutPath;
+        if (string.IsNullOrWhiteSpace(artefactPath))
+            return layoutPath;
+
+        var artefactRoot = PathValueResolver.Resolve(rootPath, artefactPath!);
+        var candidate = PathValueResolver.Resolve(rootPath, layoutPath!);
+        return IsSameOrChildPath(artefactRoot, candidate) ? candidate : layoutPath;
+    }
+
+    private static void ResolveCopyMappingSources(ArtefactCopyMapping[]? mappings, string rootPath)
+    {
+        if (mappings is null)
+            return;
+
+        foreach (var mapping in mappings)
+        {
+            if (mapping is null || string.IsNullOrWhiteSpace(mapping.Source) || Path.IsPathRooted(mapping.Source))
+                continue;
+
+            mapping.Source = PathValueResolver.Resolve(rootPath, mapping.Source);
+        }
     }
 
     private static bool SamePath(string left, string right)
@@ -501,13 +553,60 @@ internal sealed class ModuleBuildPreparationService
             cfg.StageRoot = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.StageRoot));
         }
 
+        foreach (var segment in spec.Segments?.OfType<ConfigurationPublishSegment>() ?? Enumerable.Empty<ConfigurationPublishSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.ApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.ApiKeyFilePath);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationActionSegment>() ?? Enumerable.Empty<ConfigurationActionSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.FilePath = MakeRelativeForProjectRoot(projectRoot, cfg.FilePath);
+            cfg.WorkingDirectory = MakeRelativeForProjectRoot(projectRoot, cfg.WorkingDirectory);
+        }
+
         foreach (var segment in spec.Segments?.OfType<ConfigurationArtefactSegment>() ?? Enumerable.Empty<ConfigurationArtefactSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
             cfg.Path = MakeRelativeForProjectRoot(projectRoot, cfg.Path);
-            cfg.RequiredModules.Path = MakeRelativeForProjectRoot(projectRoot, cfg.RequiredModules.Path);
-            cfg.RequiredModules.ModulesPath = MakeRelativeForProjectRoot(projectRoot, cfg.RequiredModules.ModulesPath);
+            cfg.RequiredModules.Path = MakeArtefactLayoutPathForJson(projectRoot, cfg.Path, cfg.RequiredModules.Path);
+            cfg.RequiredModules.ModulesPath = MakeArtefactLayoutPathForJson(projectRoot, cfg.Path, cfg.RequiredModules.ModulesPath);
+            MakeCopyMappingSourcesRelative(cfg.DirectoryOutput, projectRoot);
+            MakeCopyMappingSourcesRelative(cfg.FilesOutput, projectRoot);
+        }
+    }
+
+    private static string? MakeArtefactLayoutPathForJson(string projectRoot, string? artefactPath, string? layoutPath)
+    {
+        if (string.IsNullOrWhiteSpace(layoutPath))
+            return null;
+        if (Path.IsPathRooted(layoutPath))
+            return MakeRelativeForProjectRoot(projectRoot, layoutPath);
+        if (string.IsNullOrWhiteSpace(artefactPath))
+            return NormalizePathSeparators(layoutPath!);
+
+        var artefactRoot = ResolveConfigPath(projectRoot, artefactPath);
+        var candidate = ResolveConfigPath(projectRoot, layoutPath);
+        return IsSameOrChildPath(artefactRoot, candidate)
+            ? MakeRelativeForProjectRoot(projectRoot, candidate)
+            : NormalizePathSeparators(layoutPath!);
+    }
+
+    private static void MakeCopyMappingSourcesRelative(ArtefactCopyMapping[]? mappings, string projectRoot)
+    {
+        if (mappings is null)
+            return;
+
+        foreach (var mapping in mappings)
+        {
+            if (mapping is null || string.IsNullOrWhiteSpace(mapping.Source))
+                continue;
+
+            mapping.Source = MakeRelativeForProjectRoot(projectRoot, mapping.Source) ?? string.Empty;
         }
     }
 
@@ -537,6 +636,24 @@ internal sealed class ModuleBuildPreparationService
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
         return MakeRelativeForConfig(baseDir, path!);
+    }
+
+    private static string NormalizePathSeparators(string path)
+        => path.Replace('\\', '/');
+
+    private static bool IsSameOrChildPath(string rootPath, string candidatePath)
+    {
+        var root = Path.GetFullPath(rootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidate = Path.GetFullPath(candidatePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (string.Equals(root, candidate, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var rootWithSeparator = root + Path.DirectorySeparatorChar;
+        var candidateWithSeparator = candidate + Path.DirectorySeparatorChar;
+        return candidateWithSeparator.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetRelativePath(string baseDir, string fullPath)
