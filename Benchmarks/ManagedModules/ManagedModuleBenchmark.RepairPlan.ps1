@@ -124,17 +124,21 @@ function Set-RepairPlanModuleSourceMetadata {
 function New-RepairPlanMaintenanceReceipt {
     param(
         [string] $Destination,
-        [string] $Version
+        [string] $Version,
+        [string] $Source,
+        [string] $SourceRepository = '',
+        [string] $Scope = ''
     )
 
     $path = Join-Path $Destination 'module-state-maintenance-receipt.json'
     [pscustomobject]@{
-        Source = 'Managed module benchmark source-drift seed'
+        Source = $Source
         Modules = @(
             [pscustomobject]@{
                 Name = $ModuleName
                 Version = $Version
-                SourceRepository = $RepositoryName
+                SourceRepository = $SourceRepository
+                Scope = $Scope
             }
         )
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding UTF8
@@ -165,10 +169,10 @@ function Invoke-RepairPlanScenario {
     } else {
         ''
     }
-    $versionOverride = if ($ScenarioName -eq 'SourceDrift' -and -not [string]::IsNullOrWhiteSpace($script:ResolvedUpdateTargetVersion)) {
-        $script:ResolvedUpdateTargetVersion
-    } else {
+    $versionOverride = if ($ScenarioName -eq 'StaleVersion') {
         $script:ResolvedUpdateBaselineVersion
+    } else {
+        $script:ResolvedUpdateTargetVersion
     }
 
     try {
@@ -186,7 +190,10 @@ function Invoke-RepairPlanScenario {
         $installedVersion = Get-InstalledModuleVersion -Root $destination -Name $ModuleName
         $moduleDirectory = Find-RepairPlanModuleDirectory -Destination $destination -ExpectedVersion $installedVersion
         Set-RepairPlanModuleSourceMetadata -ModuleDirectory $moduleDirectory -RepositoryName 'BenchmarkWrongSource'
-        $maintenanceReceiptPath = New-RepairPlanMaintenanceReceipt -Destination $destination -Version $installedVersion
+        $maintenanceReceiptPath = New-RepairPlanMaintenanceReceipt -Destination $destination -Version $installedVersion -Source 'Managed module benchmark source-drift seed' -SourceRepository $RepositoryName
+    } elseif ($ScenarioName -eq 'ScopeDrift') {
+        $installedVersion = Get-InstalledModuleVersion -Root $destination -Name $ModuleName
+        $maintenanceReceiptPath = New-RepairPlanMaintenanceReceipt -Destination $destination -Version $installedVersion -Source 'Managed module benchmark scope-drift seed' -Scope 'CurrentUser'
     }
 
     $detailPath = Join-Path $workRoot ("managed-repairplan-{0}-details-{1}.json" -f $ScenarioName, $Iteration)
