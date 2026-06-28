@@ -92,6 +92,6 @@ Suite runs write `suite-summary.csv`, `suite-summary.json`, `suite-hosts.csv`, a
 
 License acceptance is explicit. Use `-AcceptLicense` only when the benchmark scenario is allowed to accept the package license on behalf of the run.
 
-The suite runner enables license acceptance only for scenarios that require it, such as the full Graph package family. Keep that behavior explicit when adding new scenarios.
+The suite runner enables license acceptance only for scenarios that require it, such as full Graph and Az package family scenarios. Keep that behavior explicit when adding new scenarios.
 
 Use `-RotateEngineOrder` with `-RepeatCount 3` or higher before making performance claims. Repository and host caches can otherwise make the second or third engine look faster than it really is.

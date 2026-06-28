@@ -4,6 +4,7 @@ namespace PowerForge;
 
 internal sealed class ManagedModuleArchiveExtractor
 {
+    private const int CopyBufferSize = 1024 * 1024;
     private static readonly string[] PackageMetadataPrefixes = { "_rels/", "package/" };
     private static readonly string[] PackageMetadataFiles = { "[Content_Types].xml", ".signature.p7s" };
 
@@ -16,6 +17,10 @@ internal sealed class ManagedModuleArchiveExtractor
 
         Directory.CreateDirectory(destinationPath);
         var destinationRoot = Path.GetFullPath(destinationPath);
+        var createdDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            destinationRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        };
         var fileCount = 0;
         long bytesWritten = 0;
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -35,14 +40,14 @@ internal sealed class ManagedModuleArchiveExtractor
 
             if (entry.FullName.EndsWith("/", StringComparison.Ordinal) || entry.FullName.EndsWith("\\", StringComparison.Ordinal))
             {
-                Directory.CreateDirectory(targetPath);
+                EnsureDirectory(targetPath, createdDirectories);
                 continue;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            EnsureDirectory(Path.GetDirectoryName(targetPath)!, createdDirectories);
             using var source = entry.Open();
-            using var destination = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            source.CopyTo(destination);
+            using var destination = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize, FileOptions.SequentialScan);
+            source.CopyTo(destination, CopyBufferSize);
             fileCount++;
             bytesWritten += destination.Length;
         }
@@ -53,6 +58,13 @@ internal sealed class ManagedModuleArchiveExtractor
 
     private static string Normalize(string path)
         => path.Replace('\\', '/').Trim('/');
+
+    private static void EnsureDirectory(string path, HashSet<string> createdDirectories)
+    {
+        var normalized = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (createdDirectories.Add(normalized))
+            Directory.CreateDirectory(normalized);
+    }
 
     private static bool IsPackageMetadata(string normalizedPath)
     {

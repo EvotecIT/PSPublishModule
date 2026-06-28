@@ -92,7 +92,7 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'Graph' -Name 'Graph.Beta.Full' -ModuleName 'Microsoft.Graph.Beta' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Accounts' -ModuleName 'Az.Accounts'
         New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Resources' -ModuleName 'Az.Resources'
-        New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Full' -ModuleName 'Az'
+        New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Full' -ModuleName 'Az' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'Teams' -ModuleName 'MicrosoftTeams'
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'ExchangeOnlineManagement' -ModuleName 'ExchangeOnlineManagement'
     )
