@@ -20,7 +20,8 @@ param(
 
     [switch] $SkipBuild,
 
-    [switch] $IncludeInstallManaged,
+    [Alias('IncludeInstallManaged')]
+    [switch] $IncludeInstall,
 
     [switch] $RotateEngineOrder,
 
@@ -138,8 +139,8 @@ function Get-ScenarioOperations {
     param([object] $Scenario)
 
     $operations = @($Scenario.Operations)
-    if ($IncludeInstallManaged.IsPresent -and -not ($operations -contains 'InstallManaged')) {
-        $operations += 'InstallManaged'
+    if ($IncludeInstall.IsPresent -and -not ($operations -contains 'Install')) {
+        $operations += 'Install'
     }
 
     $operations
@@ -289,7 +290,7 @@ $metadata = [ordered]@{
     Engines = $Engine
     Operations = $Operation
     RepeatCount = $RepeatCount
-    IncludeInstallManaged = $IncludeInstallManaged.IsPresent
+    IncludeInstall = $IncludeInstall.IsPresent
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     OutputDirectory = $suiteRoot
 }
