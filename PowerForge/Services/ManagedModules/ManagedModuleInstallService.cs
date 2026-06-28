@@ -329,6 +329,14 @@ public sealed class ManagedModuleInstallService
         try
         {
             var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+            var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
+            if (dependencyTrustPolicy is null &&
+                TryCreateSatisfiedDependencyResult(request, dependency.Id, range, out var satisfiedResult))
+            {
+                results[index] = satisfiedResult;
+                return;
+            }
+
             var dependencyVersion = await ResolveDependencyVersionAsync(
                 request,
                 dependency.Id,
@@ -348,7 +356,7 @@ public sealed class ManagedModuleInstallService
                     ModuleRoot = request.ModuleRoot,
                     PackageCacheDirectory = cacheDirectory,
                     ExpectedPackageSha256 = null,
-                    TrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy),
+                    TrustPolicy = dependencyTrustPolicy,
                     Credential = request.Credential,
                     Force = false,
                     AllowClobber = request.AllowClobber,
@@ -364,6 +372,74 @@ public sealed class ManagedModuleInstallService
         {
             gate.Release();
         }
+    }
+
+    private static bool TryCreateSatisfiedDependencyResult(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        ManagedModuleVersionRange range,
+        out ManagedModuleInstallResult result)
+    {
+        result = null!;
+        if (range.IsUnbounded)
+            return false;
+
+        var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
+        var installedVersion = GetInstalledVersions(moduleRoot, dependencyName)
+            .Where(version => AllowsInstalledDependencyVersion(version, request, range))
+            .LastOrDefault();
+        if (installedVersion is null)
+            return false;
+
+        var modulePath = Path.Combine(moduleRoot, dependencyName.Trim(), installedVersion);
+        result = CreateAlreadyInstalledResult(
+            new ManagedModuleInstallRequest
+            {
+                Repository = request.Repository,
+                Name = dependencyName,
+                Version = installedVersion,
+                Scope = request.Scope,
+                ShellEdition = request.ShellEdition,
+                ModuleRoot = request.ModuleRoot,
+                Credential = request.Credential,
+                Force = false,
+                AllowClobber = request.AllowClobber,
+                AcceptLicense = request.AcceptLicense
+            },
+            installedVersion,
+            moduleRoot,
+            modulePath,
+            TimeSpan.Zero,
+            TimeSpan.Zero,
+            repositoryRequestCount: 0);
+        return true;
+    }
+
+    private static bool AllowsInstalledDependencyVersion(
+        string version,
+        ManagedModuleInstallRequest request,
+        ManagedModuleVersionRange range)
+    {
+        if (ManagedModuleVersionComparer.IsPrerelease(version) &&
+            !request.IncludePrerelease &&
+            !range.AllowsPrerelease)
+            return false;
+
+        return range.IsSatisfiedBy(version);
+    }
+
+    private static IReadOnlyList<string> GetInstalledVersions(string moduleRoot, string moduleName)
+    {
+        var moduleFolder = Path.Combine(moduleRoot, moduleName.Trim());
+        if (!Directory.Exists(moduleFolder))
+            return Array.Empty<string>();
+
+        return Directory.EnumerateDirectories(moduleFolder)
+            .Select(Path.GetFileName)
+            .Where(static version => !string.IsNullOrWhiteSpace(version))
+            .Select(static version => version!)
+            .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
+            .ToArray();
     }
 
     private async Task<string> ResolveDependencyVersionAsync(
