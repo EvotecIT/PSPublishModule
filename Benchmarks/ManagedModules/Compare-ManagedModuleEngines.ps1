@@ -593,6 +593,23 @@ function Invoke-TimedOperation {
     }
 
     $detailSummary = if ($detail) { $detail.Summary } else { $null }
+    function Get-DetailNumber {
+        param(
+            [object] $InputObject,
+            [string] $Name
+        )
+
+        if ($null -eq $InputObject -or -not $InputObject.PSObject.Properties[$Name]) {
+            return 0
+        }
+
+        $value = $InputObject.PSObject.Properties[$Name].Value
+        if ($null -eq $value) {
+            return 0
+        }
+
+        return $value
+    }
 
     [pscustomobject]@{
         Operation = $OperationName
@@ -611,20 +628,22 @@ function Invoke-TimedOperation {
         OutputBytes = $metrics.TotalBytes
         OutputRoot = $OutputRoot
         DetailPath = if ($detail) { $DetailPath } else { '' }
-        ManagedPackageCount = if ($detailSummary) { [int] $detailSummary.PackageCount } else { 0 }
-        ManagedDependencyCount = if ($detailSummary) { [int] $detailSummary.DependencyCount } else { 0 }
-        ManagedUniquePackageCount = if ($detailSummary -and $detailSummary.PSObject.Properties['UniquePackageCount']) { [int] $detailSummary.UniquePackageCount } else { 0 }
-        ManagedUniqueDependencyCount = if ($detailSummary -and $detailSummary.PSObject.Properties['UniqueDependencyCount']) { [int] $detailSummary.UniqueDependencyCount } else { 0 }
-        ManagedInstalledPackageCount = if ($detailSummary -and $detailSummary.PSObject.Properties['InstalledPackageCount']) { [int] $detailSummary.InstalledPackageCount } else { 0 }
-        ManagedAlreadyInstalledPackageCount = if ($detailSummary -and $detailSummary.PSObject.Properties['AlreadyInstalledPackageCount']) { [int] $detailSummary.AlreadyInstalledPackageCount } else { 0 }
-        ManagedRootDependencyMilliseconds = if ($detailSummary) { [double] $detailSummary.RootDependencyMilliseconds } else { 0 }
-        ManagedTotalDownloadMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalDownloadMilliseconds } else { 0 }
-        ManagedTotalExtractionMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalExtractionMilliseconds } else { 0 }
-        ManagedTotalPromotionMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalPromotionMilliseconds } else { 0 }
-        ManagedRepositoryRequestCount = if ($detailSummary) { [long] $detailSummary.TotalRepositoryRequestCount } else { 0 }
-        ManagedPackageRepositoryRequestCount = if ($detailSummary) { [long] $detailSummary.TotalPackageRepositoryRequestCount } else { 0 }
-        ManagedDownloadBytes = if ($detailSummary) { [long] $detailSummary.TotalDownloadBytes } else { 0 }
-        ManagedCacheHitCount = if ($detailSummary) { [int] $detailSummary.CacheHitCount } else { 0 }
+        ManagedPackageCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'PackageCount')
+        ManagedDependencyCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'DependencyCount')
+        ManagedUniquePackageCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'UniquePackageCount')
+        ManagedUniqueDependencyCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'UniqueDependencyCount')
+        ManagedInstalledPackageCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'InstalledPackageCount')
+        ManagedAlreadyInstalledPackageCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'AlreadyInstalledPackageCount')
+        ManagedRootDependencyMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyMilliseconds')
+        ManagedTotalDownloadMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadMilliseconds')
+        ManagedTotalExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionMilliseconds')
+        ManagedTotalPromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionMilliseconds')
+        ManagedRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalRepositoryRequestCount')
+        ManagedPackageRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPackageRepositoryRequestCount')
+        ManagedDownloadBytes = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadBytes')
+        ManagedCacheHitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'CacheHitCount')
+        ManagedMaintenanceActionCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceActionCount')
+        ManagedMaintenanceFindingCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceFindingCount')
         ImportStatus = if ($importValidation) { [string] $importValidation.Status } else { '' }
         ImportVersion = if ($importValidation) { [string] $importValidation.Version } else { '' }
         ImportMilliseconds = if ($importValidation) { [double] $importValidation.ElapsedMilliseconds } else { 0 }

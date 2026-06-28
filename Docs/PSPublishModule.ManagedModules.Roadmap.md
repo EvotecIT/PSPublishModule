@@ -317,6 +317,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Surface managed detail medians in benchmark summary, comparison, and suite summary artifacts so optimization runs can be ranked by phase, requests, bytes, and cache hits without opening every detail JSON file.
 - [x] Split managed benchmark request evidence into whole-operation repository requests and package-delivery requests so parallel dependency detail rows do not hide metadata/version-resolution costs.
 - [x] Split managed package count evidence into dependency-tree rows and unique package/status counts so heavy families with repeated shared dependencies do not inflate optimization targets.
+- [x] Surface repair-plan maintenance action and finding medians in benchmark summary, comparison, and suite summary artifacts so repair optimization is not hidden behind install-only package metrics.
 - [x] Add Graph/Az/Teams/Exchange-heavy scenario presets for suite runs.
 - [x] Add a README section explaining which comparisons are safe on a developer machine and which require disposable hosts.
 - [ ] Measure Graph/Az/Teams/Exchange-heavy scenario presets on PowerShell 5.1 and PowerShell 7+.

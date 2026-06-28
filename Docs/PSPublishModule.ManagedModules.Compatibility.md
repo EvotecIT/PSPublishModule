@@ -163,7 +163,7 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [ ] Decide whether to add explicit `-TrustRepository` and `-SkipPublisherCheck` compatibility parameters. They should not be aliases unless their behavior is intentionally defined because repository trust and publisher checks are different safety concepts in the managed engine.
 - [ ] Document unsupported non-module resource use cases explicitly: scripts, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
 - [x] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, and family coherence.
-- [ ] Add repair/maintenance benchmark lanes for loaded-module safety and cleanup planning.
+- [x] Add repair/maintenance benchmark lanes for loaded-module safety and cleanup planning, with command-level plan tests that prove loaded-module findings and cleanup actions remain visible without mutation.
 
 ## Model Contracts
 

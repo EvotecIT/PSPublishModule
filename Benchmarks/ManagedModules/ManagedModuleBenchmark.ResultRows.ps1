@@ -44,6 +44,8 @@ function New-SkippedRow {
         ManagedPackageRepositoryRequestCount = 0
         ManagedDownloadBytes = 0
         ManagedCacheHitCount = 0
+        ManagedMaintenanceActionCount = 0
+        ManagedMaintenanceFindingCount = 0
         ImportStatus = ''
         ImportVersion = ''
         ImportMilliseconds = 0
