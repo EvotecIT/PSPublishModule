@@ -139,10 +139,10 @@ public sealed partial class ManagedModuleBenchmarkService
         bool enableNativeInstallUpdateBenchmarks,
         CancellationToken cancellationToken)
     {
-        PrepareCompatibilityScenario(scenario, engine, enableNativeInstallUpdateBenchmarks);
         var stopwatch = Stopwatch.StartNew();
         try
         {
+            PrepareCompatibilityScenario(scenario, engine, enableNativeInstallUpdateBenchmarks);
             var run = engine == ManagedModuleBenchmarkEngine.Managed
                 ? await RunManagedScenarioAsync(scenario, iteration, cancellationToken).ConfigureAwait(false)
                 : RunCompatibilityScenario(scenario, engine, iteration, enableNativeInstallUpdateBenchmarks);
