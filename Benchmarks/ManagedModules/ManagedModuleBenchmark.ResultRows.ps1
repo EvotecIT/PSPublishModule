@@ -36,6 +36,8 @@ function New-SkippedRow {
         ManagedUniqueDependencyCount = 0
         ManagedInstalledPackageCount = 0
         ManagedAlreadyInstalledPackageCount = 0
+        ManagedRootElapsedMilliseconds = 0
+        ManagedHarnessOverheadMilliseconds = 0
         ManagedRootDependencyMilliseconds = 0
         ManagedTotalDownloadMilliseconds = 0
         ManagedTotalExtractionMilliseconds = 0
