@@ -432,8 +432,8 @@ internal sealed class ModuleBuildPreparationService
                     ResolvePackageBuildOptionPaths(package.Options, workspaceRoot);
                     break;
                 case ConfigurationDocumentationSegment documentation:
-                    documentation.Configuration.Path = ResolveWorkspacePath(workspaceRoot, documentation.Configuration.Path) ?? string.Empty;
-                    documentation.Configuration.PathReadme = ResolveWorkspacePath(workspaceRoot, documentation.Configuration.PathReadme) ?? string.Empty;
+                    documentation.Configuration.Path = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, documentation.Configuration.Path) ?? string.Empty;
+                    documentation.Configuration.PathReadme = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, documentation.Configuration.PathReadme) ?? string.Empty;
                     break;
                 case ConfigurationBuildDocumentationSegment buildDocumentation:
                     break;
@@ -465,19 +465,19 @@ internal sealed class ModuleBuildPreparationService
                     xcodeProject.Configuration.Path = ResolveWorkspacePath(workspaceRoot, xcodeProject.Configuration.Path) ?? string.Empty;
                     break;
                 case ConfigurationArtefactSegment artefact:
-                    ResolveWorkspaceRelativeArtefactPaths(artefact.Configuration, workspaceRoot);
+                    ResolveWorkspaceRelativeArtefactPaths(artefact.Configuration, workspaceRoot, projectRoot);
                     break;
             }
         }
     }
 
-    private static void ResolveWorkspaceRelativeArtefactPaths(ArtefactConfiguration configuration, string workspaceRoot)
+    private static void ResolveWorkspaceRelativeArtefactPaths(ArtefactConfiguration configuration, string workspaceRoot, string projectRoot)
     {
         configuration.Path = ResolveWorkspacePath(workspaceRoot, configuration.Path);
         configuration.RequiredModules.Path = ResolveArtefactLayoutPath(workspaceRoot, configuration.Path, configuration.RequiredModules.Path);
         configuration.RequiredModules.ModulesPath = ResolveArtefactLayoutPath(workspaceRoot, configuration.Path, configuration.RequiredModules.ModulesPath);
-        ResolveCopyMappingSources(configuration.DirectoryOutput, workspaceRoot);
-        ResolveCopyMappingSources(configuration.FilesOutput, workspaceRoot);
+        ResolveCopyMappingSources(configuration.DirectoryOutput, workspaceRoot, projectRoot);
+        ResolveCopyMappingSources(configuration.FilesOutput, workspaceRoot, projectRoot);
     }
 
     private static string? ResolveWorkspacePath(string workspaceRoot, string? path)
@@ -497,6 +497,18 @@ internal sealed class ModuleBuildPreparationService
             .Select(path => ResolveWorkspacePath(workspaceRoot, path) ?? string.Empty)
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .ToArray();
+    }
+
+    private static string? ResolveWorkspaceQualifiedPath(string workspaceRoot, string projectRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path) || SamePath(workspaceRoot, projectRoot))
+            return path;
+
+        var moduleDirectoryName = Path.GetFileName(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) ?? string.Empty;
+        if (!StartsWithPathSegment(path!, moduleDirectoryName))
+            return path;
+
+        return ResolveWorkspacePath(workspaceRoot, path);
     }
 
     private static string[] ResolveConfigPaths(string rootPath, string[]? paths)
@@ -583,18 +595,37 @@ internal sealed class ModuleBuildPreparationService
         return IsSameOrChildPath(artefactRoot, candidate) ? candidate : layoutPath;
     }
 
-    private static void ResolveCopyMappingSources(ArtefactCopyMapping[]? mappings, string rootPath)
+    private static void ResolveCopyMappingSources(ArtefactCopyMapping[]? mappings, string rootPath, string? projectRoot = null)
     {
         if (mappings is null)
             return;
+
+        var requiredFirstSegment = string.IsNullOrWhiteSpace(projectRoot)
+            ? null
+            : Path.GetFileName(projectRoot!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) ?? string.Empty;
 
         foreach (var mapping in mappings)
         {
             if (mapping is null || string.IsNullOrWhiteSpace(mapping.Source) || Path.IsPathRooted(mapping.Source))
                 continue;
 
+            if (!string.IsNullOrWhiteSpace(requiredFirstSegment) && !StartsWithPathSegment(mapping.Source, requiredFirstSegment!))
+                continue;
+
             mapping.Source = PathValueResolver.Resolve(rootPath, mapping.Source);
         }
+    }
+
+    private static bool StartsWithPathSegment(string path, string segment)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(segment))
+            return false;
+
+        var cleaned = PathValueResolver.Clean(path);
+        var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+        var firstSeparator = cleaned.IndexOfAny(separators);
+        var firstSegment = firstSeparator < 0 ? cleaned : cleaned.Substring(0, firstSeparator);
+        return string.Equals(firstSegment, segment, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool SamePath(string left, string right)
@@ -621,9 +652,25 @@ internal sealed class ModuleBuildPreparationService
     private static string ResolveJsonOutputPath(ModuleBuildPreparationRequest request, string projectRoot, string jsonBasePath)
     {
         if (!string.IsNullOrWhiteSpace(request.JsonPath))
-            return ResolveConfigPath(jsonBasePath, request.JsonPath);
+        {
+            var jsonPath = request.JsonPath!;
+            if (RequiresPowerShellPathResolution(jsonPath))
+                return request.ResolvePath!(jsonPath);
+
+            return ResolveConfigPath(jsonBasePath, jsonPath);
+        }
 
         return Path.Combine(projectRoot, "powerforge.json");
+    }
+
+    private static bool RequiresPowerShellPathResolution(string path)
+    {
+        var cleaned = PathValueResolver.Clean(path);
+        if (cleaned.StartsWith("~", StringComparison.Ordinal))
+            return true;
+
+        var colonIndex = cleaned.IndexOf(':');
+        return colonIndex > 0 && cleaned.Substring(0, colonIndex).All(static c => char.IsLetterOrDigit(c) || c is '_' or '-' or '.');
     }
 
     private static JsonSerializerOptions CreateJsonOptions()

@@ -91,13 +91,13 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         }
         DirectoryOutput = [PowerForge.ArtefactCopyMapping[]]@(
             [PowerForge.ArtefactCopyMapping]@{
-                Source = 'Build/LICENSE'
+                Source = 'Module/Build/LICENSE'
                 Destination = 'LICENSE'
             }
         )
         FilesOutput = [PowerForge.ArtefactCopyMapping[]]@(
             [PowerForge.ArtefactCopyMapping]@{
-                Source = 'Build/NOTICE.txt'
+                Source = 'Examples/NOTICE.txt'
                 Destination = 'NOTICE.txt'
             }
         )
@@ -165,7 +165,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 [PowerForge.ConfigurationDocumentationSegment]@{
     Configuration = [PowerForge.DocumentationConfiguration]@{
         Path = 'Module/Docs'
-        PathReadme = 'README.md'
+        PathReadme = 'Docs/Readme.md'
     }
 }
 [PowerForge.ConfigurationBuildDocumentationSegment]@{
@@ -237,9 +237,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 
                 var artefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[2]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed"), artefact.Configuration.Path);
-                Assert.Equal(Path.Combine(root.FullName, "Build", "LICENSE"), artefact.Configuration.DirectoryOutput![0].Source);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Build", "LICENSE"), artefact.Configuration.DirectoryOutput![0].Source);
                 Assert.Equal("LICENSE", artefact.Configuration.DirectoryOutput[0].Destination);
-                Assert.Equal(Path.Combine(root.FullName, "Build", "NOTICE.txt"), artefact.Configuration.FilesOutput![0].Source);
+                Assert.Equal("Examples/NOTICE.txt", artefact.Configuration.FilesOutput![0].Source);
                 Assert.Equal("NOTICE.txt", artefact.Configuration.FilesOutput[0].Destination);
 
                 var artefactWithRelativeLayout = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[3]);
@@ -280,7 +280,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 
                 var documentation = Assert.IsType<ConfigurationDocumentationSegment>(prepared.PipelineSpec.Segments[11]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Docs"), documentation.Configuration.Path);
-                Assert.Equal(Path.Combine(root.FullName, "README.md"), documentation.Configuration.PathReadme);
+                Assert.Equal("Docs/Readme.md", documentation.Configuration.PathReadme);
 
                 var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(prepared.PipelineSpec.Segments[12]);
                 Assert.Equal(new[] { "Help/About" }, buildDocumentation.Configuration.AboutTopicsSourcePath);
@@ -295,6 +295,42 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Runspace.DefaultRunspace = previousRunspace;
                 try { outsideRoot.Delete(recursive: true); } catch { }
             }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_from_module_build_script_uses_powershell_resolver_for_json_path_syntax()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-jsonpath-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "SampleModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            var resolvedJsonPath = Path.Combine(root.FullName, "ResolvedFromPSDrive", "powerforge.json");
+
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Modern",
+                ModuleName = "SampleModule",
+                CurrentPath = root.FullName,
+                ScriptRoot = scriptRoot.FullName,
+                ResolvePath = path => string.Equals(path, "Temp:\\powerforge.json", StringComparison.OrdinalIgnoreCase)
+                    ? resolvedJsonPath
+                    : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                JsonOnly = true,
+                JsonPath = "Temp:\\powerforge.json",
+                DotNetFramework = Array.Empty<string>(),
+                ExcludeDirectories = Array.Empty<string>(),
+                ExcludeFiles = Array.Empty<string>()
+            });
+
+            Assert.Equal(resolvedJsonPath, prepared.JsonOutputPath);
         }
         finally
         {
