@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using PowerForge;
 
@@ -352,6 +353,8 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("Company.Tools", result.Metadata!.Id);
         Assert.Equal("1.1.0", result.Metadata.Version);
         Assert.True(result.BytesWritten > 0);
+        Assert.Equal(new FileInfo(result.PackagePath).Length, result.BytesWritten);
+        Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
     }
 
@@ -371,6 +374,8 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("Company.Tools", result.Metadata!.Id);
         Assert.Equal("1.1.0", result.Metadata.Version);
         Assert.True(result.BytesWritten > 0);
+        Assert.Equal(new FileInfo(result.PackagePath).Length, result.BytesWritten);
+        Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
         Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/package/Company.Tools/1.1.0");
         Assert.Contains(requests, request => request.Url == "https://cdn.example.test/packages/company.tools.1.1.0.nupkg");
     }
@@ -413,6 +418,7 @@ public sealed class ManagedModuleRepositoryClientTests
 
         Assert.True(result.FromCache);
         Assert.Equal(0, result.BytesWritten);
+        Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
         Assert.Equal("Company.Tools", result.Metadata!.Id);
         Assert.Empty(requests);
         Assert.Equal(0, repositoryClient.RequestCount);
@@ -649,6 +655,15 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("Company.Tools", result.Metadata!.Id);
         Assert.Equal("1.2.0", result.Metadata.Version);
         Assert.Equal("Local", result.RepositoryName);
+        Assert.Equal(new FileInfo(result.PackagePath).Length, result.BytesWritten);
+        Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = SHA256.Create();
+        return string.Concat(sha256.ComputeHash(stream).Select(static value => value.ToString("x2")));
     }
 
     private sealed class ManagedModuleHandler : HttpMessageHandler

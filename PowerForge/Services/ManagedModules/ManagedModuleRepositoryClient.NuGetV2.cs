@@ -119,12 +119,10 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!response.IsSuccessStatusCode)
             throw CreateRepositoryHttpException(repository, "Download", response.StatusCode, $"Unable to download package '{packageId}' version '{version}'.");
 
-        long bytesWritten;
+        PackageCopyResult packageCopy;
         using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
-        using (var destination = CreatePackageFileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            await source.CopyToAsync(destination, PackageCopyBufferSize, cancellationToken).ConfigureAwait(false);
-            bytesWritten = destination.Length;
+            packageCopy = await CopyPackageStreamWithHashAsync(source, destinationPath, cancellationToken).ConfigureAwait(false);
         }
 
         return new ManagedModuleDownloadResult
@@ -134,8 +132,8 @@ public sealed partial class ManagedModuleRepositoryClient
             RepositoryName = repository.Name,
             Source = packageUri.ToString(),
             PackagePath = destinationPath,
-            BytesWritten = bytesWritten,
-            PackageSha256 = ComputeSha256(destinationPath),
+            BytesWritten = packageCopy.BytesWritten,
+            PackageSha256 = packageCopy.Sha256,
             Metadata = _packageReader.ReadMetadata(destinationPath)
         };
     }
