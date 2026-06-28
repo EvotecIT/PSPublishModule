@@ -312,7 +312,8 @@ function Join-CommandLineArgument {
 function Invoke-IsolatedInstallHost {
     param(
         [string] $EngineName,
-        [string] $Destination
+        [string] $Destination,
+        [string] $DetailPath
     )
 
     $childScript = Join-Path $PSScriptRoot 'Invoke-ManagedModuleInstallChild.ps1'
@@ -358,6 +359,12 @@ function Invoke-IsolatedInstallHost {
     }
     if ($AcceptLicense.IsPresent) {
         $arguments += '-AcceptLicense'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($DetailPath)) {
+        $arguments += @(
+            '-ResultPath'
+            $DetailPath
+        )
     }
 
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
@@ -454,7 +461,8 @@ function Invoke-TimedOperation {
         [string] $EngineName,
         [int] $Iteration,
         [scriptblock] $ScriptBlock,
-        [string] $OutputRoot
+        [string] $OutputRoot,
+        [string] $DetailPath
     )
 
     $timer = [Diagnostics.Stopwatch]::StartNew()
@@ -463,6 +471,7 @@ function Invoke-TimedOperation {
     $versionText = $null
     $outputCount = 0
     $metrics = $null
+    $detail = $null
 
     try {
         $output = @(& $ScriptBlock)
@@ -482,6 +491,9 @@ function Invoke-TimedOperation {
                 $versionText = Get-InstalledModuleVersion -Root $OutputRoot -Name $ModuleName
             }
         }
+        if (-not [string]::IsNullOrWhiteSpace($DetailPath) -and (Test-Path -LiteralPath $DetailPath)) {
+            $detail = Get-Content -LiteralPath $DetailPath -Raw | ConvertFrom-Json
+        }
 
         $timer.Stop()
     }
@@ -493,6 +505,8 @@ function Invoke-TimedOperation {
             TotalBytes = 0L
         }
     }
+
+    $detailSummary = if ($detail) { $detail.Summary } else { $null }
 
     [pscustomobject]@{
         Operation = $OperationName
@@ -507,6 +521,16 @@ function Invoke-TimedOperation {
         OutputFileCount = $metrics.FileCount
         OutputBytes = $metrics.TotalBytes
         OutputRoot = $OutputRoot
+        DetailPath = if ($detail) { $DetailPath } else { '' }
+        ManagedPackageCount = if ($detailSummary) { [int] $detailSummary.PackageCount } else { 0 }
+        ManagedDependencyCount = if ($detailSummary) { [int] $detailSummary.DependencyCount } else { 0 }
+        ManagedRootDependencyMilliseconds = if ($detailSummary) { [double] $detailSummary.RootDependencyMilliseconds } else { 0 }
+        ManagedTotalDownloadMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalDownloadMilliseconds } else { 0 }
+        ManagedTotalExtractionMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalExtractionMilliseconds } else { 0 }
+        ManagedTotalPromotionMilliseconds = if ($detailSummary) { [double] $detailSummary.TotalPromotionMilliseconds } else { 0 }
+        ManagedRepositoryRequestCount = if ($detailSummary) { [long] $detailSummary.TotalRepositoryRequestCount } else { 0 }
+        ManagedDownloadBytes = if ($detailSummary) { [long] $detailSummary.TotalDownloadBytes } else { 0 }
+        ManagedCacheHitCount = if ($detailSummary) { [int] $detailSummary.CacheHitCount } else { 0 }
         Error = $errorText
     }
 }
@@ -532,6 +556,16 @@ function New-SkippedRow {
         OutputFileCount = 0
         OutputBytes = 0
         OutputRoot = ''
+        DetailPath = ''
+        ManagedPackageCount = 0
+        ManagedDependencyCount = 0
+        ManagedRootDependencyMilliseconds = 0
+        ManagedTotalDownloadMilliseconds = 0
+        ManagedTotalExtractionMilliseconds = 0
+        ManagedTotalPromotionMilliseconds = 0
+        ManagedRepositoryRequestCount = 0
+        ManagedDownloadBytes = 0
+        ManagedCacheHitCount = 0
         Error = $Reason
     }
 }
@@ -541,7 +575,7 @@ function Invoke-FindScenario {
 
     switch ($EngineName) {
         'Managed' {
-            Invoke-TimedOperation -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -OutputRoot '' -ScriptBlock {
+            Invoke-TimedOperation -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -OutputRoot '' -DetailPath '' -ScriptBlock {
                 Find-ManagedModule -Name $ModuleName -Repository (Get-ManagedRepositorySource) -RepositoryName $RepositoryName
             }
         }
@@ -550,7 +584,7 @@ function Invoke-FindScenario {
                 return New-SkippedRow -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -Reason 'Find-PSResource is not available.'
             }
 
-            Invoke-TimedOperation -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -OutputRoot '' -ScriptBlock {
+            Invoke-TimedOperation -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -OutputRoot '' -DetailPath '' -ScriptBlock {
                 Find-PSResource -Name $ModuleName -Repository $RepositoryName
             }
         }
@@ -559,7 +593,7 @@ function Invoke-FindScenario {
                 return New-SkippedRow -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -Reason 'Find-Module is not available.'
             }
 
-            Invoke-TimedOperation -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -OutputRoot '' -ScriptBlock {
+            Invoke-TimedOperation -OperationName 'Find' -EngineName $EngineName -Iteration $Iteration -OutputRoot '' -DetailPath '' -ScriptBlock {
                 Find-Module -Name $ModuleName -Repository $RepositoryName
             }
         }
@@ -574,7 +608,7 @@ function Invoke-SaveScenario {
 
     switch ($EngineName) {
         'Managed' {
-            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
+            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
                 $parameters = @{
                     Name = $ModuleName
                     Path = $destination
@@ -595,7 +629,7 @@ function Invoke-SaveScenario {
                 return New-SkippedRow -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -Reason 'Save-PSResource is not available.'
             }
 
-            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
+            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
                 $parameters = @{
                     Name = $ModuleName
                     Path = $destination
@@ -614,7 +648,7 @@ function Invoke-SaveScenario {
                 return New-SkippedRow -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -Reason 'Save-Module is not available.'
             }
 
-            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
+            Invoke-TimedOperation -OperationName 'Save' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
                 $parameters = @{
                     Name = $ModuleName
                     Path = $destination
@@ -639,8 +673,9 @@ function Invoke-InstallScenario {
 
     switch ($EngineName) {
         'Managed' {
-            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
-                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination
+            $detailPath = Join-Path $destination 'managed-install-details.json'
+            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath
             }
         }
         'PSResourceGet' {
@@ -648,8 +683,8 @@ function Invoke-InstallScenario {
                 return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'Install-PSResource is not available.'
             }
 
-            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
-                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination
+            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath ''
             }
         }
         'PowerShellGet' {
@@ -657,8 +692,8 @@ function Invoke-InstallScenario {
                 return New-SkippedRow -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -Reason 'Install-Module is not available.'
             }
 
-            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -ScriptBlock {
-                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination
+            Invoke-TimedOperation -OperationName 'Install' -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath '' -ScriptBlock {
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath ''
             }
         }
     }

@@ -86,7 +86,9 @@ public sealed class ManagedModuleInstallService
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var requestCountBefore = _repositoryClient.RequestCount;
 
+        var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
+        versionResolutionStopwatch.Stop();
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
         using var dependencyScope = context.Enter(request.Name);
@@ -121,10 +123,12 @@ public sealed class ManagedModuleInstallService
                     ModuleRoot = moduleRoot,
                     ModulePath = modulePath,
                     Elapsed = stopwatch.Elapsed,
+                    VersionResolutionElapsed = versionResolutionStopwatch.Elapsed,
                     RepositoryRequestCount = _repositoryClient.RequestCount - requestCountBefore
                 };
             }
 
+            var downloadStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var download = await _repositoryClient.DownloadPackageAsync(
                 request.Repository,
                 request.Name,
@@ -132,21 +136,26 @@ public sealed class ManagedModuleInstallService
                 cacheDirectory,
                 request.Credential,
                 cancellationToken).ConfigureAwait(false);
+            downloadStopwatch.Stop();
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
             var extraction = _extractor.ExtractPackage(download.PackagePath, stageModulePath);
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
+            var dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var dependencyResults = request.SkipDependencyCheck
                 ? Array.Empty<ManagedModuleInstallResult>()
                 : await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
+            dependencyStopwatch.Stop();
 
             if (!request.AllowClobber)
                 ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
 
+            var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
             PromoteStagedModule(stageModulePath, modulePath);
             CleanupEmptyStage(stageRoot);
+            promotionStopwatch.Stop();
 
             var result = new ManagedModuleInstallResult
             {
@@ -165,10 +174,14 @@ public sealed class ManagedModuleInstallService
                 ModuleRoot = moduleRoot,
                 ModulePath = modulePath,
                 Elapsed = stopwatch.Elapsed,
+                VersionResolutionElapsed = versionResolutionStopwatch.Elapsed,
                 Download = download,
+                DownloadElapsed = downloadStopwatch.Elapsed,
                 FileCount = extraction.FileCount,
                 ExtractedBytes = extraction.BytesWritten,
                 ExtractionElapsed = extraction.Elapsed,
+                DependencyElapsed = dependencyStopwatch.Elapsed,
+                PromotionElapsed = promotionStopwatch.Elapsed,
                 RepositoryRequestCount = _repositoryClient.RequestCount - requestCountBefore,
                 DependencyResults = dependencyResults
             };
