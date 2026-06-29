@@ -339,18 +339,21 @@ Managed is the `1.00x` baseline for each row. Other values show how many times
 slower that engine was for the same scenario, with the measured time in
 parentheses.
 
-| Scenario | Managed | Install-only speed baseline | PSResourceGet | PowerShellGet | Notes |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `Microsoft.Graph` full install, PowerShell 7, same source | 1.00x (4.45s) | 1.37x (6.08s) | Not in this gate | Not in this gate | Strict engine-speed gate with both install engines pointed at the same package source. |
-| `Microsoft.Graph` full install, PowerShell 7, provider matrix | 1.00x (5.08s) | 1.40x (7.13s) | 10.51x (53.38s) | 13.20x (67.08s) | Provider-default install comparison. |
-| `Az.Accounts` install, PowerShell 7, provider matrix | 1.00x (1.51s) | 1.39x (2.10s) | 1.52x (2.29s) | 6.01x (9.07s) | Shorter Az proof lane. |
-| `Microsoft.Graph` full save, PowerShell 7 | 1.00x (4.82s) | Not equivalent | 11.05x (53.28s) | 14.30x (68.95s) | Save-capable providers only. |
-| `Microsoft.Graph` full save, Windows PowerShell 5.1 | 1.00x (5.47s) | Not equivalent | 10.12x (55.36s) | 16.36x (89.47s) | Save-capable providers only. |
-| `Az` full save, PowerShell 7 | 1.00x (5.73s) | Not equivalent | 25.54x (146.36s) | 22.49x (128.87s) | Save-capable providers only. |
-| `Az` full save, Windows PowerShell 5.1 | 1.00x (8.56s) | Not equivalent | Failed after 84.26s with no output | 17.65x (151.05s) | Save-capable providers only. |
+<!-- managed-module-benchmark-table:start -->
+| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Scope |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| `Az.Full.Save` | PowerShell 7 | Save | 1.00x (5.50s) | Not equivalent | 30.41x (167.24s) | 24.02x (132.08s) | SaveCapableProviders |
+| `Az.Full.Save` | Windows PowerShell 5.1 | Save | 1.00x (5.80s) | Not equivalent | Failed | Skipped | SaveCapableProviders |
+| `Graph.Full.Save` | PowerShell 7 | Save | 1.00x (4.10s) | Not equivalent | 31.11x (127.68s) | 22.26x (91.33s) | SaveCapableProviders |
+| `Graph.Full.Save` | Windows PowerShell 5.1 | Save | 1.00x (5.81s) | Not equivalent | 9.53x (55.42s) | Skipped | SaveCapableProviders |
+| `Az.Accounts.ProviderMatrix` | PowerShell 7 | Install | 1.00x (1.56s) | 1.34x (2.09s) | 3.98x (6.22s) | 7.90x (12.34s) | InstallProviderMatrix |
+| `Graph.Full.SameSource` | PowerShell 7 | Install | 1.00x (5.65s) | 1.34x (7.59s) | Not in this gate | Not in this gate | InstallSameSource |
+<!-- managed-module-benchmark-table:end -->
 
-Before release, this table should be regenerated from the final benchmark
-artifacts and kept to repeatable, named gates: install speed, save throughput,
+Generate the table from retained `suite-scoreboard.csv` artifacts with
+`Benchmarks/ManagedModules/Export-ManagedModuleBenchmarkReadmeTable.ps1`.
+Before release, refresh it from the final benchmark artifacts and keep the rows
+to repeatable, named gates: install speed, save throughput,
 update/no-op/force behavior, publish proof, repair planning, security checks,
 and PowerShell 5.1 versus PowerShell 7 host drift. The final public table
 should keep this normalized shape so readers can see both raw time and relative
