@@ -124,20 +124,6 @@ function Get-ProviderModuleSearchPath {
     }
 }
 
-function Join-CommandLineArgument {
-    param([string] $Value)
-
-    if ($null -eq $Value) {
-        return '""'
-    }
-
-    if ($Value -notmatch '[\s"]') {
-        return $Value
-    }
-
-    '"' + ($Value -replace '"', '\"') + '"'
-}
-
 function Invoke-IsolatedInstallHost {
     param(
         [string] $EngineName,
@@ -220,24 +206,20 @@ function Invoke-IsolatedInstallHost {
         )
     }
 
-    $startInfo = [Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $hostPath
-    $startInfo.Arguments = ($arguments | ForEach-Object { Join-CommandLineArgument $_ }) -join ' '
-    $startInfo.WorkingDirectory = $Destination
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    foreach ($entry in $environment.GetEnumerator()) {
-        $startInfo.Environment[$entry.Key] = $entry.Value
-    }
-
     try {
-        $process = [Diagnostics.Process]::Start($startInfo)
-        $stdout = $process.StandardOutput.ReadToEnd()
-        $stderr = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
-        if ($process.ExitCode -ne 0) {
-            throw "$OperationName benchmark child host failed with exit code $($process.ExitCode).`n$stdout`n$stderr"
+        $processResult = Invoke-ManagedBenchmarkProcess `
+            -FileName $hostPath `
+            -Arguments $arguments `
+            -WorkingDirectory $Destination `
+            -Environment $environment `
+            -TimeoutSeconds $ChildTimeoutSeconds `
+            -TimeoutMessage "$OperationName benchmark child host exceeded $ChildTimeoutSeconds seconds."
+        if ($processResult.TimedOut) {
+            throw "$($processResult.TimeoutMessage)`n$($processResult.StandardOutput)`n$($processResult.StandardError)"
+        }
+
+        if ($processResult.ExitCode -ne 0) {
+            throw "$OperationName benchmark child host failed with exit code $($processResult.ExitCode).`n$($processResult.StandardOutput)`n$($processResult.StandardError)"
         }
     } finally {
         $tempPath = $environment['TEMP']

@@ -34,6 +34,8 @@ param(
 
     [int] $ImportTimeoutSeconds = 120,
 
+    [int] $ChildTimeoutSeconds = 1800,
+
     [switch] $RotateEngineOrder,
 
     [int] $ManagedMaxRank = 0,
@@ -71,6 +73,7 @@ $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.HostComparison.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.OptimizationTargets.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Artifacts.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Process.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.EngineSummary.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Scoreboard.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Scenarios.ps1')
@@ -463,14 +466,30 @@ function Invoke-ScenarioHostRun {
         $arguments += '-ValidateImport'
         $arguments += @('-ImportTimeoutSeconds', ([string]$ImportTimeoutSeconds))
     }
+    $arguments += @('-ChildTimeoutSeconds', ([string]$ChildTimeoutSeconds))
     if ($RotateEngineOrder.IsPresent) {
         $arguments += '-RotateEngineOrder'
     }
 
     Write-Host "Running $($Scenario.Name) on $HostLabel..."
-    $processOutput = @(& $Executable @arguments 2>&1)
-    $exitCode = $LASTEXITCODE
-    foreach ($line in $processOutput) {
+    $processResult = Invoke-ManagedBenchmarkProcess `
+        -FileName $Executable `
+        -Arguments $arguments `
+        -WorkingDirectory (Get-Location).Path `
+        -TimeoutSeconds $ChildTimeoutSeconds `
+        -TimeoutMessage "Benchmark scenario '$($Scenario.Name)' on '$HostLabel' exceeded $ChildTimeoutSeconds seconds."
+    foreach ($line in @($processResult.StandardOutput -split "\r?\n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        Write-Host $line
+    }
+    foreach ($line in @($processResult.StandardError -split "\r?\n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
         Write-Host $line
     }
 
@@ -478,8 +497,12 @@ function Invoke-ScenarioHostRun {
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
-    if ($exitCode -ne 0) {
-        throw "Benchmark scenario '$($Scenario.Name)' failed on '$HostLabel' with exit code $exitCode."
+    if ($processResult.TimedOut) {
+        throw $processResult.TimeoutMessage
+    }
+
+    if ($processResult.ExitCode -ne 0) {
+        throw "Benchmark scenario '$($Scenario.Name)' failed on '$HostLabel' with exit code $($processResult.ExitCode)."
     }
 
     if (-not $run) {
@@ -805,6 +828,7 @@ $metadata = [ordered]@{
     ValidateImport = $ValidateImport.IsPresent
     AuthenticodeCheck = $AuthenticodeCheck.IsPresent
     ImportTimeoutSeconds = $ImportTimeoutSeconds
+    ChildTimeoutSeconds = $ChildTimeoutSeconds
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     ManagedMaxRank = $ManagedMaxRank
     ManagedMaxVsFastest = $ManagedMaxVsFastest
