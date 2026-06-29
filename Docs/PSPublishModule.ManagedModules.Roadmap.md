@@ -69,7 +69,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] `Get-ManagedModule` inventories installed modules and returns module rows by default.
 - [x] `Update-ManagedModule` updates named modules or, when no name is supplied, all discovered modules in the selected scope/root.
 - [x] `Repair-ManagedModule` plans and applies estate maintenance through the ModuleState engine with managed delivery as the default transport.
-- [ ] Finish `Repair-ManagedModule` proof for loaded-module safety and old-version cleanup.
+- [x] Finish `Repair-ManagedModule` proof for loaded-module safety and old-version cleanup.
 - [ ] `-Plan` remains the non-mutating inspection switch across install, update, and repair flows.
 - [ ] `-WhatIf` remains the operator safety gate for mutations.
 - [ ] Destructive cleanup remains separately gated instead of being implied by update.
@@ -416,6 +416,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-29: The next full Az speed proof should use the provider-matrix lane, not the same-source heavy lifecycle gate. Same-source `Az.Full.InstallExact.NoOpForce` remains resolver/source compatibility evidence because ModuleFast and PSResourceGet failed setup from `https://pwsh.gallery/index.json` for `Az.DataTransfer`. Provider-matrix scenarios now mark ModuleFast source as `ProviderDefault`, the suite runner omits `-ModuleFastSource`, and the child harness defaults that source to empty so ModuleFast `-Source` is not accidentally reintroduced.
 - [x] 2026-06-29: The corrected provider-default harness path was smoke-tested with PowerShell 7 `Az.Accounts.ProviderMatrix`. All four engines succeeded with ModuleFast source shown as `ProviderDefault`: managed measured 1509 ms, ModuleFast 2098 ms, PSResourceGet 2293 ms, and PowerShellGet 9070 ms. This proves the provider-matrix lane can execute without an explicit ModuleFast source.
 - [x] 2026-06-29: The corrected full PowerShell 7 `Az.Full.ProviderMatrix` install proof measured managed first at 6928 ms while PSResourceGet and PowerShellGet completed at 149062 ms and 140901 ms. ModuleFast still failed under provider-default execution because its own default path could not resolve `Az.DataTransfer(1.0.0)` from `https://pwsh.gallery/index.json`. Keep this as compatibility/source evidence: managed can install full Az quickly and the native providers complete slowly, but the current ModuleFast full-Az row is not a successful speed comparison.
+- [x] 2026-06-29: `RepairGate` now promotes repair planning into named suite scenarios for stale versions, source drift, scope drift, family coherence, loaded-module safety, and cleanup planning. The focused loaded-module safety and cleanup planning proof passed with strict managed-rank gates on PowerShell 7 and Windows PowerShell 5.1: loaded-module safety planned in 678 ms on PowerShell 7 and 712 ms on Windows PowerShell 5.1 with one action and three findings; cleanup planning planned in 660 ms and 663 ms with two actions and two findings. ModuleFast, PSResourceGet, and PowerShellGet remain explicit skips because they do not expose equivalent module-estate repair planning.
 
 ### Next Optimization Targets
 

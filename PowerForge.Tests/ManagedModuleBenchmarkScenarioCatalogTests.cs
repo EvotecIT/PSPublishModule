@@ -88,6 +88,19 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             StringArrayProperty(row, "Operations").SequenceEqual(new[] { "SaveNoOp", "SaveForce" }) &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "RepairGate" &&
+            Property(row, "Name") == "ThreadJob.Repair.LoadedModuleSafety" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "RepairPlan" }) &&
+            StringArrayProperty(row, "RepairScenarios").SequenceEqual(new[] { "LoadedModuleSafety" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "RepairGate" &&
+            Property(row, "Name") == "ThreadJob.Repair.CleanupPlanning" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "RepairPlan" }) &&
+            StringArrayProperty(row, "RepairScenarios").SequenceEqual(new[] { "CleanupPlanning" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
     }
 
     [Fact]
@@ -109,7 +122,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         process.StartInfo.ArgumentList.Add("Bypass");
         process.StartInfo.ArgumentList.Add("-Command");
         process.StartInfo.ArgumentList.Add(
-            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveCacheGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
+            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveCacheGate,RepairGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.UseShellExecute = false;
