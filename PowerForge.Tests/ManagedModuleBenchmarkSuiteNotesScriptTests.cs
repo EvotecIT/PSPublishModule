@@ -58,8 +58,34 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                 }
             )
             $hostRows = @([pscustomobject]@{ Host = 'PowerShell7'; Status = 'Available'; Executable = 'pwsh'; Reason = '' })
+            $optimizationRows = @(
+                [pscustomobject]@{
+                    BenchmarkRole = 'Scoreboard'
+                    Suite = 'HeavySaveGate'
+                    Scenario = 'Graph.Full.Save'
+                    Host = 'PowerShell7'
+                    Operation = 'Save'
+                    ManagedMs = '4815.85'
+                    Bottleneck = 'RootDependency'
+                    BottleneckMs = '3966.4'
+                    BottleneckShare = '82.4%'
+                    NextQuestion = 'Can dependency scheduling, installed-version reuse, or repository lookup fan-out shrink the root operation?'
+                },
+                [pscustomobject]@{
+                    BenchmarkRole = 'Diagnostic'
+                    Suite = 'HeavySaveCacheGate'
+                    Scenario = 'Graph.Full.Save.ManagedWarmCache'
+                    Host = 'PowerShell7'
+                    Operation = 'Save'
+                    ManagedMs = '1944.07'
+                    Bottleneck = 'Extraction'
+                    BottleneckMs = '1100'
+                    BottleneckShare = '56.6%'
+                    NextQuestion = 'Can archive extraction, path creation, or file writes be reduced safely?'
+                }
+            )
 
-            Write-ManagedBenchmarkSuiteNotes -Scenarios $scenarios -SummaryRows $summaryRows -HostRows $hostRows -GateViolations @() -HostGateViolations @() -Path '{{EscapePowerShellString(notesPath)}}' -GeneratedAt ([datetime]'2026-06-29T00:00:00Z')
+            Write-ManagedBenchmarkSuiteNotes -Scenarios $scenarios -SummaryRows $summaryRows -OptimizationRows $optimizationRows -HostRows $hostRows -GateViolations @() -HostGateViolations @() -Path '{{EscapePowerShellString(notesPath)}}' -GeneratedAt ([datetime]'2026-06-29T00:00:00Z')
             """);
 
         ps.Invoke();
@@ -75,6 +101,9 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("Graph.Full.Save.ManagedWarmCache", markdown, StringComparison.Ordinal);
         Assert.Contains("do not rank it against providers or install rows", markdown, StringComparison.Ordinal);
         Assert.Contains("| Diagnostic | HeavySaveCacheGate | Graph.Full.Save.ManagedWarmCache |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Optimization Targets", markdown, StringComparison.Ordinal);
+        Assert.Contains("Use these rows to decide where the next managed-engine optimization should start.", markdown, StringComparison.Ordinal);
+        Assert.Contains("Can archive extraction, path creation, or file writes be reduced safely?", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -115,7 +144,7 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                 BenchmarkInterpretation = $scenario.BenchmarkInterpretation
             }
 
-            Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenario) -SummaryRows @($summaryRow) -HostRows @() -GateViolations @($gateViolation) -HostGateViolations @() -Path '{{EscapePowerShellString(notesPath)}}' -GeneratedAt ([datetime]'2026-06-29T00:00:00Z')
+            Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenario) -SummaryRows @($summaryRow) -OptimizationRows @() -HostRows @() -GateViolations @($gateViolation) -HostGateViolations @() -Path '{{EscapePowerShellString(notesPath)}}' -GeneratedAt ([datetime]'2026-06-29T00:00:00Z')
             """);
 
         ps.Invoke();
