@@ -142,12 +142,30 @@ public sealed class ArtefactConfigurationFactory
     {
         var scriptContent = !string.IsNullOrWhiteSpace(inlineScript)
             ? inlineScript
-            : (!string.IsNullOrWhiteSpace(scriptPath) ? File.ReadAllText(scriptPath) : null);
+            : (!string.IsNullOrWhiteSpace(scriptPath) ? File.ReadAllText(ResolveMergeScriptPath(scriptPath!)) : null);
 
         if (string.IsNullOrWhiteSpace(scriptContent))
             return null;
 
         return _formatter.Format(scriptContent!);
+    }
+
+    private static string ResolveMergeScriptPath(string scriptPath)
+    {
+        var cleaned = PathValueResolver.Clean(scriptPath);
+        if (Path.IsPathRooted(cleaned))
+            return cleaned;
+
+        var currentDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        if (currentDirectory.Parent is not null &&
+            StartsWithPathSegment(cleaned, currentDirectory.Name))
+        {
+            var workspaceCandidate = PathValueResolver.Resolve(currentDirectory.Parent.FullName, cleaned);
+            if (File.Exists(workspaceCandidate))
+                return workspaceCandidate;
+        }
+
+        return PathValueResolver.Resolve(currentDirectory.FullName, cleaned);
     }
 
     private static string ResolveSecret(string? secret, string? secretFilePath)
@@ -164,6 +182,15 @@ public sealed class ArtefactConfigurationFactory
 
     private static string NormalizePath(string value)
         => PathValueResolver.NormalizeSeparators(value);
+
+    private static bool StartsWithPathSegment(string path, string segment)
+    {
+        var cleaned = PathValueResolver.Clean(path);
+        var normalizedSegment = segment.Trim(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return cleaned.Equals(normalizedSegment, StringComparison.OrdinalIgnoreCase) ||
+               cleaned.StartsWith(normalizedSegment + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               cleaned.StartsWith(normalizedSegment + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static ArtefactCopyMapping[]? NormalizeMappings(ArtefactCopyMapping[]? input)
     {

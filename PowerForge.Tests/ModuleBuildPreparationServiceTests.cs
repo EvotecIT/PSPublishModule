@@ -66,6 +66,7 @@ public sealed class ModuleBuildPreparationServiceTests
             Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Examples"));
             File.WriteAllText(Path.Combine(root.FullName, "Build", "header.ps1"), "Write-Output 'repo header'");
             File.WriteAllText(Path.Combine(scriptRoot.FullName, "header.ps1"), "Write-Output 'module header'");
+            File.WriteAllText(Path.Combine(scriptRoot.FullName, "workspace-header.ps1"), "Write-Output 'workspace-qualified module header'");
             File.WriteAllText(Path.Combine(root.FullName, "Build", "NOTICE.txt"), "notice");
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "Examples", "NOTICE.txt"), "module notice");
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "DbaClientX.psd1"), "@{ ModuleVersion = '1.0.0' }");
@@ -211,6 +212,13 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
     Path = 'Module/Artefacts/FileBacked/<TagModuleVersionWithPreRelease>'
     PreScriptMergePath = 'Build/header.ps1'
 })
+[PowerForge.ArtefactConfigurationFactory]::new([PowerForge.NullLogger]::new()).Create([PowerForge.ArtefactConfigurationRequest]@{
+    Type = [PowerForge.ArtefactType]::Packed
+    EnableSpecified = $true
+    Enable = $true
+    Path = 'Module/Artefacts/WorkspaceFileBacked/<TagModuleVersionWithPreRelease>'
+    PreScriptMergePath = 'Module/Build/workspace-header.ps1'
+})
 [PowerForge.ConfigurationAppleAppSegment]@{
     Configuration = [PowerForge.AppleAppConfiguration]@{
         ProjectPath = '.\Tactra.xcodeproj'
@@ -343,10 +351,14 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Contains("module header", fileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
                 Assert.DoesNotContain("repo header", fileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
 
-                var appleApp = Assert.IsType<ConfigurationAppleAppSegment>(prepared.PipelineSpec.Segments[14]);
+                var workspaceFileBackedArtefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[14]);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "WorkspaceFileBacked", "<TagModuleVersionWithPreRelease>"), workspaceFileBackedArtefact.Configuration.Path);
+                Assert.Contains("workspace-qualified module header", workspaceFileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
+
+                var appleApp = Assert.IsType<ConfigurationAppleAppSegment>(prepared.PipelineSpec.Segments[15]);
                 Assert.Equal(".\\Tactra.xcodeproj", appleApp.Configuration.ProjectPath);
 
-                var xcodeProject = Assert.IsType<ConfigurationXcodeProjectVersionSegment>(prepared.PipelineSpec.Segments[15]);
+                var xcodeProject = Assert.IsType<ConfigurationXcodeProjectVersionSegment>(prepared.PipelineSpec.Segments[16]);
                 Assert.Equal("Mac\\TactraMac.xcodeproj", xcodeProject.Configuration.Path);
             }
             finally
@@ -721,7 +733,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(jsonSpec.Segments[1]);
             Assert.Equal(externalDocs, documentation.Configuration.Path);
             Assert.Equal(externalReadme, documentation.Configuration.PathReadme);
-            Assert.Equal(projectAboutTopics, buildDocumentation.Configuration.AboutTopicsSourcePath[0]);
+            Assert.Equal("Help/About", buildDocumentation.Configuration.AboutTopicsSourcePath[0]);
             Assert.Equal(externalAboutTopics, buildDocumentation.Configuration.AboutTopicsSourcePath[1]);
         }
         finally
@@ -752,7 +764,27 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                         ArtefactType = ArtefactType.Packed,
                         Configuration = new ArtefactConfiguration
                         {
-                            Path = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "<TagModuleVersionWithPreRelease>")
+                            Path = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "<TagModuleVersionWithPreRelease>"),
+                            RequiredModules = new ArtefactRequiredModulesConfiguration
+                            {
+                                Path = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "<TagModuleVersionWithPreRelease>", "RequiredModules"),
+                                ModulesPath = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "<TagModuleVersionWithPreRelease>", "Modules")
+                            }
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Path = Path.Combine(root.FullName, "Module", "Artefacts", "Packed-<TagModuleVersionWithPreRelease>")
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = Path.Combine(root.FullName, "Artefacts", "UploadReady-<ModuleVersion>")
                         }
                     }
                 }
@@ -766,6 +798,12 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 
             var artefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec!.Segments[0]);
             Assert.Equal("Module/Artefacts/Packed/<TagModuleVersionWithPreRelease>", artefact.Configuration.Path);
+            Assert.Equal("Module/Artefacts/Packed/<TagModuleVersionWithPreRelease>/RequiredModules", artefact.Configuration.RequiredModules.Path);
+            Assert.Equal("Module/Artefacts/Packed/<TagModuleVersionWithPreRelease>/Modules", artefact.Configuration.RequiredModules.ModulesPath);
+            var embeddedTokenArtefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec.Segments[1]);
+            Assert.Equal("Module/Artefacts/Packed-<TagModuleVersionWithPreRelease>", embeddedTokenArtefact.Configuration.Path);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[2]);
+            Assert.Equal("Artefacts/UploadReady-<ModuleVersion>", release.Configuration.StageRoot);
         }
         finally
         {
@@ -1137,7 +1175,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal(signingPfxPath, options.Options.Signing!.CertificatePFXPath);
             Assert.Equal(documentationPath, documentation.Configuration.Path);
             Assert.Equal(documentationReadmePath, documentation.Configuration.PathReadme);
-            Assert.Equal(Path.Combine(root.FullName, "Help", "About"), Path.GetFullPath(buildDocumentation.Configuration.AboutTopicsSourcePath[0]));
+            Assert.Equal("Help/About", buildDocumentation.Configuration.AboutTopicsSourcePath[0]);
             Assert.Equal(testsPath, validation.Settings.Tests.TestPath);
             Assert.Equal(publishKey, publish.Configuration.ApiKeyFilePath);
             Assert.Equal(actionFile, action.Configuration.FilePath);
@@ -1192,6 +1230,19 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                                 ModulesPath = "Artefacts/Packed/Modules"
                             }
                         }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Path = "Artefacts/Packed/<TagModuleVersionWithPreRelease>",
+                            RequiredModules = new ArtefactRequiredModulesConfiguration
+                            {
+                                Path = "Artefacts/Packed/<TagModuleVersionWithPreRelease>/RequiredModules",
+                                ModulesPath = "Artefacts/Packed/<TagModuleVersionWithPreRelease>/Modules"
+                            }
+                        }
                     }
                 }
             };
@@ -1207,6 +1258,11 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Packed"), workspaceQualifiedLayout.Configuration.Path);
             Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Packed", "RequiredModules"), workspaceQualifiedLayout.Configuration.RequiredModules.Path);
             Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Packed", "Modules"), workspaceQualifiedLayout.Configuration.RequiredModules.ModulesPath);
+
+            var tokenizedLayout = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments[2]);
+            Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Packed", "<TagModuleVersionWithPreRelease>"), tokenizedLayout.Configuration.Path);
+            Assert.Equal("Artefacts/Packed/<TagModuleVersionWithPreRelease>/RequiredModules", tokenizedLayout.Configuration.RequiredModules.Path);
+            Assert.Equal("Artefacts/Packed/<TagModuleVersionWithPreRelease>/Modules", tokenizedLayout.Configuration.RequiredModules.ModulesPath);
         }
         finally
         {

@@ -262,7 +262,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.AboutTopicsSourcePath = ResolveConfigPaths(projectRoot, cfg.AboutTopicsSourcePath);
+            cfg.AboutTopicsSourcePath = ResolveRootedConfigPaths(projectRoot, cfg.AboutTopicsSourcePath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
@@ -558,6 +558,26 @@ internal sealed class ModuleBuildPreparationService
             .ToArray();
     }
 
+    private static string[] ResolveRootedConfigPaths(string rootPath, string[]? paths)
+    {
+        if (paths is null || paths.Length == 0)
+            return Array.Empty<string>();
+
+        return paths
+            .Select(path =>
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    return string.Empty;
+
+                var cleaned = PathValueResolver.Clean(path);
+                return Path.IsPathRooted(cleaned)
+                    ? ResolveConfigPath(rootPath, path)
+                    : NormalizePathSeparators(path);
+            })
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+    }
+
     private static IConfigurationSegment[] CollectSettingsFromWorkspace(ScriptBlock? settings, string workspaceRoot)
     {
         if (settings is null)
@@ -643,7 +663,14 @@ internal sealed class ModuleBuildPreparationService
 
     private static string? ResolveArtefactLayoutPath(string rootPath, string? artefactPath, string? layoutPath)
     {
-        if (string.IsNullOrWhiteSpace(layoutPath) || Path.IsPathRooted(layoutPath))
+        if (string.IsNullOrWhiteSpace(layoutPath))
+            return layoutPath;
+        if (!string.IsNullOrWhiteSpace(artefactPath) &&
+            (ContainsPathToken(layoutPath!) || ContainsPathToken(artefactPath!)))
+        {
+            return layoutPath;
+        }
+        if (Path.IsPathRooted(layoutPath))
             return layoutPath;
         if (string.IsNullOrWhiteSpace(artefactPath))
             return layoutPath;
@@ -868,7 +895,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.StageRoot)) continue;
-            cfg.StageRoot = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.StageRoot));
+            cfg.StageRoot = MakeReleaseStageRootPathForJson(projectRoot, cfg.StageRoot!);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationPublishSegment>() ?? Enumerable.Empty<ConfigurationPublishSegment>())
@@ -923,6 +950,11 @@ internal sealed class ModuleBuildPreparationService
             ? MakeRelativeForProjectRoot(projectRoot, candidate)
             : NormalizePathSeparators(layoutPath!);
     }
+
+    private static string MakeReleaseStageRootPathForJson(string projectRoot, string stageRoot)
+        => ContainsPathToken(stageRoot)
+            ? MakeRelativeForProjectRoot(projectRoot, stageRoot) ?? NormalizePathSeparators(stageRoot)
+            : MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, stageRoot));
 
     private static void MakeCopyMappingSourcesRelative(ArtefactCopyMapping[]? mappings, string projectRoot, string workspaceRoot)
     {
@@ -1022,10 +1054,15 @@ internal sealed class ModuleBuildPreparationService
             return NormalizePathSeparators(cleaned);
 
         var relativePrefix = MakeRelativeForConfig(projectRoot, prefixFullPath);
-        var suffix = cleaned.Substring(tokenIndex).TrimStart(separators);
+        var tokenStartsNewSegment = tokenIndex == 0 || separators.Contains(cleaned[tokenIndex - 1]);
+        var suffix = tokenStartsNewSegment
+            ? cleaned.Substring(tokenIndex).TrimStart(separators)
+            : cleaned.Substring(tokenIndex);
         return string.Equals(relativePrefix, ".", StringComparison.Ordinal)
             ? NormalizePathSeparators(suffix)
-            : NormalizePathSeparators(Path.Combine(relativePrefix, suffix));
+            : NormalizePathSeparators(tokenStartsNewSegment
+                ? Path.Combine(relativePrefix, suffix)
+                : relativePrefix + suffix);
     }
 
     private static int IndexOfPathToken(string path)
