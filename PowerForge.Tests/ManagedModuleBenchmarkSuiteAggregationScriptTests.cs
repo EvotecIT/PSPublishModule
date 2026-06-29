@@ -20,7 +20,10 @@ public sealed class ManagedModuleBenchmarkSuiteAggregationScriptTests
                      "ManagedFirstExtractionMs",
                      "ManagedLastExtractionMs",
                      "ManagedFirstPromotionMs",
-                     "ManagedLastPromotionMs"
+                     "ManagedLastPromotionMs",
+                     "ManagedFirstCoalescedWaitMs",
+                     "ManagedLastCoalescedWaitMs",
+                     "ManagedLastSlowestMaterializedPackageMs"
                  })
         {
             Assert.Contains(field + " = $row." + field, script, StringComparison.Ordinal);

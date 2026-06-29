@@ -561,6 +561,10 @@ function Add-SummaryRows {
                 ManagedDownloadBytes = $row.ManagedDownloadBytes
                 ManagedCacheHits = $row.ManagedCacheHits
                 ManagedExtractionCacheHits = $row.ManagedExtractionCacheHits
+                ManagedCoalescedWaitCount = $row.ManagedCoalescedWaitCount
+                ManagedCoalescedWaitMs = $row.ManagedCoalescedWaitMs
+                ManagedSlowestCoalescedWaitMs = $row.ManagedSlowestCoalescedWaitMs
+                ManagedSlowestMaterializedPackageMs = $row.ManagedSlowestMaterializedPackageMs
                 ManagedAuthenticodeCheckedFiles = $row.ManagedAuthenticodeCheckedFiles
                 ManagedAuthenticodeCatalogFiles = $row.ManagedAuthenticodeCatalogFiles
                 ManagedFirstRepositoryRequests = $row.ManagedFirstRepositoryRequests
@@ -581,6 +585,14 @@ function Add-SummaryRows {
                 ManagedLastCacheHits = $row.ManagedLastCacheHits
                 ManagedFirstExtractionCacheHits = $row.ManagedFirstExtractionCacheHits
                 ManagedLastExtractionCacheHits = $row.ManagedLastExtractionCacheHits
+                ManagedFirstCoalescedWaitMs = $row.ManagedFirstCoalescedWaitMs
+                ManagedLastCoalescedWaitMs = $row.ManagedLastCoalescedWaitMs
+                ManagedLastSlowestCoalescedWaitName = $row.ManagedLastSlowestCoalescedWaitName
+                ManagedLastSlowestCoalescedWaitMs = $row.ManagedLastSlowestCoalescedWaitMs
+                ManagedLastSlowestMaterializedPackageName = $row.ManagedLastSlowestMaterializedPackageName
+                ManagedLastSlowestMaterializedPackageMs = $row.ManagedLastSlowestMaterializedPackageMs
+                ManagedLastSlowestMaterializedPackageExtractionMs = $row.ManagedLastSlowestMaterializedPackageExtractionMs
+                ManagedLastSlowestMaterializedPackagePromotionMs = $row.ManagedLastSlowestMaterializedPackagePromotionMs
                 ManagedMaintenanceActions = $row.ManagedMaintenanceActions
                 ManagedMaintenanceFindings = $row.ManagedMaintenanceFindings
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs

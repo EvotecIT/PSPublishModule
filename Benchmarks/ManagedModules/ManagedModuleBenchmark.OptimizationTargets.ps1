@@ -139,6 +139,15 @@ function New-ManagedOptimizationTarget {
             LastCacheHits = if ($row.PSObject.Properties['ManagedLastCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCacheHits } else { 0.0 }
             FirstExtractionCacheHits = if ($row.PSObject.Properties['ManagedFirstExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstExtractionCacheHits } else { 0.0 }
             LastExtractionCacheHits = if ($row.PSObject.Properties['ManagedLastExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionCacheHits } else { 0.0 }
+            CoalescedWaitMs = if ($row.PSObject.Properties['ManagedCoalescedWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedCoalescedWaitMs } else { 0.0 }
+            LastCoalescedWaitMs = if ($row.PSObject.Properties['ManagedLastCoalescedWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCoalescedWaitMs } else { 0.0 }
+            LastSlowestCoalescedWait = if ($row.PSObject.Properties['ManagedLastSlowestCoalescedWaitName']) { [string] $row.ManagedLastSlowestCoalescedWaitName } else { '' }
+            LastSlowestCoalescedWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestCoalescedWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestCoalescedWaitMs } else { 0.0 }
+            SlowestMaterializedPackageMs = if ($row.PSObject.Properties['ManagedSlowestMaterializedPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedSlowestMaterializedPackageMs } else { 0.0 }
+            LastSlowestMaterializedPackage = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageName']) { [string] $row.ManagedLastSlowestMaterializedPackageName } else { '' }
+            LastSlowestMaterializedPackageMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageMs } else { 0.0 }
+            LastSlowestMaterializedPackageExtractionMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageExtractionMs } else { 0.0 }
+            LastSlowestMaterializedPackagePromotionMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackagePromotionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackagePromotionMs } else { 0.0 }
             LastRootDependencyMs = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 }
             LastDownloadMs = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 }
             LastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
