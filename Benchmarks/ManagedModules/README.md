@@ -296,6 +296,19 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModule
 
 The probe writes `materialization-results.csv`, `materialization-results.json`, `materialization-summary.csv`, per-iteration result JSON, and `metadata.json` under `Ignore\Benchmarks\MM-Materialization`. By default it removes the short temp package/output roots after the CSV/JSON evidence is written; use `-KeepArtifacts` only when you need to inspect the cached package tree.
 
+Use `Measure-ManagedModuleDependencyConcurrency.ps1` when warm-cache Graph or Az rows point at dependency fanout or full-family materialization contention. The probe is external to the module and repeatedly calls the normal comparison harness with different managed `-DependencyConcurrency` values, writing `dependency-concurrency-summary.csv`, `dependency-concurrency-summary.json`, child comparison run folders, and `metadata.json` under the short `Ignore\Benchmarks\MMDC` path. Run it from both PowerShell 7 and Windows PowerShell 5.1 before changing the engine default:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Measure-ManagedModuleDependencyConcurrency.ps1 -ModuleName Microsoft.Graph -Version 2.38.0 -Operation Save -DependencyConcurrency 1,2,4,8,16,32 -RepeatCount 2 -AcceptLicense -RemoveOutputRoots -SkipBuild
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Measure-ManagedModuleDependencyConcurrency.ps1 -ModuleName Az -Version 16.0.0 -Operation Save -DependencyConcurrency 1,2,4,8,16,32 -RepeatCount 2 -AcceptLicense -RemoveOutputRoots -SkipBuild
+```
+
+For install scoreboards, keep ModuleFast in the comparison and vary only the managed fanout. Provider rows are repeated for each fanout value, so this mode is meant for focused proof rather than everyday smoke runs:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Measure-ManagedModuleDependencyConcurrency.ps1 -ModuleName Microsoft.Graph -Version 2.38.0 -Operation Install -ComparisonMode ManagedAndInstallProviders -DependencyConcurrency 4,8,16,32 -RepeatCount 1 -AcceptLicense -RotateEngineOrder -RemoveOutputRoots -SkipBuild
+```
+
 `DependencyVersionRange` preserves the parent package's declared dependency range, which helps separate identical ranges from lower-bound ranges that converge on the same selected version. `VersionResolutionMilliseconds` includes dependency-range resolution that happens before the child install request starts. `VersionSelectionWaitMilliseconds` is separate wait time spent on another branch in the same install graph that is already selecting the dependency version, so repeated shared dependencies do not look like duplicate repository work. `DependencyBranchOverheadMilliseconds` captures any remaining explicit branch time not explained by version resolution, version-selection wait, queue wait, download, extraction, dependency, promotion, coalescing, or install-lock phases. `RootDependencyCriticalPathGapMilliseconds` is the root dependency span minus the slowest dependency branch; the older `RootDependencyUnattributedMilliseconds` field is kept as the same value for continuity. `DependencyBranchParallelismRatio` compares summed dependency branch elapsed time with the root dependency span, making it easier to tell whether the benchmark is dominated by one slow branch or by many branches running concurrently.
 
 ## Notes

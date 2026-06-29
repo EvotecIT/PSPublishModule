@@ -132,6 +132,7 @@ function Invoke-IsolatedInstallHost {
         [string] $OperationName = 'Install',
         [string] $VersionOverride = $Version,
         [string] $PackageCacheDirectory = '',
+        [int] $ManagedDependencyConcurrency = 0,
         [bool] $Force = $false
     )
 
@@ -172,6 +173,12 @@ function Invoke-IsolatedInstallHost {
         $arguments += @(
             '-PackageCacheDirectory'
             $PackageCacheDirectory
+        )
+    }
+    if ($ManagedDependencyConcurrency -gt 0) {
+        $arguments += @(
+            '-ManagedDependencyConcurrency'
+            ([string]$ManagedDependencyConcurrency)
         )
     }
     if (-not [string]::IsNullOrWhiteSpace($VersionOverride)) {

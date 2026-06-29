@@ -20,6 +20,8 @@ param(
 
     [int] $SetupRetryCount = 2,
 
+    [int] $ManagedDependencyConcurrency = 0,
+
     [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\MM'),
 
     [ValidateSet('Debug', 'Release')]
@@ -441,6 +443,8 @@ function Invoke-ScenarioHostRun {
         ([string]$scenarioRepeatCount),
         '-SetupRetryCount',
         ([string]$SetupRetryCount),
+        '-ManagedDependencyConcurrency',
+        ([string]$ManagedDependencyConcurrency),
         '-OutputDirectory',
         $scenarioRoot,
         '-Configuration',
@@ -888,6 +892,7 @@ $metadata = [ordered]@{
     CacheMode = $CacheMode
     RepeatCount = $RepeatCount
     SetupRetryCount = $SetupRetryCount
+    ManagedDependencyConcurrency = $ManagedDependencyConcurrency
     IncludeInstall = $IncludeInstall.IsPresent
     ValidateImport = $ValidateImport.IsPresent
     AuthenticodeCheck = $AuthenticodeCheck.IsPresent

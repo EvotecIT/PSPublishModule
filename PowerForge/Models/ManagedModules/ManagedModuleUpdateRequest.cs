@@ -61,6 +61,11 @@ public sealed class ManagedModuleUpdateRequest
     public string? PackageCacheDirectory { get; set; }
 
     /// <summary>
+    /// Maximum number of dependency branches to install concurrently. A value of 0 uses the engine default.
+    /// </summary>
+    public int DependencyConcurrency { get; set; }
+
+    /// <summary>
     /// Optional expected SHA256 hash for the requested module package.
     /// </summary>
     public string? ExpectedPackageSha256 { get; set; }

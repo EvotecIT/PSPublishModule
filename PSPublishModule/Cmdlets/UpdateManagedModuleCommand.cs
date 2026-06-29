@@ -94,6 +94,11 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? PackageCacheDirectory { get; set; }
 
+    /// <summary>Maximum number of dependency branches to install concurrently during update delivery. Omit to use the managed engine default.</summary>
+    [Parameter]
+    [ValidateRange(1, 256)]
+    public int DependencyConcurrency { get; set; }
+
     /// <summary>Expected SHA256 hash of the requested module package before it is extracted and promoted.</summary>
     [Parameter]
     [Alias("PackageSha256", "Sha256")]
@@ -248,6 +253,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                     ShellEdition = ShellEdition,
                     ModuleRoot = moduleRoot,
                     PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                    DependencyConcurrency = DependencyConcurrency,
                     ExpectedPackageSha256 = ExpectedPackageSha256,
                     TrustPolicy = trustPolicy,
                     Credential = credential,

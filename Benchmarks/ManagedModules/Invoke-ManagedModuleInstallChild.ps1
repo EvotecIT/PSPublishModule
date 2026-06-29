@@ -26,6 +26,8 @@ param(
 
     [string] $PackageCacheDirectory,
 
+    [int] $ManagedDependencyConcurrency = 0,
+
     [string] $ProviderModulePath,
 
     [string[]] $ProviderDependencyModulePath,
@@ -192,6 +194,9 @@ switch ($EngineName) {
         }
         if (-not [string]::IsNullOrWhiteSpace($PackageCacheDirectory)) {
             $parameters.PackageCacheDirectory = $PackageCacheDirectory
+        }
+        if ($ManagedDependencyConcurrency -gt 0) {
+            $parameters.DependencyConcurrency = $ManagedDependencyConcurrency
         }
 
         $commandName = if ($Operation -eq 'Update') { 'Update-ManagedModule' } else { 'Install-ManagedModule' }

@@ -5,7 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class ManagedModuleInstallService
 {
-    private const int MaxDependencyInstallConcurrency = 32;
+    private const int DefaultDependencyInstallConcurrency = 32;
+    internal const int MaximumDependencyInstallConcurrency = 256;
 
     private readonly ILogger _logger;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
@@ -728,6 +729,11 @@ public sealed partial class ManagedModuleInstallService
             throw new ArgumentException("VersionPolicy cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
         if (request.Scope == ManagedModuleInstallScope.Custom && string.IsNullOrWhiteSpace(request.ModuleRoot))
             throw new ArgumentException("ModuleRoot is required when Scope is Custom.", nameof(request));
+        if (request.DependencyConcurrency < 0 || request.DependencyConcurrency > MaximumDependencyInstallConcurrency)
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                request.DependencyConcurrency,
+                $"DependencyConcurrency must be between 0 and {MaximumDependencyInstallConcurrency}. Use 0 for the engine default.");
 
         _ = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256);
     }
