@@ -68,6 +68,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
     Join-Path ([IO.Path]::GetTempPath()) 'pfmm'
 }
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
+$saveWorkRoot = Join-Path $tempWorkRoot ('SaveRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $publishWorkRoot = Join-Path $tempWorkRoot ('PublishRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 $validOperations = @('Find', 'Save', 'SaveNoOp', 'SaveForce', 'Install', 'InstallManaged', 'InstallNoOp', 'InstallForce', 'Update', 'UpdateNoOp', 'UpdateForce', 'RepairPlan', 'Publish')
@@ -575,7 +576,7 @@ function Invoke-SaveEngineCommand {
 function Invoke-SaveScenario {
     param([string] $EngineName, [int] $Iteration, [string] $OperationName = 'Save')
 
-    $destination = Join-Path $workRoot ("save-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
+    $destination = Join-Path $saveWorkRoot ("save-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
     $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
     $packageCacheDirectory = if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
@@ -833,7 +834,7 @@ foreach ($iteration in 1..$RepeatCount) {
                 foreach ($item in @($row)) {
                     $results.Add($item)
                     if ($RemoveOutputRoots.IsPresent) {
-                        $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows @($item) -AllowedRoots @($workRoot, $installWorkRoot, $publishWorkRoot)
+                        $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows @($item) -AllowedRoots @($workRoot, $installWorkRoot, $saveWorkRoot, $publishWorkRoot)
                     }
                 }
             }
@@ -872,6 +873,7 @@ $metadata = [ordered]@{
     SetupRetryCount = $SetupRetryCount
     ModuleBinary = $moduleBinary
     OutputDirectory = $workRoot
+    SaveOutputDirectory = $saveWorkRoot
     RemoveOutputRoots = $RemoveOutputRoots.IsPresent
     OutputRootsRemoved = 0
     PowerShellVersion = $PSVersionTable.PSVersion.ToString()
@@ -895,7 +897,7 @@ if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
     Write-ManagedBenchmarkCsv -InputObject @($gateViolations) -Path $gatePath
 }
 if ($RemoveOutputRoots.IsPresent) {
-    $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows $results -AllowedRoots @($workRoot, $installWorkRoot)
+    $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows $results -AllowedRoots @($workRoot, $installWorkRoot, $saveWorkRoot)
     $metadata.OutputRootsRemoved = $removedOutputRootCount
 }
 Write-ManagedBenchmarkJson -InputObject $metadata -Path $metadataPath -Depth 8
