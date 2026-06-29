@@ -193,6 +193,8 @@ function New-Comparison {
             ManagedLastIteration = if ($managed.Count) { [double] $managed[0].LastIteration } else { 0 }
             ManagedFirstMs = if ($managed.Count) { [double] $managed[0].FirstMs } else { 0 }
             ManagedLastMs = if ($managed.Count) { [double] $managed[0].LastMs } else { 0 }
+            ManagedOutputFileCount = if ($managed.Count) { [double] $managed[0].MedianOutputFileCount } else { 0 }
+            ManagedOutputBytes = if ($managed.Count) { [double] $managed[0].MedianOutputBytes } else { 0 }
             ManagedPackageCount = if ($managed.Count) { [double] $managed[0].MedianManagedPackageCount } else { 0 }
             ManagedDependencyCount = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyCount } else { 0 }
             ManagedUniquePackageCount = if ($managed.Count) { [double] $managed[0].MedianManagedUniquePackageCount } else { 0 }
