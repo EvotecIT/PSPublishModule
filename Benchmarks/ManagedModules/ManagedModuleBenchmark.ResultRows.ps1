@@ -48,6 +48,14 @@ function New-SkippedRow {
         ManagedDownloadBytes = 0
         ManagedCacheHitCount = 0
         ManagedExtractionCacheHitCount = 0
+        ManagedCoalescedWaitCount = 0
+        ManagedTotalCoalescedWaitMilliseconds = 0
+        ManagedSlowestCoalescedWaitName = ''
+        ManagedSlowestCoalescedWaitMilliseconds = 0
+        ManagedSlowestMaterializedPackageName = ''
+        ManagedSlowestMaterializedPackageMilliseconds = 0
+        ManagedSlowestMaterializedPackageExtractionMilliseconds = 0
+        ManagedSlowestMaterializedPackagePromotionMilliseconds = 0
         ManagedMaintenanceActionCount = 0
         ManagedMaintenanceFindingCount = 0
         ImportStatus = ''

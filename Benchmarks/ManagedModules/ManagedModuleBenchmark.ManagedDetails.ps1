@@ -21,6 +21,20 @@ function Get-NumericPropertyValue {
     $InputObject.$Name
 }
 
+function Get-ManagedDetailSum {
+    param(
+        [object[]] $Rows,
+        [string] $Name
+    )
+
+    $measure = @($Rows | Measure-Object $Name -Sum)
+    if ($measure.Count -eq 0 -or -not $measure[0].PSObject.Properties['Sum'] -or $null -eq $measure[0].Sum) {
+        return 0
+    }
+
+    $measure[0].Sum
+}
+
 function Add-ManagedInstallDetail {
     param(
         [Parameter(Mandatory)]
@@ -94,6 +108,28 @@ function Write-ManagedInstallDetail {
                 $_.Group | Sort-Object Depth | Select-Object -First 1
             }
     )
+    $coalescedWaits = @(
+        $packages |
+            Where-Object {
+                $_.Status -eq 'AlreadyInstalled' -and
+                [double] $_.ElapsedMilliseconds -gt 0 -and
+                [double] $_.DownloadMilliseconds -eq 0 -and
+                [double] $_.ExtractionMilliseconds -eq 0 -and
+                [double] $_.DependencyMilliseconds -eq 0 -and
+                [double] $_.PromotionMilliseconds -eq 0
+            }
+    )
+    $slowestCoalescedWait = @(
+        $coalescedWaits |
+            Sort-Object @{ Expression = { [double] $_.ElapsedMilliseconds }; Descending = $true } |
+            Select-Object -First 1
+    )
+    $slowestMaterializedPackage = @(
+        $packages |
+            Where-Object { $_.Status -eq 'Installed' -and [int] $_.Depth -gt 0 } |
+            Sort-Object @{ Expression = { [double] $_.ElapsedMilliseconds }; Descending = $true } |
+            Select-Object -First 1
+    )
     $summary = [pscustomobject]@{
         PackageCount = $packages.Count
         DependencyCount = [math]::Max(0, $packages.Count - 1)
@@ -115,6 +151,14 @@ function Write-ManagedInstallDetail {
         ExtractionCacheHitCount = @($packages | Where-Object ExtractionFromCache).Count
         TotalAuthenticodeCheckedFiles = [long] (($packages | Measure-Object AuthenticodeCheckedFiles -Sum).Sum)
         TotalAuthenticodeCatalogFiles = [long] (($packages | Measure-Object AuthenticodeCatalogFiles -Sum).Sum)
+        CoalescedWaitCount = $coalescedWaits.Count
+        TotalCoalescedWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $coalescedWaits -Name 'ElapsedMilliseconds'), 2)
+        SlowestCoalescedWaitName = if ($slowestCoalescedWait.Count) { [string] $slowestCoalescedWait[0].Name } else { '' }
+        SlowestCoalescedWaitMilliseconds = if ($slowestCoalescedWait.Count) { [double] $slowestCoalescedWait[0].ElapsedMilliseconds } else { 0.0 }
+        SlowestMaterializedPackageName = if ($slowestMaterializedPackage.Count) { [string] $slowestMaterializedPackage[0].Name } else { '' }
+        SlowestMaterializedPackageMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ElapsedMilliseconds } else { 0.0 }
+        SlowestMaterializedPackageExtractionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionMilliseconds } else { 0.0 }
+        SlowestMaterializedPackagePromotionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionMilliseconds } else { 0.0 }
     }
 
     $parent = Split-Path -Path $Path -Parent

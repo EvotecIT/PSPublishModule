@@ -35,6 +35,15 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedPackageRepositoryRedirectCount = 0
                     ManagedDownloadBytes = 186506621
                     ManagedCacheHitCount = 0
+                    ManagedExtractionCacheHitCount = 0
+                    ManagedCoalescedWaitCount = 8
+                    ManagedTotalCoalescedWaitMilliseconds = 900
+                    ManagedSlowestCoalescedWaitName = 'Company.Wait'
+                    ManagedSlowestCoalescedWaitMilliseconds = 250
+                    ManagedSlowestMaterializedPackageName = 'Company.Big'
+                    ManagedSlowestMaterializedPackageMilliseconds = 600
+                    ManagedSlowestMaterializedPackageExtractionMilliseconds = 500
+                    ManagedSlowestMaterializedPackagePromotionMilliseconds = 80
                     ManagedAuthenticodeCheckedFileCount = 3
                     ManagedAuthenticodeCatalogFileCount = 1
                     ManagedMaintenanceActionCount = 0
@@ -66,6 +75,15 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedPackageRepositoryRedirectCount = 0
                     ManagedDownloadBytes = 0
                     ManagedCacheHitCount = 40
+                    ManagedExtractionCacheHitCount = 40
+                    ManagedCoalescedWaitCount = 6
+                    ManagedTotalCoalescedWaitMilliseconds = 700
+                    ManagedSlowestCoalescedWaitName = 'Company.Shared'
+                    ManagedSlowestCoalescedWaitMilliseconds = 180
+                    ManagedSlowestMaterializedPackageName = 'Company.Files'
+                    ManagedSlowestMaterializedPackageMilliseconds = 450
+                    ManagedSlowestMaterializedPackageExtractionMilliseconds = 320
+                    ManagedSlowestMaterializedPackagePromotionMilliseconds = 70
                     ManagedAuthenticodeCheckedFileCount = 5
                     ManagedAuthenticodeCatalogFileCount = 1
                     ManagedMaintenanceActionCount = 0
@@ -101,6 +119,15 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(0.0, NumericProperty(row, "ManagedLastDownloadBytes"));
         Assert.Equal(0.0, NumericProperty(row, "ManagedFirstCacheHits"));
         Assert.Equal(40.0, NumericProperty(row, "ManagedLastCacheHits"));
+        Assert.Equal(800.0, NumericProperty(row, "ManagedCoalescedWaitMs"));
+        Assert.Equal(900.0, NumericProperty(row, "ManagedFirstCoalescedWaitMs"));
+        Assert.Equal(700.0, NumericProperty(row, "ManagedLastCoalescedWaitMs"));
+        Assert.Equal("Company.Shared", Property(row, "ManagedLastSlowestCoalescedWaitName"));
+        Assert.Equal(180.0, NumericProperty(row, "ManagedLastSlowestCoalescedWaitMs"));
+        Assert.Equal("Company.Files", Property(row, "ManagedLastSlowestMaterializedPackageName"));
+        Assert.Equal(450.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageMs"));
+        Assert.Equal(320.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageExtractionMs"));
+        Assert.Equal(70.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackagePromotionMs"));
         Assert.Equal(4.0, NumericProperty(row, "ManagedAuthenticodeCheckedFiles"));
         Assert.Equal(1.0, NumericProperty(row, "ManagedAuthenticodeCatalogFiles"));
     }
@@ -116,6 +143,9 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
 
     private static double NumericProperty(PSObject value, string name)
         => Convert.ToDouble(value.Properties[name].Value, System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Property(PSObject value, string name)
+        => (string)value.Properties[name].Value;
 
     private static void AssertNoErrors(PowerShell ps)
     {

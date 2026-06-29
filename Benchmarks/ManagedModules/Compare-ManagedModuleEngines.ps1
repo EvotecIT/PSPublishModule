@@ -433,6 +433,19 @@ function Invoke-TimedOperation {
         return $value
     }
 
+    function Get-DetailText {
+        param(
+            [object] $InputObject,
+            [string] $Name
+        )
+
+        if ($null -eq $InputObject -or -not $InputObject.PSObject.Properties[$Name]) {
+            return ''
+        }
+
+        [string] $InputObject.PSObject.Properties[$Name].Value
+    }
+
     $elapsedMilliseconds = [math]::Round($timer.Elapsed.TotalMilliseconds, 2)
     $managedRootElapsedMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootElapsedMilliseconds')
     $managedHarnessOverheadMilliseconds = if ($detail) {
@@ -476,6 +489,14 @@ function Invoke-TimedOperation {
         ManagedDownloadBytes = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadBytes')
         ManagedCacheHitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'CacheHitCount')
         ManagedExtractionCacheHitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'ExtractionCacheHitCount')
+        ManagedCoalescedWaitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'CoalescedWaitCount')
+        ManagedTotalCoalescedWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalCoalescedWaitMilliseconds')
+        ManagedSlowestCoalescedWaitName = Get-DetailText -InputObject $detailSummary -Name 'SlowestCoalescedWaitName'
+        ManagedSlowestCoalescedWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestCoalescedWaitMilliseconds')
+        ManagedSlowestMaterializedPackageName = Get-DetailText -InputObject $detailSummary -Name 'SlowestMaterializedPackageName'
+        ManagedSlowestMaterializedPackageMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageMilliseconds')
+        ManagedSlowestMaterializedPackageExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractionMilliseconds')
+        ManagedSlowestMaterializedPackagePromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionMilliseconds')
         ManagedAuthenticodeCheckedFileCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalAuthenticodeCheckedFiles')
         ManagedAuthenticodeCatalogFileCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalAuthenticodeCatalogFiles')
         ManagedMaintenanceActionCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceActionCount')

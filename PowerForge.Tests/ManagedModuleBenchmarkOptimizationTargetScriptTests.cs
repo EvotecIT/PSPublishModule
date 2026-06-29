@@ -44,6 +44,15 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastCacheHits = '3'
                     ManagedFirstExtractionCacheHits = '0'
                     ManagedLastExtractionCacheHits = '3'
+                    ManagedCoalescedWaitMs = '450'
+                    ManagedLastCoalescedWaitMs = '125'
+                    ManagedLastSlowestCoalescedWaitName = 'Company.Shared'
+                    ManagedLastSlowestCoalescedWaitMs = '125'
+                    ManagedSlowestMaterializedPackageMs = '650'
+                    ManagedLastSlowestMaterializedPackageName = 'Company.Files'
+                    ManagedLastSlowestMaterializedPackageMs = '400'
+                    ManagedLastSlowestMaterializedPackageExtractionMs = '300'
+                    ManagedLastSlowestMaterializedPackagePromotionMs = '50'
                     ManagedLastRootDependencyMs = '120'
                     ManagedLastDownloadMs = '0'
                     ManagedLastExtractionMs = '300'
@@ -78,6 +87,15 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(3.0, NumericProperty(row, "LastCacheHits"));
         Assert.Equal(0.0, NumericProperty(row, "FirstExtractionCacheHits"));
         Assert.Equal(3.0, NumericProperty(row, "LastExtractionCacheHits"));
+        Assert.Equal(450.0, NumericProperty(row, "CoalescedWaitMs"));
+        Assert.Equal(125.0, NumericProperty(row, "LastCoalescedWaitMs"));
+        Assert.Equal("Company.Shared", Property(row, "LastSlowestCoalescedWait"));
+        Assert.Equal(125.0, NumericProperty(row, "LastSlowestCoalescedWaitMs"));
+        Assert.Equal(650.0, NumericProperty(row, "SlowestMaterializedPackageMs"));
+        Assert.Equal("Company.Files", Property(row, "LastSlowestMaterializedPackage"));
+        Assert.Equal(400.0, NumericProperty(row, "LastSlowestMaterializedPackageMs"));
+        Assert.Equal(300.0, NumericProperty(row, "LastSlowestMaterializedPackageExtractionMs"));
+        Assert.Equal(50.0, NumericProperty(row, "LastSlowestMaterializedPackagePromotionMs"));
         Assert.Equal(120.0, NumericProperty(row, "LastRootDependencyMs"));
         Assert.Equal(0.0, NumericProperty(row, "LastDownloadMs"));
         Assert.Equal(300.0, NumericProperty(row, "LastExtractionMs"));

@@ -73,6 +73,9 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastMs = '4815.85'
                     LastBottleneck = 'RootDependency'
                     LastBottleneckMs = '3966.4'
+                    LastCoalescedWaitMs = '700'
+                    LastSlowestMaterializedPackage = 'Microsoft.Graph.Files'
+                    LastSlowestMaterializedPackageMs = '450'
                     LastNextQuestion = 'Can dependency scheduling, installed-version reuse, or repository lookup fan-out shrink the root operation?'
                 },
                 [pscustomobject]@{
@@ -89,6 +92,9 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastMs = '1944.07'
                     LastBottleneck = 'Extraction'
                     LastBottleneckMs = '1100'
+                    LastCoalescedWaitMs = '125'
+                    LastSlowestMaterializedPackage = 'Microsoft.Graph.Teams'
+                    LastSlowestMaterializedPackageMs = '478'
                     LastNextQuestion = 'Can archive extraction, path creation, or file writes be reduced safely?'
                 }
             )
@@ -111,6 +117,8 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("| Diagnostic | HeavySaveCacheGate | Graph.Full.Save.ManagedWarmCache |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Optimization Targets", markdown, StringComparison.Ordinal);
         Assert.Contains("Use these rows to decide where the next managed-engine optimization should start.", markdown, StringComparison.Ordinal);
+        Assert.Contains("LastCoalescedWaitMs", markdown, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.Graph.Teams", markdown, StringComparison.Ordinal);
         Assert.Contains("Can archive extraction, path creation, or file writes be reduced safely?", markdown, StringComparison.Ordinal);
     }
 
