@@ -331,39 +331,44 @@ Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 ```
 
-Benchmarking stays outside the shipped module surface. The public benchmark is
-a small command-measurement script in
-[Benchmarks/ManagedModules](Benchmarks/ManagedModules), not a benchmark
-framework. It measures `Find`, `Install`, and `Save` for PSScriptAnalyzer,
-Microsoft.Graph.Authentication, Microsoft.Graph, Az.Accounts, and Az against
-Managed, ModuleFast, PSResourceGet, and PowerShellGet where those providers have
-an equivalent command. Repair is not part of the table because the other
-providers do not expose an equivalent module-estate repair command.
+### Benchmarks
 
-In the result table, Managed is the `1.00x` baseline for each completed row.
-Other values show how many times slower that engine was for the same scenario,
-with measured time in parentheses.
+The managed module benchmark answers a narrow question: how long does each
+tool take to run the public command a user would normally run? The script in
+[Benchmarks/ManagedModules](Benchmarks/ManagedModules) measures `Find`,
+`Install`, and `Save` for PSScriptAnalyzer, Microsoft.Graph.Authentication,
+Microsoft.Graph, Az.Accounts, and Az against Managed, ModuleFast,
+PSResourceGet, and PowerShellGet where an equivalent command exists. Repair is
+not included because the other tools do not expose an equivalent module-estate
+repair command.
 
-Why the managed engine is fast:
+Managed is the `1.00x` baseline for each completed row. Other values show how
+many times slower that tool was for the same scenario, with measured time in
+parentheses. A row only deserves a speed comparison when the tool successfully
+materializes the requested module graph; source/index misses and unsupported
+operations should be read as compatibility notes, not slow timings.
 
-- It avoids the PowerShellGet/PackageManagement provider stack during normal
-  install and save operations. The public cmdlets are PowerShell, but the
-  repository, dependency, download, extraction, and promotion work runs in the
-  shared C# engine.
-- It resolves and installs dependencies concurrently. Large dependency graphs
-  such as `Microsoft.Graph` and `Az` are not handled as one long serial
-  provider walk.
-- It coalesces duplicate work inside one operation. If several dependencies ask
-  for the same package/version, one install wins and the other branches reuse
-  the completed result.
-- It streams packages directly, records SHA256, and uses a per-run package cache
-  plus an extracted-package cache so repeated materialization does not pay the
-  same download/extract cost again.
-- It stages into short hidden folders and promotes atomically into the final
+What makes Managed fast is the install model, not simply that it uses .NET.
+PowerShellGet, PackageManagement, and PSResourceGet also use compiled .NET
+components. The difference is that Managed uses a purpose-built module
+repository and archive pipeline instead of routing normal installs through a
+generic package-provider workflow.
+
+- Repository lookup, dependency planning, package download, extraction, caching,
+  and promotion run in one operation-local engine.
+- Large dependency graphs such as `Microsoft.Graph` and `Az` are resolved and
+  installed concurrently instead of as one long serial provider walk.
+- Duplicate dependency requests are coalesced inside the same operation. If two
+  branches ask for the same package/version, one install wins and the other
+  branch reuses the completed result.
+- Packages are streamed directly, SHA256 is recorded, and per-run package and
+  extracted-package caches avoid paying the same download/extract cost again.
+- Installs stage into short hidden folders and promote atomically into the final
   versioned module path. That keeps PS 5.1 viable for deep packages such as
-  `Az.MachineLearningServices` while still keeping the installed layout normal.
-- It uses the same engine on PS 7 and Windows PowerShell 5.1, so the 5.1 path is
-  not forced through older provider behavior just because the host is older.
+  `Az.MachineLearningServices` while preserving the normal installed layout.
+- The same managed path runs on PS 7 and Windows PowerShell 5.1, so the 5.1
+  results are not forced through older provider behavior just because the host
+  is older.
 
 ModuleFast is fast for a different reason. It is a focused installer that uses
 `pwsh.gallery`, a community NuGet v2-to-v3 bridge for PowerShell Gallery using

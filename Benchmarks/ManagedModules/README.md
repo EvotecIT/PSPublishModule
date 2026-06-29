@@ -23,8 +23,8 @@ ModuleFast do not expose an equivalent module-estate repair command.
 What the benchmark is trying to prove:
 
 - Managed should be fast because dependency resolution, package download,
-  extraction, caching, and promotion run in the C# engine instead of through the
-  older provider stack.
+  extraction, caching, and promotion run in one purpose-built engine instead of
+  through a generic package-provider workflow.
 - Large dependency graphs should benefit from concurrent dependency work and
   operation-local coalescing, not from skipping dependencies.
 - PS 5.1 should use the same managed engine path as PS 7, with short staging
