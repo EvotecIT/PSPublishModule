@@ -419,6 +419,7 @@ public sealed partial class ManagedModuleInstallService
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
+            StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
             var validationModulePath = stageModulePath;
             ManagedModuleArchiveExtractionResult? extraction = null;
             if (!ownsCache && !request.Force)

@@ -2,6 +2,72 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleInstallService
 {
+    private void StartDependencyVersionSelectionPrewarm(
+        ManagedModuleInstallRequest request,
+        ManagedModulePackageMetadata? metadata,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken)
+    {
+        if (request.SkipDependencyCheck ||
+            request.AuthenticodeCheck ||
+            request.Credential is not null ||
+            cancellationToken.CanBeCanceled)
+        {
+            return;
+        }
+
+        var dependencies = SelectDependencies(metadata).ToArray();
+        if (dependencies.Length == 0)
+            return;
+
+        var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
+        var tasks = dependencies
+            .Select(dependency => StartDependencyVersionSelectionPrewarmCoreAsync(
+                request,
+                dependency,
+                dependencyTrustPolicy,
+                context,
+                cancellationToken))
+            .Where(static task => task is not null)
+            .Cast<Task>()
+            .ToArray();
+        if (tasks.Length == 0)
+            return;
+
+        ObserveBackgroundDependencyVersionSelection(Task.WhenAll(tasks));
+    }
+
+    private Task? StartDependencyVersionSelectionPrewarmCoreAsync(
+        ManagedModuleInstallRequest request,
+        ManagedModuleDependencyInfo dependency,
+        ManagedModuleTrustPolicy? dependencyTrustPolicy,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken)
+    {
+        var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+        if (range.ExactVersion is not null)
+            return null;
+
+        if (dependencyTrustPolicy is null && HasSatisfiedDependency(request, dependency.Id, range, context))
+            return null;
+
+        return ResolveDependencyVersionAsync(
+            request,
+            dependency.Id,
+            range,
+            context,
+            cancellationToken);
+    }
+
+    private static void ObserveBackgroundDependencyVersionSelection(Task task)
+    {
+        _ = task.ContinueWith(
+            static completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
     private async Task<IReadOnlyList<ManagedModuleInstallResult>> InstallDependenciesAsync(
         ManagedModuleInstallRequest request,
         ManagedModulePackageMetadata? metadata,
@@ -211,6 +277,17 @@ public sealed partial class ManagedModuleInstallService
             installLockWaitElapsed: TimeSpan.Zero);
         context.RecordInstalledVersion(moduleRoot, dependencyName, installedVersion);
         return true;
+    }
+
+    private static bool HasSatisfiedDependency(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        ManagedModuleVersionRange range,
+        ManagedModuleInstallContext context)
+    {
+        var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
+        return GetInstalledVersions(moduleRoot, dependencyName, context)
+            .Any(version => AllowsInstalledDependencyVersion(version, request, range));
     }
 
     private static bool AllowsInstalledDependencyVersion(
