@@ -1,0 +1,590 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Xml.Linq;
+
+namespace PowerForge;
+
+public sealed partial class DotNetPublishPipelineRunner
+{
+    private static List<string> BuildMsiBuildArguments(
+        DotNetPublishPlan plan,
+        DotNetPublishStep step,
+        DotNetPublishMsiPrepareResult prepare,
+        string installerId,
+        string installerProjectPath,
+        string? configuredOutputDir,
+        string? configuredOutputName,
+        IReadOnlyDictionary<string, string> installerMsBuildProperties,
+        MsiVersionResolution versionResolution,
+        MsiClientLicenseResolution licenseResolution,
+        bool isGeneratedInstallerProject,
+        string? payloadDirectoryOverride = null,
+        string? harvestPathOverride = null)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (step is null) throw new ArgumentNullException(nameof(step));
+        if (prepare is null) throw new ArgumentNullException(nameof(prepare));
+        if (string.IsNullOrWhiteSpace(installerId))
+        {
+            throw new ArgumentException("Installer id is required.", nameof(installerId));
+        }
+        if (string.IsNullOrWhiteSpace(installerProjectPath))
+        {
+            throw new ArgumentException("Installer project path is required.", nameof(installerProjectPath));
+        }
+
+        var args = new List<string>
+        {
+            "build",
+            installerProjectPath,
+            "-c",
+            plan.Configuration,
+            "--nologo"
+        };
+
+        if (plan.Restore && !isGeneratedInstallerProject)
+        {
+            args.Add("--no-restore");
+        }
+
+        args.AddRange(BuildMsBuildPropertyArgs(installerMsBuildProperties));
+        if (!string.IsNullOrWhiteSpace(configuredOutputDir))
+        {
+            args.Add($"/p:OutputPath={EnsureTrailingDirectorySeparator(configuredOutputDir!)}");
+        }
+        if (!string.IsNullOrWhiteSpace(configuredOutputName))
+        {
+            args.Add($"/p:OutputName={configuredOutputName}");
+        }
+        args.Add($"/p:PowerForgeMsiInstallerId={installerId}");
+        args.Add($"/p:PowerForgeMsiPayloadDir={payloadDirectoryOverride ?? prepare.StagingDir}");
+        if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
+        {
+            args.Add($"/p:PowerForgeMsiPrepareManifest={prepare.ManifestPath}");
+        }
+        args.Add($"/p:PowerForgeMsiSourceTarget={prepare.Target}");
+        args.Add($"/p:PowerForgeMsiSourceFramework={prepare.Framework}");
+        args.Add($"/p:PowerForgeMsiSourceRuntime={prepare.Runtime}");
+        args.Add($"/p:PowerForgeMsiSourceStyle={prepare.Style}");
+        var harvestPath = harvestPathOverride ?? prepare.HarvestPath;
+        if (!string.IsNullOrWhiteSpace(harvestPath))
+        {
+            args.Add($"/p:PowerForgeMsiHarvestPath={harvestPath}");
+        }
+        if (!string.IsNullOrWhiteSpace(prepare.HarvestDirectoryRefId))
+        {
+            args.Add($"/p:PowerForgeMsiHarvestDirectoryRefId={prepare.HarvestDirectoryRefId}");
+        }
+        if (!string.IsNullOrWhiteSpace(prepare.HarvestComponentGroupId))
+        {
+            args.Add($"/p:PowerForgeMsiHarvestComponentGroupId={prepare.HarvestComponentGroupId}");
+        }
+        if (!string.IsNullOrWhiteSpace(versionResolution.Version) &&
+            !string.IsNullOrWhiteSpace(versionResolution.PropertyName) &&
+            !installerMsBuildProperties.ContainsKey(versionResolution.PropertyName!))
+        {
+            args.Add($"/p:PowerForgeMsiVersion={versionResolution.Version}");
+        }
+        if (!string.IsNullOrWhiteSpace(licenseResolution.Path) &&
+            !string.IsNullOrWhiteSpace(licenseResolution.PropertyName) &&
+            !installerMsBuildProperties.ContainsKey(licenseResolution.PropertyName!))
+        {
+            args.Add($"/p:PowerForgeMsiClientLicensePath={licenseResolution.Path}");
+            if (!string.IsNullOrWhiteSpace(licenseResolution.ClientId))
+            {
+                args.Add($"/p:PowerForgeMsiClientId={licenseResolution.ClientId}");
+            }
+        }
+
+        return args;
+    }
+
+    internal static GeneratedInstallerBuildWorkspace PrepareGeneratedInstallerBuildWorkspace(
+        string installerId,
+        string sourceProjectDirectory,
+        string sourceProjectPath,
+        DotNetPublishMsiPrepareResult? prepare = null,
+        string? projectRoot = null)
+    {
+        if (string.IsNullOrWhiteSpace(installerId))
+        {
+            throw new ArgumentException("Installer id is required.", nameof(installerId));
+        }
+        if (string.IsNullOrWhiteSpace(sourceProjectDirectory))
+        {
+            throw new ArgumentException("Source project directory is required.", nameof(sourceProjectDirectory));
+        }
+        if (string.IsNullOrWhiteSpace(sourceProjectPath))
+        {
+            throw new ArgumentException("Source project path is required.", nameof(sourceProjectPath));
+        }
+
+        var sourceDirectory = Path.GetFullPath(sourceProjectDirectory);
+        var sourcePath = Path.GetFullPath(sourceProjectPath);
+        if (!Directory.Exists(sourceDirectory))
+        {
+            throw new DirectoryNotFoundException($"Generated WiX project directory not found: {sourceDirectory}");
+        }
+        if (!File.Exists(sourcePath))
+        {
+            throw new FileNotFoundException($"Generated WiX project file not found: {sourcePath}", sourcePath);
+        }
+
+        var safeInstallerId = SanitizeWixIdentifier(installerId, "Installer");
+        var workingDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge",
+            "WixBuild",
+            $"{safeInstallerId}-{Guid.NewGuid():N}");
+
+        try
+        {
+            DirectoryCopy(sourceDirectory, workingDirectory);
+            CopyGeneratedInstallerBuildConfiguration(workingDirectory, projectRoot, sourcePath);
+            var projectPath = Path.Combine(workingDirectory, Path.GetFileName(sourcePath));
+            if (!File.Exists(projectPath))
+            {
+                throw new FileNotFoundException($"Temporary generated WiX project file not found: {projectPath}", projectPath);
+            }
+
+            var externalFiles = PrepareGeneratedInstallerExternalFiles(workingDirectory, projectPath, sourceDirectory, prepare);
+
+            return new GeneratedInstallerBuildWorkspace(
+                workingDirectory,
+                projectPath,
+                externalFiles.PayloadDirectory,
+                externalFiles.HarvestPath);
+        }
+        catch
+        {
+            TryDeleteGeneratedInstallerBuildWorkspace(workingDirectory);
+            throw;
+        }
+    }
+
+    private static GeneratedInstallerExternalFiles PrepareGeneratedInstallerExternalFiles(
+        string workingDirectory,
+        string projectPath,
+        string sourceProjectDirectory,
+        DotNetPublishMsiPrepareResult? prepare)
+    {
+        if (prepare is null)
+        {
+            return new GeneratedInstallerExternalFiles(null, null);
+        }
+
+        var inputsDirectory = Path.Combine(workingDirectory, "PowerForgeInputs");
+        string? payloadDirectory = null;
+        if (!string.IsNullOrWhiteSpace(prepare.StagingDir) &&
+            Directory.Exists(prepare.StagingDir))
+        {
+            payloadDirectory = Path.Combine(inputsDirectory, "Payload");
+            DirectoryCopy(prepare.StagingDir, payloadDirectory);
+            RewriteWixProjectDefineConstants(
+                projectPath,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PayloadDir"] = payloadDirectory,
+                    ["PowerForgeMsiPayloadDir"] = payloadDirectory
+                });
+        }
+
+        RewriteGeneratedInstallerAssetPaths(
+            Path.Combine(workingDirectory, "Product.wxs"),
+            Path.Combine(sourceProjectDirectory, "Product.wxs"),
+            inputsDirectory,
+            prepare.StagingDir,
+            payloadDirectory);
+
+        string? harvestPath = null;
+        if (!string.IsNullOrWhiteSpace(prepare.HarvestPath) &&
+            File.Exists(prepare.HarvestPath))
+        {
+            var prepareHarvestPath = prepare.HarvestPath!;
+            Directory.CreateDirectory(inputsDirectory);
+            harvestPath = Path.Combine(inputsDirectory, Path.GetFileName(prepareHarvestPath));
+            File.Copy(prepareHarvestPath, harvestPath, overwrite: true);
+
+            if (!string.IsNullOrWhiteSpace(payloadDirectory))
+            {
+                RewriteHarvestSourcePaths(harvestPath, prepare.StagingDir, payloadDirectory!);
+            }
+
+            RewriteWixProjectSourceIncludes(projectPath, prepareHarvestPath, harvestPath);
+        }
+
+        return new GeneratedInstallerExternalFiles(payloadDirectory, harvestPath);
+    }
+
+    private static void RewriteWixProjectDefineConstants(
+        string projectPath,
+        IReadOnlyDictionary<string, string> replacements)
+    {
+        if (replacements.Count == 0)
+        {
+            return;
+        }
+
+        var document = XDocument.Load(projectPath, LoadOptions.PreserveWhitespace);
+        var changed = false;
+
+        foreach (var element in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "DefineConstants", StringComparison.OrdinalIgnoreCase)))
+        {
+            var entries = element.Value
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(entry => entry.Trim())
+                .Where(entry => entry.Length > 0)
+                .ToArray();
+            var rewrittenEntries = new List<string>(entries.Length);
+            foreach (var entry in entries)
+            {
+                var separatorIndex = entry.IndexOf('=');
+                if (separatorIndex <= 0)
+                {
+                    rewrittenEntries.Add(entry);
+                    continue;
+                }
+
+                var key = entry.Substring(0, separatorIndex).Trim();
+                if (replacements.TryGetValue(key, out var replacement))
+                {
+                    rewrittenEntries.Add(key + "=" + replacement);
+                    changed = true;
+                    continue;
+                }
+
+                rewrittenEntries.Add(entry);
+            }
+
+            if (changed)
+            {
+                element.Value = string.Join(";", rewrittenEntries);
+            }
+        }
+
+        if (changed)
+        {
+            document.Save(projectPath);
+        }
+    }
+
+    private static void RewriteGeneratedInstallerAssetPaths(
+        string sourcePath,
+        string originalSourcePath,
+        string inputsDirectory,
+        string? sourcePayloadDirectory,
+        string? targetPayloadDirectory)
+    {
+        if (!File.Exists(sourcePath))
+        {
+            return;
+        }
+
+        var document = XDocument.Load(sourcePath, LoadOptions.PreserveWhitespace);
+        var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
+        var originalSourceDirectory = Path.GetDirectoryName(originalSourcePath)!;
+        var assetsDirectory = Path.Combine(inputsDirectory, "Assets");
+        var copiedAssets = new Dictionary<string, string>(CreateCurrentFileSystemPathComparer());
+        var fileSystemComparison = CreateCurrentFileSystemStringComparison();
+        var changed = false;
+
+        foreach (var valueAttribute in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "WixVariable", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Value"))
+            .Where(attribute => attribute is not null))
+        {
+            if (TryRewriteGeneratedInstallerFileAttribute(
+                valueAttribute!,
+                sourceDirectory,
+                originalSourceDirectory,
+                assetsDirectory,
+                copiedAssets,
+                fileSystemComparison,
+                sourcePayloadDirectory,
+                targetPayloadDirectory))
+            {
+                changed = true;
+            }
+        }
+
+        foreach (var sourceAttribute in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "File", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Source"))
+            .Where(attribute => attribute is not null))
+        {
+            if (TryRewriteGeneratedInstallerFileAttribute(
+                sourceAttribute!,
+                sourceDirectory,
+                originalSourceDirectory,
+                assetsDirectory,
+                copiedAssets,
+                fileSystemComparison,
+                sourcePayloadDirectory,
+                targetPayloadDirectory))
+            {
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            document.Save(sourcePath);
+        }
+    }
+
+    private static bool TryRewriteGeneratedInstallerFileAttribute(
+        XAttribute attribute,
+        string sourceDirectory,
+        string originalSourceDirectory,
+        string assetsDirectory,
+        IDictionary<string, string> copiedAssets,
+        StringComparison fileSystemComparison,
+        string? sourcePayloadDirectory,
+        string? targetPayloadDirectory)
+    {
+        var value = attribute.Value;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var fullPath = Path.GetFullPath(Path.IsPathRooted(value)
+            ? value
+            : Path.Combine(originalSourceDirectory, NormalizeRelativePathSeparators(value)));
+        if (!File.Exists(fullPath))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(sourcePayloadDirectory) &&
+            !string.IsNullOrWhiteSpace(targetPayloadDirectory))
+        {
+            var sourcePayload = AppendDirectorySeparator(Path.GetFullPath(sourcePayloadDirectory!));
+            if (fullPath.StartsWith(sourcePayload, fileSystemComparison))
+            {
+                var relativePayloadPath = fullPath.Substring(sourcePayload.Length);
+                attribute.Value = GetRelativePathCompat(sourceDirectory, Path.Combine(targetPayloadDirectory!, relativePayloadPath));
+                return true;
+            }
+        }
+
+        if (!copiedAssets.TryGetValue(fullPath, out var copiedPath))
+        {
+            Directory.CreateDirectory(assetsDirectory);
+            copiedPath = GetUniqueAssetPath(assetsDirectory, Path.GetFileName(fullPath));
+            Directory.CreateDirectory(Path.GetDirectoryName(copiedPath)!);
+            File.Copy(fullPath, copiedPath, overwrite: false);
+            copiedAssets[fullPath] = copiedPath;
+        }
+
+        attribute.Value = GetRelativePathCompat(sourceDirectory, copiedPath);
+        return true;
+    }
+
+    private static string GetUniqueAssetPath(string directory, string fileName)
+    {
+        var safeName = string.IsNullOrWhiteSpace(fileName)
+            ? "asset"
+            : fileName;
+        var candidate = Path.Combine(directory, safeName);
+        if (!File.Exists(candidate) &&
+            !Directory.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(safeName);
+        for (var index = 1; ; index++)
+        {
+            candidate = Path.Combine(directory, $"{name}_{index}", safeName);
+            if (!File.Exists(candidate) &&
+                !Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    private static StringComparer CreateCurrentFileSystemPathComparer()
+    {
+        return IsCurrentFileSystemCaseSensitive()
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
+    }
+
+    private static StringComparison CreateCurrentFileSystemStringComparison()
+    {
+        return IsCurrentFileSystemCaseSensitive()
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+    }
+
+    private static bool IsCurrentFileSystemCaseSensitive()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "PowerForgeCaseProbe", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var lowerPath = Path.Combine(directory, "caseprobe");
+            var upperPath = Path.Combine(directory, "CASEPROBE");
+            File.WriteAllText(lowerPath, string.Empty);
+            return !File.Exists(upperPath);
+        }
+        catch
+        {
+            return Path.DirectorySeparatorChar != '\\';
+        }
+        finally
+        {
+            TryDeleteGeneratedInstallerBuildWorkspace(directory);
+        }
+    }
+
+    private static void RewriteWixProjectSourceIncludes(
+        string projectPath,
+        string sourcePath,
+        string targetPath)
+    {
+        var document = XDocument.Load(projectPath, LoadOptions.PreserveWhitespace);
+        var projectDirectory = Path.GetDirectoryName(projectPath)!;
+        var sourceFullPath = Path.GetFullPath(sourcePath);
+        var targetRelativePath = GetRelativePathCompat(projectDirectory, targetPath);
+        var changed = false;
+
+        foreach (var include in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "Compile", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Include"))
+            .Where(attribute => attribute is not null))
+        {
+            var value = include!.Value;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var includePath = Path.IsPathRooted(value)
+                ? Path.GetFullPath(value)
+                : Path.GetFullPath(Path.Combine(projectDirectory, value));
+            if (!string.Equals(includePath, sourceFullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            include.Value = targetRelativePath;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            document.Save(projectPath);
+        }
+    }
+
+    private static void RewriteHarvestSourcePaths(
+        string harvestPath,
+        string sourcePayloadDirectory,
+        string targetPayloadDirectory)
+    {
+        var document = XDocument.Load(harvestPath, LoadOptions.PreserveWhitespace);
+        var sourceDirectory = AppendDirectorySeparator(Path.GetFullPath(sourcePayloadDirectory));
+        var targetDirectory = Path.GetFullPath(targetPayloadDirectory);
+        var fileSystemComparison = CreateCurrentFileSystemStringComparison();
+        var changed = false;
+
+        foreach (var sourceAttribute in document
+            .Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "File", StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Attribute("Source"))
+            .Where(attribute => attribute is not null))
+        {
+            var value = sourceAttribute!.Value;
+            if (string.IsNullOrWhiteSpace(value) ||
+                !Path.IsPathRooted(value))
+            {
+                continue;
+            }
+
+            var fullPath = Path.GetFullPath(value);
+            if (!fullPath.StartsWith(sourceDirectory, fileSystemComparison))
+            {
+                continue;
+            }
+
+            var relativePath = fullPath.Substring(sourceDirectory.Length);
+            sourceAttribute.Value = Path.Combine(targetDirectory, relativePath);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            document.Save(harvestPath);
+        }
+    }
+
+    private static void TryDeleteGeneratedInstallerBuildWorkspace(string? workingDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            return;
+        }
+
+        try
+        {
+            if (Directory.Exists(workingDirectory))
+            {
+                Directory.Delete(workingDirectory, recursive: true);
+            }
+        }
+        catch
+        {
+            // Best effort cleanup; the primary generated authoring remains in the configured artifact folder.
+        }
+    }
+
+    internal sealed class GeneratedInstallerBuildWorkspace : IDisposable
+    {
+        public GeneratedInstallerBuildWorkspace(
+            string workingDirectory,
+            string projectPath,
+            string? payloadDirectory,
+            string? harvestPath)
+        {
+            WorkingDirectory = workingDirectory;
+            ProjectPath = projectPath;
+            PayloadDirectory = payloadDirectory;
+            HarvestPath = harvestPath;
+        }
+
+        public string WorkingDirectory { get; }
+
+        public string ProjectPath { get; }
+
+        public string? PayloadDirectory { get; }
+
+        public string? HarvestPath { get; }
+
+        public void Dispose()
+        {
+            TryDeleteGeneratedInstallerBuildWorkspace(WorkingDirectory);
+        }
+    }
+
+    private sealed class GeneratedInstallerExternalFiles
+    {
+        public GeneratedInstallerExternalFiles(string? payloadDirectory, string? harvestPath)
+        {
+            PayloadDirectory = payloadDirectory;
+            HarvestPath = harvestPath;
+        }
+
+        public string? PayloadDirectory { get; }
+
+        public string? HarvestPath { get; }
+    }
+}

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Xml.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -46,6 +47,449 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             "1.0.9638");
 
         Assert.Equal("GraphEssentialsX.Sync.Service-win-x64-1.0.9638", outputName);
+    }
+
+    [Fact]
+    public void PrepareGeneratedInstallerBuildWorkspace_CopiesProjectToShortTempWorkspace()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "LocalPackages"));
+            Directory.CreateDirectory(Path.Combine(root, "GlobalPackages"));
+            Directory.CreateDirectory(Path.Combine(root, "LocalFallback"));
+            Directory.CreateDirectory(Path.Combine(root, "Artifacts", "DotNetPublish", "NestedPackages"));
+            File.WriteAllText(
+                Path.Combine(root, "NuGet.config"),
+                "<configuration><config>" +
+                "<add key=\"globalPackagesFolder\" value=\"GlobalPackages\" />" +
+                "</config><packageSources>" +
+                "<add key=\"local\" value=\"LocalPackages\" />" +
+                "<add key=\"private\" value=\"https://packages.example.test/v3/index.json\" />" +
+                "<add key=\"file\" value=\"file:///C:/packages\" />" +
+                "<add key=\"nuget\" value=\"https://api.nuget.org/v3/index.json\" />" +
+                "</packageSources><fallbackPackageFolders>" +
+                "<add key=\"fallback\" value=\"LocalFallback\" />" +
+                "</fallbackPackageFolders><packageSourceCredentials>" +
+                "<private><add key=\"Username\" value=\"parent\" /></private>" +
+                "</packageSourceCredentials></configuration>");
+            File.WriteAllText(Path.Combine(root, "Directory.Build.rsp"), "/p:RepoRsp=true");
+            var importedBuildProps = Path.Combine(root, "Build", "Props", "Generated.props");
+            Directory.CreateDirectory(Path.GetDirectoryName(importedBuildProps)!);
+            File.WriteAllText(importedBuildProps, "<Project><PropertyGroup><RepoRootBuildProps>true</RepoRootBuildProps></PropertyGroup></Project>");
+            var rootBuildTargets = Path.Combine(root, "Directory.Build.targets");
+            File.WriteAllText(rootBuildTargets, "<Project><PropertyGroup><RootBuildTargets>true</RootBuildTargets></PropertyGroup></Project>");
+            var parentBuildTargets = Path.Combine(root, "Artifacts", "Directory.Build.targets");
+            var parentCommonTargets = Path.Combine(root, "Artifacts", "Build", "Common.targets");
+            Directory.CreateDirectory(Path.GetDirectoryName(parentCommonTargets)!);
+            File.WriteAllText(parentCommonTargets, "<Project><PropertyGroup><CommonTargets>true</CommonTargets></PropertyGroup></Project>");
+            File.WriteAllText(
+                parentBuildTargets,
+                "<Project>" +
+                "<Import Project=\"Build\\**\\*.targets\" Condition=\"Exists('Build\\**\\*.targets') And '$(EnableCommon)' == 'true'\" />" +
+                "<Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))\" " +
+                "Condition=\"Exists('$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))') And '$(DisableRootImports)' != 'true'\" />" +
+                "</Project>");
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.props"),
+                "<Project><Import Project=\"$(MSBuildThisFileDirectory)Build\\**\\*.props\" /></Project>");
+            File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project />");
+            var sourceDir = Path.Combine(
+                root,
+                "Artifacts",
+                "DotNetPublish",
+                "Msi",
+                "DesktopManager.App.MSI",
+                "DesktopManager.App",
+                "win-x64",
+                "net10.0-windows10.0.19041.0",
+                "PortableCompat",
+                "prepare",
+                "generated");
+            var nestedConfigPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Directory.Build.targets");
+            Directory.CreateDirectory(Path.GetDirectoryName(nestedConfigPath)!);
+            var generatedProjectImportPath = Path.Combine(sourceDir, "Build", "Generated.props");
+            Directory.CreateDirectory(Path.GetDirectoryName(generatedProjectImportPath)!);
+            File.WriteAllText(generatedProjectImportPath, "<Project><PropertyGroup><GeneratedProjectBuildProps>true</GeneratedProjectBuildProps></PropertyGroup></Project>");
+            File.WriteAllText(
+                Path.Combine(root, "Artifacts", "DotNetPublish", "NuGet.config"),
+                "<configuration><packageSources><clear />" +
+                "<add key=\"nested\" value=\"NestedPackages\" />" +
+                "<add key=\"file\" value=\"file:///C:/packages\" />" +
+                "</packageSources><packageSourceCredentials>" +
+                "<private><add key=\"Username\" value=\"nested\" /></private>" +
+                "</packageSourceCredentials></configuration>");
+            File.WriteAllText(
+                nestedConfigPath,
+                "<Project><PropertyGroup>" +
+                "<RepoToolPath>$(MSBuildThisFileDirectory)Tools</RepoToolPath>" +
+                "</PropertyGroup>" +
+                "<Import Project=\"$(MSBuildProjectDirectory)\\Build\\Generated.props\" " +
+                "Condition=\"Exists('$(MSBuildProjectDirectory)\\Build\\Generated.props')\" />" +
+                "<Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))\" " +
+                "Condition=\"'$([MSBuild]::GetPathOfFileAbove(Directory.Build.targets, $(MSBuildThisFileDirectory)..))' != '' And '$(DisableParentImports)' != 'true'\" />" +
+                "</Project>");
+            Directory.CreateDirectory(Path.Combine(sourceDir, "Fragments"));
+            var sourceProjectPath = Path.Combine(sourceDir, "DesktopManager_App_MSI.wixproj");
+            var stagingDir = Path.Combine(root, "Payload", "DesktopManager.App", "win-x64", "net10.0-windows10.0.19041.0", "PortableCompat");
+            Directory.CreateDirectory(stagingDir);
+            var payloadFile = Path.Combine(stagingDir, "DesktopManager.App.exe");
+            File.WriteAllText(payloadFile, "payload");
+            var firstExternalAsset = Path.Combine(root, "External", "One", "duplicate.txt");
+            var secondExternalAsset = Path.Combine(root, "External", "Two", "duplicate.txt");
+            var thirdExternalAsset = Path.Combine(root, "External", "Three", "duplicate_1");
+            Directory.CreateDirectory(Path.GetDirectoryName(firstExternalAsset)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(secondExternalAsset)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(thirdExternalAsset)!);
+            File.WriteAllText(firstExternalAsset, "one");
+            File.WriteAllText(secondExternalAsset, "two");
+            File.WriteAllText(thirdExternalAsset, "three");
+            var includeCaseDistinctAssets = IsCurrentFileSystemCaseSensitive(root);
+            var firstCaseDistinctAsset = Path.Combine(root, "External", "Case", "asset.txt");
+            var secondCaseDistinctAsset = Path.Combine(root, "External", "Case", "ASSET.txt");
+            var caseDistinctPayloadFile = Path.Combine(root, "payload", "DesktopManager.App", "win-x64", "net10.0-windows10.0.19041.0", "PortableCompat", "case-payload.txt");
+            var caseDistinctFileEntries = string.Empty;
+            if (includeCaseDistinctAssets)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(firstCaseDistinctAsset)!);
+                File.WriteAllText(firstCaseDistinctAsset, "lower");
+                File.WriteAllText(secondCaseDistinctAsset, "upper");
+                Directory.CreateDirectory(Path.GetDirectoryName(caseDistinctPayloadFile)!);
+                File.WriteAllText(caseDistinctPayloadFile, "case payload");
+                caseDistinctFileEntries =
+                    $"<File Id=\"CaseLower\" Source=\"{firstCaseDistinctAsset}\" />" +
+                    $"<File Id=\"CaseUpper\" Source=\"{secondCaseDistinctAsset}\" />" +
+                    $"<File Id=\"CasePayloadOutside\" Source=\"{caseDistinctPayloadFile}\" />";
+            }
+            var licensePath = Path.Combine(root, "Build", "Installer", "DesktopManager-License.rtf");
+            Directory.CreateDirectory(Path.GetDirectoryName(licensePath)!);
+            File.WriteAllText(licensePath, "{\\rtf1 DesktopManager}");
+            var relativeBannerPath = Path.GetFullPath(Path.Combine(sourceDir, "..", "Installer", "banner.bmp"));
+            Directory.CreateDirectory(Path.GetDirectoryName(relativeBannerPath)!);
+            File.WriteAllText(relativeBannerPath, "banner");
+            var harvestPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Msi", "DesktopManager.App.MSI", "HarvestedPayload.wxs");
+            Directory.CreateDirectory(Path.GetDirectoryName(harvestPath)!);
+            File.WriteAllText(
+                harvestPath,
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">" +
+                "<Fragment><DirectoryRef Id=\"INSTALLFOLDER\"><Component Id=\"Payload\" Guid=\"*\">" +
+                $"<File Id=\"DesktopManagerAppExe\" Source=\"{payloadFile}\" KeyPath=\"yes\" />" +
+                "</Component></DirectoryRef></Fragment></Wix>");
+            File.WriteAllText(
+                sourceProjectPath,
+                "<Project Sdk=\"WixToolset.Sdk/4.0.6\">" +
+                "<PropertyGroup>" +
+                $"<DefineConstants>PayloadDir={stagingDir};PowerForgeMsiPayloadDir={stagingDir};Other=1</DefineConstants>" +
+                "</PropertyGroup>" +
+                "<ItemGroup>" +
+                "<Compile Include=\"Product.wxs\" />" +
+                $"<Compile Include=\"{harvestPath}\" />" +
+                "</ItemGroup></Project>");
+            File.WriteAllText(
+                Path.Combine(sourceDir, "Product.wxs"),
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">" +
+                "<Package Name=\"DesktopManager\">" +
+                $"<WixVariable Id=\"WixUILicenseRtf\" Value=\"{licensePath}\" />" +
+                "<WixVariable Id=\"WixUIBannerBmp\" Value=\"..\\Installer\\banner.bmp\" />" +
+                $"<File Id=\"LiteralPayloadExe\" Source=\"{payloadFile}\" />" +
+                $"<File Id=\"ExternalOne\" Source=\"{firstExternalAsset}\" />" +
+                $"<File Id=\"ExternalTwo\" Source=\"{secondExternalAsset}\" />" +
+                $"<File Id=\"ExternalThree\" Source=\"{thirdExternalAsset}\" />" +
+                caseDistinctFileEntries +
+                "</Package></Wix>");
+            File.WriteAllText(Path.Combine(sourceDir, "Fragments", "Payload.wxs"), "<Wix />");
+
+            var workspace = DotNetPublishPipelineRunner.PrepareGeneratedInstallerBuildWorkspace(
+                "DesktopManager.App.MSI",
+                sourceDir,
+                sourceProjectPath,
+                new DotNetPublishMsiPrepareResult
+                {
+                    InstallerId = "DesktopManager.App.MSI",
+                    Target = "DesktopManager.App",
+                    Framework = "net10.0-windows10.0.19041.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    StagingDir = stagingDir,
+                    HarvestPath = harvestPath
+                },
+                root);
+            var tempRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "PowerForge", "WixBuild"))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            try
+            {
+                Assert.StartsWith(tempRoot, workspace.WorkingDirectory, StringComparison.OrdinalIgnoreCase);
+                Assert.False(string.Equals(sourceDir, workspace.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
+                Assert.True(File.Exists(workspace.ProjectPath));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Product.wxs")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Fragments", "Payload.wxs")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "NuGet.config")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.props")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.rsp")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Build", "Props", "Generated.props")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "BuildConfig", "Directory.Build.targets")));
+                var copiedParentTargetsPath = Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "BuildConfig", "Artifacts", "Directory.Build.targets");
+                var copiedParentCommonTargetsPath = Path.Combine(workspace.WorkingDirectory, "Artifacts", "Build", "Common.targets");
+                Assert.True(File.Exists(copiedParentTargetsPath));
+                Assert.True(File.Exists(copiedParentCommonTargetsPath));
+                var copiedNestedTargets = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets"));
+                var copiedNestedImports = copiedNestedTargets
+                    .Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var copiedNestedProjectImportElement = copiedNestedImports
+                    .Single(element => ((string?)element.Attribute("Project"))?.IndexOf("Generated.props", StringComparison.OrdinalIgnoreCase) >= 0);
+                var copiedNestedProjectImport = copiedNestedProjectImportElement
+                    .Attribute("Project")!
+                    .Value;
+                var copiedNestedProjectImportTarget = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, copiedNestedProjectImport));
+                Assert.True(File.Exists(copiedNestedProjectImportTarget));
+                Assert.Contains("GeneratedProjectBuildProps", File.ReadAllText(copiedNestedProjectImportTarget), StringComparison.Ordinal);
+                Assert.DoesNotContain("RepoRootBuildProps", File.ReadAllText(copiedNestedProjectImportTarget), StringComparison.Ordinal);
+                Assert.DoesNotContain(Path.Combine(root, "Build"), copiedNestedProjectImportTarget, StringComparison.OrdinalIgnoreCase);
+                var copiedNestedImportElement = copiedNestedImports
+                    .Single(element => ((string?)element.Attribute("Project"))?.IndexOf("Directory.Build.targets", StringComparison.OrdinalIgnoreCase) >= 0);
+                var copiedNestedImport = copiedNestedImportElement
+                    .Attribute("Project")!
+                    .Value;
+                Assert.DoesNotContain("GetPathOfFileAbove", copiedNestedImport, StringComparison.OrdinalIgnoreCase);
+                var copiedOuterTargetPath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, copiedNestedImport));
+                Assert.True(File.Exists(copiedOuterTargetPath));
+                Assert.Contains("PowerForgeInputs", copiedNestedImport, StringComparison.OrdinalIgnoreCase);
+                var copiedNestedImportCondition = copiedNestedImportElement.Attribute("Condition")!.Value;
+                Assert.DoesNotContain("GetPathOfFileAbove", copiedNestedImportCondition, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("..))", copiedNestedImportCondition, StringComparison.Ordinal);
+                Assert.Contains(copiedNestedImport, copiedNestedImportCondition, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("DisableParentImports", copiedNestedImportCondition, StringComparison.Ordinal);
+                var copiedParentTargets = XDocument.Load(copiedParentTargetsPath);
+                var copiedParentImports = copiedParentTargets
+                    .Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var copiedParentCommonImportElement = copiedParentImports
+                    .Single(element => ((string?)element.Attribute("Project"))?.IndexOf("*.targets", StringComparison.OrdinalIgnoreCase) >= 0);
+                var copiedParentCommonImport = copiedParentCommonImportElement.Attribute("Project")!.Value;
+                Assert.NotEqual("Build\\**\\*.targets", copiedParentCommonImport);
+                Assert.Contains("**", copiedParentCommonImport, StringComparison.Ordinal);
+                var copiedParentCommonImportTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(copiedParentTargetsPath)!, copiedParentCommonImport));
+                Assert.Equal(
+                    Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, "Artifacts", "Build", "**", "*.targets")),
+                    copiedParentCommonImportTarget);
+                var copiedParentCommonImportCondition = copiedParentCommonImportElement.Attribute("Condition")!.Value;
+                Assert.Contains(copiedParentCommonImport, copiedParentCommonImportCondition, StringComparison.Ordinal);
+                Assert.Contains("EnableCommon", copiedParentCommonImportCondition, StringComparison.Ordinal);
+                var copiedParentRootImportElement = copiedParentImports
+                    .Single(element => ((string?)element.Attribute("Project"))?.IndexOf("Directory.Build.targets", StringComparison.OrdinalIgnoreCase) >= 0);
+                var copiedParentRootImport = copiedParentRootImportElement.Attribute("Project")!.Value;
+                Assert.DoesNotContain("GetPathOfFileAbove", copiedParentRootImport, StringComparison.OrdinalIgnoreCase);
+                var copiedParentRootImportTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(copiedParentTargetsPath)!, copiedParentRootImport));
+                Assert.Equal(Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "BuildConfig", "Directory.Build.targets")), copiedParentRootImportTarget);
+                var copiedParentRootImportCondition = copiedParentRootImportElement.Attribute("Condition")!.Value;
+                Assert.DoesNotContain("GetPathOfFileAbove", copiedParentRootImportCondition, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains(copiedParentRootImport, copiedParentRootImportCondition, StringComparison.Ordinal);
+                Assert.Contains("DisableRootImports", copiedParentRootImportCondition, StringComparison.Ordinal);
+                var repoToolPath = copiedNestedTargets
+                    .Descendants()
+                    .Single(element => string.Equals(element.Name.LocalName, "RepoToolPath", StringComparison.OrdinalIgnoreCase))
+                    .Value;
+                Assert.DoesNotContain("MSBuildThisFileDirectory", repoToolPath, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(
+                    Path.GetFullPath(Path.Combine(root, "Artifacts", "DotNetPublish", "Tools")),
+                    Path.GetFullPath(repoToolPath));
+                var copiedNuGetConfig = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "NuGet.config"));
+                Assert.Empty(copiedNuGetConfig
+                    .Descendants()
+                    .Where(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "local", StringComparison.OrdinalIgnoreCase))
+                    .ToArray());
+                Assert.Contains(copiedNuGetConfig
+                    .Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "packageSources", StringComparison.OrdinalIgnoreCase))
+                    .Elements(), element => string.Equals(element.Name.LocalName, "clear", StringComparison.OrdinalIgnoreCase));
+                var filePackageSource = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "file", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal("file:///C:/packages", filePackageSource);
+                var nestedPackageSource = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "nested", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal(
+                    Path.GetFullPath(Path.Combine(root, "Artifacts", "DotNetPublish", "NestedPackages")),
+                    Path.GetFullPath(nestedPackageSource));
+                var globalPackagesFolder = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "globalPackagesFolder", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal(Path.GetFullPath(Path.Combine(root, "GlobalPackages")), Path.GetFullPath(globalPackagesFolder));
+                var fallbackPackageFolder = copiedNuGetConfig
+                    .Descendants()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "fallback", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal(Path.GetFullPath(Path.Combine(root, "LocalFallback")), Path.GetFullPath(fallbackPackageFolder));
+                var privateCredentialEntries = copiedNuGetConfig
+                    .Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "packageSourceCredentials", StringComparison.OrdinalIgnoreCase))
+                    .Elements()
+                    .Where(element => string.Equals(element.Name.LocalName, "private", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var privateCredentialEntry = Assert.Single(privateCredentialEntries);
+                var privateCredentialUser = privateCredentialEntry
+                    .Elements()
+                    .Single(element =>
+                        string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((string?)element.Attribute("key"), "Username", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("value")!
+                    .Value;
+                Assert.Equal("nested", privateCredentialUser);
+                Assert.NotNull(workspace.PayloadDirectory);
+                Assert.NotNull(workspace.HarvestPath);
+                Assert.True(File.Exists(Path.Combine(workspace.PayloadDirectory!, "DesktopManager.App.exe")));
+                Assert.True(File.Exists(workspace.HarvestPath!));
+
+                var project = XDocument.Load(workspace.ProjectPath);
+                var projectText = project.ToString();
+                Assert.DoesNotContain(harvestPath, projectText, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(stagingDir, projectText, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains(workspace.PayloadDirectory!, projectText, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("PowerForgeInputs", projectText, StringComparison.OrdinalIgnoreCase);
+
+                XNamespace wix = "http://wixtoolset.org/schemas/v4/wxs";
+                var harvest = XDocument.Load(workspace.HarvestPath!);
+                var source = harvest
+                    .Descendants(wix + "File")
+                    .Single()
+                    .Attribute("Source")!
+                    .Value;
+                Assert.DoesNotContain(stagingDir, source, StringComparison.OrdinalIgnoreCase);
+                Assert.StartsWith(workspace.PayloadDirectory!, source, StringComparison.OrdinalIgnoreCase);
+                Assert.True(File.Exists(source));
+
+                var product = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "Product.wxs"));
+                var licenseValue = product
+                    .Descendants(wix + "WixVariable")
+                    .Single(element => string.Equals((string?)element.Attribute("Id"), "WixUILicenseRtf", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("Value")!
+                    .Value;
+                Assert.DoesNotContain(licensePath, licenseValue, StringComparison.OrdinalIgnoreCase);
+                var copiedLicensePath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, licenseValue));
+                Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedLicensePath, StringComparison.OrdinalIgnoreCase);
+                Assert.True(File.Exists(copiedLicensePath));
+                var bannerValue = product
+                    .Descendants(wix + "WixVariable")
+                    .Single(element => string.Equals((string?)element.Attribute("Id"), "WixUIBannerBmp", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("Value")!
+                    .Value;
+                Assert.DoesNotContain("..\\Installer\\banner.bmp", bannerValue, StringComparison.OrdinalIgnoreCase);
+                var copiedBannerPath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, bannerValue));
+                Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedBannerPath, StringComparison.OrdinalIgnoreCase);
+                Assert.True(File.Exists(copiedBannerPath));
+                Assert.Equal("banner", File.ReadAllText(copiedBannerPath));
+                var literalSource = product
+                    .Descendants(wix + "File")
+                    .Single(element => string.Equals((string?)element.Attribute("Id"), "LiteralPayloadExe", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("Source")!
+                    .Value;
+                Assert.DoesNotContain(stagingDir, literalSource, StringComparison.OrdinalIgnoreCase);
+                var copiedLiteralSource = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, literalSource));
+                Assert.StartsWith(workspace.PayloadDirectory!, copiedLiteralSource, StringComparison.OrdinalIgnoreCase);
+                Assert.True(File.Exists(copiedLiteralSource));
+                var externalSources = product
+                    .Descendants(wix + "File")
+                    .Where(element =>
+                    {
+                        var id = (string?)element.Attribute("Id");
+                        return string.Equals(id, "ExternalOne", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(id, "ExternalTwo", StringComparison.OrdinalIgnoreCase);
+                    })
+                    .Select(element => Path.GetFullPath(Path.Combine(
+                        workspace.WorkingDirectory,
+                        element.Attribute("Source")!.Value)))
+                    .ToArray();
+                Assert.Equal(2, externalSources.Length);
+                Assert.All(externalSources, path =>
+                {
+                    Assert.Equal("duplicate.txt", Path.GetFileName(path));
+                    Assert.True(File.Exists(path));
+                    Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), path, StringComparison.OrdinalIgnoreCase);
+                });
+                Assert.NotEqual(
+                    Path.GetDirectoryName(externalSources[0]),
+                    Path.GetDirectoryName(externalSources[1]),
+                    StringComparer.OrdinalIgnoreCase);
+                var externalDirectoryCollisionSource = product
+                    .Descendants(wix + "File")
+                    .Single(element => string.Equals((string?)element.Attribute("Id"), "ExternalThree", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("Source")!
+                    .Value;
+                var copiedExternalDirectoryCollisionSource = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, externalDirectoryCollisionSource));
+                Assert.Equal("duplicate_1", Path.GetFileName(copiedExternalDirectoryCollisionSource));
+                Assert.True(File.Exists(copiedExternalDirectoryCollisionSource));
+                Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedExternalDirectoryCollisionSource, StringComparison.OrdinalIgnoreCase);
+                Assert.NotEqual(
+                    Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets", "duplicate_1"),
+                    copiedExternalDirectoryCollisionSource,
+                    StringComparer.OrdinalIgnoreCase);
+                if (includeCaseDistinctAssets)
+                {
+                    var caseDistinctSources = product
+                        .Descendants(wix + "File")
+                        .Where(element =>
+                        {
+                            var id = (string?)element.Attribute("Id");
+                            return string.Equals(id, "CaseLower", StringComparison.Ordinal) ||
+                                string.Equals(id, "CaseUpper", StringComparison.Ordinal);
+                        })
+                        .Select(element => Path.GetFullPath(Path.Combine(
+                            workspace.WorkingDirectory,
+                            element.Attribute("Source")!.Value)))
+                        .ToArray();
+                    Assert.Equal(2, caseDistinctSources.Length);
+                    Assert.NotEqual(caseDistinctSources[0], caseDistinctSources[1], StringComparer.Ordinal);
+                    Assert.Contains(caseDistinctSources, path => string.Equals(File.ReadAllText(path), "lower", StringComparison.Ordinal));
+                    Assert.Contains(caseDistinctSources, path => string.Equals(File.ReadAllText(path), "upper", StringComparison.Ordinal));
+                    var casePayloadSource = product
+                        .Descendants(wix + "File")
+                        .Single(element => string.Equals((string?)element.Attribute("Id"), "CasePayloadOutside", StringComparison.Ordinal))
+                        .Attribute("Source")!
+                        .Value;
+                    var copiedCasePayloadSource = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, casePayloadSource));
+                    Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedCasePayloadSource, StringComparison.Ordinal);
+                    Assert.True(File.Exists(copiedCasePayloadSource));
+                    Assert.Equal("case payload", File.ReadAllText(copiedCasePayloadSource));
+                    Assert.DoesNotContain(workspace.PayloadDirectory!, copiedCasePayloadSource, StringComparison.Ordinal);
+                }
+            }
+            finally
+            {
+                var workingDirectory = workspace.WorkingDirectory;
+                workspace.Dispose();
+                Assert.False(Directory.Exists(workingDirectory));
+            }
+        }
+        finally
+        {
+            TryDelete(root);
+        }
     }
 
     [Fact]
@@ -1501,6 +1945,16 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static bool IsCurrentFileSystemCaseSensitive(string root)
+    {
+        var directory = Path.Combine(root, "CaseSensitivityProbe");
+        Directory.CreateDirectory(directory);
+        var lowerPath = Path.Combine(directory, "caseprobe");
+        var upperPath = Path.Combine(directory, "CASEPROBE");
+        File.WriteAllText(lowerPath, string.Empty);
+        return !File.Exists(upperPath);
     }
 
     private static string[] InvokeFindChangedMsiOutputs(string root, bool skipBinDirectoryFilter)
