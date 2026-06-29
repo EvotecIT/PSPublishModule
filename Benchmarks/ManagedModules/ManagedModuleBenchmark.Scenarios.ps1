@@ -87,6 +87,7 @@ function New-BenchmarkScenario {
         [string] $ScenarioModuleFastSource = '',
         [int] $ScenarioManagedMaxRank = 0,
         [double] $ScenarioManagedMaxVsFastest = 0,
+        [double] $ScenarioManagedMaxWindowsPowerShellVsPowerShell7 = 0,
         [int] $ScenarioManagedMinAuthenticodeCheckedFiles = 0,
         [int] $ScenarioManagedMinAuthenticodeCatalogFiles = 0,
         [bool] $ScenarioAuthenticodeCheck = $false,
@@ -122,6 +123,7 @@ function New-BenchmarkScenario {
         ModuleFastSource = $ScenarioModuleFastSource
         ManagedMaxRank = $ScenarioManagedMaxRank
         ManagedMaxVsFastest = $ScenarioManagedMaxVsFastest
+        ManagedMaxWindowsPowerShellVsPowerShell7 = $ScenarioManagedMaxWindowsPowerShellVsPowerShell7
         ManagedMinAuthenticodeCheckedFiles = $ScenarioManagedMinAuthenticodeCheckedFiles
         ManagedMinAuthenticodeCatalogFiles = $ScenarioManagedMinAuthenticodeCatalogFiles
         CacheMode = $ScenarioCacheMode
@@ -140,11 +142,11 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Full' -ModuleName 'Az' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'Teams' -ModuleName 'MicrosoftTeams'
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'ExchangeOnlineManagement' -ModuleName 'ExchangeOnlineManagement'
-        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'ThreadJob.InstallSave.NoOpForce' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce') -ScenarioManagedMaxVsFastest 1.25
-        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Graph.Authentication.InstallExact.NoOpForce' -ModuleName 'Microsoft.Graph.Authentication' -Version '2.38.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -ScenarioManagedMaxRank 1
-        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Graph.Authentication.SaveExact.NoOpForce' -ModuleName 'Microsoft.Graph.Authentication' -Version '2.38.0' -AcceptLicense $true -Operations @('SaveNoOp', 'SaveForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1
-        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Az.Accounts.InstallExact.NoOpForce' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -ScenarioManagedMaxRank 1
-        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Az.Accounts.SaveExact.NoOpForce' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('SaveNoOp', 'SaveForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'ThreadJob.InstallSave.NoOpForce' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce') -ScenarioManagedMaxVsFastest 1.25 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
+        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Graph.Authentication.InstallExact.NoOpForce' -ModuleName 'Microsoft.Graph.Authentication' -Version '2.38.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
+        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Graph.Authentication.SaveExact.NoOpForce' -ModuleName 'Microsoft.Graph.Authentication' -Version '2.38.0' -AcceptLicense $true -Operations @('SaveNoOp', 'SaveForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
+        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Az.Accounts.InstallExact.NoOpForce' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
+        New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Az.Accounts.SaveExact.NoOpForce' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('SaveNoOp', 'SaveForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
         New-BenchmarkScenario -SuiteName 'HeavyLifecycleGate' -Name 'Graph.Full.InstallExact.NoOpForce' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'HeavyLifecycleGate' -Name 'Az.Full.InstallExact.NoOpForce' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'HeavySaveGate' -Name 'Graph.Full.Save' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1
@@ -152,7 +154,7 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Graph.Full.Save.ManagedWarmCache' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
         New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Az.Full.Save.ManagedWarmCache' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
         New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-        New-BenchmarkScenario -SuiteName 'SecurityGate' -Name 'ThreadJob.Authenticode.InstallSave' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('Install', 'Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMinAuthenticodeCheckedFiles 1 -ScenarioAuthenticodeCheck $true
+        New-BenchmarkScenario -SuiteName 'SecurityGate' -Name 'ThreadJob.Authenticode.InstallSave' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('Install', 'Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0 -ScenarioManagedMinAuthenticodeCheckedFiles 1 -ScenarioAuthenticodeCheck $true
         New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.StaleVersion' -ModuleName 'ThreadJob' -Version '2.1.0' -UpdateBaselineVersion '2.0.3' -Operations @('RepairPlan') -RepairScenarios @('StaleVersion') -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.SourceDrift' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('RepairPlan') -RepairScenarios @('SourceDrift') -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.ScopeDrift' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('RepairPlan') -RepairScenarios @('ScopeDrift') -ScenarioManagedMaxRank 1

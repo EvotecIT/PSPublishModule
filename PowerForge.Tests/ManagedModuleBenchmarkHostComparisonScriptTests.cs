@@ -161,6 +161,77 @@ public sealed class ManagedModuleBenchmarkHostComparisonScriptTests
     }
 
     [Fact]
+    public void HostComparisonGate_UsesScenarioOwnedThresholdWhenScenarioGatesAreEnabled()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $rows = @(
+                [pscustomobject]@{
+                    Suite = 'LifecycleGate'
+                    Scenario = 'Az.Accounts.SaveExact.NoOpForce'
+                    ModuleName = 'Az.Accounts'
+                    Operation = 'SaveForce'
+                    Host = 'PowerShell7'
+                    ManagedMs = '100'
+                    GateManagedMaxWindowsPowerShellVsPowerShell7 = 1.5
+                },
+                [pscustomobject]@{
+                    Suite = 'LifecycleGate'
+                    Scenario = 'Az.Accounts.SaveExact.NoOpForce'
+                    ModuleName = 'Az.Accounts'
+                    Operation = 'SaveForce'
+                    Host = 'WindowsPowerShell'
+                    ManagedMs = '160'
+                    GateManagedMaxWindowsPowerShellVsPowerShell7 = 1.5
+                }
+            )
+
+            $comparison = New-ManagedHostComparison -Rows $rows
+            Get-ManagedHostComparisonGateViolation -Rows $comparison -UseScenarioGates
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var row = Assert.Single(results);
+        Assert.Equal("1.6x", Property(row, "ComparisonVsBaseline"));
+        Assert.Equal(1.5, NumericProperty(row, "MaxComparisonVsBaseline"));
+        Assert.Contains("exceeds", Property(row, "Reason"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void HostComparisonGate_SkipsRowsWithoutScenarioThreshold()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $rows = @(
+                [pscustomobject]@{
+                    Suite = 'SaveGate'
+                    Scenario = 'Diagnostic.Row'
+                    ModuleName = 'ThreadJob'
+                    Operation = 'Save'
+                    Host = 'PowerShell7'
+                    ManagedMs = '100'
+                },
+                [pscustomobject]@{
+                    Suite = 'SaveGate'
+                    Scenario = 'Diagnostic.Row'
+                    ModuleName = 'ThreadJob'
+                    Operation = 'Save'
+                    Host = 'WindowsPowerShell'
+                    ManagedMs = '500'
+                }
+            )
+
+            $comparison = New-ManagedHostComparison -Rows $rows
+            Get-ManagedHostComparisonGateViolation -Rows $comparison -UseScenarioGates
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        Assert.Empty(results);
+    }
+
+    [Fact]
     public void HostComparisonGate_FailsWhenRequestedComparisonHostIsMissing()
     {
         using var ps = CreateBenchmarkPowerShell("""

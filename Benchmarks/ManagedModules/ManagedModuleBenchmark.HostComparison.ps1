@@ -93,6 +93,7 @@ function New-ManagedHostComparison {
             ModuleName = if ($group.Group[0].PSObject.Properties['ModuleName']) { [string] $group.Group[0].ModuleName } else { '' }
             Operation = [string] $group.Group[0].Operation
             Engine = $EngineName
+            GateManagedMaxWindowsPowerShellVsPowerShell7 = if ($group.Group[0].PSObject.Properties['GateManagedMaxWindowsPowerShellVsPowerShell7']) { ConvertTo-ManagedBenchmarkDouble -Value $group.Group[0].GateManagedMaxWindowsPowerShellVsPowerShell7 } else { 0.0 }
             Status = $status
             BaselineHost = $BaselineHost
             BaselineMs = [math]::Round($baselineMs, 2)
@@ -139,18 +140,27 @@ function ConvertFrom-ManagedHostComparisonRatio {
 function Get-ManagedHostComparisonGateViolation {
     param(
         [object[]] $Rows,
-        [double] $MaxComparisonVsBaseline = 0
+        [double] $MaxComparisonVsBaseline = 0,
+        [switch] $UseScenarioGates
     )
 
-    if ($MaxComparisonVsBaseline -le 0) {
+    if ($MaxComparisonVsBaseline -le 0 -and -not $UseScenarioGates.IsPresent) {
         return @()
     }
 
     foreach ($row in @($Rows)) {
+        $rowMaxComparisonVsBaseline = $MaxComparisonVsBaseline
+        if ($rowMaxComparisonVsBaseline -le 0 -and $UseScenarioGates.IsPresent -and $row.PSObject.Properties['GateManagedMaxWindowsPowerShellVsPowerShell7']) {
+            $rowMaxComparisonVsBaseline = ConvertTo-ManagedBenchmarkDouble -Value $row.GateManagedMaxWindowsPowerShellVsPowerShell7
+        }
+        if ($rowMaxComparisonVsBaseline -le 0) {
+            continue
+        }
+
         $status = if ($row.PSObject.Properties['Status']) { [string] $row.Status } else { '' }
         $ratio = ConvertFrom-ManagedHostComparisonRatio -Value $row.ComparisonVsBaseline
         $missingHost = -not [string]::Equals($status, 'Compared', [StringComparison]::OrdinalIgnoreCase)
-        $ratioFailed = -not $missingHost -and $ratio -gt $MaxComparisonVsBaseline
+        $ratioFailed = -not $missingHost -and $ratio -gt $rowMaxComparisonVsBaseline
 
         if (-not ($missingHost -or $ratioFailed)) {
             continue
@@ -171,11 +181,11 @@ function Get-ManagedHostComparisonGateViolation {
             ComparisonHost = if ($row.PSObject.Properties['ComparisonHost']) { [string] $row.ComparisonHost } else { '' }
             ComparisonMs = if ($row.PSObject.Properties['ComparisonMs']) { [double] $row.ComparisonMs } else { 0.0 }
             ComparisonVsBaseline = if ($row.PSObject.Properties['ComparisonVsBaseline']) { [string] $row.ComparisonVsBaseline } else { '' }
-            MaxComparisonVsBaseline = $MaxComparisonVsBaseline
+            MaxComparisonVsBaseline = $rowMaxComparisonVsBaseline
             Reason = if ($missingHost) {
                 "host comparison status is $status"
             } else {
-                ("comparison ratio {0}x exceeds allowed ratio {1}x" -f $ratio.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture), $MaxComparisonVsBaseline.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture))
+                ("comparison ratio {0}x exceeds allowed ratio {1}x" -f $ratio.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture), $rowMaxComparisonVsBaseline.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture))
             }
         }
     }

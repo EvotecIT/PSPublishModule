@@ -151,6 +151,30 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
     }
 
     [Fact]
+    public void BenchmarkSuite_LifecycleScenariosCarryPowerShellHostDriftGate()
+    {
+        var script = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "Invoke-ManagedModuleBenchmarkSuite.ps1");
+
+        var results = InvokeScenarioList(script);
+        var rows = results.RootElement.EnumerateArray().ToArray();
+        var gatedScenarioNames = new[]
+        {
+            "ThreadJob.InstallSave.NoOpForce",
+            "Graph.Authentication.InstallExact.NoOpForce",
+            "Graph.Authentication.SaveExact.NoOpForce",
+            "Az.Accounts.InstallExact.NoOpForce",
+            "Az.Accounts.SaveExact.NoOpForce",
+            "ThreadJob.Authenticode.InstallSave"
+        };
+
+        foreach (var scenarioName in gatedScenarioNames)
+        {
+            var row = Assert.Single(rows, row => Property(row, "Name") == scenarioName);
+            Assert.Equal(2.0, DoubleProperty(row, "ManagedMaxWindowsPowerShellVsPowerShell7"));
+        }
+    }
+
+    [Fact]
     public void BenchmarkInstallChild_DefaultsModuleFastSourceToProviderDefault()
     {
         var script = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "Invoke-ManagedModuleInstallChild.ps1");
