@@ -90,6 +90,15 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Int32Property(row, "ManagedMaxRank") == 1);
     }
 
+    [Fact]
+    public void BenchmarkInstallChild_DefaultsModuleFastSourceToProviderDefault()
+    {
+        var script = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "Invoke-ManagedModuleInstallChild.ps1");
+        var content = File.ReadAllText(script);
+
+        Assert.Contains("[string] $ModuleFastSource = ''", content, StringComparison.Ordinal);
+    }
+
     private static JsonDocument InvokeScenarioList(string script)
     {
         using var process = new Process();
