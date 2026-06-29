@@ -1071,6 +1071,7 @@ Notes:
   - rendered content leak checks for visible front matter, raw HTML dumps, or obvious Markdown syntax
 - `includeNoIndexPages` defaults to `false`, so `robots noindex` pages are skipped by default.
 - `checkContentLeaks` defaults to `true` and should stay enabled in CI to catch broken localized pages before deploy.
+- `applyGeneratedApiReferenceSeoProfile` defaults to `true`. Generated PowerForge API reference pages keep structural SEO checks, but generic editorial title/description length and required missing-hreflang warnings are relaxed because API symbol pages follow reference-page semantics.
 - Requirement flags are opt-in (default `false`): `requireCanonical`, `requireHreflang`, `requireHreflangXDefault`, `requireStructuredData`.
 - Baselines follow the same CI pattern as audit:
   - `baselineGenerate` / `baselineUpdate`

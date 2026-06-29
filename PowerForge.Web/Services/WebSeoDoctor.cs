@@ -5,7 +5,7 @@ using HtmlTinkerX;
 namespace PowerForge.Web;
 
 /// <summary>Runs SEO-focused checks on generated HTML output.</summary>
-public static class WebSeoDoctor
+public static partial class WebSeoDoctor
 {
     private static readonly string[] DefaultExcludePatterns =
     {
@@ -187,6 +187,8 @@ public static class WebSeoDoctor
                 .Select(image => (image.GetAttribute("src") ?? string.Empty).Trim())
                 .Where(src => !string.IsNullOrWhiteSpace(src))
                 .ToArray();
+            var isGeneratedApiReferencePage = options.ApplyGeneratedApiReferenceSeoProfile &&
+                IsGeneratedApiReferencePage(relativePath, doc);
 
             if (options.CheckContentLeaks)
             {
@@ -234,7 +236,7 @@ public static class WebSeoDoctor
                 {
                     AddIssue("warning", "title", relativePath, "missing <title>.", "title-missing");
                 }
-                else
+                else if (!isGeneratedApiReferencePage)
                 {
                     if (title.Length < titleMin)
                     {
@@ -258,7 +260,7 @@ public static class WebSeoDoctor
                 {
                     AddIssue("warning", "description", relativePath, "missing meta description.", "description-missing");
                 }
-                else
+                else if (!isGeneratedApiReferencePage)
                 {
                     if (description.Length < descriptionMin)
                     {
@@ -344,7 +346,7 @@ public static class WebSeoDoctor
             {
                 ValidateHreflang(
                     relativePath,
-                    options.RequireHreflang,
+                    options.RequireHreflang && !isGeneratedApiReferencePage,
                     options.RequireHreflangXDefault,
                     hreflangAlternates,
                     AddIssue);
