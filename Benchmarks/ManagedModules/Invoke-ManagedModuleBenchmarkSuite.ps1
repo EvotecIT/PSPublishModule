@@ -564,6 +564,9 @@ function Add-SummaryRows {
                 ManagedCoalescedWaitCount = $row.ManagedCoalescedWaitCount
                 ManagedCoalescedWaitMs = $row.ManagedCoalescedWaitMs
                 ManagedSlowestCoalescedWaitMs = $row.ManagedSlowestCoalescedWaitMs
+                ManagedInstallLockWaitCount = $row.ManagedInstallLockWaitCount
+                ManagedInstallLockWaitMs = $row.ManagedInstallLockWaitMs
+                ManagedSlowestInstallLockWaitMs = $row.ManagedSlowestInstallLockWaitMs
                 ManagedSlowestMaterializedPackageMs = $row.ManagedSlowestMaterializedPackageMs
                 ManagedAuthenticodeCheckedFiles = $row.ManagedAuthenticodeCheckedFiles
                 ManagedAuthenticodeCatalogFiles = $row.ManagedAuthenticodeCatalogFiles
@@ -589,6 +592,10 @@ function Add-SummaryRows {
                 ManagedLastCoalescedWaitMs = $row.ManagedLastCoalescedWaitMs
                 ManagedLastSlowestCoalescedWaitName = $row.ManagedLastSlowestCoalescedWaitName
                 ManagedLastSlowestCoalescedWaitMs = $row.ManagedLastSlowestCoalescedWaitMs
+                ManagedFirstInstallLockWaitMs = $row.ManagedFirstInstallLockWaitMs
+                ManagedLastInstallLockWaitMs = $row.ManagedLastInstallLockWaitMs
+                ManagedLastSlowestInstallLockWaitName = $row.ManagedLastSlowestInstallLockWaitName
+                ManagedLastSlowestInstallLockWaitMs = $row.ManagedLastSlowestInstallLockWaitMs
                 ManagedLastSlowestMaterializedPackageName = $row.ManagedLastSlowestMaterializedPackageName
                 ManagedLastSlowestMaterializedPackageMs = $row.ManagedLastSlowestMaterializedPackageMs
                 ManagedLastSlowestMaterializedPackageExtractionMs = $row.ManagedLastSlowestMaterializedPackageExtractionMs

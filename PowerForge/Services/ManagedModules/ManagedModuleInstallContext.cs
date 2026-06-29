@@ -7,30 +7,35 @@ internal sealed class ManagedModuleInstallContext
     private readonly HashSet<string> _active;
     private readonly HashSet<string> _ownedInstallKeys;
     private readonly ConcurrentDictionary<string, ManagedModuleInstallPending> _inFlightInstalls;
+    private readonly ConcurrentDictionary<string, ManagedModuleInstallResult> _completedInstalls;
 
     public ManagedModuleInstallContext()
         : this(
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            new ConcurrentDictionary<string, ManagedModuleInstallPending>(StringComparer.OrdinalIgnoreCase))
+            new ConcurrentDictionary<string, ManagedModuleInstallPending>(StringComparer.OrdinalIgnoreCase),
+            new ConcurrentDictionary<string, ManagedModuleInstallResult>(StringComparer.OrdinalIgnoreCase))
     {
     }
 
     private ManagedModuleInstallContext(
         HashSet<string> active,
         HashSet<string> ownedInstallKeys,
-        ConcurrentDictionary<string, ManagedModuleInstallPending> inFlightInstalls)
+        ConcurrentDictionary<string, ManagedModuleInstallPending> inFlightInstalls,
+        ConcurrentDictionary<string, ManagedModuleInstallResult> completedInstalls)
     {
         _active = active;
         _ownedInstallKeys = ownedInstallKeys;
         _inFlightInstalls = inFlightInstalls;
+        _completedInstalls = completedInstalls;
     }
 
     public ManagedModuleInstallContext CreateBranch()
         => new(
             new HashSet<string>(_active, StringComparer.OrdinalIgnoreCase),
             new HashSet<string>(_ownedInstallKeys, StringComparer.OrdinalIgnoreCase),
-            _inFlightInstalls);
+            _inFlightInstalls,
+            _completedInstalls);
 
     public IDisposable Enter(string moduleName)
     {
@@ -86,6 +91,19 @@ internal sealed class ManagedModuleInstallContext
             pending.SetWaitingFor(key);
 
         return new ClearWaitOnDispose(ownedPending);
+    }
+
+    public bool TryGetCompletedInstall(string key, out ManagedModuleInstallResult result)
+        => _completedInstalls.TryGetValue(key, out result!);
+
+    public void RecordCompletedInstall(string key, ManagedModuleInstallResult result)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Install coalescing key is required.", nameof(key));
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
+
+        _completedInstalls[key] = result;
     }
 
     private bool WouldCreateWaitCycle(ManagedModuleInstallPending pending)

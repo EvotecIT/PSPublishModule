@@ -54,6 +54,11 @@ function Add-ManagedInstallDetail {
     $extractionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.ExtractionElapsed
     $dependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
     $promotionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.PromotionElapsed
+    $installLockWaitMilliseconds = if ($null -ne $Result.PSObject.Properties['InstallLockWaitElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.InstallLockWaitElapsed
+    } else {
+        0
+    }
     $hasExplicitCoalescedWait = $null -ne $Result.PSObject.Properties['CoalescedWaitElapsed']
     $explicitCoalescedWaitMilliseconds = if ($hasExplicitCoalescedWait) {
         ConvertTo-Milliseconds -TimeSpan $Result.CoalescedWaitElapsed
@@ -87,6 +92,7 @@ function Add-ManagedInstallDetail {
         ExtractionMilliseconds = $extractionMilliseconds
         DependencyMilliseconds = $dependencyMilliseconds
         PromotionMilliseconds = $promotionMilliseconds
+        InstallLockWaitMilliseconds = $installLockWaitMilliseconds
         CoalescedWaitMilliseconds = $coalescedWaitMilliseconds
         RepositoryRequestCount = [long] $Result.RepositoryRequestCount
         PackageRepositoryRequestCount = [long] (Get-NumericPropertyValue -InputObject $Result -Name 'PackageRepositoryRequestCount')
@@ -140,9 +146,20 @@ function Write-ManagedInstallDetail {
                 [double] $_.CoalescedWaitMilliseconds -gt 0
             }
     )
+    $installLockWaits = @(
+        $packages |
+            Where-Object {
+                [double] $_.InstallLockWaitMilliseconds -gt 0
+            }
+    )
     $slowestCoalescedWait = @(
         $coalescedWaits |
             Sort-Object @{ Expression = { [double] $_.CoalescedWaitMilliseconds }; Descending = $true } |
+            Select-Object -First 1
+    )
+    $slowestInstallLockWait = @(
+        $installLockWaits |
+            Sort-Object @{ Expression = { [double] $_.InstallLockWaitMilliseconds }; Descending = $true } |
             Select-Object -First 1
     )
     $slowestMaterializedPackage = @(
@@ -176,6 +193,10 @@ function Write-ManagedInstallDetail {
         TotalCoalescedWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $coalescedWaits -Name 'CoalescedWaitMilliseconds'), 2)
         SlowestCoalescedWaitName = if ($slowestCoalescedWait.Count) { [string] $slowestCoalescedWait[0].Name } else { '' }
         SlowestCoalescedWaitMilliseconds = if ($slowestCoalescedWait.Count) { [double] $slowestCoalescedWait[0].CoalescedWaitMilliseconds } else { 0.0 }
+        InstallLockWaitCount = $installLockWaits.Count
+        TotalInstallLockWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $installLockWaits -Name 'InstallLockWaitMilliseconds'), 2)
+        SlowestInstallLockWaitName = if ($slowestInstallLockWait.Count) { [string] $slowestInstallLockWait[0].Name } else { '' }
+        SlowestInstallLockWaitMilliseconds = if ($slowestInstallLockWait.Count) { [double] $slowestInstallLockWait[0].InstallLockWaitMilliseconds } else { 0.0 }
         SlowestMaterializedPackageName = if ($slowestMaterializedPackage.Count) { [string] $slowestMaterializedPackage[0].Name } else { '' }
         SlowestMaterializedPackageMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ElapsedMilliseconds } else { 0.0 }
         SlowestMaterializedPackageExtractionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionMilliseconds } else { 0.0 }

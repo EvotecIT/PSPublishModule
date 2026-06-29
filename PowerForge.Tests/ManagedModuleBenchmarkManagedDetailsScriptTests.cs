@@ -36,6 +36,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         ModulePath = '{{EscapePowerShellString(Path.Combine(temp.Path, "Company.Wait", "1.0.0"))}}'
                         Elapsed = [TimeSpan]::FromMilliseconds(125)
                         CoalescedWaitElapsed = [TimeSpan]::FromMilliseconds(90)
+                        InstallLockWaitElapsed = [TimeSpan]::FromMilliseconds(30)
                         VersionResolutionElapsed = [TimeSpan]::Zero
                         DownloadElapsed = [TimeSpan]::Zero
                         ExtractionElapsed = [TimeSpan]::Zero
@@ -56,6 +57,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         ModulePath = '{{EscapePowerShellString(Path.Combine(temp.Path, "Company.NoOp", "1.0.0"))}}'
                         Elapsed = [TimeSpan]::FromMilliseconds(75)
                         CoalescedWaitElapsed = [TimeSpan]::Zero
+                        InstallLockWaitElapsed = [TimeSpan]::Zero
                         VersionResolutionElapsed = [TimeSpan]::Zero
                         DownloadElapsed = [TimeSpan]::Zero
                         ExtractionElapsed = [TimeSpan]::Zero
@@ -75,6 +77,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         Status = 'Installed'
                         ModulePath = '{{EscapePowerShellString(Path.Combine(temp.Path, "Company.Big", "1.0.0"))}}'
                         Elapsed = [TimeSpan]::FromMilliseconds(450)
+                        InstallLockWaitElapsed = [TimeSpan]::FromMilliseconds(40)
                         VersionResolutionElapsed = [TimeSpan]::Zero
                         DownloadElapsed = [TimeSpan]::FromMilliseconds(20)
                         ExtractionElapsed = [TimeSpan]::FromMilliseconds(320)
@@ -113,9 +116,16 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(90.0, NumericProperty(summary, "TotalCoalescedWaitMilliseconds"));
         Assert.Equal("Company.Wait", Property(summary, "SlowestCoalescedWaitName"));
         Assert.Equal(90.0, NumericProperty(summary, "SlowestCoalescedWaitMilliseconds"));
+        Assert.Equal(2.0, NumericProperty(summary, "InstallLockWaitCount"));
+        Assert.Equal(70.0, NumericProperty(summary, "TotalInstallLockWaitMilliseconds"));
+        Assert.Equal("Company.Big", Property(summary, "SlowestInstallLockWaitName"));
+        Assert.Equal(40.0, NumericProperty(summary, "SlowestInstallLockWaitMilliseconds"));
         Assert.Equal(90.0, NumericProperty(waitPackage, "CoalescedWaitMilliseconds"));
+        Assert.Equal(30.0, NumericProperty(waitPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(noOpPackage, "CoalescedWaitMilliseconds"));
+        Assert.Equal(0.0, NumericProperty(noOpPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(bigPackage, "CoalescedWaitMilliseconds"));
+        Assert.Equal(40.0, NumericProperty(bigPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(summary, "SlowestMaterializedPackageMilliseconds"));
         Assert.Equal(320.0, NumericProperty(summary, "SlowestMaterializedPackageExtractionMilliseconds"));

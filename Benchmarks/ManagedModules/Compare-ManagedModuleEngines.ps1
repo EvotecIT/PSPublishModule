@@ -493,6 +493,10 @@ function Invoke-TimedOperation {
         ManagedTotalCoalescedWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalCoalescedWaitMilliseconds')
         ManagedSlowestCoalescedWaitName = Get-DetailText -InputObject $detailSummary -Name 'SlowestCoalescedWaitName'
         ManagedSlowestCoalescedWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestCoalescedWaitMilliseconds')
+        ManagedInstallLockWaitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'InstallLockWaitCount')
+        ManagedTotalInstallLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalInstallLockWaitMilliseconds')
+        ManagedSlowestInstallLockWaitName = Get-DetailText -InputObject $detailSummary -Name 'SlowestInstallLockWaitName'
+        ManagedSlowestInstallLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestInstallLockWaitMilliseconds')
         ManagedSlowestMaterializedPackageName = Get-DetailText -InputObject $detailSummary -Name 'SlowestMaterializedPackageName'
         ManagedSlowestMaterializedPackageMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageMilliseconds')
         ManagedSlowestMaterializedPackageExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractionMilliseconds')

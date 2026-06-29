@@ -40,6 +40,10 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedTotalCoalescedWaitMilliseconds = 900
                     ManagedSlowestCoalescedWaitName = 'Company.Wait'
                     ManagedSlowestCoalescedWaitMilliseconds = 250
+                    ManagedInstallLockWaitCount = 4
+                    ManagedTotalInstallLockWaitMilliseconds = 300
+                    ManagedSlowestInstallLockWaitName = 'Company.Lock'
+                    ManagedSlowestInstallLockWaitMilliseconds = 120
                     ManagedSlowestMaterializedPackageName = 'Company.Big'
                     ManagedSlowestMaterializedPackageMilliseconds = 600
                     ManagedSlowestMaterializedPackageExtractionMilliseconds = 500
@@ -80,6 +84,10 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedTotalCoalescedWaitMilliseconds = 700
                     ManagedSlowestCoalescedWaitName = 'Company.Shared'
                     ManagedSlowestCoalescedWaitMilliseconds = 180
+                    ManagedInstallLockWaitCount = 2
+                    ManagedTotalInstallLockWaitMilliseconds = 100
+                    ManagedSlowestInstallLockWaitName = 'Company.LockWarm'
+                    ManagedSlowestInstallLockWaitMilliseconds = 60
                     ManagedSlowestMaterializedPackageName = 'Company.Files'
                     ManagedSlowestMaterializedPackageMilliseconds = 450
                     ManagedSlowestMaterializedPackageExtractionMilliseconds = 320
@@ -124,6 +132,11 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(700.0, NumericProperty(row, "ManagedLastCoalescedWaitMs"));
         Assert.Equal("Company.Shared", Property(row, "ManagedLastSlowestCoalescedWaitName"));
         Assert.Equal(180.0, NumericProperty(row, "ManagedLastSlowestCoalescedWaitMs"));
+        Assert.Equal(200.0, NumericProperty(row, "ManagedInstallLockWaitMs"));
+        Assert.Equal(300.0, NumericProperty(row, "ManagedFirstInstallLockWaitMs"));
+        Assert.Equal(100.0, NumericProperty(row, "ManagedLastInstallLockWaitMs"));
+        Assert.Equal("Company.LockWarm", Property(row, "ManagedLastSlowestInstallLockWaitName"));
+        Assert.Equal(60.0, NumericProperty(row, "ManagedLastSlowestInstallLockWaitMs"));
         Assert.Equal("Company.Files", Property(row, "ManagedLastSlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageMs"));
         Assert.Equal(320.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageExtractionMs"));

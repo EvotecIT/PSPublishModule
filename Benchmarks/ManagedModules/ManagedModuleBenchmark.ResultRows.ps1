@@ -52,6 +52,10 @@ function New-SkippedRow {
         ManagedTotalCoalescedWaitMilliseconds = 0
         ManagedSlowestCoalescedWaitName = ''
         ManagedSlowestCoalescedWaitMilliseconds = 0
+        ManagedInstallLockWaitCount = 0
+        ManagedTotalInstallLockWaitMilliseconds = 0
+        ManagedSlowestInstallLockWaitName = ''
+        ManagedSlowestInstallLockWaitMilliseconds = 0
         ManagedSlowestMaterializedPackageName = ''
         ManagedSlowestMaterializedPackageMilliseconds = 0
         ManagedSlowestMaterializedPackageExtractionMilliseconds = 0

@@ -91,6 +91,11 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan CoalescedWaitElapsed { get; set; }
 
     /// <summary>
+    /// Elapsed time spent waiting for the per-module install lock.
+    /// </summary>
+    public TimeSpan InstallLockWaitElapsed { get; set; }
+
+    /// <summary>
     /// Package download or copy result when the install performed package delivery.
     /// </summary>
     public ManagedModuleDownloadResult? Download { get; set; }

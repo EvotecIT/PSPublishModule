@@ -122,96 +122,203 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        using (ManagedModuleInstallLock.Acquire(moduleRoot, request.Name, cancellationToken))
-        {
-            if (TrySelectInstalledNoOpVersion(request, moduleRoot, out var installedVersion))
-            {
-                var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), installedVersion);
-                _logger.Verbose($"Managed module install skipped existing satisfying version: {installedModulePath}");
-                return CreateAlreadyInstalledResult(
-                    request,
-                    installedVersion,
-                    moduleRoot,
-                    installedModulePath,
-                    stopwatch.Elapsed,
-                    TimeSpan.Zero,
-                    repositoryRequestCount: 0);
-            }
-        }
-
-        using var requestScope = _repositoryClient.BeginRequestScope();
-
-        var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
-        var version = versionInfo.Version;
-        versionResolutionStopwatch.Stop();
-        var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
+        var installLockWaitElapsed = TimeSpan.Zero;
         using var dependencyScope = context.Enter(request.Name);
+        var knownVersion = string.IsNullOrWhiteSpace(request.Version) ? null : request.Version!.Trim();
+        var knownCoalescingKey = knownVersion is null ? null : TryCreateInstallCoalescingKey(request, knownVersion, moduleRoot);
+        ManagedModuleInstallPending? preResolvedPendingInstall = null;
+        string? preResolvedCoalescingKey = null;
 
-        var coalescingKey = TryCreateInstallCoalescingKey(request, version, moduleRoot);
-        if (coalescingKey is not null)
+        ManagedModuleInstallResult CompletePreResolvedInstall(ManagedModuleInstallResult result)
         {
-            if (!context.TryBeginInstall(coalescingKey, out var existingInstall, out var pendingInstall, out var runIndependently))
-            {
-                if (!runIndependently)
-                {
-                    var coalescedWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                    ManagedModuleInstallResult completed;
-                    using (context.EnterInstallWait(coalescingKey))
-                    {
-                        completed = await existingInstall.ConfigureAwait(false);
-                    }
+            if (preResolvedCoalescingKey is not null)
+                context.RecordCompletedInstall(preResolvedCoalescingKey, result);
 
-                    coalescedWaitStopwatch.Stop();
-                    return CreateAlreadyInstalledResult(
-                        request,
-                        completed.Version,
-                        moduleRoot,
-                        modulePath,
-                        stopwatch.Elapsed,
-                        versionResolutionStopwatch.Elapsed,
-                        requestScope.Count,
-                        coalescedWaitStopwatch.Elapsed);
-                }
-            }
-            else
+            if (preResolvedPendingInstall is not null)
             {
-                using (pendingInstall)
-                {
-                    try
-                    {
-                        var result = await InstallResolvedAsync(
-                            request,
-                            context,
-                            cancellationToken,
-                            stopwatch,
-                            requestScope,
-                            versionResolutionStopwatch.Elapsed,
-                            version,
-                            moduleRoot,
-                            modulePath).ConfigureAwait(false);
-                        pendingInstall.Complete(result);
-                        return result;
-                    }
-                    catch (Exception exception)
-                    {
-                        pendingInstall.Fail(exception);
-                        throw;
-                    }
-                }
+                preResolvedPendingInstall.Complete(result);
+                preResolvedPendingInstall.Dispose();
+                preResolvedPendingInstall = null;
             }
+
+            return result;
         }
 
-        return await InstallResolvedAsync(
-            request,
-            context,
-            cancellationToken,
-            stopwatch,
-            requestScope,
-            versionResolutionStopwatch.Elapsed,
-            version,
-            moduleRoot,
-            modulePath).ConfigureAwait(false);
+        if (knownCoalescingKey is not null && context.TryGetCompletedInstall(knownCoalescingKey, out var completedInstall))
+        {
+            var completedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), completedInstall.Version);
+            _logger.Verbose($"Managed module install skipped operation-local completed target: {completedModulePath}");
+            return CreateAlreadyInstalledResult(
+                request,
+                completedInstall.Version,
+                moduleRoot,
+                completedModulePath,
+                stopwatch.Elapsed,
+                TimeSpan.Zero,
+                repositoryRequestCount: 0,
+                installLockWaitElapsed);
+        }
+
+        try
+        {
+            if (knownCoalescingKey is not null)
+            {
+                if (!context.TryBeginInstall(knownCoalescingKey, out var existingInstall, out var pendingInstall, out var runIndependently))
+                {
+                    if (!runIndependently)
+                    {
+                        var coalescedWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                        ManagedModuleInstallResult completed;
+                        using (context.EnterInstallWait(knownCoalescingKey))
+                        {
+                            completed = await existingInstall.ConfigureAwait(false);
+                        }
+
+                        coalescedWaitStopwatch.Stop();
+                        var completedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), completed.Version);
+                        return CreateAlreadyInstalledResult(
+                            request,
+                            completed.Version,
+                            moduleRoot,
+                            completedModulePath,
+                            stopwatch.Elapsed,
+                            TimeSpan.Zero,
+                            repositoryRequestCount: 0,
+                            installLockWaitElapsed,
+                            coalescedWaitStopwatch.Elapsed);
+                    }
+                }
+                else
+                {
+                    preResolvedPendingInstall = pendingInstall;
+                    preResolvedCoalescingKey = knownCoalescingKey;
+                }
+            }
+
+            using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var initialLockWaitElapsed))
+            {
+                installLockWaitElapsed += initialLockWaitElapsed;
+                if (TrySelectInstalledNoOpVersion(request, moduleRoot, out var installedVersion))
+                {
+                    var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), installedVersion);
+                    _logger.Verbose($"Managed module install skipped existing satisfying version: {installedModulePath}");
+                    var result = CreateAlreadyInstalledResult(
+                        request,
+                        installedVersion,
+                        moduleRoot,
+                        installedModulePath,
+                        stopwatch.Elapsed,
+                        TimeSpan.Zero,
+                        repositoryRequestCount: 0,
+                        installLockWaitElapsed);
+
+                    return CompletePreResolvedInstall(result);
+                }
+            }
+
+            using var requestScope = _repositoryClient.BeginRequestScope();
+
+            var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
+            var version = versionInfo.Version;
+            versionResolutionStopwatch.Stop();
+            var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
+
+            var coalescingKey = preResolvedCoalescingKey ?? TryCreateInstallCoalescingKey(request, version, moduleRoot);
+            if (preResolvedPendingInstall is not null && coalescingKey is not null)
+            {
+                var result = await InstallResolvedAsync(
+                    request,
+                    context,
+                    cancellationToken,
+                    stopwatch,
+                    requestScope,
+                    versionResolutionStopwatch.Elapsed,
+                    installLockWaitElapsed,
+                    version,
+                    moduleRoot,
+                    modulePath).ConfigureAwait(false);
+                return CompletePreResolvedInstall(result);
+            }
+
+            if (coalescingKey is not null)
+            {
+                if (!context.TryBeginInstall(coalescingKey, out var existingInstall, out var pendingInstall, out var runIndependently))
+                {
+                    if (!runIndependently)
+                    {
+                        var coalescedWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                        ManagedModuleInstallResult completed;
+                        using (context.EnterInstallWait(coalescingKey))
+                        {
+                            completed = await existingInstall.ConfigureAwait(false);
+                        }
+
+                        coalescedWaitStopwatch.Stop();
+                        return CreateAlreadyInstalledResult(
+                            request,
+                            completed.Version,
+                            moduleRoot,
+                            modulePath,
+                            stopwatch.Elapsed,
+                            versionResolutionStopwatch.Elapsed,
+                            requestScope.Count,
+                            installLockWaitElapsed,
+                            coalescedWaitStopwatch.Elapsed);
+                    }
+                }
+                else
+                {
+                    using (pendingInstall)
+                    {
+                        try
+                        {
+                            var result = await InstallResolvedAsync(
+                                request,
+                                context,
+                                cancellationToken,
+                                stopwatch,
+                                requestScope,
+                                versionResolutionStopwatch.Elapsed,
+                                installLockWaitElapsed,
+                                version,
+                                moduleRoot,
+                                modulePath).ConfigureAwait(false);
+                            context.RecordCompletedInstall(coalescingKey, result);
+                            pendingInstall.Complete(result);
+                            return result;
+                        }
+                        catch (Exception exception)
+                        {
+                            pendingInstall.Fail(exception);
+                            throw;
+                        }
+                    }
+                }
+            }
+
+            return await InstallResolvedAsync(
+                request,
+                context,
+                cancellationToken,
+                stopwatch,
+                requestScope,
+                versionResolutionStopwatch.Elapsed,
+                installLockWaitElapsed,
+                version,
+                moduleRoot,
+                modulePath).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            if (preResolvedPendingInstall is not null)
+            {
+                preResolvedPendingInstall.Fail(exception);
+                preResolvedPendingInstall.Dispose();
+            }
+
+            throw;
+        }
     }
 
     private static bool TrySelectInstalledNoOpVersion(
@@ -254,6 +361,7 @@ public sealed partial class ManagedModuleInstallService
         System.Diagnostics.Stopwatch stopwatch,
         ManagedModuleRepositoryClient.RepositoryRequestScope requestScope,
         TimeSpan versionResolutionElapsed,
+        TimeSpan installLockWaitElapsed,
         string version,
         string moduleRoot,
         string modulePath)
@@ -267,8 +375,9 @@ public sealed partial class ManagedModuleInstallService
 
         try
         {
-            using (ManagedModuleInstallLock.Acquire(moduleRoot, request.Name, cancellationToken))
+            using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedLockWaitElapsed))
             {
+                installLockWaitElapsed += resolvedLockWaitElapsed;
                 if (Directory.Exists(modulePath) && !request.Force)
                 {
                     _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
@@ -279,7 +388,8 @@ public sealed partial class ManagedModuleInstallService
                         modulePath,
                         stopwatch.Elapsed,
                         versionResolutionElapsed,
-                        requestScope.Count);
+                        requestScope.Count,
+                        installLockWaitElapsed);
                 }
             }
 
@@ -328,8 +438,9 @@ public sealed partial class ManagedModuleInstallService
                 ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
 
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            using (ManagedModuleInstallLock.Acquire(moduleRoot, request.Name, cancellationToken))
+            using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var promotionLockWaitElapsed))
             {
+                installLockWaitElapsed += promotionLockWaitElapsed;
                 if (Directory.Exists(modulePath) && !request.Force)
                 {
                     _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
@@ -340,7 +451,8 @@ public sealed partial class ManagedModuleInstallService
                         modulePath,
                         stopwatch.Elapsed,
                         versionResolutionElapsed,
-                        requestScope.Count);
+                        requestScope.Count,
+                        installLockWaitElapsed);
                 }
 
                 PromoteStagedModule(stageModulePath, modulePath);
@@ -367,6 +479,7 @@ public sealed partial class ManagedModuleInstallService
                 ModulePath = modulePath,
                 Elapsed = stopwatch.Elapsed,
                 VersionResolutionElapsed = versionResolutionElapsed,
+                InstallLockWaitElapsed = installLockWaitElapsed,
                 Download = download,
                 AuthenticodeVerification = authenticode,
                 DownloadElapsed = downloadStopwatch.Elapsed,
@@ -475,6 +588,7 @@ public sealed partial class ManagedModuleInstallService
         TimeSpan elapsed,
         TimeSpan versionResolutionElapsed,
         long repositoryRequestCount,
+        TimeSpan installLockWaitElapsed,
         TimeSpan coalescedWaitElapsed = default)
         => new()
         {
@@ -495,8 +609,22 @@ public sealed partial class ManagedModuleInstallService
             Elapsed = elapsed,
             VersionResolutionElapsed = versionResolutionElapsed,
             CoalescedWaitElapsed = coalescedWaitElapsed,
+            InstallLockWaitElapsed = installLockWaitElapsed,
             RepositoryRequestCount = repositoryRequestCount
         };
+
+    private static ManagedModuleInstallLock AcquireInstallLock(
+        string moduleRoot,
+        string moduleName,
+        CancellationToken cancellationToken,
+        out TimeSpan waitElapsed)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var installLock = ManagedModuleInstallLock.Acquire(moduleRoot, moduleName, cancellationToken);
+        stopwatch.Stop();
+        waitElapsed = stopwatch.Elapsed;
+        return installLock;
+    }
 
     private static void Validate(ManagedModuleInstallRequest request)
     {

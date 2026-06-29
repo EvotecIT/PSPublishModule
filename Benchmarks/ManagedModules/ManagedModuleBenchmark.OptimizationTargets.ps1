@@ -36,6 +36,7 @@ function Get-ManagedPhaseQuestion {
         'Download' { 'Can package download throughput, source selection, caching, or request coalescing improve this lane?' }
         'Extraction' { 'Can archive extraction, path creation, or file writes be reduced safely?' }
         'Promotion' { 'Can final move, overwrite, or receipt writes be reduced without weakening rollback?' }
+        'InstallLock' { 'Can per-module lock serialization or duplicate dependency scheduling be reduced without weakening concurrent install safety?' }
         'HarnessOverhead' { 'Is the benchmark dominated by child-host startup, module import, or measurement wrapper work?' }
         default { 'Add managed detail instrumentation before optimizing this row.' }
     }
@@ -81,6 +82,7 @@ function New-ManagedOptimizationTarget {
             [pscustomobject]@{ Name = 'Download'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadMs }
             [pscustomobject]@{ Name = 'Extraction'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionMs }
             [pscustomobject]@{ Name = 'Promotion'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPromotionMs }
+            [pscustomobject]@{ Name = 'InstallLock'; Milliseconds = if ($row.PSObject.Properties['ManagedInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedInstallLockWaitMs } else { 0.0 } }
             [pscustomobject]@{ Name = 'HarnessOverhead'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedHarnessOverheadMs }
         )
         $bottleneck = Get-ManagedBenchmarkBottleneck -ManagedMilliseconds $managedMs -Phases $phases
@@ -90,6 +92,7 @@ function New-ManagedOptimizationTarget {
             [pscustomobject]@{ Name = 'Download'; Milliseconds = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 } }
             [pscustomobject]@{ Name = 'Extraction'; Milliseconds = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 } }
             [pscustomobject]@{ Name = 'Promotion'; Milliseconds = if ($row.PSObject.Properties['ManagedLastPromotionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMs } else { 0.0 } }
+            [pscustomobject]@{ Name = 'InstallLock'; Milliseconds = if ($row.PSObject.Properties['ManagedLastInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastInstallLockWaitMs } else { 0.0 } }
         )
         $lastBottleneck = Get-ManagedBenchmarkBottleneck -ManagedMilliseconds $lastMs -Phases $lastPhases
         $rootElapsedMs = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootElapsedMs
@@ -143,6 +146,10 @@ function New-ManagedOptimizationTarget {
             LastCoalescedWaitMs = if ($row.PSObject.Properties['ManagedLastCoalescedWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCoalescedWaitMs } else { 0.0 }
             LastSlowestCoalescedWait = if ($row.PSObject.Properties['ManagedLastSlowestCoalescedWaitName']) { [string] $row.ManagedLastSlowestCoalescedWaitName } else { '' }
             LastSlowestCoalescedWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestCoalescedWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestCoalescedWaitMs } else { 0.0 }
+            InstallLockWaitMs = if ($row.PSObject.Properties['ManagedInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedInstallLockWaitMs } else { 0.0 }
+            LastInstallLockWaitMs = if ($row.PSObject.Properties['ManagedLastInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastInstallLockWaitMs } else { 0.0 }
+            LastSlowestInstallLockWait = if ($row.PSObject.Properties['ManagedLastSlowestInstallLockWaitName']) { [string] $row.ManagedLastSlowestInstallLockWaitName } else { '' }
+            LastSlowestInstallLockWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestInstallLockWaitMs } else { 0.0 }
             SlowestMaterializedPackageMs = if ($row.PSObject.Properties['ManagedSlowestMaterializedPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedSlowestMaterializedPackageMs } else { 0.0 }
             LastSlowestMaterializedPackage = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageName']) { [string] $row.ManagedLastSlowestMaterializedPackageName } else { '' }
             LastSlowestMaterializedPackageMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageMs } else { 0.0 }
