@@ -56,7 +56,7 @@ $providerDefaultModuleFastSource = 'ProviderDefault'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('S{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), $PID)
-$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'All')
+$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'RepairGate', 'All')
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
@@ -102,6 +102,7 @@ function New-BenchmarkScenario {
         [string] $UpdateBaselineVersion = '',
         [bool] $AcceptLicense = $false,
         [string[]] $Operations = $Operation,
+        [string[]] $RepairScenarios = @(),
         [string[]] $Engines = $Engine,
         [string] $Repository = '',
         [string] $RepositoryName = '',
@@ -121,6 +122,7 @@ function New-BenchmarkScenario {
         UpdateBaselineVersion = $UpdateBaselineVersion
         AcceptLicense = $AcceptLicense
         Operations = $Operations
+        RepairScenarios = $RepairScenarios
         Engines = $Engines
         Repository = $Repository
         RepositoryName = $RepositoryName
@@ -155,6 +157,12 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Graph.Full.Save.ManagedWarmCache' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
         New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Az.Full.Save.ManagedWarmCache' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
         New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
+        New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.StaleVersion' -ModuleName 'ThreadJob' -Version '2.1.0' -UpdateBaselineVersion '2.0.3' -Operations @('RepairPlan') -RepairScenarios @('StaleVersion') -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.SourceDrift' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('RepairPlan') -RepairScenarios @('SourceDrift') -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.ScopeDrift' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('RepairPlan') -RepairScenarios @('ScopeDrift') -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'Graph.Repair.FamilyCoherence' -ModuleName 'ThreadJob' -Operations @('RepairPlan') -RepairScenarios @('FamilyCoherence') -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.LoadedModuleSafety' -ModuleName 'ThreadJob' -Operations @('RepairPlan') -RepairScenarios @('LoadedModuleSafety') -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.CleanupPlanning' -ModuleName 'ThreadJob' -Operations @('RepairPlan') -RepairScenarios @('CleanupPlanning') -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.ProviderMatrix' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioModuleFastSource $providerDefaultModuleFastSource
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Accounts.ProviderMatrix' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioModuleFastSource $providerDefaultModuleFastSource
@@ -165,7 +173,7 @@ function Get-ScenarioCatalog {
 
 function Resolve-ScenarioList {
     $selectedSuites = if ($Suite -contains 'All') {
-        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate')
+        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'RepairGate')
     } else {
         $Suite
     }
@@ -238,6 +246,16 @@ function Get-ScenarioOperations {
     }
 
     $operations
+}
+
+function Get-ScenarioRepairScenarios {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['RepairScenarios'] -and $Scenario.RepairScenarios -and @($Scenario.RepairScenarios).Count -gt 0) {
+        return @($Scenario.RepairScenarios)
+    }
+
+    @()
 }
 
 function Get-ScenarioEngines {
@@ -438,6 +456,10 @@ function Invoke-ScenarioHostRun {
     if ($RemoveOutputRoots.IsPresent) {
         $arguments += '-RemoveOutputRoots'
     }
+    $repairScenarios = @(Get-ScenarioRepairScenarios -Scenario $Scenario)
+    if ($repairScenarios.Count -gt 0) {
+        $arguments += @('-RepairScenario', ($repairScenarios -join ','))
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($Scenario.Version)) {
         $arguments += @('-Version', $Scenario.Version)
@@ -516,6 +538,7 @@ function Add-SummaryRows {
                 Scenario = $Scenario.Name
                 ModuleName = $Scenario.ModuleName
                 Engines = (Get-ScenarioEngines -Scenario $Scenario) -join ','
+                RepairScenarios = (Get-ScenarioRepairScenarios -Scenario $Scenario) -join ','
                 Repository = Get-ScenarioRepository -Scenario $Scenario
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $Scenario
                 ModuleFastSource = Get-ScenarioModuleFastSourceLabel -Scenario $Scenario
@@ -576,7 +599,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest
+    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest
     return
 }
 
@@ -647,6 +670,7 @@ $metadata = [ordered]@{
                 UpdateBaselineVersion = $_.UpdateBaselineVersion
                 AcceptLicense = $_.AcceptLicense
                 Operations = @(Get-ScenarioOperations -Scenario $_)
+                RepairScenarios = @(Get-ScenarioRepairScenarios -Scenario $_)
                 Engines = @(Get-ScenarioEngines -Scenario $_)
                 Repository = Get-ScenarioRepository -Scenario $_
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $_
