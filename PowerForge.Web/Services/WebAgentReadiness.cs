@@ -27,6 +27,9 @@ public static class WebAgentReadiness
     private static readonly Regex MarkdownTrailingWhitespaceRegex = new(@"[ \t]+\n", RegexOptions.Compiled);
     private static readonly Regex MarkdownBlankLinesRegex = new(@"\n{3,}", RegexOptions.Compiled);
     private static readonly Regex MarkdownRepeatedSpacesRegex = new(@"[ \t]{2,}", RegexOptions.Compiled);
+    private static readonly Regex MarkdownH1Regex = new(@"(?m)^#\s+\S", RegexOptions.Compiled);
+    private static readonly Regex MarkdownH2Regex = new(@"(?m)^##\s+\S", RegexOptions.Compiled);
+    private static readonly Regex MarkdownListLinkRegex = new(@"(?m)^\s*[-*]\s+\[[^\]\r\n]+\]\([^) \r\n]+[^)\r\n]*\)", RegexOptions.Compiled);
     private static readonly Regex SlugSeparatorRegex = new(@"[-_\s]+", RegexOptions.Compiled);
 
     /// <summary>Writes configured agent-readiness files under the site root.</summary>
@@ -201,6 +204,15 @@ public static class WebAgentReadiness
         AddCheck(checks, "sitemap", "discoverability", "sitemap.xml", ValidateSitemap(sitemapPath, out var sitemapMessage) ? "pass" : "fail",
             sitemapMessage, sitemapPath);
 
+        var llmsPath = Path.Combine(siteRoot, "llms.txt");
+        var llmsExists = File.Exists(llmsPath);
+        var llmsMessage = string.Empty;
+        var llmsStatus = llmsExists ? GetLlmsTxtStatus(llmsPath, out llmsMessage) : "info";
+        AddCheck(checks, "llms-txt", "agent-accessibility", "llms.txt",
+            llmsExists ? llmsStatus : "info",
+            llmsExists ? llmsMessage : "llms.txt is not present.",
+            llmsPath);
+
         var headersPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!);
         var headersText = File.Exists(headersPath) ? File.ReadAllText(headersPath) : string.Empty;
         var apacheEnabled = spec.Apache?.Enabled == true;
@@ -339,14 +351,55 @@ public static class WebAgentReadiness
             sitemap.Success && LooksLikeSitemap(sitemap.Text) ? "sitemap.xml exists with valid structure." : sitemap.Message,
             CombineUrl(baseUrl, "/sitemap.xml"));
 
+        var llms = await TryGetTextAsync(http, CombineUrl(baseUrl, "/llms.txt"), null, cancellationToken).ConfigureAwait(false);
+        var llmsMessage = string.Empty;
+        var llmsStatus = llms.Success ? GetLlmsTxtTextStatus(llms.Text, out llmsMessage) : "info";
+        AddCheck(checks, "llms-txt", "agent-accessibility", "llms.txt",
+            llms.Success ? llmsStatus : "info",
+            llms.Success ? llmsMessage : "llms.txt was not found.",
+            CombineUrl(baseUrl, "/llms.txt"));
+
         var markdown = await TryGetTextAsync(http, baseUrl, "text/markdown", cancellationToken).ConfigureAwait(false);
         var markdownContentType = markdown.Response?.Content.Headers.ContentType?.MediaType ?? string.Empty;
+        var markdownNegotiated = markdown.Success && IsMarkdownContentType(markdownContentType);
+        var markdownAlternateUrl = ResolveMarkdownAlternateUrl(baseUrl, linkHeader) ?? CombineUrl(baseUrl, "/index.md");
+        HttpTextResult? markdownAlternate = null;
+        var markdownAlternateContentType = string.Empty;
+        var markdownAlternateFetched = false;
+        var markdownAlternateAvailableAsMarkdown = false;
+        if (!markdownNegotiated && !string.IsNullOrWhiteSpace(markdownAlternateUrl))
+        {
+            markdownAlternate = await TryGetTextAsync(http, markdownAlternateUrl, null, cancellationToken).ConfigureAwait(false);
+            markdownAlternateContentType = markdownAlternate.Response?.Content.Headers.ContentType?.MediaType ?? string.Empty;
+            markdownAlternateFetched = markdownAlternate.Success;
+            markdownAlternateAvailableAsMarkdown = markdownAlternateFetched && IsMarkdownContentType(markdownAlternateContentType);
+        }
+
         AddCheck(checks, "markdown-negotiation", "content", "Markdown for Agents",
-            markdown.Success && markdownContentType.Contains("markdown", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            markdown.Success && markdownContentType.Contains("markdown", StringComparison.OrdinalIgnoreCase)
-                ? "Accept: text/markdown returned markdown content."
-                : "Accept: text/markdown did not return Content-Type text/markdown.",
+            markdownNegotiated ? "pass" : "fail",
+            BuildMarkdownNegotiationMessage(
+                markdownNegotiated,
+                markdown.Success,
+                markdownContentType,
+                GetHeaderValue(markdown.Response, "Vary"),
+                GetHeaderValue(markdown.Response, "CF-Cache-Status"),
+                GetHeaderValue(markdown.Response, "Cache-Control"),
+                markdownAlternateAvailableAsMarkdown,
+                markdownAlternateUrl,
+                markdownAlternateFetched,
+                markdownAlternateContentType),
             baseUrl);
+        if (!markdownNegotiated)
+        {
+            AddCheck(checks, "markdown-artifact-public", "content", "Direct Markdown artifact",
+                markdownAlternateAvailableAsMarkdown ? "pass" : (markdownAlternateFetched ? "warn" : "info"),
+                markdownAlternateAvailableAsMarkdown
+                    ? $"Direct Markdown artifact is available at {markdownAlternateUrl}."
+                    : (markdownAlternateFetched
+                        ? $"Direct Markdown artifact was fetched at {markdownAlternateUrl}, but returned {FormatContentTypeForMessage(markdownAlternateContentType)}. Configure the host MIME type as text/markdown."
+                        : $"Direct Markdown artifact was not found at {markdownAlternateUrl}."),
+                markdownAlternateUrl);
+        }
 
         var apiCatalog = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/api-catalog"), null, cancellationToken).ConfigureAwait(false);
         AddCheck(checks, "api-catalog", "api-auth-mcp-skill-discovery", "API Catalog (RFC 9727)",
@@ -1505,6 +1558,62 @@ public static class WebAgentReadiness
         }
     }
 
+    private static string GetLlmsTxtStatus(string path, out string message)
+    {
+        if (!File.Exists(path))
+        {
+            message = "llms.txt is missing.";
+            return "info";
+        }
+
+        try
+        {
+            return GetLlmsTxtTextStatus(File.ReadAllText(path), out message);
+        }
+        catch (Exception ex)
+        {
+            message = $"llms.txt could not be read: {ex.Message}";
+            return "fail";
+        }
+    }
+
+    private static string GetLlmsTxtTextStatus(string text, out string message)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            message = "llms.txt is empty.";
+            return "fail";
+        }
+
+        var hasH1 = MarkdownH1Regex.IsMatch(text);
+        var hasH2 = MarkdownH2Regex.IsMatch(text);
+        var hasMarkdownListLink = MarkdownListLinkRegex.IsMatch(text);
+
+        if (hasH1 && hasH2 && hasMarkdownListLink)
+        {
+            message = "llms.txt follows the recommended Markdown outline with linked resources.";
+            return "pass";
+        }
+
+        if (hasH1)
+        {
+            var recommendations = new List<string>();
+            if (!hasH2) recommendations.Add("at least one H2 section");
+            if (!hasMarkdownListLink) recommendations.Add("at least one Markdown list link");
+
+            message = "llms.txt has an H1 heading. Recommended outline is missing " + string.Join(", ", recommendations) + ".";
+            return "warn";
+        }
+
+        var missing = new List<string>();
+        if (!hasH1) missing.Add("an H1 heading");
+        if (!hasH2) missing.Add("at least one H2 section");
+        if (!hasMarkdownListLink) missing.Add("at least one Markdown list link");
+
+        message = "llms.txt is missing " + string.Join(", ", missing) + ".";
+        return "fail";
+    }
+
     private static bool ValidateApiCatalog(string path, out string message)
     {
         if (!File.Exists(path))
@@ -2161,6 +2270,200 @@ public static class WebAgentReadiness
             return new HttpResponseResult(false, ex.Message, null);
         }
     }
+
+    private static bool IsMarkdownContentType(string? contentType)
+        => !string.IsNullOrWhiteSpace(contentType) &&
+           contentType.Contains("markdown", StringComparison.OrdinalIgnoreCase);
+
+    internal static string? ResolveMarkdownAlternateUrl(string baseUrl, string linkHeader)
+    {
+        if (string.IsNullOrWhiteSpace(linkHeader))
+            return null;
+
+        foreach (var segment in SplitHeaderValues(linkHeader))
+        {
+            var start = segment.IndexOf('<');
+            var end = segment.IndexOf('>');
+            if (start < 0 || end <= start)
+                continue;
+
+            var parameters = ParseLinkParameters(segment[(end + 1)..]);
+            if (!LinkRelContains(parameters.GetValueOrDefault("rel"), "alternate") ||
+                !IsMarkdownMediaType(parameters.GetValueOrDefault("type")))
+            {
+                continue;
+            }
+
+            var href = segment.Substring(start + 1, end - start - 1).Trim();
+            if (string.IsNullOrWhiteSpace(href))
+                continue;
+
+            return Uri.TryCreate(href, UriKind.Absolute, out _)
+                ? href
+                : CombineUrl(baseUrl, href);
+        }
+
+        return null;
+    }
+
+    private static string[] SplitHeaderValues(string value)
+    {
+        var values = new List<string>();
+        var current = new StringBuilder();
+        var inQuote = false;
+        var inAngle = false;
+
+        foreach (var c in value)
+        {
+            if (c == '"')
+                inQuote = !inQuote;
+            else if (!inQuote && c == '<')
+                inAngle = true;
+            else if (!inQuote && c == '>')
+                inAngle = false;
+
+            if (c == ',' && !inQuote && !inAngle)
+            {
+                AddTrimmedValue(values, current);
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        AddTrimmedValue(values, current);
+        return values.ToArray();
+    }
+
+    private static string[] SplitHeaderParameters(string value)
+    {
+        var values = new List<string>();
+        var current = new StringBuilder();
+        var inQuote = false;
+
+        foreach (var c in value)
+        {
+            if (c == '"')
+                inQuote = !inQuote;
+
+            if (c == ';' && !inQuote)
+            {
+                AddTrimmedValue(values, current);
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        AddTrimmedValue(values, current);
+        return values.ToArray();
+    }
+
+    private static void AddTrimmedValue(List<string> values, StringBuilder current)
+    {
+        var value = current.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(value))
+            values.Add(value);
+        current.Clear();
+    }
+
+    private static Dictionary<string, string> ParseLinkParameters(string value)
+    {
+        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var segment in SplitHeaderParameters(value))
+        {
+            var equalsIndex = segment.IndexOf('=');
+            if (equalsIndex <= 0)
+                continue;
+
+            var name = segment[..equalsIndex].Trim();
+            var parameterValue = TrimQuotedValue(segment[(equalsIndex + 1)..].Trim());
+            if (!string.IsNullOrWhiteSpace(name))
+                parameters[name] = parameterValue;
+        }
+
+        return parameters;
+    }
+
+    private static string TrimQuotedValue(string value)
+        => value.Length >= 2 && value[0] == '"' && value[^1] == '"'
+            ? value[1..^1]
+            : value;
+
+    private static bool LinkRelContains(string? rel, string expectedRel)
+        => !string.IsNullOrWhiteSpace(rel) &&
+           rel.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+               .Any(token => string.Equals(token, expectedRel, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsMarkdownMediaType(string? mediaType)
+    {
+        if (string.IsNullOrWhiteSpace(mediaType))
+            return false;
+
+        var type = mediaType.Split(';', 2, StringSplitOptions.TrimEntries)[0];
+        return string.Equals(type, "text/markdown", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetHeaderValue(HttpResponseMessage? response, string name)
+    {
+        if (response is null)
+            return string.Empty;
+
+        if (response.Headers.TryGetValues(name, out var headerValues))
+            return string.Join(", ", headerValues);
+
+        return response.Content.Headers.TryGetValues(name, out var contentHeaderValues)
+            ? string.Join(", ", contentHeaderValues)
+            : string.Empty;
+    }
+
+    internal static string BuildMarkdownNegotiationMessage(
+        bool negotiated,
+        bool requestSucceeded,
+        string contentType,
+        string vary,
+        string cacheStatus,
+        string cacheControl,
+        bool directMarkdownAvailable,
+        string? directMarkdownUrl,
+        bool directMarkdownFetched = false,
+        string directMarkdownContentType = "")
+    {
+        if (negotiated)
+            return "Accept: text/markdown returned markdown content.";
+
+        var returned = string.IsNullOrWhiteSpace(contentType) ? "no Content-Type" : $"Content-Type {contentType}";
+        if (!requestSucceeded)
+            return $"Accept: text/markdown request failed and returned {returned}.";
+
+        var hasVaryAccept = HasHeaderToken(vary, "Accept");
+        var hasEdgeCache = !string.IsNullOrWhiteSpace(cacheStatus);
+        if (directMarkdownAvailable)
+        {
+            var cacheDetail = hasEdgeCache
+                ? $" Edge cache status was {cacheStatus}."
+                : string.Empty;
+            var varyDetail = hasVaryAccept
+                ? " The response declares Vary: Accept, so the edge/cache layer may not be keying cached HTML by Accept."
+                : " The response does not declare Vary: Accept.";
+            return $"Accept: text/markdown returned {returned}, but the direct Markdown artifact is available at {directMarkdownUrl}.{varyDetail}{cacheDetail}";
+        }
+
+        if (directMarkdownFetched)
+        {
+            return $"Accept: text/markdown returned {returned}, and the direct Markdown artifact at {directMarkdownUrl} was fetched but returned {FormatContentTypeForMessage(directMarkdownContentType)}.";
+        }
+
+        var cacheControlDetail = string.IsNullOrWhiteSpace(cacheControl) ? string.Empty : $" Cache-Control was {cacheControl}.";
+        return $"Accept: text/markdown did not return Content-Type text/markdown; returned {returned}.{cacheControlDetail}";
+    }
+
+    private static string FormatContentTypeForMessage(string contentType)
+        => string.IsNullOrWhiteSpace(contentType) ? "no Content-Type" : $"Content-Type {contentType}";
+
+    private static bool HasHeaderToken(string value, string expectedToken)
+        => value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(token => string.Equals(token, expectedToken, StringComparison.OrdinalIgnoreCase));
 
     private static string NormalizeBaseUrl(string? value)
     {
