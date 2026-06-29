@@ -74,6 +74,37 @@ public sealed class ManagedModuleBenchmarkGateScriptTests
     }
 
     [Fact]
+    public void GateForSuite_AppliesScenarioOwnedAuthenticodeCheckedFileMinimumWhenRequested()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $row = [pscustomobject]@{
+                Suite = 'SecurityGate'
+                Scenario = 'ThreadJob.Authenticode.InstallSave'
+                Host = 'PowerShell7'
+                Operation = 'Save'
+                FastestEngine = 'Managed'
+                FastestMs = 1000
+                ManagedMs = 1000
+                ManagedRank = 1
+                ManagedVsFastest = '1.00x'
+                ManagedAuthenticodeCheckedFiles = 0
+                GateManagedMaxRank = 1
+                GateManagedMaxVsFastest = 0
+                GateManagedMinAuthenticodeCheckedFiles = 1
+            }
+
+            Get-ManagedPerformanceGateViolationForSuite -Rows @($row) -MaxRank 0 -MaxVsFastest 0 -UseScenarioGates
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var violation = Assert.Single(results);
+        Assert.Contains("Authenticode", Property(violation, "Reason"), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("0", Property(violation, "ManagedAuthenticodeCheckedFiles"));
+    }
+
+    [Fact]
     public void GateForSuite_FailsScenarioGateWhenManagedDidNotSucceed()
     {
         using var ps = CreateBenchmarkPowerShell("""

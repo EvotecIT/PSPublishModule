@@ -123,7 +123,8 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             BooleanProperty(row, "AuthenticodeCheck") &&
             StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Install", "Save" }) &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet" }) &&
-            Int32Property(row, "ManagedMaxRank") == 1);
+            Int32Property(row, "ManagedMaxRank") == 1 &&
+            Int32Property(row, "ManagedMinAuthenticodeCheckedFiles") == 1);
         Assert.Contains(rows, row =>
             Property(row, "Suite") == "RepairGate" &&
             Property(row, "Name") == "ThreadJob.Repair.LoadedModuleSafety" &&
