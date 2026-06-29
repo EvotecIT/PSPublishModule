@@ -10,7 +10,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Do not use `powershell.exe`, `pwsh`, `dotnet.exe`, `nuget.exe`, or embedded `.ps1` scripts for the new managed engine path.
 - [x] Keep PowerShellGet and PSResourceGet as compatibility baselines and temporary fallbacks, not as the long-term engine.
 - [x] Preserve easy migration from existing `Install-Module`, `Save-Module`, `Publish-Module`, `Install-PSResource`, `Save-PSResource`, and `Publish-PSResource` usage.
-- [x] Keep `Install-PrivateModule` and `Update-PrivateModule` as thin compatibility/convenience wrappers with opt-in managed transport.
+- [x] Keep `Install-ManagedModule` and `Update-ManagedModule` as clean managed lifecycle cmdlets without private wrapper transport switches.
 - [x] Make `Get-ManagedModule`, `Update-ManagedModule`, and `Repair-ManagedModule` the day-to-day estate maintenance entrypoints while keeping ModuleState plan objects as internal engine vocabulary.
 - [x] Prefer typed objects and pipeline-friendly output over JSON-first workflows.
 - [x] Write receipts and evidence only after successful delivery.
@@ -43,7 +43,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [ ] Add a short migration table in the README only after final parameter names and aliases are locked.
 - [ ] Include benchmark methodology in public docs: host, module family, operation, cache mode, repeat count, engine order, cleanup mode, correctness/import validation, and gate result.
 - [ ] Include benchmark limits in public docs: install-only engines are not save/publish competitors, managed-only cache lanes are diagnostics, and one-shot exploratory runs are not release claims.
-- [ ] Keep private-gallery docs aligned with the managed transport default/opt-in behavior.
+- [ ] Keep private-gallery docs aligned with the managed repository profile behavior.
 - [ ] Before PR/release readiness, run the docs build path and verify generated command docs plus external help XML changed only where expected.
 
 ## Public Command Shape
@@ -57,9 +57,9 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Introduce `Get-ManagedModule` as the PowerShell-native installed inventory surface.
 - [x] Introduce `Repair-ManagedModule` as the one-stop stale/drift/family/source maintenance surface.
 - [x] Remove unreleased `Get-ModuleState`, `Get-ModuleStatePlan`, `Test-ModuleState`, `Invoke-ModuleStatePlan`, and `Invoke-ModuleState` public exports; the clean public state workflow is `Get-ManagedModule`, `Update-ManagedModule`, and `Repair-ManagedModule -Plan`.
-- [x] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Register-ModuleRepository` remains the repository surface.
-- [x] Keep `Install-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed install delivery when `-Transport ManagedModule` is selected.
-- [x] Keep `Update-PrivateModule` as a wrapper that maps private-gallery profile/repository options to managed update delivery when `-Transport ManagedModule` is selected.
+- [x] Decide whether `Register-ManagedModuleRepository` is needed or whether existing `Initialize-ManagedModuleRepository` remains the repository surface.
+- [x] Let `Install-ManagedModule` consume saved managed repository profiles directly through `-ProfileName`.
+- [x] Let `Update-ManagedModule` consume saved managed repository profiles directly through `-ProfileName`.
 - [x] Avoid adding separate public/private command families unless a wrapper has a clearly different operator purpose.
 
 ## Compatibility Parameters
@@ -315,7 +315,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [ ] Add managed-family plan/test/apply surfaces only where `Repair-ManagedModule -Plan` and typed result objects are not enough.
 - [ ] Remove unreleased ModuleState public cmdlets/exports after the managed-family surface covers the inspected workflows.
 - [x] Use managed delivery as the default repair transport.
-- [ ] Retire compatibility transport from the primary repair path once managed parity is proven by benchmarks and compatibility tests.
+- [ ] Retire remaining legacy delivery terminology once managed parity is proven by benchmarks and compatibility tests.
 - [x] Ensure maintenance receipts contain managed-engine evidence.
 - [x] Ensure summaries explain what changed, what was skipped, and why.
 - [x] Add tests for managed maintenance delivery command shaping.
@@ -548,14 +548,13 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 
 ## Phase 11: Transition And Cleanup
 
-- [x] Keep current PowerShellGet/PSResourceGet wrappers while managed parity is incomplete.
-- [x] Add opt-in `Install-PrivateModule -Transport ManagedModule` routing.
-- [x] Add opt-in `Update-PrivateModule -Transport ManagedModule` routing.
-- [x] Make `Install-PrivateModule` prefer managed transport by default when a repository source URI/path is available, while preserving compatibility transport for bare registered repository names.
-- [x] Make `Update-PrivateModule` prefer managed transport by default when a repository source URI/path is available, while preserving compatibility transport for bare registered repository names.
+- [x] Remove unreleased private install/update wrappers and make managed commands the only module lifecycle surface.
+- [x] Remove opt-in transport switches from the public managed install/update shape.
+- [x] Make `Install-ManagedModule` resolve direct URLs, local feeds, saved profiles, and registered repository names through the managed support layer.
+- [x] Make `Update-ManagedModule` resolve direct URLs, local feeds, saved profiles, and registered repository names through the managed support layer.
 - [x] Resolve registered repository source locations before falling back for bare repository names.
 - [x] Route required-module mirroring through the managed engine after save/publish parity is proven.
-- [x] Mark compatibility transport as legacy only after benchmark and compatibility gates pass.
+- [x] Mark legacy delivery terminology as cleanup-only after benchmark and compatibility gates pass.
 - [x] Remove embedded PowerShell scripts from the managed path.
 - [x] Remove external tool assumptions from managed tests.
 - [x] Update generated command docs from source metadata.
@@ -568,7 +567,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Managed install/save/update/publish works without PowerShellGet, PSResourceGet, PackageManagement, `nuget.exe`, `dotnet.exe`, `powershell.exe`, `pwsh`, or embedded `.ps1` scripts in the core path.
 - [x] Common PowerShellGet workflows have a documented managed equivalent.
 - [x] Common PSResourceGet workflows have a documented managed equivalent.
-- [x] Existing private-gallery workflows continue to work through wrappers.
+- [x] Existing private-gallery workflows continue through managed repository profiles and managed lifecycle cmdlets.
 - [x] ModuleState can maintain installed modules through the managed engine.
 - [x] Benchmarks prove correctness and performance on Windows PowerShell 5.1 and PowerShell 7+.
 - [x] Compatibility fallback remains only where provider support or repository source evidence is explicitly incomplete.

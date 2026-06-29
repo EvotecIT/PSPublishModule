@@ -30,8 +30,8 @@ Baseline references:
 
 - `Get-ManagedModule` is the PowerShell-native installed inventory surface. Use `-AsInventory` when an advanced ModuleState inventory object is needed for planning or support bundles.
 - `Repair-ManagedModule` is the day-to-day stale/drift/family/source maintenance surface. Use `-Plan` for preview. ModuleState remains the internal planning engine, not a compatibility promise for unreleased public cmdlet names.
-- `Register-ManagedModuleRepository` is not planned now. Use `Set-ModuleRepositoryProfile`, `Get-ModuleRepositoryProfile`, `Connect-ModuleRepository`, and `Register-ModuleRepository` for repository profiles and compatibility registration. Managed commands can also use direct `-Repository` values.
-- `Install-PrivateModule` and `Update-PrivateModule` stay as convenience wrappers. The reusable path is `Find-ManagedModule`, `Install-ManagedModule`, `Save-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, and `Publish-ManagedModule`.
+- `Register-ManagedModuleRepository` is not planned now. Use `Set-ManagedModuleRepository`, `Get-ManagedModuleRepository`, `Initialize-ManagedModuleRepository`, and `Remove-ManagedModuleRepository` for repository profiles, onboarding, readiness checks, export/import, and bootstrap packages. Managed commands can also use direct `-Repository` values.
+- There are no separate private install/update wrappers. The reusable path is `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, and `Publish-ManagedModule`.
 - Public and private command aliases are allowed only when they point to the same managed command implementation. New command families need a distinct operator purpose.
 
 ## Switching Examples
@@ -95,13 +95,15 @@ Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages
 Publish-ManagedModule -Path C:\Source\Company.Tools -ProfileName CompanyModules -ApiKeyFilePath C:\Secrets\company-feed-key.txt
 ```
 
-### Private Gallery Wrapper Opt-In
+### Managed Repository Profiles
 
-Existing private-gallery wrappers remain available while parity is proven. Use `-Transport ManagedModule` when a profile should use the managed engine for module install/update delivery:
+Managed repository profiles are first-class inputs to the lifecycle commands:
 
 ```powershell
-Install-PrivateModule -ProfileName CompanyModules -Name Company.Tools -Transport ManagedModule
-Update-PrivateModule  -ProfileName CompanyModules -Name Company.Tools -Transport ManagedModule
+Set-ManagedModuleRepository -Name CompanyModules -Provider NuGet -RepositoryUri 'https://packages.company.test/nuget/v3/index.json'
+Initialize-ManagedModuleRepository -ProfileName CompanyModules -InstallPrerequisites
+Install-ManagedModule -ProfileName CompanyModules -Name Company.Tools
+Update-ManagedModule  -ProfileName CompanyModules -Name Company.Tools
 ```
 
 ### Estate Maintenance
@@ -156,7 +158,7 @@ The managed engine is a module lifecycle engine. It supports module packages for
 - role capability search
 - provider-specific bootstrap, registration, credential-provider installation, or repository plugin behavior
 
-Those scenarios should continue through compatibility transport or native provider commands until they have a managed model, tests, and benchmark evidence. They are intentionally documented gaps, not silently supported module-engine behavior.
+Those scenarios should continue through native provider commands until they have a managed model, tests, and benchmark evidence. They are intentionally documented gaps, not silently supported module-engine behavior.
 
 ## Compatibility Checklist
 

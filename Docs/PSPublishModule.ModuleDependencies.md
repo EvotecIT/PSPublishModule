@@ -136,7 +136,7 @@ After the built module is installed from PSGallery or a private feed, deploy the
 module plus embedded dependencies to an explicit folder:
 
 ```powershell
-Install-PrivateModule `
+Install-ManagedModule `
     -Name Company.Tools `
     -ProfileName JFrogPS `
     -InstallPrerequisites
@@ -148,7 +148,7 @@ Install-ModuleDependency `
 ```
 
 Use raw `Install-Module` only for the generic public-gallery path. For private
-feeds, prefer `Install-PrivateModule` so repository registration, credentials,
+feeds, prefer `Install-ManagedModule` so repository registration, credentials,
 profiles, and prerequisites follow the PSPublishModule private-gallery contract.
 
 The destination becomes:

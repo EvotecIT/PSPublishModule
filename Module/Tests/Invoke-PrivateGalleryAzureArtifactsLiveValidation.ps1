@@ -5,7 +5,7 @@ Runs the opt-in live Azure Artifacts private gallery validation flow.
 .DESCRIPTION
 This helper wraps PrivateGallery.AzureArtifacts.Live.Tests.ps1 with parameters
 so desktop support, release operators, and maintainers can prove the managed
-Initialize-ModuleRepository onboarding flow without hand-setting environment
+Initialize-ManagedModuleRepository onboarding flow without hand-setting environment
 variables. It restores the caller's environment variables after the run.
 The helper fails the script when the live Pester run reports failed tests.
 

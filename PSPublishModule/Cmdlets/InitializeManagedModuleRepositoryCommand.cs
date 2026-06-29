@@ -7,49 +7,51 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Performs one-command enterprise onboarding for a private module repository profile.
+/// Performs one-command onboarding for managed module repository profiles.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This cmdlet is the managed-workstation entry point for private gallery onboarding. It can use an existing saved
-/// profile, import a non-secret profile JSON file, or create an Azure Artifacts profile from feed details. Unless
-/// <c>-SkipConnect</c> is used, it then installs requested prerequisites, registers the repository, and validates
-/// authenticated access through the selected bootstrap mode.
+/// This cmdlet is the workstation or build-agent onboarding entry point for managed module repositories. It can use an
+/// existing saved profile, import a non-secret profile JSON file, or create a profile from feed details. Unless
+/// <c>-SkipConnect</c> is used, it then installs requested prerequisites, registers/probes native provider state where
+/// needed, and validates authenticated access through the selected bootstrap mode. It can also write a distributable
+/// non-secret bootstrap package for other machines.
 /// </para>
 /// </remarks>
 /// <example>
 /// <summary>Onboard from a managed profile file</summary>
-/// <code>Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites</code>
+/// <code>Initialize-ManagedModuleRepository -Path .\Company.repository.json -ProfileName Company -Overwrite -InstallPrerequisites</code>
 /// <para>Imports the non-secret profile, installs/refreshes prerequisites, registers the repository, and triggers the Azure Artifacts credential-provider login flow when needed.</para>
 /// </example>
 /// <example>
 /// <summary>Create and connect an Entra-first Azure Artifacts profile</summary>
-/// <code>Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites</code>
+/// <code>Initialize-ManagedModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites</code>
 /// <para>Saves an Entra-first profile and connects the workstation in one command.</para>
 /// </example>
 /// <example>
 /// <summary>Verify profile metadata without connecting</summary>
-/// <code>Initialize-ModuleRepository -ProfileName Company -SkipConnect</code>
+/// <code>Initialize-ManagedModuleRepository -ProfileName Company -SkipConnect</code>
 /// <para>Returns profile and local prerequisite readiness without registering or probing the repository.</para>
 /// </example>
-[Cmdlet(VerbsData.Initialize, "ModuleRepository", DefaultParameterSetName = ParameterSetProfile, SupportsShouldProcess = true)]
-[Alias("Initialize-Gallery")]
+[Cmdlet(VerbsData.Initialize, "ManagedModuleRepository", DefaultParameterSetName = ParameterSetProfile, SupportsShouldProcess = true)]
 [OutputType(typeof(ModuleRepositoryOnboardingResult))]
-public sealed class InitializeModuleRepositoryCommand : PSCmdlet
+[OutputType(typeof(ModuleRepositoryRegistrationResult))]
+public sealed class InitializeManagedModuleRepositoryCommand : PSCmdlet
 {
     private const string ParameterSetProfile = "Profile";
     private const string ParameterSetImport = "Import";
-    private const string ParameterSetAzureArtifacts = "AzureArtifacts";
+    private const string ParameterSetRepository = "Repository";
+    private const string ParameterSetMicrosoftArtifactRegistry = "MicrosoftArtifactRegistry";
 
     /// <summary>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</summary>
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = ParameterSetProfile)]
     [Parameter(ParameterSetName = ParameterSetImport)]
-    [Parameter(Mandatory = true, Position = 0, ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(Mandatory = true, Position = 0, ParameterSetName = ParameterSetRepository)]
     [Alias("Name", "Profile")]
     [ValidateNotNullOrEmpty]
     public string? ProfileName { get; set; }
 
-    /// <summary>Source JSON profile file exported with Export-ModuleRepositoryProfile.</summary>
+    /// <summary>Source JSON profile file exported with Get-ManagedModuleRepository -ExportPath.</summary>
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = ParameterSetImport)]
     [ValidateNotNullOrEmpty]
     public string? Path { get; set; }
@@ -59,69 +61,82 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     public SwitchParameter Overwrite { get; set; }
 
     /// <summary>Private gallery provider.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     public PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;
 
+    /// <summary>Initializes the public Microsoft Artifact Registry PowerShell repository.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
+    public SwitchParameter MicrosoftArtifactRegistry { get; set; }
+
     /// <summary>Azure DevOps organization name.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     [Alias("Organization")]
     [ValidateNotNullOrEmpty]
     public string AzureDevOpsOrganization { get; set; } = string.Empty;
 
     /// <summary>Optional Azure DevOps project name for project-scoped feeds.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     [Alias("Project")]
     public string? AzureDevOpsProject { get; set; }
 
     /// <summary>Azure Artifacts feed name.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     [Alias("Feed")]
     [ValidateNotNullOrEmpty]
     public string AzureArtifactsFeed { get; set; } = string.Empty;
 
     /// <summary>Provider repository/feed id. For Azure this is the feed when AzureArtifactsFeed is omitted; for JFrog this is the Artifactory NuGet repository key.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     public string? Repository { get; set; }
 
     /// <summary>Optional local repository name override. Defaults to the profile name for new Azure Artifacts profiles.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     public string? RepositoryName { get; set; }
 
     /// <summary>PSResourceGet v3 repository URI for generic/JFrog feeds.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     public string? RepositoryUri { get; set; }
 
     /// <summary>PowerShellGet source URI for generic/JFrog feeds.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     public string? RepositorySourceUri { get; set; }
 
     /// <summary>PowerShellGet publish URI for generic/JFrog feeds.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     public string? RepositoryPublishUri { get; set; }
 
     /// <summary>JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     public string? JFrogBaseUri { get; set; }
 
     /// <summary>JFrog NuGet repository key. Defaults from Repository when omitted.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     public string? JFrogRepository { get; set; }
 
+    /// <summary>GitHub user or organization namespace for GitHub Packages. Defaults from Repository when omitted.</summary>
+    [Parameter(ParameterSetName = ParameterSetRepository)]
+    [Alias("Owner", "Namespace")]
+    public string? GitHubOwner { get; set; }
+
     /// <summary>Registration strategy saved in a new profile. Defaults to PSResourceGet for Entra-first Azure Artifacts use.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.PSResourceGet;
 
     /// <summary>Bootstrap/authentication mode saved in a new profile. Defaults to ExistingSession for Azure Artifacts Credential Provider login.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
     [Alias("Mode")]
     public PrivateGalleryBootstrapMode BootstrapMode { get; set; } = PrivateGalleryBootstrapMode.ExistingSession;
 
     /// <summary>When true, marks the repository as trusted during registration.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     public bool Trusted { get; set; } = true;
 
     /// <summary>Optional PSResourceGet repository priority.</summary>
-    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetRepository)]
+    [Parameter(ParameterSetName = ParameterSetMicrosoftArtifactRegistry)]
     public int? Priority { get; set; }
 
     /// <summary>Optional repository credential username for credential-prompt fallback environments.</summary>
@@ -148,6 +163,29 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     [Parameter]
     public SwitchParameter InstallPrerequisites { get; set; }
 
+    /// <summary>Optional output directory for a non-secret onboarding package that imports the selected profiles and can install starter modules.</summary>
+    [Parameter]
+    public string? BootstrapPath { get; set; }
+
+    /// <summary>Generated bootstrap script file name when BootstrapPath is used.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string BootstrapScriptName { get; set; } = "Initialize-ManagedModuleRepository.ps1";
+
+    /// <summary>Generated profile JSON file name when BootstrapPath is used.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string BootstrapProfileFileName { get; set; } = "repositories.json";
+
+    /// <summary>Optional module names written into the bootstrap script as starter managed installs.</summary>
+    [Parameter]
+    [Alias("ModuleName")]
+    public string[]? InstallModule { get; set; }
+
+    /// <summary>Overwrite existing bootstrap files when BootstrapPath is used.</summary>
+    [Parameter]
+    public SwitchParameter BootstrapForce { get; set; }
+
     /// <summary>Save/import/test the profile but do not register, connect, or probe the repository.</summary>
     [Parameter]
     public SwitchParameter SkipConnect { get; set; }
@@ -161,8 +199,17 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     {
         var host = new CmdletPrivateGalleryHost(this);
         var service = new PrivateGalleryService(host);
+
+        if (ParameterSetName == ParameterSetMicrosoftArtifactRegistry)
+        {
+            InitializeMicrosoftArtifactRegistry(service);
+            return;
+        }
+
         var profileWriteState = ResolveProfiles(out var importedFromPath);
         var prerequisiteStatus = service.GetBootstrapPrerequisiteStatus();
+
+        WriteBootstrapPackageIfRequested(profileWriteState);
 
         foreach (var state in profileWriteState)
         {
@@ -182,8 +229,8 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
                 ImportedFromPath = importedFromPath,
                 Profile = profileResult,
                 Readiness = readiness,
-                RecommendedInstallCommand = $"Install-PrivateModule -ProfileName '{state.Profile.Name}' -Name <ModuleName>",
-                RecommendedUpdateCommand = $"Update-PrivateModule -ProfileName '{state.Profile.Name}' -Name <ModuleName>",
+                RecommendedInstallCommand = $"Install-ManagedModule -ProfileName '{state.Profile.Name}' -Name <ModuleName>",
+                RecommendedUpdateCommand = $"Update-ManagedModule -ProfileName '{state.Profile.Name}' -Name <ModuleName>",
                 Messages = BuildProfileMessages(state, readiness).ToArray()
             };
 
@@ -234,12 +281,13 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
         }
 
         if (Scope == ModuleRepositoryProfileScope.All)
-            throw new ArgumentException("Initialize-ModuleRepository requires User or Machine scope when creating or importing profiles.", nameof(Scope));
+            throw new ArgumentException("Initialize-ManagedModuleRepository requires User or Machine scope when creating or importing profiles.", nameof(Scope));
 
         var store = new ModuleRepositoryProfileStore(Scope);
 
-        if (ParameterSetName == ParameterSetAzureArtifacts)
+        if (ParameterSetName == ParameterSetRepository)
         {
+            ValidateRepositoryProfile();
             var profile = ModuleRepositoryProfileStore.Normalize(new ModuleRepositoryProfile
             {
                 Name = ProfileName!,
@@ -254,6 +302,7 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
                 RepositoryPublishUri = RepositoryPublishUri ?? string.Empty,
                 JFrogBaseUri = JFrogBaseUri ?? string.Empty,
                 JFrogRepository = JFrogRepository ?? string.Empty,
+                GitHubOwner = GitHubOwner ?? string.Empty,
                 Tool = Tool,
                 BootstrapMode = BootstrapMode,
                 Trusted = Trusted,
@@ -294,6 +343,80 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
         return imported.Select(profile => new ProfileWriteState(profile, store, written: true, shouldConnect: true)).ToArray();
     }
 
+    private void InitializeMicrosoftArtifactRegistry(PrivateGalleryService service)
+    {
+        var prerequisiteInstall = service.EnsureMicrosoftArtifactRegistryPrerequisites(InstallPrerequisites.IsPresent);
+        var registration = service.EnsureMicrosoftArtifactRegistryRegistered(
+            RepositoryName,
+            Tool,
+            Trusted,
+            Priority,
+            prerequisiteInstall.Status,
+            shouldProcessAction: "Initialize Microsoft Artifact Registry repository using PSResourceGet");
+        registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
+        registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
+        service.WriteRegistrationSummary(registration);
+        WriteObject(ModuleRepositoryRegistrationResultMapper.ToCmdletResult(registration));
+    }
+
+    private void ValidateRepositoryProfile()
+    {
+        if (Provider == PrivateGalleryProvider.AzureArtifacts &&
+            (string.IsNullOrWhiteSpace(AzureDevOpsOrganization) || string.IsNullOrWhiteSpace(AzureArtifactsFeed)))
+        {
+            throw new ArgumentException("Azure Artifacts managed module repositories require AzureDevOpsOrganization and AzureArtifactsFeed.");
+        }
+
+        if (Provider == PrivateGalleryProvider.JFrog &&
+            string.IsNullOrWhiteSpace(JFrogBaseUri) &&
+            string.IsNullOrWhiteSpace(RepositoryUri))
+        {
+            throw new ArgumentException("JFrog managed module repositories require JFrogBaseUri or RepositoryUri.");
+        }
+
+        if (Provider == PrivateGalleryProvider.NuGet &&
+            string.IsNullOrWhiteSpace(RepositoryUri) &&
+            string.IsNullOrWhiteSpace(RepositorySourceUri))
+        {
+            throw new ArgumentException("NuGet managed module repositories require RepositoryUri or RepositorySourceUri.");
+        }
+
+        if (Provider == PrivateGalleryProvider.GitHubPackages &&
+            string.IsNullOrWhiteSpace(GitHubOwner) &&
+            string.IsNullOrWhiteSpace(Repository))
+        {
+            throw new ArgumentException("GitHub Packages managed module repositories require GitHubOwner or Repository owner metadata.");
+        }
+    }
+
+    private void WriteBootstrapPackageIfRequested(ProfileWriteState[] profileWriteState)
+    {
+        if (string.IsNullOrWhiteSpace(BootstrapPath))
+            return;
+
+        var profiles = profileWriteState
+            .Select(static state => state.Profile)
+            .ToArray();
+        if (profiles.Length == 0)
+            return;
+
+        var resolvedOutputDirectory = SessionState.Path.GetUnresolvedProviderPathFromPSPath(BootstrapPath!);
+        if (!ShouldProcess(resolvedOutputDirectory, $"Create managed module repository bootstrap package for {profiles.Length} profile(s)"))
+            return;
+
+        var package = ModuleRepositoryBootstrapScriptBuilder.WritePackage(new ModuleRepositoryBootstrapScriptOptions
+        {
+            OutputDirectory = resolvedOutputDirectory,
+            ScriptName = BootstrapScriptName,
+            ProfileFileName = BootstrapProfileFileName,
+            Profiles = profiles,
+            InstallModules = InstallModule ?? Array.Empty<string>(),
+            Force = BootstrapForce.IsPresent
+        });
+
+        WriteObject(package);
+    }
+
     private PowerForge.ModuleRepositoryRegistrationResult ConnectProfile(
         PrivateGalleryService service,
         CmdletPrivateGalleryHost host,
@@ -312,7 +435,8 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             profile.RepositorySourceUri,
             profile.RepositoryPublishUri,
             profile.JFrogBaseUri,
-            profile.JFrogRepository);
+            profile.JFrogRepository,
+            profile.GitHubOwner);
         var prerequisiteInstall = service.EnsureBootstrapPrerequisites(
             InstallPrerequisites.IsPresent,
             profile.BootstrapMode,

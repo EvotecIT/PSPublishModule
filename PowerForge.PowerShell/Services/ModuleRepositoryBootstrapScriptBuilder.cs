@@ -23,8 +23,8 @@ internal static class ModuleRepositoryBootstrapScriptBuilder
             throw new ArgumentException("At least one module repository profile is required.", nameof(options));
 
         var outputDirectory = Path.GetFullPath(options.OutputDirectory);
-        var scriptName = NormalizeFileName(options.ScriptName, "Initialize-PrivateGallery.ps1", nameof(options.ScriptName));
-        var profileFileName = NormalizeFileName(options.ProfileFileName, "profiles.json", nameof(options.ProfileFileName));
+        var scriptName = NormalizeFileName(options.ScriptName, "Initialize-ManagedModuleRepository.ps1", nameof(options.ScriptName));
+        var profileFileName = NormalizeFileName(options.ProfileFileName, "repositories.json", nameof(options.ProfileFileName));
         var scriptPath = Path.Combine(outputDirectory, scriptName);
         var profilePath = Path.Combine(outputDirectory, profileFileName);
 
@@ -89,12 +89,12 @@ internal static class ModuleRepositoryBootstrapScriptBuilder
         builder.AppendLine("#requires -Version 5.1");
         builder.AppendLine("<#");
         builder.AppendLine(".SYNOPSIS");
-        builder.AppendLine("Initializes PSPublishModule private gallery access on a managed workstation.");
+        builder.AppendLine("Initializes PSPublishModule managed module repository access on a workstation.");
         builder.AppendLine();
         builder.AppendLine(".DESCRIPTION");
         builder.AppendLine("Imports the bundled non-secret profile JSON, installs requested prerequisites unless skipped,");
-        builder.AppendLine("connects to the private gallery, and can install approved modules through the saved profile.");
-        builder.AppendLine("Authentication remains owned by PSResourceGet and the Azure Artifacts Credential Provider.");
+        builder.AppendLine("connects to the repository when needed, and can install approved modules through the saved profile.");
+        builder.AppendLine("Authentication remains owned by credentials, provider sessions, or the configured repository bootstrap path.");
         builder.AppendLine("#>");
         builder.AppendLine("[CmdletBinding()]");
         builder.AppendLine("param(");
@@ -114,7 +114,7 @@ internal static class ModuleRepositoryBootstrapScriptBuilder
         builder.AppendLine("$ErrorActionPreference = 'Stop'");
         builder.AppendLine("$scriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }");
         builder.AppendLine("$profilePath = Join-Path -Path $scriptRoot -ChildPath " + QuotePowerShellString(profileFileName));
-        builder.AppendLine("if (-not (Get-Command -Name Initialize-ModuleRepository -ErrorAction SilentlyContinue)) {");
+        builder.AppendLine("if (-not (Get-Command -Name Initialize-ManagedModuleRepository -ErrorAction SilentlyContinue)) {");
         builder.AppendLine("    Import-Module PSPublishModule -ErrorAction Stop");
         builder.AppendLine("}");
         builder.AppendLine();
@@ -136,7 +136,7 @@ internal static class ModuleRepositoryBootstrapScriptBuilder
         builder.AppendLine("    $initializeArguments.SkipConnect = $true");
         builder.AppendLine("}");
         builder.AppendLine();
-        builder.AppendLine("$onboarding = Initialize-ModuleRepository @initializeArguments");
+        builder.AppendLine("$onboarding = Initialize-ManagedModuleRepository @initializeArguments");
         builder.AppendLine("$onboardingItems = @($onboarding)");
         builder.AppendLine();
         builder.AppendLine("if ($InstallModule -and $InstallModule.Count -gt 0) {");
@@ -145,7 +145,7 @@ internal static class ModuleRepositoryBootstrapScriptBuilder
         builder.AppendLine("        throw 'ProfileName is required when installing modules from a bootstrap package that contains multiple profiles.'");
         builder.AppendLine("    }");
         builder.AppendLine();
-        builder.AppendLine("    Install-PrivateModule -ProfileName $targetProfileName -Name $InstallModule -InstallPrerequisites:((-not $SkipInstallPrerequisites) -and (-not $SkipConnect))");
+        builder.AppendLine("    Install-ManagedModule -ProfileName $targetProfileName -Name $InstallModule");
         builder.AppendLine("}");
         builder.AppendLine();
         builder.AppendLine("$onboarding");

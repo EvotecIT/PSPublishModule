@@ -173,8 +173,8 @@ internal sealed class PrivateModuleWorkflowService
                     ? $"Repository access probe failed via {probe.Tool}."
                     : $"Repository access probe failed via {probe.Tool}: {probe.Message}";
                 var refreshCommand = string.IsNullOrWhiteSpace(request.ProfileName)
-                    ? "Initialize-ModuleRepository for this private gallery"
-                    : $"Initialize-ModuleRepository -ProfileName '{request.ProfileName}' -InstallPrerequisites";
+                    ? "Initialize-ManagedModuleRepository for this managed module repository"
+                    : $"Initialize-ManagedModuleRepository -ProfileName '{request.ProfileName}' -InstallPrerequisites";
                 throw new InvalidOperationException($"{message} Re-run {refreshCommand} or retry the command with valid private gallery credentials.");
             }
 
@@ -255,7 +255,7 @@ internal sealed class PrivateModuleWorkflowService
             if (!string.IsNullOrWhiteSpace(request.VersionPolicy))
             {
                 throw new InvalidOperationException(
-                    "VersionPolicy requires -Transport ManagedModule or Auto with a repository source URI/path. The private-module compatibility transport supports RequiredVersion, MinimumVersion, and MaximumVersion.");
+                    "VersionPolicy requires the managed module repository path. Legacy delivery supports RequiredVersion, MinimumVersion, and MaximumVersion.");
             }
 
             ThrowIfManagedOnlyOptionsRequested(request);
@@ -515,7 +515,7 @@ internal sealed class PrivateModuleWorkflowService
             return;
 
         throw new InvalidOperationException(
-            $"{string.Join(", ", managedOnly)} requires -Transport ManagedModule or Auto with a repository source URI/path.");
+            $"{string.Join(", ", managedOnly)} requires a managed module repository source URI/path.");
     }
 
     private static bool HasManagedOnlyOptionsRequested(PrivateModuleWorkflowRequest request)

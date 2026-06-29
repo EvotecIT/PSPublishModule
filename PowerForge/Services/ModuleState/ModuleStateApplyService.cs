@@ -291,8 +291,8 @@ internal sealed class ModuleStateApplyService
             return "Save-ManagedModule";
 
         return actionKind == ModuleStatePlanActionKind.Update
-            ? "Update-PrivateModule"
-            : "Install-PrivateModule";
+            ? "Update-ManagedModule"
+            : "Install-ManagedModule";
     }
 
     private static string? GetExactVersionPolicyValue(string? versionPolicy)

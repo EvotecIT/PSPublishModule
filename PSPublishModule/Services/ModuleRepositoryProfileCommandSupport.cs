@@ -40,7 +40,21 @@ internal static class ModuleRepositoryProfileCommandSupport
                 return new ResolvedModuleRepositoryProfile(profile, store);
         }
 
-        throw new InvalidOperationException($"Module repository profile '{profileName}' was not found. Create it with Set-ModuleRepositoryProfile first.");
+        throw new InvalidOperationException($"Managed module repository '{profileName}' was not found. Create it with Set-ManagedModuleRepository or import it with Initialize-ManagedModuleRepository first.");
+    }
+
+    internal static ResolvedModuleRepositoryProfile? ResolveWithStore(
+        string profileName,
+        ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.All)
+    {
+        foreach (var store in ModuleRepositoryProfileStore.GetStores(scope))
+        {
+            var profile = store.GetProfile(profileName);
+            if (profile is not null)
+                return new ResolvedModuleRepositoryProfile(profile, store);
+        }
+
+        return null;
     }
 
     internal static ResolvedModuleRepositoryProfile[] GetUniqueProfilesWithStores(ModuleRepositoryProfileScope scope)

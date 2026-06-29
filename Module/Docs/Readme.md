@@ -16,9 +16,6 @@ Adds App Store Connect beta testers to a TestFlight beta group.
 ### [Add-AppStoreConnectBuildToBetaGroup](Add-AppStoreConnectBuildToBetaGroup.md)
 Adds App Store Connect builds to a TestFlight beta group.
 
-### [Connect-ModuleRepository](Connect-ModuleRepository.md)
-Registers an Azure Artifacts repository if needed and validates authenticated access for the selected bootstrap mode.
-
 ### [Convert-ProjectConsistency](Convert-ProjectConsistency.md)
 Converts a project to a consistent encoding/line ending policy and reports the results.
 
@@ -27,9 +24,6 @@ Exports a code-signing certificate to DER format for NuGet.org registration.
 
 ### [Export-ConfigurationProject](Export-ConfigurationProject.md)
 Exports a PowerShell-authored project release object to JSON.
-
-### [Export-ModuleRepositoryProfile](Export-ModuleRepositoryProfile.md)
-Exports saved private module repository profiles to a non-secret JSON file.
 
 ### [Find-ManagedModule](Find-ManagedModule.md)
 Finds module versions from a managed module repository.
@@ -73,6 +67,9 @@ Resolves a boolean configuration value from an environment variable with a scrip
 ### [Get-ManagedModule](Get-ManagedModule.md)
 Gets installed PowerShell modules from managed module inventory.
 
+### [Get-ManagedModuleRepository](Get-ManagedModuleRepository.md)
+Gets, tests, or exports saved managed module repository profiles.
+
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
 
@@ -83,9 +80,6 @@ Resolves documentation files from an installed module (root or Internals folder)
 
 ### [Get-ModuleInformation](Get-ModuleInformation.md)
 Gets module manifest information from a project directory.
-
-### [Get-ModuleRepositoryProfile](Get-ModuleRepositoryProfile.md)
-Gets saved private module repository profiles.
 
 ### [Get-ModuleTestFailures](Get-ModuleTestFailures.md)
 Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.
@@ -114,11 +108,8 @@ Imports a known PowerShell module through a curated AssemblyLoadContext isolatio
 ### [Import-ModuleDependency](Import-ModuleDependency.md)
 Imports a module runtime by exact paths, with dependencies loaded before the root module.
 
-### [Import-ModuleRepositoryProfile](Import-ModuleRepositoryProfile.md)
-Imports private module repository profiles from a non-secret JSON file.
-
-### [Initialize-ModuleRepository](Initialize-ModuleRepository.md)
-Performs one-command enterprise onboarding for a private module repository profile.
+### [Initialize-ManagedModuleRepository](Initialize-ManagedModuleRepository.md)
+Performs one-command onboarding for managed module repository profiles.
 
 ### [Install-AppleApp](Install-AppleApp.md)
 Installs a built Apple .app bundle on a physical device.
@@ -137,9 +128,6 @@ Resolves the module and copies its documentation payload into a destination fold
 ### [Install-ModuleScript](Install-ModuleScript.md)
 Copies only PowerShell scripts from a module's Internals\Scripts folder to a destination path.
 The destination is flattened (no Module/Version subfolders).
-
-### [Install-PrivateModule](Install-PrivateModule.md)
-Installs one or more modules from a private repository, optionally bootstrapping Azure Artifacts registration first.
 
 ### [Invoke-DotNetPublish](Invoke-DotNetPublish.md)
 Executes DotNet publish engine from DSL settings or an existing JSON config.
@@ -336,9 +324,6 @@ Scaffolds a starter powerforge.dotnetpublish.json configuration file.
 ### [New-ModuleAboutTopic](New-ModuleAboutTopic.md)
 Creates an about_*.help.txt template source file for module documentation.
 
-### [New-ModuleRepositoryBootstrap](New-ModuleRepositoryBootstrap.md)
-Creates a managed workstation bootstrap package for private module repository onboarding.
-
 ### [New-PowerForgeReleaseConfig](New-PowerForgeReleaseConfig.md)
 Scaffolds a starter unified release.json configuration file.
 
@@ -372,14 +357,11 @@ Pushes NuGet packages to a feed using dotnet nuget push.
 ### [Register-Certificate](Register-Certificate.md)
 Signs files in a path using a code-signing certificate (Windows and PowerShell Core supported).
 
-### [Register-ModuleRepository](Register-ModuleRepository.md)
-Registers an Azure Artifacts feed as a private PowerShell module repository for PowerShellGet and/or PSResourceGet.
-
 ### [Remove-Comments](Remove-Comments.md)
 Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.
 
-### [Remove-ModuleRepositoryProfile](Remove-ModuleRepositoryProfile.md)
-Removes a saved private module repository profile.
+### [Remove-ManagedModuleRepository](Remove-ManagedModuleRepository.md)
+Removes a saved managed module repository profile.
 
 ### [Remove-ProjectFiles](Remove-ProjectFiles.md)
 Removes specific files and folders from a project directory with safety features.
@@ -399,13 +381,13 @@ Creates or finds an App Store version and selects a processed build for Distribu
 ### [Set-AppStoreConnectVersionLocalization](Set-AppStoreConnectVersionLocalization.md)
 Updates localized metadata fields on an App Store version localization.
 
+### [Set-ManagedModuleRepository](Set-ManagedModuleRepository.md)
+Creates or updates a saved managed module repository profile.
+
 ### [Set-ModuleDocumentation](Set-ModuleDocumentation.md)
 Configures repository access for documentation (stores/revokes tokens).
 
 Stores Personal Access Tokens for GitHub and/or Azure DevOps under the current user profile so module documentation commands can access private repositories. On Windows, tokens are protected with DPAPI; on other platforms they are stored as Base64 (best effort).
-
-### [Set-ModuleRepositoryProfile](Set-ModuleRepositoryProfile.md)
-Creates or updates a saved private module repository profile.
 
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
 Updates version numbers across multiple project files.
@@ -448,17 +430,8 @@ Validates an App Store Connect screenshot sync configuration against local files
 ### [Test-IsolatedModuleProfile](Test-IsolatedModuleProfile.md)
 Validates a curated isolated module profile without importing it.
 
-### [Test-ModuleRepositoryProfile](Test-ModuleRepositoryProfile.md)
-Tests saved private module repository profiles and local authentication prerequisites.
-
 ### [Update-ManagedModule](Update-ManagedModule.md)
 Updates installed PowerShell modules through the managed C# module engine.
-
-### [Update-ModuleRepository](Update-ModuleRepository.md)
-Refreshes or repairs an Azure Artifacts private PowerShell module repository registration.
-
-### [Update-PrivateModule](Update-PrivateModule.md)
-Updates one or more modules from a private repository, optionally refreshing Azure Artifacts registration first.
 
 ## About Topics
 

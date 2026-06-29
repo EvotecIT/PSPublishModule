@@ -6,6 +6,9 @@ PSPublishModule and PowerForge. It is written for the common operator decision:
 
 The short answer:
 
+- Use managed module commands for supported module lifecycle work:
+  `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`,
+  `Update-ManagedModule`, `Repair-ManagedModule`, and `Publish-ManagedModule`.
 - Use the generic NuGet-compatible flow when you already know the feed URLs and
   the feed behaves like a normal NuGet v2/v3 repository.
 - Use the Azure Artifacts preset when the feed is in Azure DevOps and users
@@ -13,8 +16,10 @@ The short answer:
   Provider.
 - Use the JFrog preset when the feed is Artifactory and you want PSPublishModule
   to derive the NuGet URLs from `JFrogBaseUri` and `JFrogRepository`.
-- Use profiles for workstation onboarding and repeated install/update commands.
-- Use publish configuration for build/release pipelines.
+- Use profiles for workstation onboarding, repository shape, trust policy, and
+  repeated managed commands.
+- Use publish configuration for build/release pipelines, with managed module
+  publishing where the target feed supports it.
 
 For the Evotec Azure Artifacts feed runbook, see
 `Docs/PSPublishModule.PrivateGalleryProcess.md`.
@@ -30,19 +35,21 @@ PowerShell module publishing still uses NuGet underneath:
 - Profiles store repository shape and local behavior only. They must not store
   PATs, passwords, Entra tokens, or JFrog access tokens.
 
-Use `PSResourceGet` unless you have a specific reason to support older
-PowerShellGet-only clients.
+Use the managed module engine when the profile resolves to a usable feed source
+and the workflow is module find/save/install/update/publish/repair. Use native
+provider commands only for provider bootstrap, non-module resource kinds, or
+feed-specific behavior that is not modeled by the managed engine yet.
 
 ## Which Flow Should I Pick?
 
 | Feed or scenario | Recommended path | Why |
 | --- | --- | --- |
-| Any NuGet v3/v2-compatible feed with known URLs | Generic NuGet-compatible configuration | It is explicit and works for most vendors. |
-| Azure DevOps Artifacts | Azure Artifacts preset/profile | It derives endpoints and uses the Azure Artifacts Credential Provider. |
+| Any NuGet v3/v2-compatible feed with known URLs | Generic NuGet-compatible profile plus managed module commands | It is explicit and works for most feeds without repository registration as the core module engine. |
+| Azure DevOps Artifacts | Azure Artifacts preset/profile plus managed commands where the feed source is available | It derives endpoints and can still use credential-provider bootstrap when users need interactive enterprise auth. |
 | JFrog Artifactory | JFrog preset | It derives Artifactory NuGet URLs and supports PAT/basic, API key, OIDC, and CLI bootstrap options. |
-| GitHub Packages | GitHub Packages profile | It resolves `https://nuget.pkg.github.com/<owner>/index.json`; see `Docs/PSPublishModule.GitHubPackages.md`. |
-| Microsoft-owned modules from MAR | Microsoft Artifact Registry | MAR is read-only discovery/install only, not a publish target. |
-| Missing RequiredModules in a private feed | `-PublishRequiredModules` | Mirrors required dependencies into the target feed before publishing the main module. |
+| GitHub Packages | GitHub Packages profile plus managed commands where authentication is static | It resolves `https://nuget.pkg.github.com/<owner>/index.json`; see `Docs/PSPublishModule.GitHubPackages.md`. |
+| Microsoft-owned modules from MAR | Compatibility/native provider path | MAR is read-only discovery/install only and remains a provider-specific path until a managed model exists. |
+| Missing RequiredModules in a private feed | Managed publish with required-module mirroring when possible | Mirrors required dependencies into the target feed before publishing the main module. |
 
 ## Standard NuGet-Compatible Feed
 
@@ -82,7 +89,7 @@ generic feed, create a non-secret profile once, then pass the credential at
 publish time:
 
 ```powershell
-Set-ModuleRepositoryProfile `
+Set-ManagedModuleRepository `
     -Name 'CompanyNuGet' `
     -Provider NuGet `
     -RepositoryName 'CompanyModules' `
@@ -106,7 +113,7 @@ configuration.
 For users or support engineers:
 
 ```powershell
-Connect-ModuleRepository `
+Initialize-ManagedModuleRepository `
     -Provider NuGet `
     -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' `
     -Name 'CompanyModules' `
@@ -115,7 +122,7 @@ Connect-ModuleRepository `
     -CredentialSecretFilePath "$env:USERPROFILE\.secrets\company-feed-token.txt" `
     -InstallPrerequisites
 
-Install-PrivateModule `
+Install-ManagedModule `
     -Name 'Company.Tools' `
     -Repository 'CompanyModules' `
     -CredentialUserName 'reader' `
@@ -145,7 +152,7 @@ It does not store Entra tokens, PATs, or passwords. Authentication stays with
 Create a profile directly:
 
 ```powershell
-Set-ModuleRepositoryProfile `
+Set-ManagedModuleRepository `
     -Name 'Company' `
     -AzureDevOpsOrganization 'contoso' `
     -AzureDevOpsProject 'Platform' `
@@ -155,7 +162,7 @@ Set-ModuleRepositoryProfile `
 One-command workstation onboarding:
 
 ```powershell
-Initialize-ModuleRepository `
+Initialize-ManagedModuleRepository `
     -ProfileName 'Company' `
     -InstallPrerequisites
 ```
@@ -163,7 +170,7 @@ Initialize-ModuleRepository `
 Import a managed profile file:
 
 ```powershell
-Initialize-ModuleRepository `
+Initialize-ManagedModuleRepository `
     -Path .\Company.profile.json `
     -ProfileName 'Company' `
     -Overwrite `
@@ -173,27 +180,14 @@ Initialize-ModuleRepository `
 ### Install And Update
 
 ```powershell
-Install-PrivateModule -ProfileName 'Company' -Name 'Company.Tools' -InstallPrerequisites
-Update-PrivateModule  -ProfileName 'Company' -Name 'Company.Tools'
+Install-ManagedModule -ProfileName 'Company' -Name 'Company.Tools'
+Update-ManagedModule  -ProfileName 'Company' -Name 'Company.Tools'
 ```
 
-The wrappers refresh repository registration and run the access
-probe/session-prime step before install or update. If the cached credential
-provider session expired, the normal command can prompt the user again.
-
-When the feed is reachable as a NuGet v3 source and you want to use the managed
-C# module engine instead of the compatibility transport, opt in per command:
-
-```powershell
-Install-PrivateModule -ProfileName 'Company' -Name 'Company.Tools' -Transport ManagedModule
-Update-PrivateModule  -ProfileName 'Company' -Name 'Company.Tools' -Transport ManagedModule
-```
-
-The profile still owns the feed shape and credential bootstrap policy. The
-managed transport owns repository metadata lookup, dependency closure, package
-integrity, extraction, side-by-side install/update behavior, and receipts.
-Keep the default transport for providers that still need compatibility
-bootstrap or provider-specific behavior until the managed parity gates pass.
+Run `Initialize-ManagedModuleRepository -ProfileName 'Company'` again when a
+workstation needs repository registration, prerequisite installation, or a fresh
+credential-provider session. Install/update stays in the managed C# module
+engine and uses the profile for repository source, trust, and credential shape.
 
 ### Publish A PowerShell Module
 
@@ -237,7 +231,7 @@ PAT/basic credential parameters still exist for legacy or constrained
 environments:
 
 ```powershell
-Install-PrivateModule `
+Install-ManagedModule `
     -Name 'Company.Tools' `
     -AzureDevOpsOrganization 'contoso' `
     -AzureDevOpsProject 'Platform' `
@@ -354,7 +348,7 @@ Use this as an interactive bootstrap/proof path, not as the default CI publish
 configuration:
 
 ```powershell
-Connect-ModuleRepository `
+Initialize-ManagedModuleRepository `
     -Provider JFrog `
     -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
     -JFrogRepository 'powershell-virtual' `
@@ -376,7 +370,7 @@ Profiles are useful for workstation onboarding because they store the feed
 shape once:
 
 ```powershell
-Set-ModuleRepositoryProfile `
+Set-ManagedModuleRepository `
     -Name 'JFrogPS' `
     -Provider JFrog `
     -JFrogBaseUri 'https://company.jfrog.io/artifactory' `
@@ -385,7 +379,7 @@ Set-ModuleRepositoryProfile `
     -Tool PSResourceGet `
     -Trusted $true
 
-Install-PrivateModule `
+Install-ManagedModule `
     -Name 'Company.Tools' `
     -ProfileName 'JFrogPS' `
     -CredentialUserName 'name@company.com' `
@@ -454,12 +448,13 @@ PSResourceGet container-registry repository.
 Use it for discovery/install, not publishing:
 
 ```powershell
-Register-ModuleRepository -MicrosoftArtifactRegistry
-Connect-ModuleRepository -MicrosoftArtifactRegistry
+Initialize-ManagedModuleRepository -MicrosoftArtifactRegistry
 
-Install-PrivateModule `
-    -MicrosoftArtifactRegistry `
-    -Name Microsoft.PowerShell.SecretManagement
+Install-ManagedModule `
+Install-PSResource `
+    -Repository MAR `
+    -Name Microsoft.PowerShell.SecretManagement `
+    -TrustRepository
 ```
 
 For production estates, promote approved Microsoft packages into your enterprise
@@ -481,20 +476,20 @@ authenticates as themselves.
 Useful profile commands:
 
 ```powershell
-Test-ModuleRepositoryProfile -ProfileName 'Company'
-Export-ModuleRepositoryProfile -Name 'Company' -Path .\Company.profile.json -Force
-Import-ModuleRepositoryProfile -Path .\Company.profile.json -Scope Machine -Overwrite
-Remove-ModuleRepositoryProfile -Name 'Company'
+Get-ManagedModuleRepository -ProfileName 'Company' -Test
+Get-ManagedModuleRepository -Name 'Company' -ExportPath .\Company.profile.json -Force
+Initialize-ManagedModuleRepository -Path .\Company.profile.json -Scope Machine -Overwrite
+Remove-ManagedModuleRepository -Name 'Company'
 ```
 
 Generate a one-folder onboarding package:
 
 ```powershell
-New-ModuleRepositoryBootstrap `
+Initialize-ManagedModuleRepository `
     -ProfileName 'Company' `
-    -OutputDirectory .\CompanyGalleryBootstrap `
+    -BootstrapPath .\CompanyGalleryBootstrap `
     -InstallModule 'Company.Tools' `
-    -Force
+    -BootstrapForce
 ```
 
 The package contains feed metadata and bootstrap scripts only. It must not
@@ -505,9 +500,9 @@ session caches.
 
 Before announcing a feed as ready:
 
-1. Register/connect the repository from a clean shell.
-2. Install a known module through `Install-PrivateModule`.
-3. Update the same module through `Update-PrivateModule`.
+1. Initialize/connect the repository from a clean shell.
+2. Install a known module through `Install-ManagedModule`.
+3. Update the same module through `Update-ManagedModule`.
 4. Generate publish configuration and confirm secrets are not stored.
 5. Publish a disposable package or module version.
 6. If dependency mirroring is enabled, prove a missing dependency is promoted

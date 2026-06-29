@@ -14,8 +14,12 @@ internal static class ManagedModuleCommandSupport
 
     internal static ManagedModuleRepository CreateRepository(PSCmdlet cmdlet, string repositoryName, string repository)
     {
-        var source = ResolveRepositorySource(cmdlet, repository);
-        var name = ResolveRepositoryName(repositoryName, source);
+        var source = ResolveRepositorySource(cmdlet, repository, out var resolvedRegisteredRepositoryName);
+        var name = !string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase)
+            ? repositoryName
+            : !string.IsNullOrWhiteSpace(resolvedRegisteredRepositoryName)
+                ? resolvedRegisteredRepositoryName!
+                : ResolveRepositoryName(repositoryName, source);
         return new ManagedModuleRepository(name, source);
     }
 
@@ -84,12 +88,44 @@ internal static class ManagedModuleCommandSupport
     }
 
     internal static string ResolveRepositorySource(PSCmdlet cmdlet, string repository)
-        => GetRepositoryKind(repository) == ManagedModuleRepositoryKind.LocalFolder
-            ? ResolveProviderPath(cmdlet, repository) ?? repository
-            : repository;
+        => ResolveRepositorySource(cmdlet, repository, out _);
+
+    internal static string ResolveRepositorySource(PSCmdlet cmdlet, string repository, out string? resolvedRegisteredRepositoryName)
+    {
+        resolvedRegisteredRepositoryName = null;
+        if (string.IsNullOrWhiteSpace(repository))
+            return repository;
+
+        var trimmed = repository.Trim().Trim('"');
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) && !uri.IsFile)
+            return trimmed;
+
+        var providerPath = ResolveProviderPath(cmdlet, trimmed);
+        if (!string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath))
+            return providerPath!;
+
+        if (Path.IsPathRooted(trimmed) || trimmed.StartsWith(".", StringComparison.Ordinal))
+            return providerPath ?? trimmed;
+
+        if (new PowerShellRepositorySourceResolver().TryResolveSource(cmdlet, trimmed, out var registeredSource) &&
+            !string.IsNullOrWhiteSpace(registeredSource))
+        {
+            resolvedRegisteredRepositoryName = trimmed;
+            return registeredSource!;
+        }
+
+        if (LooksLikeRepositoryName(trimmed))
+            throw new InvalidOperationException(
+                $"Repository '{trimmed}' looks like a registered PowerShell repository name, but no matching repository was found in the current session. Use Set-ManagedModuleRepository/Initialize-ManagedModuleRepository with -ProfileName, or pass a repository URL/local feed path.");
+
+        return trimmed;
+    }
 
     internal static bool HasWildcard(string value)
         => value.IndexOf('*') >= 0 || value.IndexOf('?') >= 0;
+
+    private static bool LooksLikeRepositoryName(string repository)
+        => repository.IndexOfAny(new[] { '/', '\\', ':', '?' }) < 0;
 
     internal static string? ResolveProviderPath(PSCmdlet cmdlet, string? path)
     {

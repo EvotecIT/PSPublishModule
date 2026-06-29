@@ -431,7 +431,7 @@ if ($moduleImported -and $hasCredential) {
             RepositoryName = $localRepositoryName
         }
 
-        $profile = Set-ModuleRepositoryProfile @setProfile
+        $profile = Set-ManagedModuleRepository @setProfile
         $profile | Out-Null
 
         $connect = @{
@@ -446,7 +446,7 @@ if ($moduleImported -and $hasCredential) {
             $connect.CredentialSecret = $CredentialSecret
         }
 
-        $connection = Connect-ModuleRepository @connect
+        $connection = Initialize-ManagedModuleRepository @connect
         Add-EvidenceItem -Name 'CredentialConnectModuleRepository' -Succeeded ([bool] $connection.AccessProbeSucceeded) -Details @{
             RepositoryName        = $connection.RepositoryName
             AccessProbePerformed  = $connection.AccessProbePerformed

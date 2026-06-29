@@ -52,7 +52,7 @@ The same contracts are available from PowerShell cmdlets, JSON files, and CLI co
 | PowerShell module build | Builds script and binary modules, merges public/private functions, updates manifests, signs outputs, creates packed/unpacked artifacts, validates imports, runs tests, and generates help. | `Invoke-ModuleBuild`, `Build-Module`, `New-ConfigurationBuild`, `New-ConfigurationManifest`, `New-ConfigurationArtefact`, `New-ConfigurationValidation` |
 | Module dependencies and isolation | Resolves required/external/approved modules, supports online dependency install, packages required modules, detects missing helpers, and imports selected modules through AssemblyLoadContext isolation profiles. | `New-ConfigurationModule`, `Get-MissingFunctions`, `Import-IsolatedModule`, `Test-IsolatedModuleProfile` |
 | Documentation and delivery | Generates Markdown command docs, MAML external help, about topics, and bundled module documentation. It can also copy or render installed module docs from local files, GitHub, or Azure DevOps. | `New-ConfigurationDocumentation`, `New-ModuleAboutTopic`, `Show-ModuleDocumentation`, `Install-ModuleDocumentation`, `Install-ModuleScript` |
-| Private galleries | Onboards users and publishers to private PowerShell module feeds, especially Azure Artifacts, without storing secrets in profiles. | `Initialize-ModuleRepository`, `Connect-ModuleRepository`, `Register-ModuleRepository`, `Install-PrivateModule`, `Update-PrivateModule`, `Publish-NugetPackage` |
+| Private galleries | Stores non-secret repository profiles, bootstraps feed access, and lets the managed module cmdlets use the same profile for find/save/install/update/publish. | `Set-ManagedModuleRepository`, `Get-ManagedModuleRepository`, `Initialize-ManagedModuleRepository`, `Remove-ManagedModuleRepository`, `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Publish-ManagedModule` |
 | Managed module lifecycle | Finds, saves, installs, updates, publishes, and maintains PowerShell modules through the managed C# engine with typed results and receipts. Benchmark tooling lives under Benchmarks for contributor evidence. | `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, `Publish-ManagedModule` |
 | .NET publish and packaging | Builds publish matrices for apps, services, tools, bundles, plugins, MSI, MSIX, Microsoft Store packages, appinstaller files, signing, checksums, and manifests. | `New-DotNetPublishConfig`, `Invoke-DotNetPublish`, `Invoke-PowerForgeBundlePostProcess`, `Invoke-PowerForgePluginExport`, `Invoke-PowerForgePluginPack` |
 | Unified release | Coordinates module artifacts, NuGet packages, tool binaries, installers, GitHub releases, staging folders, checksums, Winget manifests/submission, and release manifests from one release config. | `New-PowerForgeReleaseConfig`, `Invoke-PowerForgeRelease`, `Invoke-ProjectRelease`, `Invoke-ProjectBuild`, `powerforge release` |
@@ -257,34 +257,49 @@ The older hashtable-style configuration is still supported for compatibility, bu
 
 ## Quick Start: Private PowerShell Galleries
 
-Create a non-secret private gallery profile for Azure Artifacts:
+Create a non-secret profile for a private NuGet-compatible module feed:
 
 ```powershell
-Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+Set-ManagedModuleRepository `
+    -Name Company `
+    -Provider NuGet `
+    -RepositoryName CompanyModules `
+    -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' `
+    -RepositoryPublishUri 'https://packages.company.test/nuget/v3/index.json' `
+    -Trusted
 ```
 
 Export/import the same settings for other users or build machines:
 
 ```powershell
-Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
-Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
-Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+Get-ManagedModuleRepository -Name Company -ExportPath .\Company.profile.json -Force
+Initialize-ManagedModuleRepository -Path .\Company.profile.json -Overwrite
+Initialize-ManagedModuleRepository -ProfileName Company -InstallPrerequisites
 ```
 
-Install and update modules through the profile:
+Use the profile with the managed module lifecycle commands:
 
 ```powershell
-Install-PrivateModule -ProfileName Company -Name ModuleA
-Update-PrivateModule -ProfileName Company -Name ModuleA
+Find-ManagedModule -ProfileName Company -Name Company.Tools
+Save-ManagedModule -ProfileName Company -Name Company.Tools -Path C:\OfflineModules
+Install-ManagedModule -ProfileName Company -Name Company.Tools -Scope CurrentUser
+Update-ManagedModule -ProfileName Company -Name Company.Tools
 ```
 
-Publish packages to the saved feed:
+Publish PowerShell modules through the same profile:
 
 ```powershell
-Publish-NugetPackage -Path .\Artifacts -ProfileName Company -SkipDuplicate
+Publish-ManagedModule -Path C:\Source\Company.Tools -ProfileName Company -ApiKeyFilePath C:\Secrets\company-feed-key.txt
 ```
 
-See [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md) and `Get-Help about_PrivateGalleries`.
+`Publish-NugetPackage` remains available for raw `.nupkg` publishing. For
+module lifecycle work, prefer `Publish-ManagedModule` so package creation,
+metadata validation, repository resolution, and publish behavior stay in the
+managed module flow.
+
+See [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md),
+[Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md),
+and `Get-Help about_PrivateGalleries`.
 
 ## Quick Start: Managed Module Lifecycle
 
@@ -303,13 +318,9 @@ Update-ManagedModule -Name Company.Tools -Repository PSGallery
 Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages
 ```
 
-Private-gallery profiles can opt into the managed transport without changing
-their profile shape:
-
-```powershell
-Install-PrivateModule -ProfileName Company -Name Company.Tools -Transport ManagedModule
-Update-PrivateModule  -ProfileName Company -Name Company.Tools -Transport ManagedModule
-```
+Managed module repository profiles can be used anywhere the lifecycle commands
+accept `-ProfileName`, so private/internal feeds do not need a parallel install
+or update command family.
 
 For machine-wide maintenance, use `Repair-ManagedModule` as the operator
 entrypoint. `-Plan` previews the work with typed objects and the same summary
@@ -470,7 +481,7 @@ PSPublishModule exports commands in these families:
 - `New-Configuration*`: create DSL objects for module, .NET publish, release, installer, signing, documentation, validation, and compatibility configuration.
 - `New-*Config`: scaffold JSON configuration files.
 - `Get-*` / `Test-*`: inspect module metadata, repository profiles, compatibility, project consistency, versions, isolated module profiles, and test failures.
-- `Find-*` / `Save-*` / `Install-*` / `Update-*` / `Repair-*` / `Register-*` / `Connect-*`: manage module discovery, materialization, installation, repair, docs/scripts, and private gallery repositories.
+- `Find-*` / `Save-*` / `Install-*` / `Update-*` / `Repair-*`: manage module discovery, materialization, installation, update, repair, docs/scripts, and managed repository profiles.
 - `Publish-*` / `Send-*`: publish NuGet packages and GitHub release assets.
 - `powerforge`: JSON-first CLI for release, .NET publish, GitHub housekeeping, plugin export/pack, bundle post-process, and related automation.
 - `powerforge-web`: static-site and API-docs CLI.

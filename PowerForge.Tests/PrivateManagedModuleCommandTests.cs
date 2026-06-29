@@ -8,7 +8,7 @@ namespace PowerForge.Tests;
 public sealed class PrivateManagedModuleCommandTests
 {
     [Fact]
-    public void InstallPrivateModule_defaults_to_managed_transport_for_local_feed()
+    public void InstallManagedModule_defaults_to_managed_transport_for_local_feed()
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
@@ -19,7 +19,7 @@ public sealed class PrivateManagedModuleCommandTests
             files: CreateModuleFiles("1.0.0"));
 
         using var ps = CreatePowerShellWithModuleImported();
-        ps.AddCommand("Install-PrivateModule")
+        ps.AddCommand("Install-ManagedModule")
             .AddParameter("Name", "Company.Tools")
             .AddParameter("Repository", feed.Path)
             .AddParameter("RepositoryName", "Local")
@@ -28,15 +28,14 @@ public sealed class PrivateManagedModuleCommandTests
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
-        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
-        Assert.Equal("ManagedModule", result.Installer);
-        Assert.Equal("1.0.0", result.ResolvedVersion);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.Equal("1.0.0", result.Version);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
     [Fact]
-    public void InstallPrivateModule_can_use_managed_transport_against_local_feed()
+    public void InstallManagedModule_can_use_managed_transport_against_local_feed()
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
@@ -47,25 +46,23 @@ public sealed class PrivateManagedModuleCommandTests
             files: CreateModuleFiles("1.0.0"));
 
         using var ps = CreatePowerShellWithModuleImported();
-        ps.AddCommand("Install-PrivateModule")
+        ps.AddCommand("Install-ManagedModule")
             .AddParameter("Name", "Company.Tools")
             .AddParameter("Repository", feed.Path)
             .AddParameter("RepositoryName", "Local")
-            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
             .AddParameter("Path", moduleRoot.Path)
             .AddParameter("RequiredVersion", "1.0.0");
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
-        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
-        Assert.Equal("ManagedModule", result.Installer);
-        Assert.Equal("1.0.0", result.ResolvedVersion);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.Equal("1.0.0", result.Version);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
     [Fact]
-    public void InstallPrivateModule_defaults_to_managed_transport_from_registered_repository_source()
+    public void InstallManagedModule_defaults_to_managed_transport_from_registered_repository_source()
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
@@ -77,7 +74,7 @@ public sealed class PrivateManagedModuleCommandTests
 
         using var ps = CreatePowerShellWithModuleImported();
         RegisterPSResourceRepositoryFunction(ps, "Company", feed.Path);
-        ps.AddCommand("Install-PrivateModule")
+        ps.AddCommand("Install-ManagedModule")
             .AddParameter("Name", "Company.Tools")
             .AddParameter("Repository", "Company")
             .AddParameter("Path", moduleRoot.Path)
@@ -85,15 +82,14 @@ public sealed class PrivateManagedModuleCommandTests
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
-        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
-        Assert.Equal("ManagedModule", result.Installer);
-        Assert.Equal("1.0.0", result.ResolvedVersion);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.Equal("1.0.0", result.Version);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
     [Fact]
-    public void UpdatePrivateModule_can_use_managed_transport_against_local_feed()
+    public void UpdateManagedModule_can_use_managed_transport_against_local_feed()
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
@@ -110,25 +106,23 @@ public sealed class PrivateManagedModuleCommandTests
         Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
 
         using var ps = CreatePowerShellWithModuleImported();
-        ps.AddCommand("Update-PrivateModule")
+        ps.AddCommand("Update-ManagedModule")
             .AddParameter("Name", "Company.Tools")
             .AddParameter("Repository", feed.Path)
             .AddParameter("RepositoryName", "Local")
-            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
             .AddParameter("Path", moduleRoot.Path);
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
-        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
-        Assert.Equal("ManagedModule", result.Installer);
-        Assert.Equal("1.0.0", result.InstalledVersion);
-        Assert.Equal("1.1.0", result.ResolvedVersion);
+        var result = Assert.IsType<ManagedModuleUpdateResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.Equal("1.0.0", result.PreviousVersion);
+        Assert.Equal("1.1.0", result.TargetVersion);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
     }
 
     [Fact]
-    public void UpdatePrivateModule_defaults_to_managed_transport_from_repository_profile()
+    public void UpdateManagedModule_defaults_to_managed_transport_from_repository_profile()
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
@@ -148,23 +142,22 @@ public sealed class PrivateManagedModuleCommandTests
         SaveProfile(feed.Path);
 
         using var ps = CreatePowerShellWithModuleImported();
-        ps.AddCommand("Update-PrivateModule")
+        ps.AddCommand("Update-ManagedModule")
             .AddParameter("Name", "Company.Tools")
             .AddParameter("ProfileName", "Company")
             .AddParameter("Path", moduleRoot.Path);
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
-        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
-        Assert.Equal("ManagedModule", result.Installer);
-        Assert.Equal("1.0.0", result.InstalledVersion);
-        Assert.Equal("1.1.0", result.ResolvedVersion);
+        var result = Assert.IsType<ManagedModuleUpdateResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.Equal("1.0.0", result.PreviousVersion);
+        Assert.Equal("1.1.0", result.TargetVersion);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
     }
 
     [Fact]
-    public void InstallPrivateModule_can_use_managed_transport_from_repository_profile()
+    public void InstallManagedModule_can_use_managed_transport_from_repository_profile()
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
@@ -178,24 +171,22 @@ public sealed class PrivateManagedModuleCommandTests
         SaveProfile(feed.Path);
 
         using var ps = CreatePowerShellWithModuleImported();
-        ps.AddCommand("Install-PrivateModule")
+        ps.AddCommand("Install-ManagedModule")
             .AddParameter("Name", "Company.Tools")
             .AddParameter("ProfileName", "Company")
-            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
             .AddParameter("Path", moduleRoot.Path)
             .AddParameter("RequiredVersion", "1.0.0");
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
-        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
-        Assert.Equal("ManagedModule", result.Installer);
-        Assert.Equal("1.0.0", result.ResolvedVersion);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.Equal("1.0.0", result.Version);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
     [Fact]
-    public void UpdatePrivateModule_can_use_managed_transport_from_repository_profile()
+    public void UpdateManagedModule_can_use_managed_transport_from_repository_profile()
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
@@ -215,37 +206,31 @@ public sealed class PrivateManagedModuleCommandTests
         SaveProfile(feed.Path);
 
         using var ps = CreatePowerShellWithModuleImported();
-        ps.AddCommand("Update-PrivateModule")
+        ps.AddCommand("Update-ManagedModule")
             .AddParameter("Name", "Company.Tools")
             .AddParameter("ProfileName", "Company")
-            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule)
             .AddParameter("Path", moduleRoot.Path);
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
-        var result = Assert.IsType<ModuleDependencyInstallResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
-        Assert.Equal("ManagedModule", result.Installer);
-        Assert.Equal("1.0.0", result.InstalledVersion);
-        Assert.Equal("1.1.0", result.ResolvedVersion);
+        var result = Assert.IsType<ManagedModuleUpdateResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.Equal("1.0.0", result.PreviousVersion);
+        Assert.Equal("1.1.0", result.TargetVersion);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
     }
 
     [Fact]
-    public void Managed_transport_rejects_registered_repository_name_without_source()
+    public void InstallManagedModule_rejects_unresolved_registered_repository_name()
     {
         using var ps = CreatePowerShellWithModuleImported();
-        ps.AddCommand("Install-PrivateModule")
+        ps.AddCommand("Install-ManagedModule")
             .AddParameter("Name", "Company.Tools")
-            .AddParameter("Repository", "Company")
-            .AddParameter("Transport", ModuleStateDeliveryTransport.ManagedModule);
+            .AddParameter("Repository", "Company");
 
         var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
 
-        Assert.Contains(
-            "registered PowerShell repository name",
-            exception.Message,
-            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("registered PowerShell repository name", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
@@ -269,7 +254,7 @@ public sealed class PrivateManagedModuleCommandTests
     {
         var ps = PowerShell.Create();
         ps.AddCommand("Import-Module")
-            .AddParameter("Name", typeof(InstallPrivateModuleCommand).Assembly.Location)
+            .AddParameter("Name", typeof(InstallManagedModuleCommand).Assembly.Location)
             .AddParameter("Force");
         _ = ps.Invoke();
         AssertNoPowerShellErrors(ps);

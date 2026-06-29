@@ -92,7 +92,7 @@ TOPIC
 LONG DESCRIPTION
     Create and connect a profile directly:
 
-        Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+        Initialize-ManagedModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 
     Configure these machine or user environment variables before running -InstallPrerequisites:
 
@@ -105,7 +105,7 @@ LONG DESCRIPTION
         var res = AboutTopicMarkdown.Convert("about_PrivateGalleries.help", content);
         var markdown = res.Markdown.Replace("\r\n", "\n");
 
-        Assert.Contains("```powershell\nInitialize-ModuleRepository -ProfileName Company", markdown);
+        Assert.Contains("```powershell\nInitialize-ManagedModuleRepository -ProfileName Company", markdown);
         Assert.Contains("POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETCORE_PACKAGE", markdown);
         Assert.Contains("POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_NETFX_PACKAGE\n```", markdown);
         Assert.Contains("The package variables may point at local paths", markdown);

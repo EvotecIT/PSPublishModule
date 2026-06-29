@@ -5,32 +5,29 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Creates or updates a saved private module repository profile.
+/// Creates or updates a saved managed module repository profile.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Profiles store the non-secret Azure Artifacts feed settings used by <c>Connect-ModuleRepository</c>,
-/// <c>Install-PrivateModule</c>, <c>Update-PrivateModule</c>, <c>New-ConfigurationPublish</c>, and
-/// <c>Publish-NugetPackage</c>. Azure Artifacts profiles default to PSResourceGet with the Azure Artifacts
-/// Credential Provider so Entra ID/MFA is handled by the provider instead of storing PATs in PSPublishModule.
+/// Profiles store non-secret repository shape, trust, bootstrap, and publish-source settings used by the managed
+/// module lifecycle commands. Secrets stay in credentials, environment variables, secret files, or provider sessions.
 /// </para>
 /// </remarks>
 /// <example>
 /// <summary>Create an Entra-first Azure Artifacts profile</summary>
-/// <code>Set-ModuleRepositoryProfile -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules</code>
+/// <code>Set-ManagedModuleRepository -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules</code>
 /// <para>Saves a user-local profile that later commands can reference with <c>-ProfileName Company</c>.</para>
 /// </example>
 /// <example>
 /// <summary>Use a different local repository name</summary>
-/// <code>Set-ModuleRepositoryProfile -Name Finance -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed InternalModules -RepositoryName CompanyModules -Priority 20</code>
+/// <code>Set-ManagedModuleRepository -Name Finance -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed InternalModules -RepositoryName CompanyModules -Priority 20</code>
 /// <para>Stores the Azure Artifacts feed identity while registering it locally as <c>CompanyModules</c>.</para>
 /// </example>
-[Cmdlet(VerbsCommon.Set, "ModuleRepositoryProfile", SupportsShouldProcess = true)]
-[Alias("Set-GalleryProfile")]
+[Cmdlet(VerbsCommon.Set, "ManagedModuleRepository", SupportsShouldProcess = true)]
 [OutputType(typeof(ModuleRepositoryProfileResult))]
-public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
+public sealed class SetManagedModuleRepositoryCommand : PSCmdlet
 {
-    /// <summary>Profile name used by connect, install, update, and publish commands.</summary>
+    /// <summary>Repository profile name used by managed find, save, install, update, repair, and publish commands.</summary>
     [Parameter(Mandatory = true, Position = 0)]
     [Alias("ProfileName")]
     [ValidateNotNullOrEmpty]
@@ -111,11 +108,11 @@ public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
     [Parameter]
     public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.User;
 
-    /// <summary>Saves the profile.</summary>
+    /// <summary>Saves the repository profile.</summary>
     protected override void ProcessRecord()
     {
         if (Scope == ModuleRepositoryProfileScope.All)
-            throw new ArgumentException("Set-ModuleRepositoryProfile requires User or Machine scope.", nameof(Scope));
+            throw new ArgumentException("Set-ManagedModuleRepository requires User or Machine scope.", nameof(Scope));
 
         var store = new ModuleRepositoryProfileStore(Scope);
         var profile = ModuleRepositoryProfileStore.Normalize(new ModuleRepositoryProfile

@@ -11,7 +11,7 @@ Saves modules from a managed repository to an explicit module root.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -327,6 +327,38 @@ Saved repository profile name.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Proxy
+Optional HTTP proxy used for repository requests.
+
+```yaml
+Type: Uri
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProxyCredential
+Optional proxy credential used with Proxy.
+
+```yaml
+Type: PSCredential
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
