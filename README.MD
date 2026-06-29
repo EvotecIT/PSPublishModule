@@ -53,7 +53,7 @@ The same contracts are available from PowerShell cmdlets, JSON files, and CLI co
 | Module dependencies and isolation | Resolves required/external/approved modules, supports online dependency install, packages required modules, detects missing helpers, and imports selected modules through AssemblyLoadContext isolation profiles. | `New-ConfigurationModule`, `Get-MissingFunctions`, `Import-IsolatedModule`, `Test-IsolatedModuleProfile` |
 | Documentation and delivery | Generates Markdown command docs, MAML external help, about topics, and bundled module documentation. It can also copy or render installed module docs from local files, GitHub, or Azure DevOps. | `New-ConfigurationDocumentation`, `New-ModuleAboutTopic`, `Show-ModuleDocumentation`, `Install-ModuleDocumentation`, `Install-ModuleScript` |
 | Private galleries | Onboards users and publishers to private PowerShell module feeds, especially Azure Artifacts, without storing secrets in profiles. | `Initialize-ModuleRepository`, `Connect-ModuleRepository`, `Register-ModuleRepository`, `Install-PrivateModule`, `Update-PrivateModule`, `Publish-NugetPackage` |
-| Managed module lifecycle | Finds, saves, installs, updates, publishes, and maintains PowerShell modules through the managed C# engine with typed results and receipts. Benchmark tooling lives under Benchmarks for contributor evidence. | `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Publish-ManagedModule`, `Invoke-ModuleState` |
+| Managed module lifecycle | Finds, saves, installs, updates, publishes, and maintains PowerShell modules through the managed C# engine with typed results and receipts. Benchmark tooling lives under Benchmarks for contributor evidence. | `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, `Publish-ManagedModule` |
 | .NET publish and packaging | Builds publish matrices for apps, services, tools, bundles, plugins, MSI, MSIX, Microsoft Store packages, appinstaller files, signing, checksums, and manifests. | `New-DotNetPublishConfig`, `Invoke-DotNetPublish`, `Invoke-PowerForgeBundlePostProcess`, `Invoke-PowerForgePluginExport`, `Invoke-PowerForgePluginPack` |
 | Unified release | Coordinates module artifacts, NuGet packages, tool binaries, installers, GitHub releases, staging folders, checksums, Winget manifests/submission, and release manifests from one release config. | `New-PowerForgeReleaseConfig`, `Invoke-PowerForgeRelease`, `Invoke-ProjectRelease`, `Invoke-ProjectBuild`, `powerforge release` |
 | GitHub housekeeping | Prunes Actions artifacts and caches, performs runner cleanup, and provides reusable workflows/actions for cross-repo maintenance. | `powerforge github housekeeping`, `.github/workflows/powerforge-github-housekeeping.yml` |
@@ -289,15 +289,18 @@ See [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalle
 ## Quick Start: Managed Module Lifecycle
 
 The managed module commands are the C# engine path for module discovery, save,
-install, update, publish, and estate maintenance. They are designed to cover the
-common module workflows while keeping the existing private-gallery wrappers
-available during the transition.
+install, update, publish, and estate maintenance. They are designed to cover
+common `Find-Module`, `Save-Module`, `Install-Module`, `Update-Module`, and
+`Publish-Module` workflows without depending on PowerShellGet, PSResourceGet,
+PackageManagement, external executables, or embedded PowerShell scripts in the
+managed delivery path.
 
 ```powershell
 Find-ManagedModule -Name Company.Tools -Repository PSGallery
 Save-ManagedModule -Name Company.Tools -Path C:\OfflineModules -Repository PSGallery
 Install-ManagedModule -Name Company.Tools -Scope CurrentUser -Repository PSGallery
 Update-ManagedModule -Name Company.Tools -Repository PSGallery
+Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages
 ```
 
 Private-gallery profiles can opt into the managed transport without changing
@@ -308,15 +311,36 @@ Install-PrivateModule -ProfileName Company -Name Company.Tools -Transport Manage
 Update-PrivateModule  -ProfileName Company -Name Company.Tools -Transport ManagedModule
 ```
 
-For machine-wide maintenance, use the object-first ModuleState workflow:
+For machine-wide maintenance, use `Repair-ManagedModule` as the operator
+entrypoint. `-Plan` previews the work with typed objects and the same summary
+view; removing `-Plan` applies the managed install/update/save actions.
 
 ```powershell
-Invoke-ModuleState -Installed -Latest -Repository PSGallery -Transport ManagedModule -ShowSummary
+Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
+Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 ```
 
+Current local benchmark evidence is tracked as contributor proof, not as a
+shipped cmdlet. The suite runs from [Benchmarks/ManagedModules](Benchmarks/ManagedModules)
+and compares the managed engine against install-capable and save-capable
+providers on PowerShell 7 and Windows PowerShell 5.1.
+
+| Scenario | Current local evidence |
+| --- | --- |
+| Full `Microsoft.Graph` install on PowerShell 7 | Managed completed in about 4.45s in the same-source speed gate and about 5.08s in the provider matrix. The install-only speed baseline was about 6.08s; PSResourceGet and PowerShellGet were about 53.38s and 67.08s in the provider matrix. |
+| `Az.Accounts` install on PowerShell 7 | Managed completed in about 1.51s. The install-only speed baseline was about 2.10s; PSResourceGet and PowerShellGet were about 2.29s and 9.07s. |
+| Full `Microsoft.Graph` save on PowerShell 7 / 5.1 | Managed completed in about 4.82s / 5.47s. PSResourceGet measured about 53.28s / 55.36s, and PowerShellGet measured about 68.95s / 89.47s. |
+| Full `Az` save on PowerShell 7 / 5.1 | Managed completed in about 5.73s / 8.56s. PowerShellGet measured about 128.87s / 151.05s; PSResourceGet measured about 146.36s on PowerShell 7 and failed the Windows PowerShell 5.1 row after producing no output. |
+
+Before release, this table should be regenerated from the final benchmark
+artifacts and kept to repeatable, named gates: install speed, save throughput,
+update/no-op/force behavior, publish proof, repair planning, security checks,
+and PowerShell 5.1 versus PowerShell 7 host drift.
+
 See [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
-for the switching matrix and [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
-for the remaining parity and benchmark gates.
+for the switching matrix, [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
+for the remaining parity and documentation gates, and [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
+for the exact benchmark commands.
 
 ## Quick Start: .NET Publish and Packaging
 
@@ -438,7 +462,7 @@ PSPublishModule exports commands in these families:
 - `New-Configuration*`: create DSL objects for module, .NET publish, release, installer, signing, documentation, validation, and compatibility configuration.
 - `New-*Config`: scaffold JSON configuration files.
 - `Get-*` / `Test-*`: inspect module metadata, repository profiles, compatibility, project consistency, versions, isolated module profiles, and test failures.
-- `Install-*` / `Update-*` / `Register-*` / `Connect-*`: manage module docs/scripts and private gallery repositories.
+- `Find-*` / `Save-*` / `Install-*` / `Update-*` / `Repair-*` / `Register-*` / `Connect-*`: manage module discovery, materialization, installation, repair, docs/scripts, and private gallery repositories.
 - `Publish-*` / `Send-*`: publish NuGet packages and GitHub release assets.
 - `powerforge`: JSON-first CLI for release, .NET publish, GitHub housekeeping, plugin export/pack, bundle post-process, and related automation.
 - `powerforge-web`: static-site and API-docs CLI.
@@ -503,6 +527,7 @@ Start here:
 - [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md)
 - [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
 - [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
+- [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
 - [Docs/PSPublishModule.DevelopmentBootstrapper.md](Docs/PSPublishModule.DevelopmentBootstrapper.md)
 - [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md)

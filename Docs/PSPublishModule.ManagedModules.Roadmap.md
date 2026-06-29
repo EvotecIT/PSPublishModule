@@ -17,6 +17,34 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Treat destructive cleanup as a separately proven and explicitly gated capability.
 - [x] Benchmark correctness and speed on both Windows PowerShell 5.1 and PowerShell 7+ before replacing existing compatibility paths.
 
+## Current State
+
+- [x] Managed find, save, install, update, publish, and repair cmdlets exist as thin PowerShell surfaces over the reusable C# engine.
+- [x] The core managed path avoids PowerShellGet, PSResourceGet, PackageManagement, external executables, and embedded PowerShell scripts for supported module lifecycle operations.
+- [x] `Repair-ManagedModule` is the operator-facing maintenance surface for stale versions, source drift, scope drift, family coherence, loaded-module safety, and old-version cleanup planning.
+- [x] Benchmarks live outside the shipped module under `Benchmarks/ManagedModules`, with named gates for install, save, update, publish, repair, security, and host drift.
+- [x] Current local Graph and Az evidence shows managed install/save ahead of the measured compatible providers on PowerShell 7 and Windows PowerShell 5.1 for the recorded gates.
+- [ ] Final release claims still need a fresh repeated benchmark pass from the release candidate build, including retained command lines, suite metadata, gate results, and compact evidence paths.
+- [ ] Full catalog, timestamp, and short-lived certificate parity still needs signed fixtures and explicit benchmark/test evidence before the managed security story is called complete.
+- [ ] Public generated help, external XML help, and README benchmark tables need one final synchronization pass after the command surface stops changing.
+
+## Documentation And Publication Plan
+
+- [x] Keep the durable compatibility contract in `Docs/PSPublishModule.ManagedModules.Compatibility.md`.
+- [x] Keep contributor benchmark commands and interpretation rules in `Benchmarks/ManagedModules/README.md` instead of shipping a benchmark cmdlet.
+- [x] Add a root README managed-module section that introduces the command family, estate-maintenance flow, current local benchmark evidence, and links to deeper docs.
+- [ ] Regenerate the root README benchmark table from final release-candidate artifacts, not from hand-copied exploratory numbers.
+- [ ] Keep public README comparison language provider-neutral unless naming a provider is necessary to explain an equivalent command, a skipped row, or a compatibility gap.
+- [ ] Audit XML documentation comments on `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, `Get-ManagedModule`, and `Publish-ManagedModule`.
+- [ ] Regenerate generated command Markdown under `Module/Docs` from the cmdlet source comments.
+- [ ] Regenerate `Module/en-US/PSPublishModule-help.xml` after XML/comment updates.
+- [ ] Add or update an about topic for managed module lifecycle operations if generated command docs are not enough for operator guidance.
+- [ ] Add a short migration table in the README only after final parameter names and aliases are locked.
+- [ ] Include benchmark methodology in public docs: host, module family, operation, cache mode, repeat count, engine order, cleanup mode, correctness/import validation, and gate result.
+- [ ] Include benchmark limits in public docs: install-only engines are not save/publish competitors, managed-only cache lanes are diagnostics, and one-shot exploratory runs are not release claims.
+- [ ] Keep private-gallery docs aligned with the managed transport default/opt-in behavior.
+- [ ] Before PR/release readiness, run the docs build path and verify generated command docs plus external help XML changed only where expected.
+
 ## Public Command Shape
 
 - [x] Introduce `Find-ManagedModule`.
