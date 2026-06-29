@@ -127,6 +127,7 @@ public sealed partial class ManagedModuleInstallService
         if (isSatisfied)
         {
             satisfiedResult.Elapsed = satisfiedStopwatch.Elapsed;
+            satisfiedResult.DependencyVersionRange = dependency.VersionRange;
             return satisfiedResult;
         }
 
@@ -162,6 +163,7 @@ public sealed partial class ManagedModuleInstallService
             },
             context,
             cancellationToken).ConfigureAwait(false);
+        result.DependencyVersionRange = dependency.VersionRange;
         if (dependencyVersion.Shared)
             result.VersionSelectionWaitElapsed += dependencyVersionStopwatch.Elapsed;
         else

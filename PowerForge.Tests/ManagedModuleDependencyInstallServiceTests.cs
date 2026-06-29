@@ -35,6 +35,7 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, dependency.Status);
         Assert.Equal("Company.Core", dependency.Name);
         Assert.Equal("1.1.0", dependency.Version);
+        Assert.Equal("[1.0.0,2.0.0)", dependency.DependencyVersionRange);
         Assert.Equal("keep", File.ReadAllText(Path.Combine(existingDependencyPath, "marker.txt")));
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
@@ -72,6 +73,7 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, dependency.Status);
         Assert.Equal("Company.Core", dependency.Name);
         Assert.Equal("1.1.0", dependency.Version);
+        Assert.Equal("[1.0.0,2.0.0)", dependency.DependencyVersionRange);
         Assert.Equal(0, handler.DependencyVersionQueryCount);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }

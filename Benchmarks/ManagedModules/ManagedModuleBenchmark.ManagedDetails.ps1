@@ -189,6 +189,7 @@ function Add-ManagedInstallDetail {
         Name = [string] $Result.Name
         Version = [string] $Result.Version
         Status = [string] $Result.Status
+        DependencyVersionRange = if ($Result.PSObject.Properties['DependencyVersionRange']) { [string] $Result.DependencyVersionRange } else { '' }
         ModulePath = [string] $Result.ModulePath
         Parent = $Parent
         Depth = $Depth
