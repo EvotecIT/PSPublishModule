@@ -50,6 +50,8 @@ public sealed partial class ManagedModuleInstallServiceTests
         Assert.True(result.ExtractionElapsed > TimeSpan.Zero);
         Assert.True(result.DependencyElapsed >= TimeSpan.Zero);
         Assert.True(result.PromotionElapsed > TimeSpan.Zero);
+        Assert.True(result.PromotionLockWaitElapsed >= TimeSpan.Zero);
+        Assert.True(result.PromotionMoveElapsed > TimeSpan.Zero);
         Assert.False(string.IsNullOrWhiteSpace(result.ReceiptPath));
         Assert.True(File.Exists(result.ReceiptPath));
         Assert.NotNull(result.Receipt);

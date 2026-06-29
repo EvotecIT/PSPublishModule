@@ -167,11 +167,17 @@ function New-ManagedOptimizationTarget {
             LastSlowestMaterializedPackageExtractionMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageExtractionMs } else { 0.0 }
             LastSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs } else { 0.0 }
             LastSlowestMaterializedPackagePromotionMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackagePromotionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackagePromotionMs } else { 0.0 }
+            LastSlowestMaterializedPackagePromotionLockWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackagePromotionLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackagePromotionLockWaitMs } else { 0.0 }
+            LastSlowestMaterializedPackagePromotionMoveMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackagePromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackagePromotionMoveMs } else { 0.0 }
             LastRootDependencyMs = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 }
             LastDependencyMs = if ($row.PSObject.Properties['ManagedLastDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyMs } else { 0.0 }
             LastDownloadMs = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 }
             LastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
             LastPromotionMs = if ($row.PSObject.Properties['ManagedLastPromotionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMs } else { 0.0 }
+            PromotionLockWaitMs = if ($row.PSObject.Properties['ManagedPromotionLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPromotionLockWaitMs } else { 0.0 }
+            PromotionMoveMs = if ($row.PSObject.Properties['ManagedPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPromotionMoveMs } else { 0.0 }
+            LastPromotionLockWaitMs = if ($row.PSObject.Properties['ManagedLastPromotionLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionLockWaitMs } else { 0.0 }
+            LastPromotionMoveMs = if ($row.PSObject.Properties['ManagedLastPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMoveMs } else { 0.0 }
             Bottleneck = [string] $bottleneck.Name
             BottleneckMs = [math]::Round([double] $bottleneck.Milliseconds, 2)
             BottleneckShare = [string] $bottleneck.Share
