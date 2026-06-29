@@ -87,6 +87,7 @@ function New-BenchmarkScenario {
         [string] $ScenarioModuleFastSource = '',
         [int] $ScenarioManagedMaxRank = 0,
         [double] $ScenarioManagedMaxVsFastest = 0,
+        [int] $ScenarioManagedMinAuthenticodeCheckedFiles = 0,
         [bool] $ScenarioAuthenticodeCheck = $false,
         [ValidateSet('', 'Default', 'Cold', 'Warm')]
         [string] $ScenarioCacheMode = '',
@@ -120,6 +121,7 @@ function New-BenchmarkScenario {
         ModuleFastSource = $ScenarioModuleFastSource
         ManagedMaxRank = $ScenarioManagedMaxRank
         ManagedMaxVsFastest = $ScenarioManagedMaxVsFastest
+        ManagedMinAuthenticodeCheckedFiles = $ScenarioManagedMinAuthenticodeCheckedFiles
         CacheMode = $ScenarioCacheMode
         RepeatCount = $ScenarioRepeatCount
     }
@@ -148,7 +150,7 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Graph.Full.Save.ManagedWarmCache' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
         New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Az.Full.Save.ManagedWarmCache' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
         New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-        New-BenchmarkScenario -SuiteName 'SecurityGate' -Name 'ThreadJob.Authenticode.InstallSave' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('Install', 'Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxRank 1 -ScenarioAuthenticodeCheck $true
+        New-BenchmarkScenario -SuiteName 'SecurityGate' -Name 'ThreadJob.Authenticode.InstallSave' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('Install', 'Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMinAuthenticodeCheckedFiles 1 -ScenarioAuthenticodeCheck $true
         New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.StaleVersion' -ModuleName 'ThreadJob' -Version '2.1.0' -UpdateBaselineVersion '2.0.3' -Operations @('RepairPlan') -RepairScenarios @('StaleVersion') -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.SourceDrift' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('RepairPlan') -RepairScenarios @('SourceDrift') -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'RepairGate' -Name 'ThreadJob.Repair.ScopeDrift' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('RepairPlan') -RepairScenarios @('ScopeDrift') -ScenarioManagedMaxRank 1
