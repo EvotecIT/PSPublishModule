@@ -567,6 +567,7 @@ function Add-SummaryRows {
                 ManagedInstallLockWaitCount = $row.ManagedInstallLockWaitCount
                 ManagedInstallLockWaitMs = $row.ManagedInstallLockWaitMs
                 ManagedSlowestInstallLockWaitMs = $row.ManagedSlowestInstallLockWaitMs
+                ManagedSlowestDependencyPackageMs = $row.ManagedSlowestDependencyPackageMs
                 ManagedSlowestMaterializedPackageMs = $row.ManagedSlowestMaterializedPackageMs
                 ManagedAuthenticodeCheckedFiles = $row.ManagedAuthenticodeCheckedFiles
                 ManagedAuthenticodeCatalogFiles = $row.ManagedAuthenticodeCatalogFiles
@@ -580,6 +581,8 @@ function Add-SummaryRows {
                 ManagedLastDownloadMs = $row.ManagedLastDownloadMs
                 ManagedFirstExtractionMs = $row.ManagedFirstExtractionMs
                 ManagedLastExtractionMs = $row.ManagedLastExtractionMs
+                ManagedFirstDependencyMs = $row.ManagedFirstDependencyMs
+                ManagedLastDependencyMs = $row.ManagedLastDependencyMs
                 ManagedFirstPromotionMs = $row.ManagedFirstPromotionMs
                 ManagedLastPromotionMs = $row.ManagedLastPromotionMs
                 ManagedFirstDownloadBytes = $row.ManagedFirstDownloadBytes
@@ -596,6 +599,9 @@ function Add-SummaryRows {
                 ManagedLastInstallLockWaitMs = $row.ManagedLastInstallLockWaitMs
                 ManagedLastSlowestInstallLockWaitName = $row.ManagedLastSlowestInstallLockWaitName
                 ManagedLastSlowestInstallLockWaitMs = $row.ManagedLastSlowestInstallLockWaitMs
+                ManagedLastSlowestDependencyPackageName = $row.ManagedLastSlowestDependencyPackageName
+                ManagedLastSlowestDependencyPackageParent = $row.ManagedLastSlowestDependencyPackageParent
+                ManagedLastSlowestDependencyPackageMs = $row.ManagedLastSlowestDependencyPackageMs
                 ManagedLastSlowestMaterializedPackageName = $row.ManagedLastSlowestMaterializedPackageName
                 ManagedLastSlowestMaterializedPackageMs = $row.ManagedLastSlowestMaterializedPackageMs
                 ManagedLastSlowestMaterializedPackageExtractionMs = $row.ManagedLastSlowestMaterializedPackageExtractionMs
@@ -605,6 +611,7 @@ function Add-SummaryRows {
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs
                 ManagedDownloadMs = $row.ManagedDownloadMs
                 ManagedExtractionMs = $row.ManagedExtractionMs
+                ManagedDependencyMs = $row.ManagedDependencyMs
                 ManagedPromotionMs = $row.ManagedPromotionMs
                 RunPath = $RunPath
             })

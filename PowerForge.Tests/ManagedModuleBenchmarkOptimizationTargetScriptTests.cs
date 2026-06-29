@@ -21,6 +21,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedRootElapsedMs = '900'
                     ManagedHarnessOverheadMs = '100'
                     ManagedRootDependencyMs = '0'
+                    ManagedDependencyMs = '300'
                     ManagedDownloadMs = '600'
                     ManagedExtractionMs = '150'
                     ManagedPromotionMs = '25'
@@ -52,12 +53,17 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastInstallLockWaitMs = '35'
                     ManagedLastSlowestInstallLockWaitName = 'Company.Lock'
                     ManagedLastSlowestInstallLockWaitMs = '35'
+                    ManagedSlowestDependencyPackageMs = '300'
+                    ManagedLastSlowestDependencyPackageName = 'Company.Branch'
+                    ManagedLastSlowestDependencyPackageParent = 'Company.Root'
+                    ManagedLastSlowestDependencyPackageMs = '200'
                     ManagedSlowestMaterializedPackageMs = '650'
                     ManagedLastSlowestMaterializedPackageName = 'Company.Files'
                     ManagedLastSlowestMaterializedPackageMs = '400'
                     ManagedLastSlowestMaterializedPackageExtractionMs = '300'
                     ManagedLastSlowestMaterializedPackagePromotionMs = '50'
                     ManagedLastRootDependencyMs = '120'
+                    ManagedLastDependencyMs = '200'
                     ManagedLastDownloadMs = '0'
                     ManagedLastExtractionMs = '300'
                     ManagedLastPromotionMs = '40'
@@ -99,6 +105,12 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(35.0, NumericProperty(row, "LastInstallLockWaitMs"));
         Assert.Equal("Company.Lock", Property(row, "LastSlowestInstallLockWait"));
         Assert.Equal(35.0, NumericProperty(row, "LastSlowestInstallLockWaitMs"));
+        Assert.Equal(300.0, NumericProperty(row, "DependencyMs"));
+        Assert.Equal(200.0, NumericProperty(row, "LastDependencyMs"));
+        Assert.Equal(300.0, NumericProperty(row, "SlowestDependencyPackageMs"));
+        Assert.Equal("Company.Branch", Property(row, "LastSlowestDependencyPackage"));
+        Assert.Equal("Company.Root", Property(row, "LastSlowestDependencyPackageParent"));
+        Assert.Equal(200.0, NumericProperty(row, "LastSlowestDependencyPackageMs"));
         Assert.Equal(650.0, NumericProperty(row, "SlowestMaterializedPackageMs"));
         Assert.Equal("Company.Files", Property(row, "LastSlowestMaterializedPackage"));
         Assert.Equal(400.0, NumericProperty(row, "LastSlowestMaterializedPackageMs"));
@@ -113,6 +125,64 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal("60%", Property(row, "LastBottleneckShare"));
         Assert.Contains("download", Property(row, "NextQuestion"), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("archive extraction", Property(row, "LastNextQuestion"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OptimizationTarget_IdentifiesDependencyBottleneck()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $rows = @(
+                [pscustomobject]@{
+                    Suite = 'HeavySaveCacheGate'
+                    Scenario = 'Az.Full.Save.ManagedWarmCache'
+                    ModuleName = 'Az'
+                    Host = 'PowerShell7'
+                    Operation = 'Save'
+                    ManagedMs = '4000'
+                    ManagedRank = '1'
+                    ManagedVsFastest = '1x'
+                    ManagedRootElapsedMs = '3900'
+                    ManagedHarnessOverheadMs = '100'
+                    ManagedRootDependencyMs = '3500'
+                    ManagedDependencyMs = '4600'
+                    ManagedDownloadMs = '0'
+                    ManagedExtractionMs = '700'
+                    ManagedPromotionMs = '120'
+                    ManagedRepositoryRequests = '0'
+                    ManagedPackageRepositoryRequests = '0'
+                    ManagedPackageRepositoryRedirects = '0'
+                    ManagedDownloadBytes = '0'
+                    ManagedPackageCount = '102'
+                    ManagedUniquePackageCount = '102'
+                    ManagedCacheHits = '102'
+                    ManagedLastMs = '3800'
+                    ManagedLastRootDependencyMs = '3300'
+                    ManagedLastDependencyMs = '4200'
+                    ManagedLastDownloadMs = '0'
+                    ManagedLastExtractionMs = '600'
+                    ManagedLastPromotionMs = '100'
+                    ManagedSlowestDependencyPackageMs = '900'
+                    ManagedLastSlowestDependencyPackageName = 'Az.Advisor'
+                    ManagedLastSlowestDependencyPackageParent = 'Az'
+                    ManagedLastSlowestDependencyPackageMs = '800'
+                }
+            )
+
+            New-ManagedOptimizationTarget -Rows $rows
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var row = Assert.Single(results);
+        Assert.Equal("Dependency", Property(row, "Bottleneck"));
+        Assert.Equal("Dependency", Property(row, "LastBottleneck"));
+        Assert.Equal(4600.0, NumericProperty(row, "DependencyMs"));
+        Assert.Equal(4200.0, NumericProperty(row, "LastDependencyMs"));
+        Assert.Equal("Az.Advisor", Property(row, "LastSlowestDependencyPackage"));
+        Assert.Equal("Az", Property(row, "LastSlowestDependencyPackageParent"));
+        Assert.Equal(800.0, NumericProperty(row, "LastSlowestDependencyPackageMs"));
+        Assert.Contains("dependency graph", Property(row, "NextQuestion"), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

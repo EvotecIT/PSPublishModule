@@ -29,6 +29,7 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedRootDependencyMilliseconds = 3540
                     ManagedTotalDownloadMilliseconds = 25000
                     ManagedTotalExtractionMilliseconds = 1200
+                    ManagedTotalDependencyMilliseconds = 1600
                     ManagedTotalPromotionMilliseconds = 60
                     ManagedRepositoryRequestCount = 40
                     ManagedPackageRepositoryRequestCount = 40
@@ -44,6 +45,9 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedTotalInstallLockWaitMilliseconds = 300
                     ManagedSlowestInstallLockWaitName = 'Company.Lock'
                     ManagedSlowestInstallLockWaitMilliseconds = 120
+                    ManagedSlowestDependencyPackageName = 'Company.BranchCold'
+                    ManagedSlowestDependencyPackageParent = 'Company.Root'
+                    ManagedSlowestDependencyPackageMilliseconds = 700
                     ManagedSlowestMaterializedPackageName = 'Company.Big'
                     ManagedSlowestMaterializedPackageMilliseconds = 600
                     ManagedSlowestMaterializedPackageExtractionMilliseconds = 500
@@ -73,6 +77,7 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedRootDependencyMilliseconds = 1773
                     ManagedTotalDownloadMilliseconds = 0
                     ManagedTotalExtractionMilliseconds = 1100
+                    ManagedTotalDependencyMilliseconds = 900
                     ManagedTotalPromotionMilliseconds = 58
                     ManagedRepositoryRequestCount = 0
                     ManagedPackageRepositoryRequestCount = 0
@@ -88,6 +93,9 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedTotalInstallLockWaitMilliseconds = 100
                     ManagedSlowestInstallLockWaitName = 'Company.LockWarm'
                     ManagedSlowestInstallLockWaitMilliseconds = 60
+                    ManagedSlowestDependencyPackageName = 'Company.BranchWarm'
+                    ManagedSlowestDependencyPackageParent = 'Company.Shared'
+                    ManagedSlowestDependencyPackageMilliseconds = 500
                     ManagedSlowestMaterializedPackageName = 'Company.Files'
                     ManagedSlowestMaterializedPackageMilliseconds = 450
                     ManagedSlowestMaterializedPackageExtractionMilliseconds = 320
@@ -121,6 +129,9 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(0.0, NumericProperty(row, "ManagedLastDownloadMs"));
         Assert.Equal(1200.0, NumericProperty(row, "ManagedFirstExtractionMs"));
         Assert.Equal(1100.0, NumericProperty(row, "ManagedLastExtractionMs"));
+        Assert.Equal(1250.0, NumericProperty(row, "ManagedDependencyMs"));
+        Assert.Equal(1600.0, NumericProperty(row, "ManagedFirstDependencyMs"));
+        Assert.Equal(900.0, NumericProperty(row, "ManagedLastDependencyMs"));
         Assert.Equal(60.0, NumericProperty(row, "ManagedFirstPromotionMs"));
         Assert.Equal(58.0, NumericProperty(row, "ManagedLastPromotionMs"));
         Assert.Equal(186506621.0, NumericProperty(row, "ManagedFirstDownloadBytes"));
@@ -137,6 +148,9 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(100.0, NumericProperty(row, "ManagedLastInstallLockWaitMs"));
         Assert.Equal("Company.LockWarm", Property(row, "ManagedLastSlowestInstallLockWaitName"));
         Assert.Equal(60.0, NumericProperty(row, "ManagedLastSlowestInstallLockWaitMs"));
+        Assert.Equal("Company.BranchWarm", Property(row, "ManagedLastSlowestDependencyPackageName"));
+        Assert.Equal("Company.Shared", Property(row, "ManagedLastSlowestDependencyPackageParent"));
+        Assert.Equal(500.0, NumericProperty(row, "ManagedLastSlowestDependencyPackageMs"));
         Assert.Equal("Company.Files", Property(row, "ManagedLastSlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageMs"));
         Assert.Equal(320.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageExtractionMs"));

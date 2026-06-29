@@ -162,6 +162,17 @@ function Write-ManagedInstallDetail {
             Sort-Object @{ Expression = { [double] $_.InstallLockWaitMilliseconds }; Descending = $true } |
             Select-Object -First 1
     )
+    $dependencyWork = @(
+        $packages |
+            Where-Object {
+                [int] $_.Depth -gt 0 -and [double] $_.DependencyMilliseconds -gt 0
+            }
+    )
+    $slowestDependencyPackage = @(
+        $dependencyWork |
+            Sort-Object @{ Expression = { [double] $_.DependencyMilliseconds }; Descending = $true } |
+            Select-Object -First 1
+    )
     $slowestMaterializedPackage = @(
         $packages |
             Where-Object { $_.Status -eq 'Installed' -and [int] $_.Depth -gt 0 } |
@@ -179,6 +190,7 @@ function Write-ManagedInstallDetail {
         RootDependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
         TotalDownloadMilliseconds = [math]::Round((($packages | Measure-Object DownloadMilliseconds -Sum).Sum), 2)
         TotalExtractionMilliseconds = [math]::Round((($packages | Measure-Object ExtractionMilliseconds -Sum).Sum), 2)
+        TotalDependencyMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyWork -Name 'DependencyMilliseconds'), 2)
         TotalPromotionMilliseconds = [math]::Round((($packages | Measure-Object PromotionMilliseconds -Sum).Sum), 2)
         TotalRepositoryRequestCount = [long] $Result.RepositoryRequestCount
         TotalPackageRepositoryRequestCount = [long] (($packages | Measure-Object PackageRepositoryRequestCount -Sum).Sum)
@@ -197,6 +209,9 @@ function Write-ManagedInstallDetail {
         TotalInstallLockWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $installLockWaits -Name 'InstallLockWaitMilliseconds'), 2)
         SlowestInstallLockWaitName = if ($slowestInstallLockWait.Count) { [string] $slowestInstallLockWait[0].Name } else { '' }
         SlowestInstallLockWaitMilliseconds = if ($slowestInstallLockWait.Count) { [double] $slowestInstallLockWait[0].InstallLockWaitMilliseconds } else { 0.0 }
+        SlowestDependencyPackageName = if ($slowestDependencyPackage.Count) { [string] $slowestDependencyPackage[0].Name } else { '' }
+        SlowestDependencyPackageParent = if ($slowestDependencyPackage.Count) { [string] $slowestDependencyPackage[0].Parent } else { '' }
+        SlowestDependencyPackageMilliseconds = if ($slowestDependencyPackage.Count) { [double] $slowestDependencyPackage[0].DependencyMilliseconds } else { 0.0 }
         SlowestMaterializedPackageName = if ($slowestMaterializedPackage.Count) { [string] $slowestMaterializedPackage[0].Name } else { '' }
         SlowestMaterializedPackageMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ElapsedMilliseconds } else { 0.0 }
         SlowestMaterializedPackageExtractionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionMilliseconds } else { 0.0 }

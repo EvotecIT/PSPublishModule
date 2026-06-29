@@ -482,6 +482,7 @@ function Invoke-TimedOperation {
         ManagedRootDependencyMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyMilliseconds')
         ManagedTotalDownloadMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadMilliseconds')
         ManagedTotalExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionMilliseconds')
+        ManagedTotalDependencyMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDependencyMilliseconds')
         ManagedTotalPromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionMilliseconds')
         ManagedRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalRepositoryRequestCount')
         ManagedPackageRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPackageRepositoryRequestCount')
@@ -497,6 +498,9 @@ function Invoke-TimedOperation {
         ManagedTotalInstallLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalInstallLockWaitMilliseconds')
         ManagedSlowestInstallLockWaitName = Get-DetailText -InputObject $detailSummary -Name 'SlowestInstallLockWaitName'
         ManagedSlowestInstallLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestInstallLockWaitMilliseconds')
+        ManagedSlowestDependencyPackageName = Get-DetailText -InputObject $detailSummary -Name 'SlowestDependencyPackageName'
+        ManagedSlowestDependencyPackageParent = Get-DetailText -InputObject $detailSummary -Name 'SlowestDependencyPackageParent'
+        ManagedSlowestDependencyPackageMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestDependencyPackageMilliseconds')
         ManagedSlowestMaterializedPackageName = Get-DetailText -InputObject $detailSummary -Name 'SlowestMaterializedPackageName'
         ManagedSlowestMaterializedPackageMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageMilliseconds')
         ManagedSlowestMaterializedPackageExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractionMilliseconds')
