@@ -581,6 +581,8 @@ function Add-SummaryRows {
                 ManagedLastDownloadMs = $row.ManagedLastDownloadMs
                 ManagedFirstExtractionMs = $row.ManagedFirstExtractionMs
                 ManagedLastExtractionMs = $row.ManagedLastExtractionMs
+                ManagedFirstExtractionCacheLockWaitMs = $row.ManagedFirstExtractionCacheLockWaitMs
+                ManagedLastExtractionCacheLockWaitMs = $row.ManagedLastExtractionCacheLockWaitMs
                 ManagedFirstDependencyMs = $row.ManagedFirstDependencyMs
                 ManagedLastDependencyMs = $row.ManagedLastDependencyMs
                 ManagedFirstPromotionMs = $row.ManagedFirstPromotionMs
@@ -605,12 +607,14 @@ function Add-SummaryRows {
                 ManagedLastSlowestMaterializedPackageName = $row.ManagedLastSlowestMaterializedPackageName
                 ManagedLastSlowestMaterializedPackageMs = $row.ManagedLastSlowestMaterializedPackageMs
                 ManagedLastSlowestMaterializedPackageExtractionMs = $row.ManagedLastSlowestMaterializedPackageExtractionMs
+                ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs = $row.ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs
                 ManagedLastSlowestMaterializedPackagePromotionMs = $row.ManagedLastSlowestMaterializedPackagePromotionMs
                 ManagedMaintenanceActions = $row.ManagedMaintenanceActions
                 ManagedMaintenanceFindings = $row.ManagedMaintenanceFindings
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs
                 ManagedDownloadMs = $row.ManagedDownloadMs
                 ManagedExtractionMs = $row.ManagedExtractionMs
+                ManagedExtractionCacheLockWaitMs = $row.ManagedExtractionCacheLockWaitMs
                 ManagedDependencyMs = $row.ManagedDependencyMs
                 ManagedPromotionMs = $row.ManagedPromotionMs
                 RunPath = $RunPath

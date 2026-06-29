@@ -32,7 +32,10 @@ internal sealed class ManagedModuleExtractedPackageCache
         var metadataPath = Path.Combine(cacheRoot, MetadataFileName);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
         using var cacheLock = ManagedModuleExtractedPackageCacheLock.Acquire(packageCacheDirectory, normalizedSha256, cancellationToken);
+        lockStopwatch.Stop();
+        var cacheLockWaitElapsed = lockStopwatch.Elapsed;
         var metadata = ReadValidMetadata(metadataPath, normalizedSha256);
         if (metadata is not null && Directory.Exists(payloadPath))
         {
@@ -42,7 +45,7 @@ internal sealed class ManagedModuleExtractedPackageCache
                 if (copied.FileCount == metadata.Value.FileCount && copied.BytesWritten == metadata.Value.BytesWritten)
                 {
                     stopwatch.Stop();
-                    return new ManagedModuleArchiveExtractionResult(copied.FileCount, copied.BytesWritten, stopwatch.Elapsed, fromCache: true);
+                    return new ManagedModuleArchiveExtractionResult(copied.FileCount, copied.BytesWritten, stopwatch.Elapsed, fromCache: true, cacheLockWaitElapsed);
                 }
 
                 _logger.Verbose($"Discarded extracted package cache for SHA256 {normalizedSha256} because materialized file counts did not match metadata.");
@@ -63,7 +66,7 @@ internal sealed class ManagedModuleExtractedPackageCache
         var extraction = extractor.ExtractPackage(packagePath, destinationPath);
         TryPopulateCache(destinationPath, cacheRoot, normalizedSha256, extraction, cancellationToken);
         stopwatch.Stop();
-        return new ManagedModuleArchiveExtractionResult(extraction.FileCount, extraction.BytesWritten, stopwatch.Elapsed, fromCache: false);
+        return new ManagedModuleArchiveExtractionResult(extraction.FileCount, extraction.BytesWritten, stopwatch.Elapsed, fromCache: false, cacheLockWaitElapsed);
     }
 
     private static string GetCacheRoot(string packageCacheDirectory, string packageSha256)

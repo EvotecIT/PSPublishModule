@@ -136,6 +136,7 @@ function New-ManagedOptimizationTarget {
             UniquePackageCount = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedUniquePackageCount
             CacheHits = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedCacheHits
             ExtractionCacheHits = if ($row.PSObject.Properties['ManagedExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionCacheHits } else { 0.0 }
+            ExtractionCacheLockWaitMs = if ($row.PSObject.Properties['ManagedExtractionCacheLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionCacheLockWaitMs } else { 0.0 }
             FirstMs = if ($row.PSObject.Properties['ManagedFirstMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstMs } else { 0.0 }
             LastMs = if ($row.PSObject.Properties['ManagedLastMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastMs } else { 0.0 }
             FirstRepositoryRequests = if ($row.PSObject.Properties['ManagedFirstRepositoryRequests']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstRepositoryRequests } else { 0.0 }
@@ -146,6 +147,8 @@ function New-ManagedOptimizationTarget {
             LastCacheHits = if ($row.PSObject.Properties['ManagedLastCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCacheHits } else { 0.0 }
             FirstExtractionCacheHits = if ($row.PSObject.Properties['ManagedFirstExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstExtractionCacheHits } else { 0.0 }
             LastExtractionCacheHits = if ($row.PSObject.Properties['ManagedLastExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionCacheHits } else { 0.0 }
+            FirstExtractionCacheLockWaitMs = if ($row.PSObject.Properties['ManagedFirstExtractionCacheLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstExtractionCacheLockWaitMs } else { 0.0 }
+            LastExtractionCacheLockWaitMs = if ($row.PSObject.Properties['ManagedLastExtractionCacheLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionCacheLockWaitMs } else { 0.0 }
             CoalescedWaitMs = if ($row.PSObject.Properties['ManagedCoalescedWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedCoalescedWaitMs } else { 0.0 }
             LastCoalescedWaitMs = if ($row.PSObject.Properties['ManagedLastCoalescedWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCoalescedWaitMs } else { 0.0 }
             LastSlowestCoalescedWait = if ($row.PSObject.Properties['ManagedLastSlowestCoalescedWaitName']) { [string] $row.ManagedLastSlowestCoalescedWaitName } else { '' }
@@ -162,6 +165,7 @@ function New-ManagedOptimizationTarget {
             LastSlowestMaterializedPackage = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageName']) { [string] $row.ManagedLastSlowestMaterializedPackageName } else { '' }
             LastSlowestMaterializedPackageMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageMs } else { 0.0 }
             LastSlowestMaterializedPackageExtractionMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageExtractionMs } else { 0.0 }
+            LastSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs } else { 0.0 }
             LastSlowestMaterializedPackagePromotionMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackagePromotionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackagePromotionMs } else { 0.0 }
             LastRootDependencyMs = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 }
             LastDependencyMs = if ($row.PSObject.Properties['ManagedLastDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyMs } else { 0.0 }
