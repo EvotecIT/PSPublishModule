@@ -49,7 +49,7 @@ function New-Summary {
 
     foreach ($group in ($Rows | Group-Object Operation, Scenario, Engine)) {
         $passed = @($group.Group | Where-Object Status -eq 'Succeeded')
-        $orderedPassed = Get-OrderedSucceededRows -Rows $passed
+        $orderedPassed = @(Get-OrderedSucceededRows -Rows $passed)
         $firstPassed = if ($orderedPassed.Count) { $orderedPassed[0] } else { $null }
         $lastPassed = if ($orderedPassed.Count) { $orderedPassed[$orderedPassed.Count - 1] } else { $null }
         [pscustomobject]@{
@@ -86,6 +86,7 @@ function New-Summary {
             MedianManagedPackageRepositoryRedirects = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRedirectCount' } else { 0 }
             MedianManagedDownloadBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDownloadBytes' } else { 0 }
             MedianManagedCacheHits = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCacheHitCount' } else { 0 }
+            MedianManagedExtractionCacheHits = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedExtractionCacheHitCount' } else { 0 }
             FirstManagedRepositoryRequests = if ($firstPassed) { [double]$firstPassed.ManagedRepositoryRequestCount } else { 0 }
             LastManagedRepositoryRequests = if ($lastPassed) { [double]$lastPassed.ManagedRepositoryRequestCount } else { 0 }
             FirstManagedPackageRepositoryRequests = if ($firstPassed) { [double]$firstPassed.ManagedPackageRepositoryRequestCount } else { 0 }
@@ -94,6 +95,8 @@ function New-Summary {
             LastManagedDownloadBytes = if ($lastPassed) { [double]$lastPassed.ManagedDownloadBytes } else { 0 }
             FirstManagedCacheHits = if ($firstPassed) { [double]$firstPassed.ManagedCacheHitCount } else { 0 }
             LastManagedCacheHits = if ($lastPassed) { [double]$lastPassed.ManagedCacheHitCount } else { 0 }
+            FirstManagedExtractionCacheHits = if ($firstPassed) { [double]$firstPassed.ManagedExtractionCacheHitCount } else { 0 }
+            LastManagedExtractionCacheHits = if ($lastPassed) { [double]$lastPassed.ManagedExtractionCacheHitCount } else { 0 }
             MedianManagedMaintenanceActions = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceActionCount' } else { 0 }
             MedianManagedMaintenanceFindings = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceFindingCount' } else { 0 }
         }
@@ -140,6 +143,7 @@ function New-Comparison {
             ManagedPackageRepositoryRedirects = if ($managed.Count) { [double] $managed[0].MedianManagedPackageRepositoryRedirects } else { 0 }
             ManagedDownloadBytes = if ($managed.Count) { [double] $managed[0].MedianManagedDownloadBytes } else { 0 }
             ManagedCacheHits = if ($managed.Count) { [double] $managed[0].MedianManagedCacheHits } else { 0 }
+            ManagedExtractionCacheHits = if ($managed.Count) { [double] $managed[0].MedianManagedExtractionCacheHits } else { 0 }
             ManagedFirstRepositoryRequests = if ($managed.Count) { [double] $managed[0].FirstManagedRepositoryRequests } else { 0 }
             ManagedLastRepositoryRequests = if ($managed.Count) { [double] $managed[0].LastManagedRepositoryRequests } else { 0 }
             ManagedFirstPackageRepositoryRequests = if ($managed.Count) { [double] $managed[0].FirstManagedPackageRepositoryRequests } else { 0 }
@@ -148,6 +152,8 @@ function New-Comparison {
             ManagedLastDownloadBytes = if ($managed.Count) { [double] $managed[0].LastManagedDownloadBytes } else { 0 }
             ManagedFirstCacheHits = if ($managed.Count) { [double] $managed[0].FirstManagedCacheHits } else { 0 }
             ManagedLastCacheHits = if ($managed.Count) { [double] $managed[0].LastManagedCacheHits } else { 0 }
+            ManagedFirstExtractionCacheHits = if ($managed.Count) { [double] $managed[0].FirstManagedExtractionCacheHits } else { 0 }
+            ManagedLastExtractionCacheHits = if ($managed.Count) { [double] $managed[0].LastManagedExtractionCacheHits } else { 0 }
             ManagedMaintenanceActions = if ($managed.Count) { [double] $managed[0].MedianManagedMaintenanceActions } else { 0 }
             ManagedMaintenanceFindings = if ($managed.Count) { [double] $managed[0].MedianManagedMaintenanceFindings } else { 0 }
             ManagedRootDependencyMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyMs } else { 0 }

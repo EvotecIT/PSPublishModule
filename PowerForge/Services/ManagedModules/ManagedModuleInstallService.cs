@@ -10,6 +10,7 @@ public sealed partial class ManagedModuleInstallService
     private readonly ILogger _logger;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
     private readonly ManagedModuleArchiveExtractor _extractor;
+    private readonly ManagedModuleExtractedPackageCache _extractedPackageCache;
     private readonly ManagedModuleAuthenticodeVerifier _authenticodeVerifier;
     private readonly ManagedModuleReceiptStore _receiptStore;
 
@@ -23,6 +24,7 @@ public sealed partial class ManagedModuleInstallService
         _logger = logger ?? new NullLogger();
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(_logger);
         _extractor = new ManagedModuleArchiveExtractor();
+        _extractedPackageCache = new ManagedModuleExtractedPackageCache(_logger);
         _authenticodeVerifier = new ManagedModuleAuthenticodeVerifier();
         _receiptStore = new ManagedModuleReceiptStore();
     }
@@ -291,7 +293,15 @@ public sealed partial class ManagedModuleInstallService
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
-            var extraction = _extractor.ExtractPackage(download.PackagePath, stageModulePath);
+            var extraction = ownsCache
+                ? _extractor.ExtractPackage(download.PackagePath, stageModulePath)
+                : _extractedPackageCache.MaterializePackage(
+                    download.PackagePath,
+                    download.PackageSha256,
+                    cacheDirectory,
+                    stageModulePath,
+                    _extractor,
+                    cancellationToken);
             var authenticode = request.AuthenticodeCheck
                 ? _authenticodeVerifier.VerifyDirectory(stageModulePath)
                 : null;
@@ -352,6 +362,7 @@ public sealed partial class ManagedModuleInstallService
                 FileCount = extraction.FileCount,
                 ExtractedBytes = extraction.BytesWritten,
                 ExtractionElapsed = extraction.Elapsed,
+                ExtractionFromCache = extraction.FromCache,
                 DependencyElapsed = dependencyStopwatch.Elapsed,
                 PromotionElapsed = promotionStopwatch.Elapsed,
                 RepositoryRequestCount = requestScope.Count,

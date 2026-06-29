@@ -76,6 +76,7 @@ function New-ManagedOptimizationTarget {
             PackageCount = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageCount
             UniquePackageCount = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedUniquePackageCount
             CacheHits = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedCacheHits
+            ExtractionCacheHits = if ($row.PSObject.Properties['ManagedExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionCacheHits } else { 0.0 }
             FirstMs = if ($row.PSObject.Properties['ManagedFirstMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstMs } else { 0.0 }
             LastMs = if ($row.PSObject.Properties['ManagedLastMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastMs } else { 0.0 }
             FirstRepositoryRequests = if ($row.PSObject.Properties['ManagedFirstRepositoryRequests']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstRepositoryRequests } else { 0.0 }
@@ -84,6 +85,8 @@ function New-ManagedOptimizationTarget {
             LastPackageRepositoryRequests = if ($row.PSObject.Properties['ManagedLastPackageRepositoryRequests']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPackageRepositoryRequests } else { 0.0 }
             FirstCacheHits = if ($row.PSObject.Properties['ManagedFirstCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstCacheHits } else { 0.0 }
             LastCacheHits = if ($row.PSObject.Properties['ManagedLastCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCacheHits } else { 0.0 }
+            FirstExtractionCacheHits = if ($row.PSObject.Properties['ManagedFirstExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstExtractionCacheHits } else { 0.0 }
+            LastExtractionCacheHits = if ($row.PSObject.Properties['ManagedLastExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionCacheHits } else { 0.0 }
             Bottleneck = if ($bottleneckMs -gt 0) { [string] $bottleneck[0].Name } else { 'Uninstrumented' }
             BottleneckMs = [math]::Round($bottleneckMs, 2)
             BottleneckShare = [string] $bottleneckShare.Text
