@@ -33,6 +33,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Keep the durable compatibility contract in `Docs/PSPublishModule.ManagedModules.Compatibility.md`.
 - [x] Keep contributor benchmark commands and interpretation rules in `Benchmarks/ManagedModules/README.md` instead of shipping a benchmark cmdlet.
 - [x] Add a root README managed-module section that introduces the command family, estate-maintenance flow, current local benchmark evidence, and links to deeper docs.
+- [x] Add an operation-split README exporter mode so install/save/update/publish/repair evidence can be regenerated into separate public tables instead of one mixed benchmark ledger.
 - [ ] Regenerate the root README benchmark table from final release-candidate artifacts, not from hand-copied exploratory numbers.
 - [ ] Publish benchmark tables with Managed as the `1.00x` baseline for each scenario, comparable engines in their own columns, raw times in the cells, and explicit `Not equivalent`/`Failed` markers where a provider cannot run the scenario.
 - [ ] Keep public README comparison language provider-neutral unless naming a provider is necessary to explain an equivalent command, a skipped row, or a compatibility gap.

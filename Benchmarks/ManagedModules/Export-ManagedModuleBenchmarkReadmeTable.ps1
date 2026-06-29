@@ -17,7 +17,9 @@ param(
 
     [string] $ReadmePath,
 
-    [string] $MarkerName = 'managed-module-benchmark-table'
+    [string] $MarkerName = 'managed-module-benchmark-table',
+
+    [switch] $SplitByOperation
 )
 
 Set-StrictMode -Version Latest
@@ -121,6 +123,39 @@ function Format-ReadmeBenchmarkCell {
     'Not in this gate'
 }
 
+function Get-ReadmeBenchmarkOperationGroup {
+    param([object] $Row)
+
+    $operationName = Get-ReadmeBenchmarkProperty -InputObject $Row -Name 'Operation'
+    switch -Wildcard ($operationName) {
+        'Install*' { 'Install'; break }
+        'Save*' { 'Save'; break }
+        'Update*' { 'Update'; break }
+        'Publish*' { 'Publish'; break }
+        'Repair*' { 'Repair'; break }
+        default {
+            if ([string]::IsNullOrWhiteSpace($operationName)) {
+                'Other'
+            } else {
+                $operationName
+            }
+        }
+    }
+}
+
+function Get-ReadmeBenchmarkOperationGroupOrder {
+    param([string] $Name)
+
+    switch ($Name) {
+        'Install' { 10; break }
+        'Save' { 20; break }
+        'Update' { 30; break }
+        'Publish' { 40; break }
+        'Repair' { 50; break }
+        default { 90 }
+    }
+}
+
 function Resolve-ReadmeBenchmarkScoreboardPaths {
     param([string[]] $InputPath)
 
@@ -189,7 +224,7 @@ function Select-LatestReadmeBenchmarkRows {
     }
 }
 
-function ConvertTo-ReadmeBenchmarkTable {
+function ConvertTo-ReadmeBenchmarkTableBlock {
     param([object[]] $Rows)
 
     $output = [Collections.Generic.List[string]]::new()
@@ -213,6 +248,31 @@ function ConvertTo-ReadmeBenchmarkTable {
             "$scope |"
         )
         $output.Add(($cells -join ' | '))
+    }
+
+    $output -join "`n"
+}
+
+function ConvertTo-ReadmeBenchmarkTable {
+    param(
+        [object[]] $Rows,
+        [switch] $SplitByOperation
+    )
+
+    if (-not $SplitByOperation) {
+        return ConvertTo-ReadmeBenchmarkTableBlock -Rows $Rows
+    }
+
+    $output = [Collections.Generic.List[string]]::new()
+    $groups = @($Rows | Group-Object -Property { Get-ReadmeBenchmarkOperationGroup -Row $_ } | Sort-Object @{ Expression = { Get-ReadmeBenchmarkOperationGroupOrder -Name $_.Name } }, Name)
+    foreach ($group in $groups) {
+        if ($output.Count -gt 0) {
+            $output.Add('')
+        }
+
+        $output.Add("#### $($group.Name)")
+        $output.Add('')
+        $output.Add((ConvertTo-ReadmeBenchmarkTableBlock -Rows $group.Group))
     }
 
     $output -join "`n"
@@ -252,7 +312,7 @@ if ($LatestPerScenario) {
     $selectedRows = @(Select-LatestReadmeBenchmarkRows -Rows $selectedRows)
 }
 
-$table = ConvertTo-ReadmeBenchmarkTable -Rows $selectedRows
+$table = ConvertTo-ReadmeBenchmarkTable -Rows $selectedRows -SplitByOperation:$SplitByOperation
 
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     $directory = Split-Path -Path $OutputPath -Parent
