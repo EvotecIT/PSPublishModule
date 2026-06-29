@@ -166,6 +166,26 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan PromotionMoveElapsed { get; set; }
 
     /// <summary>
+    /// True when final promotion replaced an existing module directory.
+    /// </summary>
+    public bool PromotionHadExistingTarget { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent moving the existing target directory to a rollback backup during promotion.
+    /// </summary>
+    public TimeSpan PromotionBackupMoveElapsed { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent moving the staged module directory into the final module path.
+    /// </summary>
+    public TimeSpan PromotionFinalMoveElapsed { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent deleting the rollback backup after a successful final promotion.
+    /// </summary>
+    public TimeSpan PromotionBackupCleanupElapsed { get; set; }
+
+    /// <summary>
     /// Repository HTTP request attempts observed during this install operation, including dependencies.
     /// </summary>
     public long RepositoryRequestCount { get; set; }

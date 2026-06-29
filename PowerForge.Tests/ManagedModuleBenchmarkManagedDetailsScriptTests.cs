@@ -25,6 +25,10 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                 PromotionElapsed = [TimeSpan]::FromMilliseconds(2)
                 PromotionLockWaitElapsed = [TimeSpan]::FromMilliseconds(0.5)
                 PromotionMoveElapsed = [TimeSpan]::FromMilliseconds(1.5)
+                PromotionBackupMoveElapsed = [TimeSpan]::Zero
+                PromotionFinalMoveElapsed = [TimeSpan]::FromMilliseconds(1.5)
+                PromotionBackupCleanupElapsed = [TimeSpan]::Zero
+                PromotionHadExistingTarget = $false
                 RepositoryRequestCount = 0
                 PackageRepositoryRequestCount = 0
                 PackageRepositoryRedirectCount = 0
@@ -99,6 +103,10 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         PromotionElapsed = [TimeSpan]::FromMilliseconds(70)
                         PromotionLockWaitElapsed = [TimeSpan]::FromMilliseconds(12)
                         PromotionMoveElapsed = [TimeSpan]::FromMilliseconds(58)
+                        PromotionBackupMoveElapsed = [TimeSpan]::FromMilliseconds(3)
+                        PromotionFinalMoveElapsed = [TimeSpan]::FromMilliseconds(50)
+                        PromotionBackupCleanupElapsed = [TimeSpan]::FromMilliseconds(5)
+                        PromotionHadExistingTarget = $true
                         RepositoryRequestCount = 0
                         PackageRepositoryRequestCount = 0
                         PackageRepositoryRedirectCount = 0
@@ -160,6 +168,10 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(70.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionMilliseconds"));
         Assert.Equal(12.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionLockWaitMilliseconds"));
         Assert.Equal(58.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionMoveMilliseconds"));
+        Assert.Equal(3.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionBackupMoveMilliseconds"));
+        Assert.Equal(50.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionFinalMoveMilliseconds"));
+        Assert.Equal(5.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionBackupCleanupMilliseconds"));
+        Assert.True(BooleanProperty(summary, "SlowestMaterializedPackagePromotionHadExistingTarget"));
         Assert.Equal("Company.Big", Property(summary, "CriticalDependencyBranchName"));
         Assert.Equal("Company.Root", Property(summary, "CriticalDependencyBranchParent"));
         Assert.Equal(760.0, NumericProperty(summary, "CriticalDependencyBranchMilliseconds"));
@@ -177,6 +189,14 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(320.0, NumericProperty(summary, "CriticalMaterializationDominantPhaseMilliseconds"));
         Assert.Equal(12.5, NumericProperty(summary, "TotalPromotionLockWaitMilliseconds"));
         Assert.Equal(59.5, NumericProperty(summary, "TotalPromotionMoveMilliseconds"));
+        Assert.Equal(3.0, NumericProperty(summary, "TotalPromotionBackupMoveMilliseconds"));
+        Assert.Equal(51.5, NumericProperty(summary, "TotalPromotionFinalMoveMilliseconds"));
+        Assert.Equal(5.0, NumericProperty(summary, "TotalPromotionBackupCleanupMilliseconds"));
+        Assert.Equal(1.0, NumericProperty(summary, "PromotionOverwriteCount"));
+        Assert.Equal(3.0, NumericProperty(bigPackage, "PromotionBackupMoveMilliseconds"));
+        Assert.Equal(50.0, NumericProperty(bigPackage, "PromotionFinalMoveMilliseconds"));
+        Assert.Equal(5.0, NumericProperty(bigPackage, "PromotionBackupCleanupMilliseconds"));
+        Assert.True(BooleanProperty(bigPackage, "PromotionHadExistingTarget"));
     }
 
     private static PowerShell CreateBenchmarkPowerShell(string script)
@@ -196,6 +216,9 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
 
     private static double NumericProperty(PSObject value, string name)
         => Convert.ToDouble(value.Properties[name].Value, System.Globalization.CultureInfo.InvariantCulture);
+
+    private static bool BooleanProperty(PSObject value, string name)
+        => Convert.ToBoolean(value.Properties[name].Value, System.Globalization.CultureInfo.InvariantCulture);
 
     private static string EscapePowerShellString(string value)
         => value.Replace("'", "''", StringComparison.Ordinal);

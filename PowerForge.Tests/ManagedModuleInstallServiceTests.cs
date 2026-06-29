@@ -52,6 +52,10 @@ public sealed partial class ManagedModuleInstallServiceTests
         Assert.True(result.PromotionElapsed > TimeSpan.Zero);
         Assert.True(result.PromotionLockWaitElapsed >= TimeSpan.Zero);
         Assert.True(result.PromotionMoveElapsed > TimeSpan.Zero);
+        Assert.False(result.PromotionHadExistingTarget);
+        Assert.Equal(TimeSpan.Zero, result.PromotionBackupMoveElapsed);
+        Assert.True(result.PromotionFinalMoveElapsed > TimeSpan.Zero);
+        Assert.Equal(TimeSpan.Zero, result.PromotionBackupCleanupElapsed);
         Assert.False(string.IsNullOrWhiteSpace(result.ReceiptPath));
         Assert.True(File.Exists(result.ReceiptPath));
         Assert.NotNull(result.Receipt);
@@ -270,6 +274,10 @@ public sealed partial class ManagedModuleInstallServiceTests
         });
 
         Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.True(result.PromotionHadExistingTarget);
+        Assert.True(result.PromotionBackupMoveElapsed >= TimeSpan.Zero);
+        Assert.True(result.PromotionFinalMoveElapsed > TimeSpan.Zero);
+        Assert.True(result.PromotionBackupCleanupElapsed >= TimeSpan.Zero);
         Assert.False(File.Exists(Path.Combine(existingPath, "marker.txt")));
         Assert.True(File.Exists(Path.Combine(existingPath, "Company.Tools.psd1")));
         AssertReceipt(result.ReceiptPath, "Install", "Company.Tools", "1.0.0", previousVersion: null);
