@@ -162,9 +162,13 @@ internal sealed class ManagedModuleInstallContext
             .Select(Path.GetFileName)
             .Where(static version => !string.IsNullOrWhiteSpace(version))
             .Select(static version => version!)
+            .Where(static version => !IsManagedStageDirectory(version))
             .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
             .ToArray();
     }
+
+    internal static bool IsManagedStageDirectory(string directoryName)
+        => directoryName.StartsWith(".pfmm-stage-", StringComparison.OrdinalIgnoreCase);
 
     private bool WouldCreateWaitCycle(ManagedModuleInstallPending pending)
     {

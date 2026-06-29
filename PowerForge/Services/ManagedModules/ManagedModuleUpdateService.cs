@@ -401,18 +401,7 @@ public sealed class ManagedModuleUpdateService
         };
 
     private static IReadOnlyList<string> GetInstalledVersions(string moduleRoot, string moduleName)
-    {
-        var moduleFolder = Path.Combine(moduleRoot, moduleName.Trim());
-        if (!Directory.Exists(moduleFolder))
-            return Array.Empty<string>();
-
-        return Directory.EnumerateDirectories(moduleFolder)
-            .Select(Path.GetFileName)
-            .Where(static version => !string.IsNullOrWhiteSpace(version))
-            .Select(static version => version!)
-            .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
-            .ToArray();
-    }
+        => ManagedModuleInstallContext.EnumerateInstalledVersions(moduleRoot, moduleName);
 
     private static ManagedModuleUpdatePlanAction ResolvePlanAction(
         string? currentVersion,

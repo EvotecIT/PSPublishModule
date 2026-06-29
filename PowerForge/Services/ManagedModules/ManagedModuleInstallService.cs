@@ -372,8 +372,9 @@ public sealed partial class ManagedModuleInstallService
         var cacheDirectory = ownsCache
             ? Path.Combine(Path.GetTempPath(), "PFMM.C", NewShortId())
             : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
-        var stageRoot = CreateStageRoot(moduleRoot);
-        var stageModulePath = Path.Combine(stageRoot, request.Name.Trim(), version);
+        var moduleName = request.Name.Trim();
+        var stageRoot = CreateStageRoot(moduleRoot, moduleName);
+        var stageModulePath = CreateStageModulePath(stageRoot, moduleName, version);
 
         try
         {
@@ -678,15 +679,23 @@ public sealed partial class ManagedModuleInstallService
             ? ManagedModuleVersionRange.FromBounds(minimumVersion, maximumVersion)
             : ManagedModuleVersionRange.Parse(versionPolicy);
 
-    private static string CreateStageRoot(string moduleRoot)
+    private static string CreateStageRoot(string moduleRoot, string moduleName)
     {
 #if NET472
         return Path.Combine(Path.GetTempPath(), "PFMM.S", NewShortId());
 #else
         var root = Path.GetFullPath(moduleRoot.Trim().Trim('"'))
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var parent = Path.GetDirectoryName(root);
-        return Path.Combine(string.IsNullOrWhiteSpace(parent) ? root : parent!, ".pfmm-stage-" + NewShortId());
+        return Path.Combine(root, moduleName.Trim(), ".pfmm-stage-" + NewShortId());
+#endif
+    }
+
+    private static string CreateStageModulePath(string stageRoot, string moduleName, string version)
+    {
+#if NET472
+        return Path.Combine(stageRoot, moduleName.Trim(), version);
+#else
+        return Path.Combine(stageRoot, version);
 #endif
     }
 
