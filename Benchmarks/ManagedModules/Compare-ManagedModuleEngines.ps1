@@ -69,6 +69,7 @@ $tempWorkRoot = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 }
 $installWorkRoot = Join-Path $tempWorkRoot ('InstallRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $saveWorkRoot = Join-Path $tempWorkRoot ('SaveRoots\Run-{0}-{1}' -f $runStamp, $PID)
+$managedPackageCacheRoot = Join-Path $tempWorkRoot ('PackageCaches\Run-{0}-{1}' -f $runStamp, $PID)
 $publishWorkRoot = Join-Path $tempWorkRoot ('PublishRoots\Run-{0}-{1}' -f $runStamp, $PID)
 $validEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 $validOperations = @('Find', 'Save', 'SaveNoOp', 'SaveForce', 'Install', 'InstallManaged', 'InstallNoOp', 'InstallForce', 'Update', 'UpdateNoOp', 'UpdateForce', 'RepairPlan', 'Publish')
@@ -155,6 +156,16 @@ function Test-BenchmarkOperationRequiresExistingTarget {
     param([string] $OperationName)
 
     $OperationName -in @('SaveNoOp', 'SaveForce', 'InstallNoOp', 'InstallForce', 'UpdateNoOp', 'UpdateForce')
+}
+
+function Get-ManagedBenchmarkPackageCacheDirectory {
+    param([string] $EngineName)
+
+    if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
+        return $managedPackageCacheRoot
+    }
+
+    ''
 }
 
 function Invoke-BenchmarkSetupOperation {
@@ -579,11 +590,7 @@ function Invoke-SaveScenario {
     $destination = Join-Path $saveWorkRoot ("save-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
     $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
-    $packageCacheDirectory = if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
-        Join-Path $destination 'ManagedPackageCache'
-    } else {
-        ''
-    }
+    $packageCacheDirectory = Get-ManagedBenchmarkPackageCacheDirectory -EngineName $EngineName
 
     switch ($EngineName) {
         'ModuleFast' {
@@ -635,11 +642,7 @@ function Invoke-InstallScenario {
     $destination = Join-Path $installWorkRoot ("install-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
     $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
-    $packageCacheDirectory = if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
-        Join-Path $destination 'ManagedPackageCache'
-    } else {
-        ''
-    }
+    $packageCacheDirectory = Get-ManagedBenchmarkPackageCacheDirectory -EngineName $EngineName
 
     switch ($EngineName) {
         'ModuleFast' {
@@ -718,11 +721,7 @@ function Invoke-UpdateScenario {
 
     $destination = Join-Path $installWorkRoot ("update-{0}-{1}-{2}" -f $OperationName, $EngineName, $Iteration)
     New-Item -Path $destination -ItemType Directory -Force | Out-Null
-    $packageCacheDirectory = if ($CacheMode -eq 'Warm' -and $EngineName -eq 'Managed') {
-        Join-Path $destination 'ManagedPackageCache'
-    } else {
-        ''
-    }
+    $packageCacheDirectory = Get-ManagedBenchmarkPackageCacheDirectory -EngineName $EngineName
     $force = Test-BenchmarkOperationUsesForce -OperationName $OperationName
     $preseedVersion = if ($OperationName -eq 'Update') {
         $script:ResolvedUpdateBaselineVersion
@@ -874,6 +873,7 @@ $metadata = [ordered]@{
     ModuleBinary = $moduleBinary
     OutputDirectory = $workRoot
     SaveOutputDirectory = $saveWorkRoot
+    ManagedPackageCacheDirectory = if ($CacheMode -eq 'Warm') { $managedPackageCacheRoot } else { '' }
     RemoveOutputRoots = $RemoveOutputRoots.IsPresent
     OutputRootsRemoved = 0
     PowerShellVersion = $PSVersionTable.PSVersion.ToString()
@@ -898,6 +898,9 @@ if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0) {
 }
 if ($RemoveOutputRoots.IsPresent) {
     $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows $results -AllowedRoots @($workRoot, $installWorkRoot, $saveWorkRoot)
+    if ($CacheMode -eq 'Warm') {
+        $removedOutputRootCount += Remove-ManagedModuleBenchmarkOutputRoots -Rows @([pscustomobject]@{ OutputRoot = $managedPackageCacheRoot }) -AllowedRoots @($tempWorkRoot)
+    }
     $metadata.OutputRootsRemoved = $removedOutputRootCount
 }
 Write-ManagedBenchmarkJson -InputObject $metadata -Path $metadataPath -Depth 8
