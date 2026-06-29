@@ -212,7 +212,6 @@ internal sealed class ManagedModuleExtractedPackageCache
     {
         cancellationToken.ThrowIfCancellationRequested();
         var targetFile = Path.Combine(destinationRoot, file.Substring(sourceRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
         var sourceInfo = new FileInfo(file);
         File.Copy(file, targetFile, overwrite: false);
         return sourceInfo.Length;
