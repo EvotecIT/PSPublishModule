@@ -15,11 +15,15 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         var rows = results.RootElement.EnumerateArray().ToArray();
         Assert.Contains(rows, row =>
             Property(row, "Name") == "Graph.Full.SameSource" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "InstallSameSource" &&
             Property(row, "Repository") == "https://pwsh.gallery/index.json" &&
             Property(row, "RepositoryName") == "PWSHGallery" &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast" }));
         Assert.Contains(rows, row =>
             Property(row, "Name") == "Graph.Full.ProviderMatrix" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "InstallProviderMatrix" &&
             Property(row, "ModuleFastSource") == "ProviderDefault" &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }));
         Assert.Contains(rows, row =>
@@ -36,6 +40,8 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         Assert.Contains(rows, row =>
             Property(row, "Suite") == "HeavySaveCacheGate" &&
             Property(row, "Name") == "Graph.Full.Save.ManagedWarmCache" &&
+            Property(row, "BenchmarkRole") == "Diagnostic" &&
+            Property(row, "ComparisonScope") == "ManagedOnlySaveCache" &&
             Property(row, "ModuleName") == "Microsoft.Graph" &&
             Property(row, "Version") == "2.38.0" &&
             Property(row, "CacheMode") == "Warm" &&
@@ -45,6 +51,8 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         Assert.Contains(rows, row =>
             Property(row, "Suite") == "HeavySaveCacheGate" &&
             Property(row, "Name") == "Az.Full.Save.ManagedWarmCache" &&
+            Property(row, "BenchmarkRole") == "Diagnostic" &&
+            Property(row, "ComparisonScope") == "ManagedOnlySaveCache" &&
             Property(row, "ModuleName") == "Az" &&
             Property(row, "Version") == "16.0.0" &&
             Property(row, "CacheMode") == "Warm" &&
@@ -53,11 +61,15 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed" }));
         Assert.Contains(rows, row =>
             Property(row, "Name") == "Graph.Authentication.Save" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "SaveCapableProviders" &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1 &&
             DoubleProperty(row, "ManagedMaxVsFastest") == 0);
         Assert.Contains(rows, row =>
             Property(row, "Name") == "Graph.Authentication.SaveExact.NoOpForce" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "SaveCapableProviders" &&
             Property(row, "Version") == "2.38.0" &&
             StringArrayProperty(row, "Operations").SequenceEqual(new[] { "SaveNoOp", "SaveForce" }) &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
@@ -65,6 +77,8 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         Assert.Contains(rows, row =>
             Property(row, "Suite") == "HeavyLifecycleGate" &&
             Property(row, "Name") == "Graph.Full.InstallExact.NoOpForce" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "InstallWithModuleFast" &&
             Property(row, "ModuleName") == "Microsoft.Graph" &&
             Property(row, "Version") == "2.38.0" &&
             Property(row, "Repository") == "https://pwsh.gallery/index.json" &&
@@ -89,8 +103,17 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1);
         Assert.Contains(rows, row =>
+            Property(row, "Suite") == "HeavySaveGate" &&
+            Property(row, "Name") == "Graph.Full.Save" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "SaveCapableProviders" &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet", "PowerShellGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
             Property(row, "Suite") == "RepairGate" &&
             Property(row, "Name") == "ThreadJob.Repair.LoadedModuleSafety" &&
+            Property(row, "BenchmarkRole") == "Diagnostic" &&
+            Property(row, "ComparisonScope") == "ManagedOnlyRepairPlan" &&
             StringArrayProperty(row, "Operations").SequenceEqual(new[] { "RepairPlan" }) &&
             StringArrayProperty(row, "RepairScenarios").SequenceEqual(new[] { "LoadedModuleSafety" }) &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
@@ -122,7 +145,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         process.StartInfo.ArgumentList.Add("Bypass");
         process.StartInfo.ArgumentList.Add("-Command");
         process.StartInfo.ArgumentList.Add(
-            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveCacheGate,RepairGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
+            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveGate,HeavySaveCacheGate,RepairGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.UseShellExecute = false;

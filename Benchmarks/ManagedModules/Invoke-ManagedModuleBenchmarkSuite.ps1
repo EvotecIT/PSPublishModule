@@ -93,6 +93,55 @@ function Resolve-TokenList {
     , $resolved.ToArray()
 }
 
+function Get-BenchmarkComparisonScope {
+    param(
+        [string] $SuiteName,
+        [string] $Name,
+        [string[]] $Operations,
+        [string[]] $Engines
+    )
+
+    if ($SuiteName -eq 'HeavySaveCacheGate') {
+        return 'ManagedOnlySaveCache'
+    }
+
+    if ($SuiteName -eq 'RepairGate') {
+        return 'ManagedOnlyRepairPlan'
+    }
+
+    if ($SuiteName -eq 'PublishGate') {
+        return 'PublishCapableProviders'
+    }
+
+    if ($Name -like '*.ProviderMatrix') {
+        return 'InstallProviderMatrix'
+    }
+
+    if ($Name -like '*.SameSource') {
+        return 'InstallSameSource'
+    }
+
+    $hasInstall = @($Operations | Where-Object { $_ -like 'Install*' }).Count -gt 0
+    $hasSave = @($Operations | Where-Object { $_ -like 'Save*' }).Count -gt 0
+    if ($hasInstall -and $hasSave) {
+        return 'MixedLifecycle'
+    }
+
+    if ($hasInstall) {
+        if (@($Engines | Where-Object { $_ -eq 'ModuleFast' }).Count -gt 0) {
+            return 'InstallWithModuleFast'
+        }
+
+        return 'InstallCapableProviders'
+    }
+
+    if ($hasSave) {
+        return 'SaveCapableProviders'
+    }
+
+    'ProviderComparison'
+}
+
 function New-BenchmarkScenario {
     param(
         [string] $SuiteName,
@@ -114,9 +163,18 @@ function New-BenchmarkScenario {
         [int] $ScenarioRepeatCount = 0
     )
 
+    $benchmarkRole = if ($SuiteName -eq 'HeavySaveCacheGate' -or $SuiteName -eq 'RepairGate') {
+        'Diagnostic'
+    } else {
+        'Scoreboard'
+    }
+    $comparisonScope = Get-BenchmarkComparisonScope -SuiteName $SuiteName -Name $Name -Operations $Operations -Engines $Engines
+
     [pscustomobject]@{
         Suite = $SuiteName
         Name = $Name
+        BenchmarkRole = $benchmarkRole
+        ComparisonScope = $comparisonScope
         ModuleName = $ModuleName
         Version = $Version
         UpdateBaselineVersion = $UpdateBaselineVersion
@@ -536,6 +594,8 @@ function Add-SummaryRows {
             $Rows.Add([pscustomobject]@{
                 Suite = $Scenario.Suite
                 Scenario = $Scenario.Name
+                BenchmarkRole = $Scenario.BenchmarkRole
+                ComparisonScope = $Scenario.ComparisonScope
                 ModuleName = $Scenario.ModuleName
                 Engines = (Get-ScenarioEngines -Scenario $Scenario) -join ','
                 RepairScenarios = (Get-ScenarioRepairScenarios -Scenario $Scenario) -join ','
@@ -599,7 +659,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest
+    $scenarios | Select-Object Suite, Name, BenchmarkRole, ComparisonScope, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest
     return
 }
 
@@ -665,6 +725,8 @@ $metadata = [ordered]@{
             [ordered]@{
                 Suite = $_.Suite
                 Name = $_.Name
+                BenchmarkRole = $_.BenchmarkRole
+                ComparisonScope = $_.ComparisonScope
                 ModuleName = $_.ModuleName
                 Version = $_.Version
                 UpdateBaselineVersion = $_.UpdateBaselineVersion
