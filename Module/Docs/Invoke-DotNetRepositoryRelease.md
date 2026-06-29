@@ -11,7 +11,7 @@ Repository-wide .NET package release workflow (discover, version, pack, publish)
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-DotNetRepositoryRelease [-Path <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-IncludeProject <string[]>] [-ExcludeProject <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-Configuration <string>] [-OutputPath <string>] [-CertificateThumbprint <string>] [-CertificateStore <CertificateStoreLocation>] [-TimeStampServer <string>] [-SkipPack] [-Publish] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-DotNetRepositoryRelease [-Path <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-IncludeProject <string[]>] [-ExcludeProject <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-Configuration <string>] [-OutputPath <string>] [-CertificateThumbprint <string>] [-CertificateStore <CertificateStoreLocation>] [-TimeStampServer <string>] [-SkipAssemblySigning] [-SkipPackageSigning] [-SkipPack] [-Publish] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -418,6 +418,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -SkipAssemblySigning
+Skip Authenticode signing of build outputs before packages are created.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -SkipDuplicate
 Skip duplicates when pushing packages.
 
@@ -436,6 +452,22 @@ Accept wildcard characters: True
 
 ### -SkipPack
 Skip dotnet pack step.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipPackageSigning
+Skip signing generated NuGet packages.
 
 ```yaml
 Type: SwitchParameter

@@ -13784,6 +13784,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipAssemblySigning</maml:name>
+          <maml:description>
+            <maml:para>Skip Authenticode signing of build outputs before packages are created.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipDuplicate</maml:name>
           <maml:description>
             <maml:para>Skip duplicates when pushing packages.</maml:para>
@@ -13799,6 +13811,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
           <maml:name>SkipPack</maml:name>
           <maml:description>
             <maml:para>Skip dotnet pack step.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipPackageSigning</maml:name>
+          <maml:description>
+            <maml:para>Skip signing generated NuGet packages.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -14119,6 +14143,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipAssemblySigning</maml:name>
+        <maml:description>
+          <maml:para>Skip Authenticode signing of build outputs before packages are created.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SkipDuplicate</maml:name>
         <maml:description>
           <maml:para>Skip duplicates when pushing packages.</maml:para>
@@ -14134,6 +14170,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
         <maml:name>SkipPack</maml:name>
         <maml:description>
           <maml:para>Skip dotnet pack step.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipPackageSigning</maml:name>
+        <maml:description>
+          <maml:para>Skip signing generated NuGet packages.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -23768,78 +23816,6 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>NETDevelopmentBinaries</maml:name>
-          <maml:description>
-            <maml:para>Generate checked-in source bootstrapper logic for local development binary outputs.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>NETDevelopmentBinariesEnvironmentVariable</maml:name>
-          <maml:description>
-            <maml:para>Optional environment variable used by Environment development-binary mode.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>NETDevelopmentBinariesMode</maml:name>
-          <maml:description>
-            <maml:para>Controls when the generated source bootstrapper loads local development binaries.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
-          <dev:type>
-            <maml:name>Nullable`1</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>NETDevelopmentBinariesPath</maml:name>
-          <maml:description>
-            <maml:para>Optional root folder that contains configuration/framework development binary outputs.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>NETDevelopmentConfigurationEnvironmentVariable</maml:name>
-          <maml:description>
-            <maml:para>Optional environment variable that chooses the development build configuration.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>NETDevelopmentSourceBootstrapperMode</maml:name>
-          <maml:description>
-            <maml:para>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
-          <dev:type>
-            <maml:name>Nullable`1</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="AssemblyTypeAcceleratorAssemblies">
           <maml:name>NETAssemblyTypeAcceleratorAssemblies</maml:name>
           <maml:description>
@@ -23924,6 +23900,78 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETDevelopmentBinaries</maml:name>
+          <maml:description>
+            <maml:para>Generate checked-in source bootstrapper logic for local development binary outputs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETDevelopmentBinariesEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Optional environment variable used by Environment development-binary mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETDevelopmentBinariesMode</maml:name>
+          <maml:description>
+            <maml:para>Controls when the generated source bootstrapper loads local development binaries.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETDevelopmentBinariesPath</maml:name>
+          <maml:description>
+            <maml:para>Optional root folder that contains configuration/framework development binary outputs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETDevelopmentConfigurationEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Optional environment variable that chooses the development build configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETDevelopmentSourceBootstrapperMode</maml:name>
+          <maml:description>
+            <maml:para>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -24602,78 +24650,6 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>NETDevelopmentBinaries</maml:name>
-        <maml:description>
-          <maml:para>Generate checked-in source bootstrapper logic for local development binary outputs.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>NETDevelopmentBinariesEnvironmentVariable</maml:name>
-        <maml:description>
-          <maml:para>Optional environment variable used by Environment development-binary mode.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>NETDevelopmentBinariesMode</maml:name>
-        <maml:description>
-          <maml:para>Controls when the generated source bootstrapper loads local development binaries.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
-        <dev:type>
-          <maml:name>Nullable`1</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>NETDevelopmentBinariesPath</maml:name>
-        <maml:description>
-          <maml:para>Optional root folder that contains configuration/framework development binary outputs.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>NETDevelopmentConfigurationEnvironmentVariable</maml:name>
-        <maml:description>
-          <maml:para>Optional environment variable that chooses the development build configuration.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>NETDevelopmentSourceBootstrapperMode</maml:name>
-        <maml:description>
-          <maml:para>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
-        <dev:type>
-          <maml:name>Nullable`1</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="AssemblyTypeAcceleratorAssemblies">
         <maml:name>NETAssemblyTypeAcceleratorAssemblies</maml:name>
         <maml:description>
@@ -24758,6 +24734,78 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETDevelopmentBinaries</maml:name>
+        <maml:description>
+          <maml:para>Generate checked-in source bootstrapper logic for local development binary outputs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETDevelopmentBinariesEnvironmentVariable</maml:name>
+        <maml:description>
+          <maml:para>Optional environment variable used by Environment development-binary mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETDevelopmentBinariesMode</maml:name>
+        <maml:description>
+          <maml:para>Controls when the generated source bootstrapper loads local development binaries.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETDevelopmentBinariesPath</maml:name>
+        <maml:description>
+          <maml:para>Optional root folder that contains configuration/framework development binary outputs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETDevelopmentConfigurationEnvironmentVariable</maml:name>
+        <maml:description>
+          <maml:para>Optional environment variable that chooses the development build configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETDevelopmentSourceBootstrapperMode</maml:name>
+        <maml:description>
+          <maml:para>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -35787,6 +35835,30 @@ Build-Module { } to remain the primary authoring surface for combined module and
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Whether assemblies should be signed before packages are created.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignPackages</maml:name>
+          <maml:description>
+            <maml:para>Whether generated NuGet packages should be signed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipDuplicate</maml:name>
           <maml:description>
             <maml:para>Whether duplicate NuGet packages should be skipped during push.</maml:para>
@@ -36498,6 +36570,30 @@ Build-Module { } to remain the primary authoring surface for combined module and
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Whether assemblies should be signed before packages are created.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignPackages</maml:name>
+        <maml:description>
+          <maml:para>Whether generated NuGet packages should be signed.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SkipDuplicate</maml:name>
         <maml:description>
           <maml:para>Whether duplicate NuGet packages should be skipped during push.</maml:para>
@@ -37128,6 +37224,30 @@ module build should coordinate with that package lane.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Whether assemblies should be signed before packages are created, overriding the referenced JSON when set.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignPackages</maml:name>
+          <maml:description>
+            <maml:para>Whether generated NuGet packages should be signed, overriding the referenced JSON when set.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UpdateVersions</maml:name>
           <maml:description>
             <maml:para>Whether project/package versions should be updated, overriding the referenced JSON when set.</maml:para>
@@ -37266,6 +37386,30 @@ module build should coordinate with that package lane.</maml:para>
         <maml:name>PublishNuget</maml:name>
         <maml:description>
           <maml:para>Whether NuGet packages should be published, overriding the referenced JSON when set.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Whether assemblies should be signed before packages are created, overriding the referenced JSON when set.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignPackages</maml:name>
+        <maml:description>
+          <maml:para>Whether generated NuGet packages should be signed, overriding the referenced JSON when set.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
