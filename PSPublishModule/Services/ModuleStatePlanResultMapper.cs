@@ -33,7 +33,10 @@ internal static class ModuleStatePlanResultMapper
                 TargetScope = action.TargetScope,
                 TargetPath = action.TargetPath,
                 TargetRepository = action.TargetRepository,
-                ExpectedPackageSha256 = action.ExpectedPackageSha256
+                ExpectedPackageSha256 = action.ExpectedPackageSha256,
+                License = action.License,
+                LicenseAcceptanceRequired = action.LicenseAcceptanceRequired,
+                LicenseAccepted = action.LicenseAccepted
             }).ToArray(),
             Findings = plan.Findings.Select(static finding => new ModuleStateConflictFindingResult
             {
@@ -64,7 +67,10 @@ internal static class ModuleStatePlanResultMapper
                 targetScope: action.TargetScope,
                 targetPath: action.TargetPath,
                 targetRepository: action.TargetRepository,
-                expectedPackageSha256: action.ExpectedPackageSha256)).ToArray(),
+                expectedPackageSha256: action.ExpectedPackageSha256,
+                license: action.License,
+                licenseAcceptanceRequired: action.LicenseAcceptanceRequired,
+                licenseAccepted: action.LicenseAccepted)).ToArray(),
             (result.Findings ?? Array.Empty<ModuleStateConflictFindingResult>()).Select(static finding => new ModuleStateConflictFinding(
                 ParseEnum<ModuleStateConflictSeverity>(finding.Severity, nameof(finding.Severity)),
                 finding.Code,

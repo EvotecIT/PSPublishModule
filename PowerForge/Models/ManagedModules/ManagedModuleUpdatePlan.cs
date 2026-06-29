@@ -114,4 +114,19 @@ public sealed class ManagedModuleUpdatePlan
     /// Planned actions for related installed modules covered by the family policy.
     /// </summary>
     public IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> FamilyActions { get; set; } = Array.Empty<ManagedModuleFamilyUpdatePlanItem>();
+
+    /// <summary>
+    /// License expression, license URL, or license file reference for the selected package when known.
+    /// </summary>
+    public string? License { get; set; }
+
+    /// <summary>
+    /// True when repository metadata indicates the selected package requires explicit license acceptance.
+    /// </summary>
+    public bool LicenseAcceptanceRequired { get; set; }
+
+    /// <summary>
+    /// True when the caller supplied license acceptance for this plan.
+    /// </summary>
+    public bool LicenseAccepted { get; set; }
 }

@@ -156,6 +156,7 @@ internal static class ModuleStateConsoleRenderer
         table.AddColumn(new TableColumn("Installed").NoWrap());
         table.AddColumn(new TableColumn("Policy").NoWrap());
         table.AddColumn(new TableColumn("Target").NoWrap());
+        table.AddColumn(new TableColumn("License").NoWrap());
         table.AddColumn(new TableColumn("Reason"));
         foreach (var action in actions.Take(20))
         {
@@ -165,6 +166,7 @@ internal static class ModuleStateConsoleRenderer
                 Esc(action.InstalledVersion),
                 Esc(action.VersionPolicy),
                 Esc(FormatTarget(action)),
+                Esc(FormatLicense(action)),
                 Esc(action.Reason));
         }
 
@@ -206,6 +208,14 @@ internal static class ModuleStateConsoleRenderer
         }.Where(static part => !string.IsNullOrWhiteSpace(part));
 
         return string.Join(" / ", parts);
+    }
+
+    private static string FormatLicense(ModuleStatePlanActionResult action)
+    {
+        if (!action.LicenseAcceptanceRequired)
+            return string.Empty;
+
+        return action.LicenseAccepted ? "accepted" : "required";
     }
 
     internal static string FormatExecutionStatuses(ModuleStateDeliveryExecutionResult execution)

@@ -17,6 +17,7 @@ internal static class ManagedModuleSummaryWriter
         Add(table, "Repository", FormatRepository(plan.RepositoryName, plan.RepositorySource));
         Add(table, "Module path", plan.ModulePath);
         Add(table, "Would write", plan.WouldWriteFiles ? "Yes" : "No");
+        AddLicense(table, plan.LicenseAcceptanceRequired, plan.LicenseAccepted, plan.License);
         AnsiConsole.Write(table);
     }
 
@@ -44,6 +45,7 @@ internal static class ManagedModuleSummaryWriter
         Add(table, "Repository", FormatRepository(plan.RepositoryName, plan.RepositorySource));
         Add(table, "Module path", plan.ModulePath);
         Add(table, "Would write", plan.WouldWriteFiles ? "Yes" : "No");
+        AddLicense(table, plan.LicenseAcceptanceRequired, plan.LicenseAccepted, plan.License);
         AddSource(table, plan.SourcePolicySatisfied, plan.SourcePolicyReason);
         AddFamily(table, plan.FamilyActions);
         AnsiConsole.Write(table);
@@ -105,6 +107,16 @@ internal static class ManagedModuleSummaryWriter
 
         Add(table, "Source policy", satisfied ? "Satisfied" : "Needs repair");
         Add(table, "Source reason", reason);
+    }
+
+    private static void AddLicense(Table table, bool required, bool accepted, string? license)
+    {
+        if (!required && string.IsNullOrWhiteSpace(license))
+            return;
+
+        Add(table, "License", license);
+        if (required)
+            Add(table, "License acceptance", accepted ? "Accepted" : "Required");
     }
 
     private static void AddFamily(Table table, IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> actions)

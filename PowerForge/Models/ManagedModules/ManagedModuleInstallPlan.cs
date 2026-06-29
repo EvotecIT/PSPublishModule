@@ -89,4 +89,19 @@ public sealed class ManagedModuleInstallPlan
     /// Package authors allowed by the caller's trust policy.
     /// </summary>
     public IReadOnlyList<string> AllowedAuthors { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// License expression, license URL, or license file reference for the selected package when known.
+    /// </summary>
+    public string? License { get; set; }
+
+    /// <summary>
+    /// True when repository metadata indicates the selected package requires explicit license acceptance.
+    /// </summary>
+    public bool LicenseAcceptanceRequired { get; set; }
+
+    /// <summary>
+    /// True when the caller supplied license acceptance for this plan.
+    /// </summary>
+    public bool LicenseAccepted { get; set; }
 }

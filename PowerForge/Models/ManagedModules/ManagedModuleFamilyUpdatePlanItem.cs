@@ -54,4 +54,19 @@ public sealed class ManagedModuleFamilyUpdatePlanItem
     /// Diagnostic reason when the family action cannot be applied safely.
     /// </summary>
     public string? ConflictReason { get; set; }
+
+    /// <summary>
+    /// License expression, license URL, or license file reference for the selected package when known.
+    /// </summary>
+    public string? License { get; set; }
+
+    /// <summary>
+    /// True when repository metadata indicates the selected package requires explicit license acceptance.
+    /// </summary>
+    public bool LicenseAcceptanceRequired { get; set; }
+
+    /// <summary>
+    /// True when the caller supplied license acceptance for this plan item.
+    /// </summary>
+    public bool LicenseAccepted { get; set; }
 }

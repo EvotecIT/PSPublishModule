@@ -412,7 +412,9 @@ public sealed partial class ManagedModuleRepositoryClient
                 RepositoryName = repository.Name,
                 RepositorySource = repository.Source,
                 PackageSource = file,
-                IsPrerelease = metadata.IsPrerelease
+                IsPrerelease = metadata.IsPrerelease,
+                License = metadata.License,
+                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
             });
         }
 
@@ -730,7 +732,10 @@ public sealed partial class ManagedModuleRepositoryClient
             RepositoryName = repository.Name,
             RepositorySource = repository.Source,
             IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version!),
-            Listed = !item.TryGetProperty("listed", out var listedElement) || listedElement.ValueKind != JsonValueKind.False
+            Listed = !item.TryGetProperty("listed", out var listedElement) || listedElement.ValueKind != JsonValueKind.False,
+            License = ReadOptionalString(item, "licenseExpression") ??
+                      ReadOptionalString(item, "licenseUrl"),
+            RequireLicenseAcceptance = ReadOptionalBoolean(item, "requireLicenseAcceptance")
         };
     }
 
@@ -778,9 +783,29 @@ public sealed partial class ManagedModuleRepositoryClient
                 RepositoryName = repository.Name,
                 RepositorySource = repository.Source,
                 PackageSource = file,
-                IsPrerelease = metadata.IsPrerelease
+                IsPrerelease = metadata.IsPrerelease,
+                License = metadata.License,
+                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
             };
         }
+    }
+
+    private static string? ReadOptionalString(JsonElement item, string propertyName)
+        => item.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.String
+            ? element.GetString()?.Trim()
+            : null;
+
+    private static bool ReadOptionalBoolean(JsonElement item, string propertyName)
+    {
+        if (!item.TryGetProperty(propertyName, out var element))
+            return false;
+
+        return element.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.String => bool.TryParse(element.GetString(), out var value) && value,
+            _ => false
+        };
     }
 
     private static Uri BuildPackageUri(string packageBase, string packageId, string version)

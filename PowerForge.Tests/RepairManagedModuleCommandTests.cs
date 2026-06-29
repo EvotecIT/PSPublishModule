@@ -156,6 +156,78 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_PlanReportsLicenseRequiredPackageAndBlocksApplyWithoutAcceptance()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("Company.Tools", "1.1.0"),
+            requireLicenseAcceptance: true);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Latest")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions, static action =>
+            string.Equals(action.ModuleName, "Company.Tools", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(action.Kind, "Update", StringComparison.OrdinalIgnoreCase));
+        Assert.True(action.LicenseAcceptanceRequired);
+        Assert.False(action.LicenseAccepted);
+        Assert.False(result.Apply.CanApply);
+        Assert.Contains("license acceptance", result.Apply.BlockedReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(result.Apply.ExecutionResults);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
+    [Fact]
+    public void RepairManagedModule_PlanPreservesAcceptedLicenseOnPreparedCommand()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("Company.Tools", "1.1.0"),
+            requireLicenseAcceptance: true);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Latest")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("AcceptLicense")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions, static action =>
+            string.Equals(action.ModuleName, "Company.Tools", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(action.Kind, "Update", StringComparison.OrdinalIgnoreCase));
+        Assert.True(action.LicenseAcceptanceRequired);
+        Assert.True(action.LicenseAccepted);
+        Assert.True(result.Apply.CanApply);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.Contains("-AcceptLicense", command.Arguments);
+        Assert.False(result.Apply.ExecutionRequested);
+        Assert.Empty(result.Apply.ExecutionResults);
+    }
+
+    [Fact]
     public void RepairManagedModule_ForceDoesNotApplyCleanupRemoval()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -218,6 +290,13 @@ public sealed class RepairManagedModuleCommandTests
         File.WriteAllText(Path.Combine(modulePath, name + ".psm1"), string.Empty);
         return modulePath;
     }
+
+    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string name, string version)
+        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [name + ".psd1"] = "@{ RootModule = '" + name + ".psm1'; ModuleVersion = '" + version + "' }",
+            [name + ".psm1"] = string.Empty
+        };
 
     private static PowerShell CreatePowerShellWithModuleImported()
     {

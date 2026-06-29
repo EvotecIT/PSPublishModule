@@ -189,6 +189,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
                 ParseCleanupMode(Cleanup),
                 Family);
             ApplyLatestUpdateIntent(plan);
+            EnrichManagedLicenseMetadata(plan);
 
             var test = ModuleStateTestResult.FromPlan(plan);
             var applyResult = PrepareApply(plan);
@@ -329,10 +330,11 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             ProfileName,
             Repository,
             installPrerequisites: false,
-            Prerelease.IsPresent,
-            Force.IsPresent,
-            AllowConflict.IsPresent,
-            Transport);
+            prerelease: Prerelease.IsPresent,
+            force: Force.IsPresent,
+            acceptLicense: AcceptLicense.IsPresent,
+            allowErrorFindings: AllowConflict.IsPresent,
+            transport: Transport);
         var service = new ModuleStateApplyService();
         var corePlan = ModuleStatePlanResultMapper.ToCorePlan(plan);
         var result = service.Prepare(corePlan, deliveryOptions);
@@ -356,22 +358,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
         {
             return new ModuleStateManagedDeliveryService(this).Execute(
                 result,
-                new ModuleStateManagedDeliveryOptions
-                {
-                    ProfileName = ProfileName,
-                    Repository = Repository,
-                    Prerelease = Prerelease.IsPresent,
-                    Force = Force.IsPresent,
-                    AllowClobber = AllowClobber.IsPresent,
-                    AcceptLicense = AcceptLicense.IsPresent,
-                    ModuleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
-                    Credential = ManagedModuleCommandSupport.ResolveCredential(
-                        this,
-                        Credential,
-                        CredentialUserName,
-                        CredentialSecret,
-                        CredentialSecretFilePath)
-                });
+                CreateManagedDeliveryOptions());
         }
 
         return new ModuleStatePrivateDeliveryService(this).Execute(
@@ -389,6 +376,39 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
                 PromptForCredential = false
             });
     }
+
+    private void EnrichManagedLicenseMetadata(ModuleStatePlanResult plan)
+    {
+        if (Transport != ModuleStateDeliveryTransport.ManagedModule)
+            return;
+
+        try
+        {
+            new ModuleStateManagedPlanLicenseEnricher(this).Enrich(plan, CreateManagedDeliveryOptions());
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException)
+        {
+            WriteVerbose("Managed module license preflight skipped: " + ex.Message);
+        }
+    }
+
+    private ModuleStateManagedDeliveryOptions CreateManagedDeliveryOptions()
+        => new()
+        {
+            ProfileName = ProfileName,
+            Repository = Repository,
+            Prerelease = Prerelease.IsPresent,
+            Force = Force.IsPresent,
+            AllowClobber = AllowClobber.IsPresent,
+            AcceptLicense = AcceptLicense.IsPresent,
+            ModuleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
+            Credential = ManagedModuleCommandSupport.ResolveCredential(
+                this,
+                Credential,
+                CredentialUserName,
+                CredentialSecret,
+                CredentialSecretFilePath)
+        };
 
     private void ValidateVersionPolicy()
     {

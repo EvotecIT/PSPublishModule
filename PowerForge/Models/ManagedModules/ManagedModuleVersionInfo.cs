@@ -39,4 +39,14 @@ public sealed class ManagedModuleVersionInfo
     /// True when repository metadata indicates the version is listed.
     /// </summary>
     public bool Listed { get; set; } = true;
+
+    /// <summary>
+    /// License expression, license URL, or license file reference when repository metadata exposes it.
+    /// </summary>
+    public string? License { get; set; }
+
+    /// <summary>
+    /// True when repository metadata indicates this package version requires explicit license acceptance.
+    /// </summary>
+    public bool RequireLicenseAcceptance { get; set; }
 }

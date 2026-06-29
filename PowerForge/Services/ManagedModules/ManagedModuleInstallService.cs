@@ -65,14 +65,15 @@ public sealed partial class ManagedModuleInstallService
                 exists: true);
         }
 
-        var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
-        var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
+        var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken, resolveExactMetadata: true).ConfigureAwait(false);
+        var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), versionInfo.Version);
         return CreateInstallPlan(
             request,
-            version,
+            versionInfo.Version,
             moduleRoot,
             modulePath,
-            Directory.Exists(modulePath));
+            Directory.Exists(modulePath),
+            versionInfo);
     }
 
     private static ManagedModuleInstallPlan CreateInstallPlan(
@@ -80,7 +81,8 @@ public sealed partial class ManagedModuleInstallService
         string version,
         string moduleRoot,
         string modulePath,
-        bool exists)
+        bool exists,
+        ManagedModuleVersionInfo? versionInfo = null)
     {
         var action = exists
             ? request.Force ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
@@ -104,7 +106,10 @@ public sealed partial class ManagedModuleInstallService
             ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
             AuthenticodeCheck = request.AuthenticodeCheck,
             RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
-            AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors)
+            AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
+            License = versionInfo?.License,
+            LicenseAcceptanceRequired = versionInfo?.RequireLicenseAcceptance == true,
+            LicenseAccepted = request.AcceptLicense
         };
     }
 
@@ -137,7 +142,8 @@ public sealed partial class ManagedModuleInstallService
         using var requestScope = _repositoryClient.BeginRequestScope();
 
         var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var version = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
+        var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
+        var version = versionInfo.Version;
         versionResolutionStopwatch.Stop();
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
         using var dependencyScope = context.Enter(request.Name);
@@ -382,10 +388,23 @@ public sealed partial class ManagedModuleInstallService
         }
     }
 
-    private async Task<string> ResolveSelectedVersionAsync(ManagedModuleInstallRequest request, CancellationToken cancellationToken)
+    private async Task<ManagedModuleVersionInfo> ResolveSelectedVersionInfoAsync(
+        ManagedModuleInstallRequest request,
+        CancellationToken cancellationToken,
+        bool resolveExactMetadata = false)
     {
         if (!string.IsNullOrWhiteSpace(request.Version))
-            return request.Version!.Trim();
+        {
+            var exactVersion = request.Version!.Trim();
+            if (resolveExactMetadata)
+            {
+                var exactMatch = await TryResolveExactVersionInfoAsync(request, exactVersion, cancellationToken).ConfigureAwait(false);
+                if (exactMatch is not null)
+                    return exactMatch;
+            }
+
+            return CreateRequestedVersionInfo(request, exactVersion);
+        }
 
         var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
         if (range.IsUnbounded)
@@ -399,7 +418,7 @@ public sealed partial class ManagedModuleInstallService
             if (latestVersion is null)
                 throw new InvalidOperationException($"No versions of '{request.Name}' were found in repository '{request.Repository.Name}'.");
 
-            return latestVersion.Version;
+            return latestVersion;
         }
 
         var versions = await _repositoryClient.GetVersionsAsync(
@@ -415,8 +434,33 @@ public sealed partial class ManagedModuleInstallService
         if (latest is null)
             throw new InvalidOperationException($"No versions of '{request.Name}' satisfying range '{range}' were found in repository '{request.Repository.Name}'.");
 
-        return latest.Version;
+        return latest;
     }
+
+    private async Task<ManagedModuleVersionInfo?> TryResolveExactVersionInfoAsync(
+        ManagedModuleInstallRequest request,
+        string exactVersion,
+        CancellationToken cancellationToken)
+    {
+        var versions = await _repositoryClient.GetVersionsAsync(
+            request.Repository,
+            request.Name,
+            request.IncludePrerelease || ManagedModuleVersionComparer.IsPrerelease(exactVersion),
+            request.Credential,
+            cancellationToken).ConfigureAwait(false);
+
+        return versions.FirstOrDefault(version => version.Version.Equals(exactVersion, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static ManagedModuleVersionInfo CreateRequestedVersionInfo(ManagedModuleInstallRequest request, string version)
+        => new()
+        {
+            Name = request.Name.Trim(),
+            Version = version,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version)
+        };
 
     private static ManagedModuleInstallResult CreateAlreadyInstalledResult(
         ManagedModuleInstallRequest request,
