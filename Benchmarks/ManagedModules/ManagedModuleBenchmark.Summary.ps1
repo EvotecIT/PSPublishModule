@@ -113,6 +113,7 @@ function New-Summary {
             MedianManagedRootDependencyUnattributedMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyUnattributedMilliseconds' } else { 0 }
             MedianManagedDependencyQueueWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyQueueWaitMilliseconds' } else { 0 }
             MedianManagedDependencyBranchElapsedMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyBranchElapsedMilliseconds' } else { 0 }
+            MedianManagedDependencyBranchOverheadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyBranchOverheadMilliseconds' } else { 0 }
             MedianManagedDownloadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDownloadMilliseconds' } else { 0 }
             MedianManagedExtractionMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionMilliseconds' } else { 0 }
             MedianManagedExtractionCacheLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionCacheLockWaitMilliseconds' } else { 0 }
@@ -162,6 +163,8 @@ function New-Summary {
             LastManagedDependencyQueueWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDependencyQueueWaitMilliseconds } else { 0 }
             FirstManagedDependencyBranchElapsedMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDependencyBranchElapsedMilliseconds } else { 0 }
             LastManagedDependencyBranchElapsedMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDependencyBranchElapsedMilliseconds } else { 0 }
+            FirstManagedDependencyBranchOverheadMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDependencyBranchOverheadMilliseconds } else { 0 }
+            LastManagedDependencyBranchOverheadMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDependencyBranchOverheadMilliseconds } else { 0 }
             FirstManagedDownloadMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDownloadMilliseconds } else { 0 }
             LastManagedDownloadMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDownloadMilliseconds } else { 0 }
             FirstManagedExtractionMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalExtractionMilliseconds } else { 0 }
@@ -309,6 +312,8 @@ function New-Comparison {
             ManagedLastDependencyQueueWaitMs = if ($managed.Count) { [double] $managed[0].LastManagedDependencyQueueWaitMs } else { 0 }
             ManagedFirstDependencyBranchElapsedMs = if ($managed.Count) { [double] $managed[0].FirstManagedDependencyBranchElapsedMs } else { 0 }
             ManagedLastDependencyBranchElapsedMs = if ($managed.Count) { [double] $managed[0].LastManagedDependencyBranchElapsedMs } else { 0 }
+            ManagedFirstDependencyBranchOverheadMs = if ($managed.Count) { [double] $managed[0].FirstManagedDependencyBranchOverheadMs } else { 0 }
+            ManagedLastDependencyBranchOverheadMs = if ($managed.Count) { [double] $managed[0].LastManagedDependencyBranchOverheadMs } else { 0 }
             ManagedFirstDownloadMs = if ($managed.Count) { [double] $managed[0].FirstManagedDownloadMs } else { 0 }
             ManagedLastDownloadMs = if ($managed.Count) { [double] $managed[0].LastManagedDownloadMs } else { 0 }
             ManagedFirstExtractionMs = if ($managed.Count) { [double] $managed[0].FirstManagedExtractionMs } else { 0 }
@@ -386,6 +391,7 @@ function New-Comparison {
             ManagedRootDependencyUnattributedMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyUnattributedMs } else { 0 }
             ManagedDependencyQueueWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyQueueWaitMs } else { 0 }
             ManagedDependencyBranchElapsedMs = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyBranchElapsedMs } else { 0 }
+            ManagedDependencyBranchOverheadMs = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyBranchOverheadMs } else { 0 }
             ManagedDownloadMs = if ($managed.Count) { [double] $managed[0].MedianManagedDownloadMs } else { 0 }
             ManagedExtractionMs = if ($managed.Count) { [double] $managed[0].MedianManagedExtractionMs } else { 0 }
             ManagedExtractionCacheLockWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedExtractionCacheLockWaitMs } else { 0 }

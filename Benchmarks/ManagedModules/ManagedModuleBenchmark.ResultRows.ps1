@@ -42,6 +42,7 @@ function New-SkippedRow {
         ManagedRootDependencyUnattributedMilliseconds = 0
         ManagedTotalDependencyQueueWaitMilliseconds = 0
         ManagedTotalDependencyBranchElapsedMilliseconds = 0
+        ManagedTotalDependencyBranchOverheadMilliseconds = 0
         ManagedTotalDownloadMilliseconds = 0
         ManagedTotalExtractionMilliseconds = 0
         ManagedTotalExtractionCacheLockWaitMilliseconds = 0

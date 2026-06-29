@@ -486,6 +486,7 @@ function Invoke-TimedOperation {
         ManagedRootDependencyUnattributedMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyUnattributedMilliseconds')
         ManagedTotalDependencyQueueWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDependencyQueueWaitMilliseconds')
         ManagedTotalDependencyBranchElapsedMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDependencyBranchElapsedMilliseconds')
+        ManagedTotalDependencyBranchOverheadMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDependencyBranchOverheadMilliseconds')
         ManagedTotalDownloadMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadMilliseconds')
         ManagedTotalExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionMilliseconds')
         ManagedTotalExtractionCacheLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionCacheLockWaitMilliseconds')

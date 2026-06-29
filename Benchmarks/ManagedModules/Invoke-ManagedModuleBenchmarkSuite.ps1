@@ -614,6 +614,8 @@ function Add-SummaryRows {
                 ManagedLastDependencyQueueWaitMs = $row.ManagedLastDependencyQueueWaitMs
                 ManagedFirstDependencyBranchElapsedMs = $row.ManagedFirstDependencyBranchElapsedMs
                 ManagedLastDependencyBranchElapsedMs = $row.ManagedLastDependencyBranchElapsedMs
+                ManagedFirstDependencyBranchOverheadMs = $row.ManagedFirstDependencyBranchOverheadMs
+                ManagedLastDependencyBranchOverheadMs = $row.ManagedLastDependencyBranchOverheadMs
                 ManagedFirstDownloadMs = $row.ManagedFirstDownloadMs
                 ManagedLastDownloadMs = $row.ManagedLastDownloadMs
                 ManagedFirstExtractionMs = $row.ManagedFirstExtractionMs
@@ -691,6 +693,7 @@ function Add-SummaryRows {
                 ManagedRootDependencyUnattributedMs = $row.ManagedRootDependencyUnattributedMs
                 ManagedDependencyQueueWaitMs = $row.ManagedDependencyQueueWaitMs
                 ManagedDependencyBranchElapsedMs = $row.ManagedDependencyBranchElapsedMs
+                ManagedDependencyBranchOverheadMs = $row.ManagedDependencyBranchOverheadMs
                 ManagedDownloadMs = $row.ManagedDownloadMs
                 ManagedExtractionMs = $row.ManagedExtractionMs
                 ManagedExtractionCacheLockWaitMs = $row.ManagedExtractionCacheLockWaitMs
