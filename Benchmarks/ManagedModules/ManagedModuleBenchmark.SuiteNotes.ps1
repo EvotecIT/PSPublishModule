@@ -61,6 +61,7 @@ function Write-ManagedBenchmarkSuiteNotes {
     param(
         [object[]] $Scenarios,
         [object[]] $SummaryRows,
+        [object[]] $OptimizationRows,
         [object[]] $HostRows,
         [object[]] $GateViolations,
         [object[]] $HostGateViolations,
@@ -93,6 +94,15 @@ function Write-ManagedBenchmarkSuiteNotes {
     $lines.Add('')
     Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $SummaryRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'FastestEngine', 'FastestMs', 'ManagedMs', 'ManagedRank', 'ManagedVsFastest')
     $lines.Add('')
+
+    if ($OptimizationRows -and $OptimizationRows.Count -gt 0) {
+        $lines.Add('## Optimization Targets')
+        $lines.Add('')
+        $lines.Add('Use these rows to decide where the next managed-engine optimization should start. `Diagnostic` rows identify managed cost centers; `Scoreboard` rows keep provider-race context.')
+        $lines.Add('')
+        Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $OptimizationRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'ManagedMs', 'Bottleneck', 'BottleneckMs', 'BottleneckShare', 'NextQuestion')
+        $lines.Add('')
+    }
 
     $lines.Add('## Hosts')
     $lines.Add('')
