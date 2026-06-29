@@ -40,6 +40,43 @@ public sealed class ManagedModuleDependencyInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_skips_dependency_version_query_for_satisfied_dependency_when_only_repository_trust_is_required()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var handler = new SatisfiedDependencyTrustFeedHandler();
+        using var httpClient = new HttpClient(handler);
+        var existingDependencyPath = Path.Combine(moduleRoot.Path, "Company.Core", "1.1.0");
+        Directory.CreateDirectory(existingDependencyPath);
+        File.WriteAllText(Path.Combine(existingDependencyPath, "Company.Core.psd1"), "@{ ModuleVersion = '1.1.0' }");
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository(
+                "Gallery",
+                "https://example.test/v3/index.json",
+                ManagedModuleRepositoryKind.NuGetV3,
+                trusted: true),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            TrustPolicy = new ManagedModuleTrustPolicy
+            {
+                RequireTrustedRepository = true
+            }
+        });
+
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, dependency.Status);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal("1.1.0", dependency.Version);
+        Assert.Equal(0, handler.DependencyVersionQueryCount);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_validates_dependency_package_when_dependency_trust_policy_is_active()
     {
         using var feed = new TemporaryDirectory();
@@ -118,6 +155,59 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         {
             ["Company.Core.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private sealed class SatisfiedDependencyTrustFeedHandler : HttpMessageHandler
+    {
+        private int _dependencyVersionQueryCount;
+
+        public int DependencyVersionQueryCount => _dependencyVersionQueryCount;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            if (uri == "https://example.test/v3/index.json")
+                return Task.FromResult(Json("{\"resources\":[{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}"));
+
+            if (uri == "https://example.test/packages/company.tools/1.0.0/company.tools.1.0.0.nupkg")
+                return Task.FromResult(Package("Company.Tools", "1.0.0", new[] { new TestDependency("Company.Core", "[1.0.0,2.0.0)", null) }));
+
+            if (uri == "https://example.test/packages/company.core/index.json")
+            {
+                System.Threading.Interlocked.Increment(ref _dependencyVersionQueryCount);
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static HttpResponseMessage Json(string json)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+            };
+
+        private static HttpResponseMessage Package(string id, string version, IReadOnlyList<TestDependency>? dependencies)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(CreatePackageBytes(id, version, dependencies))
+            };
+
+        private static byte[] CreatePackageBytes(string id, string version, IReadOnlyList<TestDependency>? dependencies)
+        {
+            using var directory = new TemporaryDirectory();
+            var packagePath = Path.Combine(directory.Path, id + "." + version + ".nupkg");
+            TestPackageFactory.Create(
+                packagePath,
+                id,
+                version,
+                dependencies,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [id + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
+                });
+            return File.ReadAllBytes(packagePath);
+        }
+    }
 
     private sealed class ParallelDependencyFeedHandler : HttpMessageHandler
     {
