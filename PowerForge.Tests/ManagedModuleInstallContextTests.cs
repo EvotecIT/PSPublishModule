@@ -23,4 +23,16 @@ public sealed class ManagedModuleInstallContextTests
             new[] { "1.0.0", "1.1.0", "1.2.0" },
             context.GetInstalledVersions(moduleRoot.Path, "Company.Core"));
     }
+
+    [Fact]
+    public void EnumerateInstalledVersions_IgnoresManagedStageDirectories()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Core", ".pfmm-stage-abcd"));
+
+        var versions = ManagedModuleInstallContext.EnumerateInstalledVersions(moduleRoot.Path, "Company.Core");
+
+        Assert.Equal(new[] { "1.0.0" }, versions);
+    }
 }

@@ -938,7 +938,7 @@ public sealed partial class ManagedModuleInstallServiceTests
         foreach (var root in roots.Where(static root => !string.IsNullOrWhiteSpace(root)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (Directory.Exists(root))
-                Assert.Empty(Directory.EnumerateDirectories(root, ".pfmm-stage-*", SearchOption.TopDirectoryOnly));
+                Assert.Empty(Directory.EnumerateDirectories(root, ".pfmm-stage-*", SearchOption.AllDirectories));
         }
     }
 
