@@ -209,7 +209,13 @@ internal static class ModuleManifestTextParser
             yield break;
         }
 
-        yield return ParseRequiredModuleItem(trimmed);
+        var itemIndex = 0;
+        while (TryReadValueExpression(trimmed, ref itemIndex, out var itemExpression))
+        {
+            var module = ParseRequiredModuleItem(itemExpression);
+            if (module is not null)
+                yield return module;
+        }
     }
 
     private static RequiredModuleReference? ParseRequiredModuleItem(string expression)
@@ -247,10 +253,9 @@ internal static class ModuleManifestTextParser
             yield break;
         }
 
-        if (!IsArrayExpression(trimmed))
-            yield break;
-
-        var body = TrimCompositeWrapper(trimmed);
+        var body = IsArrayExpression(trimmed)
+            ? TrimCompositeWrapper(trimmed)
+            : trimmed;
         var index = 0;
         while (TryReadValueExpression(body, ref index, out var itemExpression))
         {
@@ -285,8 +290,28 @@ internal static class ModuleManifestTextParser
             return false;
 
         var index = match.Index + match.Length;
-        expression = ReadValueExpression(text, ref index);
+        expression = ReadAssignedValueExpression(text, ref index);
         return !string.IsNullOrWhiteSpace(expression);
+    }
+
+    private static string ReadAssignedValueExpression(string text, ref int index)
+    {
+        var parts = new List<string>();
+        while (true)
+        {
+            var expression = ReadValueExpression(text, ref index);
+            if (string.IsNullOrWhiteSpace(expression))
+                break;
+
+            parts.Add(expression.Trim());
+            var next = SkipWhitespaceAndComments(text, index);
+            if (next >= text.Length || text[next] != ',')
+                break;
+
+            index = next + 1;
+        }
+
+        return string.Join(", ", parts);
     }
 
     private static bool TryReadValueExpression(string text, ref int index, out string expression)
@@ -482,6 +507,30 @@ internal static class ModuleManifestTextParser
         {
             var ch = text[index];
             if (char.IsWhiteSpace(ch) || ch == ';' || (treatCommasAsTrivia && ch == ','))
+            {
+                index++;
+                continue;
+            }
+
+            if (ch == '#')
+            {
+                while (index < text.Length && text[index] != '\r' && text[index] != '\n')
+                    index++;
+                continue;
+            }
+
+            break;
+        }
+
+        return index;
+    }
+
+    private static int SkipWhitespaceAndComments(string text, int index)
+    {
+        while (index < text.Length)
+        {
+            var ch = text[index];
+            if (char.IsWhiteSpace(ch))
             {
                 index++;
                 continue;

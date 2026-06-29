@@ -36,10 +36,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$invocationPath = if ($MyInvocation.MyCommand -and $MyInvocation.MyCommand.PSObject.Properties['Path']) {
+    $MyInvocation.MyCommand.Path
+} else {
+    ''
+}
 $script:BenchmarkScriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
     $PSScriptRoot
-} elseif ($MyInvocation.MyCommand.Path) {
-    Split-Path -Parent $MyInvocation.MyCommand.Path
+} elseif (-not [string]::IsNullOrWhiteSpace($invocationPath)) {
+    Split-Path -Parent $invocationPath
 } else {
     Get-Location
 }

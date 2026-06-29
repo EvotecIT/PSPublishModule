@@ -49,7 +49,12 @@ public sealed class ManagedModuleUpdateService
         var currentVersion = installedVersions.LastOrDefault();
         var currentModulePath = currentVersion is null ? null : Path.Combine(moduleRoot, request.Name.Trim(), currentVersion);
         var sourceEvaluation = EvaluateSourcePolicy(request, currentModulePath);
-        var action = ResolvePlanAction(currentVersion, targetVersion, request.Force, sourceEvaluation);
+        var action = ResolvePlanAction(
+            currentVersion,
+            targetVersion,
+            request.Force,
+            requiresVerifiedPackage: !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256),
+            sourceEvaluation);
         ThrowIfSourcePolicyBlocked(action, sourceEvaluation);
         var targetWouldWrite = ActionWritesFiles(action);
         var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, resolvePackageMetadata: false, cancellationToken).ConfigureAwait(false);
@@ -147,7 +152,12 @@ public sealed class ManagedModuleUpdateService
         var currentVersion = installedVersions.LastOrDefault();
         var currentModulePath = currentVersion is null ? null : Path.Combine(moduleRoot, request.Name.Trim(), currentVersion);
         var sourceEvaluation = EvaluateSourcePolicy(request, currentModulePath);
-        var action = ResolvePlanAction(currentVersion, targetVersion, request.Force, sourceEvaluation);
+        var action = ResolvePlanAction(
+            currentVersion,
+            targetVersion,
+            request.Force,
+            requiresVerifiedPackage: !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256),
+            sourceEvaluation);
         var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, resolvePackageMetadata: true, cancellationToken).ConfigureAwait(false);
         var selectedPathVersion = action is ManagedModuleUpdatePlanAction.SkipUpToDate or ManagedModuleUpdatePlanAction.SourceMismatchBlocked && currentVersion is not null
             ? currentVersion
@@ -488,6 +498,7 @@ public sealed class ManagedModuleUpdateService
         string? currentVersion,
         string targetVersion,
         bool force,
+        bool requiresVerifiedPackage,
         SourcePolicyEvaluation sourceEvaluation)
     {
         if (currentVersion is null)
@@ -496,7 +507,7 @@ public sealed class ManagedModuleUpdateService
         var comparison = ManagedModuleVersionComparer.Instance.Compare(currentVersion, targetVersion);
         if (comparison == 0)
         {
-            if (force)
+            if (force || requiresVerifiedPackage)
                 return ManagedModuleUpdatePlanAction.Reinstall;
             return sourceEvaluation.IsSatisfied
                 ? ManagedModuleUpdatePlanAction.SkipUpToDate

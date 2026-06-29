@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using PowerForge;
 
@@ -163,6 +164,33 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.Equal("Company.Tools", exception.ModuleName);
         Assert.Equal("1.1.0", exception.Version);
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_reinstalls_current_version_when_expected_sha256_is_supplied()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var packagePath = Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "marker.txt"), "old");
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.Version = "1.0.0";
+        request.ExpectedPackageSha256 = ComputeSha256(packagePath);
+
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.NotNull(result.InstallResult?.Download);
+        Assert.False(File.Exists(Path.Combine(installedPath, "marker.txt")));
+        Assert.True(File.Exists(Path.Combine(installedPath, "Company.Tools.psd1")));
     }
 
     [Fact]
@@ -700,4 +728,7 @@ public sealed class ManagedModuleUpdateServiceTests
             Path.Combine(receiptDirectory, "managed-module-receipt.json"),
             "{\"RepositoryName\":\"" + repositoryName + "\",\"RepositorySource\":\"" + repositorySource.Replace("\\", "\\\\", StringComparison.Ordinal) + "\"}");
     }
+
+    private static string ComputeSha256(string path)
+        => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
 }

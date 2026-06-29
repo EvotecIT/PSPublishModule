@@ -21,8 +21,12 @@ public sealed class ManagedModulePackService
         var manifestPath = ResolveManifestPath(modulePath, request.ManifestPath);
         var manifestText = File.ReadAllText(manifestPath);
         ValidateManifestMetadata(manifestPath, manifestText, request);
-        var name = ResolveName(modulePath, manifestPath, request.Name, manifestText);
-        var version = ResolveVersion(request.Version, manifestPath);
+        var name = ManagedModulePackageIdentity.RequireSafeId(
+            ResolveName(modulePath, manifestPath, request.Name, manifestText),
+            nameof(request));
+        var version = ManagedModulePackageIdentity.RequireSafeVersion(
+            ResolveVersion(request.Version, manifestPath),
+            nameof(request));
         var outputDirectory = Path.GetFullPath(request.OutputDirectory.Trim().Trim('"'));
         Directory.CreateDirectory(outputDirectory);
         var packagePath = Path.Combine(outputDirectory, $"{name}.{version}.nupkg");

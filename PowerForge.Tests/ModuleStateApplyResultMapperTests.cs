@@ -58,7 +58,7 @@ public sealed class ModuleStateApplyResultMapperTests
         Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, executionResult.EffectiveTransport);
         Assert.Contains("Auto selected managed transport", executionResult.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
         Assert.Same(postInventory, result.PostApplyInventory);
-        Assert.Equal("Install-PrivateModule", Assert.Single(result.Commands).CommandName);
+        Assert.Equal("Install-ManagedModule", Assert.Single(result.Commands).CommandName);
     }
 
     [Fact]

@@ -239,8 +239,6 @@ internal sealed class ModuleStateApplyService
             arguments.Add(deliveryOptions.Repository!);
         }
 
-        if (deliveryOptions.InstallPrerequisites && action.Kind != ModuleStatePlanActionKind.Save)
-            arguments.Add("-InstallPrerequisites");
         if (deliveryOptions.Prerelease)
             arguments.Add("-Prerelease");
         if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
@@ -277,22 +275,11 @@ internal sealed class ModuleStateApplyService
 
     private static string ResolveCommandName(ModuleStatePlanActionKind actionKind, ModuleStateDeliveryTransport transport)
     {
-        if (transport == ModuleStateDeliveryTransport.ManagedModule)
-        {
-            if (actionKind == ModuleStatePlanActionKind.Save)
-                return "Save-ManagedModule";
-
-            return actionKind == ModuleStatePlanActionKind.Update
-                ? "Update-ManagedModule"
-                : "Install-ManagedModule";
-        }
-
         if (actionKind == ModuleStatePlanActionKind.Save)
-            return "Save-PrivateModule";
-
+            return "Save-ManagedModule";
         return actionKind == ModuleStatePlanActionKind.Update
-            ? "Update-PrivateModule"
-            : "Install-PrivateModule";
+            ? "Update-ManagedModule"
+            : "Install-ManagedModule";
     }
 
     private static string? GetExactVersionPolicyValue(string? versionPolicy)

@@ -104,6 +104,29 @@ public sealed class ManagedModuleUpdatePlanServiceTests
     }
 
     [Fact]
+    public async Task PlanUpdateAsync_classifies_hash_pinned_current_version_as_reinstall()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.ExpectedPackageSha256 = new string('a', 64);
+
+        var plan = await service.PlanUpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdatePlanAction.Reinstall, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+        Assert.Equal(installedPath, plan.ModulePath);
+    }
+
+    [Fact]
     public async Task PlanUpdateAsync_rejects_missing_exact_repository_version()
     {
         using var feed = new TemporaryDirectory();

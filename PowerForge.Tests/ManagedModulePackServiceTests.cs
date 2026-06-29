@@ -96,6 +96,51 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public void Pack_writes_comma_separated_required_modules_as_nuspec_dependencies()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = 'Company.Core', 'Loose.Dependency'");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        var dependencyIds = ReadNuspecDependencyIds(archive);
+
+        Assert.Contains("Company.Core", dependencyIds);
+        Assert.Contains("Loose.Dependency", dependencyIds);
+    }
+
+    [Fact]
+    public void Pack_rejects_unsafe_requested_name_before_building_package_path()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        var service = new ManagedModulePackService();
+
+        var exception = Assert.Throws<ArgumentException>(() => service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path,
+            Name = "..\\Escape"
+        }));
+
+        Assert.Contains("Unsafe package id", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFiles(output.Path));
+    }
+
+    [Fact]
     public void Pack_uses_manifest_name_when_root_module_points_to_binary()
     {
         using var moduleRoot = new TemporaryDirectory();

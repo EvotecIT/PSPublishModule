@@ -444,7 +444,7 @@ public sealed partial class ManagedModuleInstallService
             StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
             var validationModulePath = stageModulePath;
             ManagedModuleArchiveExtractionResult? extraction = null;
-            if (!ownsCache && !request.Force)
+            if (!ownsCache && !request.Force && !RequiresVerifiedPackage(request))
             {
                 directPayloadLease = _extractedPackageCache.TryAcquirePayload(
                     download.PackageSha256,

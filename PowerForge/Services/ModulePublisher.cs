@@ -570,6 +570,15 @@ public sealed partial class ModulePublisher
             return true;
         }
 
+        if (exception is ManagedModuleRepositoryException localRepositoryException &&
+            localRepositoryException.Operation.Equals("VersionQuery", StringComparison.OrdinalIgnoreCase) &&
+            localRepositoryException.StatusCode is null &&
+            Path.IsPathRooted(localRepositoryException.RepositorySource) &&
+            localRepositoryException.Message.IndexOf("Local repository folder was not found", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return true;
+        }
+
         var message = exception.ToString();
         return message.IndexOf(moduleName, StringComparison.OrdinalIgnoreCase) >= 0 &&
                (message.IndexOf("could not be found in repository", StringComparison.OrdinalIgnoreCase) >= 0 ||
