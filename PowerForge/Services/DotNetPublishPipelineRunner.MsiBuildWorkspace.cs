@@ -345,12 +345,12 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
 
-        var fullPath = Path.GetFullPath(value);
+            var fullPath = Path.GetFullPath(value);
         if (!string.IsNullOrWhiteSpace(sourcePayloadDirectory) &&
             !string.IsNullOrWhiteSpace(targetPayloadDirectory))
         {
             var sourcePayload = AppendDirectorySeparator(Path.GetFullPath(sourcePayloadDirectory!));
-            if (fullPath.StartsWith(sourcePayload, StringComparison.OrdinalIgnoreCase))
+            if (fullPath.StartsWith(sourcePayload, CreateCurrentFileSystemStringComparison()))
             {
                 var relativePayloadPath = fullPath.Substring(sourcePayload.Length);
                 attribute.Value = GetRelativePathCompat(sourceDirectory, Path.Combine(targetPayloadDirectory!, relativePayloadPath));
@@ -398,6 +398,13 @@ public sealed partial class DotNetPublishPipelineRunner
         return IsCurrentFileSystemCaseSensitive()
             ? StringComparer.Ordinal
             : StringComparer.OrdinalIgnoreCase;
+    }
+
+    private static StringComparison CreateCurrentFileSystemStringComparison()
+    {
+        return IsCurrentFileSystemCaseSensitive()
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
     }
 
     private static bool IsCurrentFileSystemCaseSensitive()
@@ -485,8 +492,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-            var fullPath = Path.GetFullPath(value);
-            if (!fullPath.StartsWith(sourceDirectory, StringComparison.OrdinalIgnoreCase))
+        var fullPath = Path.GetFullPath(value);
+            if (!fullPath.StartsWith(sourceDirectory, CreateCurrentFileSystemStringComparison()))
             {
                 continue;
             }

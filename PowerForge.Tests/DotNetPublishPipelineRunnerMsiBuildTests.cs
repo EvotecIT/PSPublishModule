@@ -74,7 +74,18 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Directory.CreateDirectory(Path.GetDirectoryName(importedBuildProps)!);
             File.WriteAllText(importedBuildProps, "<Project />");
             var rootBuildTargets = Path.Combine(root, "Directory.Build.targets");
-            File.WriteAllText(rootBuildTargets, "<Project />");
+            File.WriteAllText(rootBuildTargets, "<Project><PropertyGroup><RootBuildTargets>true</RootBuildTargets></PropertyGroup></Project>");
+            var parentBuildTargets = Path.Combine(root, "Artifacts", "Directory.Build.targets");
+            var parentCommonTargets = Path.Combine(root, "Artifacts", "Build", "Common.targets");
+            Directory.CreateDirectory(Path.GetDirectoryName(parentCommonTargets)!);
+            File.WriteAllText(parentCommonTargets, "<Project><PropertyGroup><CommonTargets>true</CommonTargets></PropertyGroup></Project>");
+            File.WriteAllText(
+                parentBuildTargets,
+                "<Project>" +
+                "<Import Project=\"Build\\Common.targets\" Condition=\"Exists('Build\\Common.targets') And '$(EnableCommon)' == 'true'\" />" +
+                "<Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))\" " +
+                "Condition=\"Exists('$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))') And '$(DisableRootImports)' != 'true'\" />" +
+                "</Project>");
             File.WriteAllText(
                 Path.Combine(root, "Directory.Build.props"),
                 "<Project><Import Project=\"$(MSBuildThisFileDirectory)Build\\**\\*.props\" /></Project>");
@@ -104,7 +115,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "<RepoToolPath>$(MSBuildThisFileDirectory)Tools</RepoToolPath>" +
                 "</PropertyGroup>" +
                 "<Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))\" " +
-                "Condition=\"Exists('$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))')\" />" +
+                "Condition=\"Exists('$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))') And '$(DisableParentImports)' != 'true'\" />" +
                 "</Project>");
             Directory.CreateDirectory(Path.Combine(sourceDir, "Fragments"));
             var sourceProjectPath = Path.Combine(sourceDir, "DesktopManager_App_MSI.wixproj");
@@ -121,15 +132,19 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var includeCaseDistinctAssets = IsCurrentFileSystemCaseSensitive(root);
             var firstCaseDistinctAsset = Path.Combine(root, "External", "Case", "asset.txt");
             var secondCaseDistinctAsset = Path.Combine(root, "External", "Case", "ASSET.txt");
+            var caseDistinctPayloadFile = Path.Combine(root, "payload", "DesktopManager.App", "win-x64", "net10.0-windows10.0.19041.0", "PortableCompat", "case-payload.txt");
             var caseDistinctFileEntries = string.Empty;
             if (includeCaseDistinctAssets)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(firstCaseDistinctAsset)!);
                 File.WriteAllText(firstCaseDistinctAsset, "lower");
                 File.WriteAllText(secondCaseDistinctAsset, "upper");
+                Directory.CreateDirectory(Path.GetDirectoryName(caseDistinctPayloadFile)!);
+                File.WriteAllText(caseDistinctPayloadFile, "case payload");
                 caseDistinctFileEntries =
                     $"<File Id=\"CaseLower\" Source=\"{firstCaseDistinctAsset}\" />" +
-                    $"<File Id=\"CaseUpper\" Source=\"{secondCaseDistinctAsset}\" />";
+                    $"<File Id=\"CaseUpper\" Source=\"{secondCaseDistinctAsset}\" />" +
+                    $"<File Id=\"CasePayloadOutside\" Source=\"{caseDistinctPayloadFile}\" />";
             }
             var licensePath = Path.Combine(root, "Build", "Installer", "DesktopManager-License.rtf");
             Directory.CreateDirectory(Path.GetDirectoryName(licensePath)!);
@@ -197,6 +212,10 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Build", "Props", "Generated.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "BuildConfig", "Directory.Build.targets")));
+                var copiedParentTargetsPath = Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "BuildConfig", "Artifacts", "Directory.Build.targets");
+                var copiedParentCommonTargetsPath = Path.Combine(workspace.WorkingDirectory, "Artifacts", "Build", "Common.targets");
+                Assert.True(File.Exists(copiedParentTargetsPath));
+                Assert.True(File.Exists(copiedParentCommonTargetsPath));
                 var copiedNestedTargets = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets"));
                 var copiedNestedImportElement = copiedNestedTargets
                     .Descendants()
@@ -211,6 +230,31 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 var copiedNestedImportCondition = copiedNestedImportElement.Attribute("Condition")!.Value;
                 Assert.DoesNotContain("GetPathOfFileAbove", copiedNestedImportCondition, StringComparison.OrdinalIgnoreCase);
                 Assert.Contains(copiedNestedImport, copiedNestedImportCondition, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("DisableParentImports", copiedNestedImportCondition, StringComparison.Ordinal);
+                var copiedParentTargets = XDocument.Load(copiedParentTargetsPath);
+                var copiedParentImports = copiedParentTargets
+                    .Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var copiedParentCommonImportElement = copiedParentImports
+                    .Single(element => ((string?)element.Attribute("Project"))?.IndexOf("Common.targets", StringComparison.OrdinalIgnoreCase) >= 0);
+                var copiedParentCommonImport = copiedParentCommonImportElement.Attribute("Project")!.Value;
+                Assert.NotEqual("Build\\Common.targets", copiedParentCommonImport);
+                var copiedParentCommonImportTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(copiedParentTargetsPath)!, copiedParentCommonImport));
+                Assert.Equal(Path.GetFullPath(copiedParentCommonTargetsPath), copiedParentCommonImportTarget);
+                var copiedParentCommonImportCondition = copiedParentCommonImportElement.Attribute("Condition")!.Value;
+                Assert.Contains(copiedParentCommonImport, copiedParentCommonImportCondition, StringComparison.Ordinal);
+                Assert.Contains("EnableCommon", copiedParentCommonImportCondition, StringComparison.Ordinal);
+                var copiedParentRootImportElement = copiedParentImports
+                    .Single(element => ((string?)element.Attribute("Project"))?.IndexOf("Directory.Build.targets", StringComparison.OrdinalIgnoreCase) >= 0);
+                var copiedParentRootImport = copiedParentRootImportElement.Attribute("Project")!.Value;
+                Assert.DoesNotContain("GetPathOfFileAbove", copiedParentRootImport, StringComparison.OrdinalIgnoreCase);
+                var copiedParentRootImportTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(copiedParentTargetsPath)!, copiedParentRootImport));
+                Assert.Equal(Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "BuildConfig", "Directory.Build.targets")), copiedParentRootImportTarget);
+                var copiedParentRootImportCondition = copiedParentRootImportElement.Attribute("Condition")!.Value;
+                Assert.DoesNotContain("GetPathOfFileAbove", copiedParentRootImportCondition, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains(copiedParentRootImport, copiedParentRootImportCondition, StringComparison.Ordinal);
+                Assert.Contains("DisableRootImports", copiedParentRootImportCondition, StringComparison.Ordinal);
                 var repoToolPath = copiedNestedTargets
                     .Descendants()
                     .Single(element => string.Equals(element.Name.LocalName, "RepoToolPath", StringComparison.OrdinalIgnoreCase))
@@ -346,6 +390,16 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     Assert.NotEqual(caseDistinctSources[0], caseDistinctSources[1], StringComparer.Ordinal);
                     Assert.Contains(caseDistinctSources, path => string.Equals(File.ReadAllText(path), "lower", StringComparison.Ordinal));
                     Assert.Contains(caseDistinctSources, path => string.Equals(File.ReadAllText(path), "upper", StringComparison.Ordinal));
+                    var casePayloadSource = product
+                        .Descendants(wix + "File")
+                        .Single(element => string.Equals((string?)element.Attribute("Id"), "CasePayloadOutside", StringComparison.Ordinal))
+                        .Attribute("Source")!
+                        .Value;
+                    var copiedCasePayloadSource = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, casePayloadSource));
+                    Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedCasePayloadSource, StringComparison.Ordinal);
+                    Assert.True(File.Exists(copiedCasePayloadSource));
+                    Assert.Equal("case payload", File.ReadAllText(copiedCasePayloadSource));
+                    Assert.DoesNotContain(workspace.PayloadDirectory!, copiedCasePayloadSource, StringComparison.Ordinal);
                 }
             }
             finally
