@@ -47,10 +47,14 @@ function Get-ManagedPerformanceGateViolation {
         [object[]] $Rows,
         [int] $MaxRank,
         [double] $MaxVsFastest,
-        [int] $MinAuthenticodeCheckedFiles = 0
+        [int] $MinAuthenticodeCheckedFiles = 0,
+        [int] $MinAuthenticodeCatalogFiles = 0
     )
 
-    if (($MaxRank -le 0) -and ($MaxVsFastest -le 0) -and ($MinAuthenticodeCheckedFiles -le 0)) {
+    if (($MaxRank -le 0) -and
+        ($MaxVsFastest -le 0) -and
+        ($MinAuthenticodeCheckedFiles -le 0) -and
+        ($MinAuthenticodeCatalogFiles -le 0)) {
         return @()
     }
 
@@ -58,6 +62,11 @@ function Get-ManagedPerformanceGateViolation {
         $managedRank = [int] $row.ManagedRank
         $checkedFiles = if ($row.PSObject.Properties['ManagedAuthenticodeCheckedFiles']) {
             ConvertFrom-ManagedGateInteger -Value $row.ManagedAuthenticodeCheckedFiles
+        } else {
+            0
+        }
+        $catalogFiles = if ($row.PSObject.Properties['ManagedAuthenticodeCatalogFiles']) {
+            ConvertFrom-ManagedGateInteger -Value $row.ManagedAuthenticodeCatalogFiles
         } else {
             0
         }
@@ -77,6 +86,7 @@ function Get-ManagedPerformanceGateViolation {
                 ManagedRank = $managedRank
                 ManagedVsFastest = [string] $row.ManagedVsFastest
                 ManagedAuthenticodeCheckedFiles = $checkedFiles
+                ManagedAuthenticodeCatalogFiles = $catalogFiles
                 Reason = 'managed did not produce a successful benchmark result'
             }
             continue
@@ -86,7 +96,8 @@ function Get-ManagedPerformanceGateViolation {
         $rankFailed = $MaxRank -gt 0 -and $managedRank -gt $MaxRank
         $ratioFailed = $MaxVsFastest -gt 0 -and $ratio -gt $MaxVsFastest
         $authenticodeFilesFailed = $MinAuthenticodeCheckedFiles -gt 0 -and $checkedFiles -lt $MinAuthenticodeCheckedFiles
-        if (-not ($rankFailed -or $ratioFailed -or $authenticodeFilesFailed)) {
+        $catalogFilesFailed = $MinAuthenticodeCatalogFiles -gt 0 -and $catalogFiles -lt $MinAuthenticodeCatalogFiles
+        if (-not ($rankFailed -or $ratioFailed -or $authenticodeFilesFailed -or $catalogFilesFailed)) {
             continue
         }
 
@@ -99,6 +110,9 @@ function Get-ManagedPerformanceGateViolation {
         }
         if ($authenticodeFilesFailed) {
             $reasonParts += "managed checked $checkedFiles Authenticode file(s), expected at least $MinAuthenticodeCheckedFiles"
+        }
+        if ($catalogFilesFailed) {
+            $reasonParts += "managed checked $catalogFiles Authenticode catalog file(s), expected at least $MinAuthenticodeCatalogFiles"
         }
 
         [pscustomobject]@{
@@ -115,6 +129,7 @@ function Get-ManagedPerformanceGateViolation {
             ManagedRank = $managedRank
             ManagedVsFastest = [string] $row.ManagedVsFastest
             ManagedAuthenticodeCheckedFiles = $checkedFiles
+            ManagedAuthenticodeCatalogFiles = $catalogFiles
             Reason = $reasonParts -join '; '
         }
     }
@@ -126,11 +141,12 @@ function Get-ManagedPerformanceGateViolationForSuite {
         [int] $MaxRank,
         [double] $MaxVsFastest,
         [int] $MinAuthenticodeCheckedFiles = 0,
+        [int] $MinAuthenticodeCatalogFiles = 0,
         [switch] $UseScenarioGates
     )
 
-    if ($MaxRank -gt 0 -or $MaxVsFastest -gt 0 -or $MinAuthenticodeCheckedFiles -gt 0) {
-        return @(Get-ManagedPerformanceGateViolation -Rows @($Rows) -MaxRank $MaxRank -MaxVsFastest $MaxVsFastest -MinAuthenticodeCheckedFiles $MinAuthenticodeCheckedFiles)
+    if ($MaxRank -gt 0 -or $MaxVsFastest -gt 0 -or $MinAuthenticodeCheckedFiles -gt 0 -or $MinAuthenticodeCatalogFiles -gt 0) {
+        return @(Get-ManagedPerformanceGateViolation -Rows @($Rows) -MaxRank $MaxRank -MaxVsFastest $MaxVsFastest -MinAuthenticodeCheckedFiles $MinAuthenticodeCheckedFiles -MinAuthenticodeCatalogFiles $MinAuthenticodeCatalogFiles)
     }
 
     if (-not $UseScenarioGates.IsPresent) {
@@ -152,7 +168,11 @@ function Get-ManagedPerformanceGateViolationForSuite {
         if ($row.PSObject.Properties['GateManagedMinAuthenticodeCheckedFiles']) {
             $scenarioMinAuthenticodeCheckedFiles = ConvertFrom-ManagedGateInteger -Value $row.GateManagedMinAuthenticodeCheckedFiles
         }
+        $scenarioMinAuthenticodeCatalogFiles = 0
+        if ($row.PSObject.Properties['GateManagedMinAuthenticodeCatalogFiles']) {
+            $scenarioMinAuthenticodeCatalogFiles = ConvertFrom-ManagedGateInteger -Value $row.GateManagedMinAuthenticodeCatalogFiles
+        }
 
-        Get-ManagedPerformanceGateViolation -Rows @($row) -MaxRank $scenarioMaxRank -MaxVsFastest $scenarioMaxVsFastest -MinAuthenticodeCheckedFiles $scenarioMinAuthenticodeCheckedFiles
+        Get-ManagedPerformanceGateViolation -Rows @($row) -MaxRank $scenarioMaxRank -MaxVsFastest $scenarioMaxVsFastest -MinAuthenticodeCheckedFiles $scenarioMinAuthenticodeCheckedFiles -MinAuthenticodeCatalogFiles $scenarioMinAuthenticodeCatalogFiles
     }
 }

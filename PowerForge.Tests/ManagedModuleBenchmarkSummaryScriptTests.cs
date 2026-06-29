@@ -35,6 +35,8 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedPackageRepositoryRedirectCount = 0
                     ManagedDownloadBytes = 186506621
                     ManagedCacheHitCount = 0
+                    ManagedAuthenticodeCheckedFileCount = 3
+                    ManagedAuthenticodeCatalogFileCount = 1
                     ManagedMaintenanceActionCount = 0
                     ManagedMaintenanceFindingCount = 0
                 },
@@ -64,6 +66,8 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedPackageRepositoryRedirectCount = 0
                     ManagedDownloadBytes = 0
                     ManagedCacheHitCount = 40
+                    ManagedAuthenticodeCheckedFileCount = 5
+                    ManagedAuthenticodeCatalogFileCount = 1
                     ManagedMaintenanceActionCount = 0
                     ManagedMaintenanceFindingCount = 0
                 }
@@ -89,6 +93,8 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(0.0, NumericProperty(row, "ManagedLastDownloadBytes"));
         Assert.Equal(0.0, NumericProperty(row, "ManagedFirstCacheHits"));
         Assert.Equal(40.0, NumericProperty(row, "ManagedLastCacheHits"));
+        Assert.Equal(4.0, NumericProperty(row, "ManagedAuthenticodeCheckedFiles"));
+        Assert.Equal(1.0, NumericProperty(row, "ManagedAuthenticodeCatalogFiles"));
     }
 
     private static PowerShell CreateBenchmarkPowerShell(string script)

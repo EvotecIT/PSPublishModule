@@ -46,15 +46,25 @@ internal sealed class ManagedModuleAuthenticodeVerifier
             }
         }
 
+        var catalogFiles = files
+            .Where(IsCatalogFile)
+            .Select(file => GetRelativePath(root, file))
+            .ToArray();
+
         return new ManagedModuleAuthenticodeVerificationResult
         {
             CheckedFiles = files.Length,
-            Files = files.Select(file => GetRelativePath(root, file)).ToArray()
+            Files = files.Select(file => GetRelativePath(root, file)).ToArray(),
+            CatalogFiles = catalogFiles.Length,
+            CatalogFilePaths = catalogFiles
         };
     }
 
     private static bool IsSignableFile(string path)
         => SignableExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsCatalogFile(string path)
+        => string.Equals(Path.GetExtension(path), ".cat", StringComparison.OrdinalIgnoreCase);
 
     private static string GetRelativePath(string root, string file)
     {

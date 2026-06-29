@@ -59,6 +59,8 @@ function Add-ManagedInstallDetail {
         ExtractionFromCache = [bool] (Get-NumericPropertyValue -InputObject $Result -Name 'ExtractionFromCache')
         AuthenticodeCheckedFiles = if ($authenticode) { [int] $authenticode.CheckedFiles } else { 0 }
         AuthenticodeFiles = if ($authenticode) { @($authenticode.Files) } else { @() }
+        AuthenticodeCatalogFiles = if ($authenticode) { [int] (Get-NumericPropertyValue -InputObject $authenticode -Name 'CatalogFiles') } else { 0 }
+        AuthenticodeCatalogFilePaths = if ($authenticode -and $authenticode.PSObject.Properties['CatalogFilePaths']) { @($authenticode.CatalogFilePaths) } else { @() }
     })
 
     foreach ($dependency in @($Result.DependencyResults)) {
@@ -112,6 +114,7 @@ function Write-ManagedInstallDetail {
         CacheHitCount = @($packages | Where-Object DownloadFromCache).Count
         ExtractionCacheHitCount = @($packages | Where-Object ExtractionFromCache).Count
         TotalAuthenticodeCheckedFiles = [long] (($packages | Measure-Object AuthenticodeCheckedFiles -Sum).Sum)
+        TotalAuthenticodeCatalogFiles = [long] (($packages | Measure-Object AuthenticodeCatalogFiles -Sum).Sum)
     }
 
     $parent = Split-Path -Path $Path -Parent
