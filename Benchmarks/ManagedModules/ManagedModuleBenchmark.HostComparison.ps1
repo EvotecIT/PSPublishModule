@@ -22,6 +22,43 @@ function ConvertTo-ManagedBenchmarkDouble {
     0.0
 }
 
+function Format-ManagedHostComparisonRatio {
+    param(
+        [double] $BaselineMs,
+        [double] $ComparisonMs
+    )
+
+    if ($BaselineMs -le 0 -or $ComparisonMs -le 0) {
+        return ''
+    }
+
+    $ratio = [math]::Round($ComparisonMs / $BaselineMs, 2)
+    '{0}x' -f $ratio.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Get-ManagedHostComparisonWinner {
+    param(
+        [double] $BaselineMs,
+        [double] $ComparisonMs,
+        [string] $BaselineHost,
+        [string] $ComparisonHost
+    )
+
+    if ($BaselineMs -le 0 -or $ComparisonMs -le 0) {
+        return ''
+    }
+
+    if ($ComparisonMs -lt $BaselineMs) {
+        return $ComparisonHost
+    }
+
+    if ($BaselineMs -lt $ComparisonMs) {
+        return $BaselineHost
+    }
+
+    'Tie'
+}
+
 function New-ManagedHostComparison {
     param(
         [object[]] $Rows,
@@ -35,18 +72,16 @@ function New-ManagedHostComparison {
         $comparison = @($group.Group | Where-Object { $_.Host -eq $ComparisonHost } | Select-Object -First 1)
         $baselineMs = if ($baseline.Count) { ConvertTo-ManagedBenchmarkDouble -Value $baseline[0].ManagedMs } else { 0.0 }
         $comparisonMs = if ($comparison.Count) { ConvertTo-ManagedBenchmarkDouble -Value $comparison[0].ManagedMs } else { 0.0 }
+        $baselineFirstMs = if ($baseline.Count -and $baseline[0].PSObject.Properties['ManagedFirstMs']) { ConvertTo-ManagedBenchmarkDouble -Value $baseline[0].ManagedFirstMs } else { 0.0 }
+        $comparisonFirstMs = if ($comparison.Count -and $comparison[0].PSObject.Properties['ManagedFirstMs']) { ConvertTo-ManagedBenchmarkDouble -Value $comparison[0].ManagedFirstMs } else { 0.0 }
+        $baselineLastMs = if ($baseline.Count -and $baseline[0].PSObject.Properties['ManagedLastMs']) { ConvertTo-ManagedBenchmarkDouble -Value $baseline[0].ManagedLastMs } else { 0.0 }
+        $comparisonLastMs = if ($comparison.Count -and $comparison[0].PSObject.Properties['ManagedLastMs']) { ConvertTo-ManagedBenchmarkDouble -Value $comparison[0].ManagedLastMs } else { 0.0 }
         $status = if ($baselineMs -le 0) {
             'MissingBaseline'
         } elseif ($comparisonMs -le 0) {
             'MissingComparison'
         } else {
             'Compared'
-        }
-
-        $ratio = if ($baselineMs -gt 0 -and $comparisonMs -gt 0) {
-            [math]::Round($comparisonMs / $baselineMs, 2)
-        } else {
-            0.0
         }
 
         [pscustomobject]@{
@@ -64,12 +99,18 @@ function New-ManagedHostComparison {
             ComparisonHost = $ComparisonHost
             ComparisonMs = [math]::Round($comparisonMs, 2)
             DeltaMs = if ($status -eq 'Compared') { [math]::Round($comparisonMs - $baselineMs, 2) } else { 0.0 }
-            ComparisonVsBaseline = if ($status -eq 'Compared') { ('{0}x' -f $ratio.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)) } else { '' }
-            FasterHost = if ($status -eq 'Compared') {
-                if ($comparisonMs -lt $baselineMs) { $ComparisonHost } elseif ($baselineMs -lt $comparisonMs) { $BaselineHost } else { 'Tie' }
-            } else {
-                ''
-            }
+            ComparisonVsBaseline = if ($status -eq 'Compared') { Format-ManagedHostComparisonRatio -BaselineMs $baselineMs -ComparisonMs $comparisonMs } else { '' }
+            FasterHost = if ($status -eq 'Compared') { Get-ManagedHostComparisonWinner -BaselineMs $baselineMs -ComparisonMs $comparisonMs -BaselineHost $BaselineHost -ComparisonHost $ComparisonHost } else { '' }
+            BaselineFirstMs = [math]::Round($baselineFirstMs, 2)
+            ComparisonFirstMs = [math]::Round($comparisonFirstMs, 2)
+            FirstDeltaMs = if ($status -eq 'Compared' -and $baselineFirstMs -gt 0 -and $comparisonFirstMs -gt 0) { [math]::Round($comparisonFirstMs - $baselineFirstMs, 2) } else { 0.0 }
+            FirstComparisonVsBaseline = if ($status -eq 'Compared') { Format-ManagedHostComparisonRatio -BaselineMs $baselineFirstMs -ComparisonMs $comparisonFirstMs } else { '' }
+            FasterFirstHost = if ($status -eq 'Compared') { Get-ManagedHostComparisonWinner -BaselineMs $baselineFirstMs -ComparisonMs $comparisonFirstMs -BaselineHost $BaselineHost -ComparisonHost $ComparisonHost } else { '' }
+            BaselineLastMs = [math]::Round($baselineLastMs, 2)
+            ComparisonLastMs = [math]::Round($comparisonLastMs, 2)
+            LastDeltaMs = if ($status -eq 'Compared' -and $baselineLastMs -gt 0 -and $comparisonLastMs -gt 0) { [math]::Round($comparisonLastMs - $baselineLastMs, 2) } else { 0.0 }
+            LastComparisonVsBaseline = if ($status -eq 'Compared') { Format-ManagedHostComparisonRatio -BaselineMs $baselineLastMs -ComparisonMs $comparisonLastMs } else { '' }
+            FasterLastHost = if ($status -eq 'Compared') { Get-ManagedHostComparisonWinner -BaselineMs $baselineLastMs -ComparisonMs $comparisonLastMs -BaselineHost $BaselineHost -ComparisonHost $ComparisonHost } else { '' }
             BaselineRunPath = if ($baseline.Count -and $baseline[0].PSObject.Properties['RunPath']) { [string] $baseline[0].RunPath } else { '' }
             ComparisonRunPath = if ($comparison.Count -and $comparison[0].PSObject.Properties['RunPath']) { [string] $comparison[0].RunPath } else { '' }
         }

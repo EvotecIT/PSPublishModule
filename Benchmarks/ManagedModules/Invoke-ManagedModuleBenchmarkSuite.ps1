@@ -677,7 +677,7 @@ if ($ManagedMaxRank -gt 0 -or
 if ($ManagedMaxWindowsPowerShellVsPowerShell7 -gt 0) {
     Write-ManagedBenchmarkCsv -InputObject @($hostGateViolations) -Path $hostGatePath
 }
-Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenarios) -SummaryRows @($summaryRows) -OptimizationRows @($optimizationTargetRows) -HostRows @($hostRows) -GateViolations @($gateViolations) -HostGateViolations @($hostGateViolations) -Path $notesPath
+Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenarios) -SummaryRows @($summaryRows) -OptimizationRows @($optimizationTargetRows) -HostComparisonRows @($hostComparisonRows) -HostRows @($hostRows) -GateViolations @($gateViolations) -HostGateViolations @($hostGateViolations) -Path $notesPath
 
 $metadata = [ordered]@{
     Suites = $Suite
