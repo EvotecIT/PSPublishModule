@@ -15,7 +15,8 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             UseProxy = options.UseProxy,
             AllowAutoRedirect = false,
-            AutomaticDecompression = decompression
+            AutomaticDecompression = decompression,
+            MaxConnectionsPerServer = Math.Max(1, options.MaxConnectionsPerServer)
         };
         if (!options.UseProxy || options.ProxyAddress is null)
             return handler;

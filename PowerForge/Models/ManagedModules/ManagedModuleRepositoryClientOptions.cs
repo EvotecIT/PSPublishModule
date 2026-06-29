@@ -21,6 +21,11 @@ public sealed class ManagedModuleRepositoryClientOptions
     public TimeSpan? RequestTimeout { get; set; } = TimeSpan.FromSeconds(100);
 
     /// <summary>
+    /// Maximum concurrent HTTP connections allowed per repository host when the managed client owns the HTTP handler.
+    /// </summary>
+    public int MaxConnectionsPerServer { get; set; } = 32;
+
+    /// <summary>
     /// True when HTTP requests should use proxy configuration.
     /// </summary>
     public bool UseProxy { get; set; } = true;
