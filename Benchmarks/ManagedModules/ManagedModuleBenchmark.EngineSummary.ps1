@@ -37,6 +37,10 @@ function Add-ManagedBenchmarkEngineRows {
             Failed = $row.Failed
             Skipped = $row.Skipped
             MedianMs = $row.MedianMs
+            WarmRuns = $row.WarmRuns
+            WarmMedianMs = $row.WarmMedianMs
+            WarmMinMs = $row.WarmMinMs
+            WarmMaxMs = $row.WarmMaxMs
             FirstIteration = $row.FirstIteration
             LastIteration = $row.LastIteration
             FirstMs = $row.FirstMs

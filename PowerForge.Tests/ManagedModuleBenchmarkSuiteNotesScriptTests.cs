@@ -41,6 +41,8 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     FastestEngine = 'Managed'
                     FastestMs = '4815.85'
                     ManagedMs = '4815.85'
+                    ManagedWarmRuns = '2'
+                    ManagedWarmMedianMs = '4300'
                     ManagedRank = '1'
                     ManagedVsFastest = '1x'
                 },
@@ -53,6 +55,8 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     FastestEngine = 'Managed'
                     FastestMs = '1944.07'
                     ManagedMs = '1944.07'
+                    ManagedWarmRuns = '2'
+                    ManagedWarmMedianMs = '1500'
                     ManagedRank = '1'
                     ManagedVsFastest = '1x'
                 }
@@ -103,6 +107,8 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     Host = 'PowerShell7'
                     Operation = 'Save'
                     ManagedMs = '4815.85'
+                    WarmRuns = '2'
+                    WarmMedianMs = '4300'
                     Bottleneck = 'RootDependency'
                     BottleneckMs = '3966.4'
                     BottleneckShare = '82.4%'
@@ -144,6 +150,8 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     Host = 'PowerShell7'
                     Operation = 'Save'
                     ManagedMs = '1944.07'
+                    WarmRuns = '2'
+                    WarmMedianMs = '1500'
                     Bottleneck = 'Extraction'
                     BottleneckMs = '1100'
                     BottleneckShare = '56.6%'
@@ -199,6 +207,7 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("## Host Comparisons", markdown, StringComparison.Ordinal);
         Assert.Contains("## Provider Scoreboard", markdown, StringComparison.Ordinal);
         Assert.Contains("README-ready evidence", markdown, StringComparison.Ordinal);
+        Assert.Contains("WarmMedianMs", markdown, StringComparison.Ordinal);
         Assert.Contains("4815.85 ms (1x)", markdown, StringComparison.Ordinal);
         Assert.Contains("53277.79 ms (11.06x)", markdown, StringComparison.Ordinal);
         Assert.Contains("Skipped", markdown, StringComparison.Ordinal);

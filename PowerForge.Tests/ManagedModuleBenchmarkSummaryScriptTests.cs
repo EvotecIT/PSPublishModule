@@ -5,6 +5,62 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleBenchmarkSummaryScriptTests
 {
     [Fact]
+    public void Comparison_ExposesManagedWarmMedianFromPostFirstIterations()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $rows = @(
+                [pscustomobject]@{
+                    Operation = 'Save'
+                    Scenario = 'Warm'
+                    Engine = 'Managed'
+                    Iteration = 1
+                    Status = 'Succeeded'
+                    ElapsedMilliseconds = 900
+                },
+                [pscustomobject]@{
+                    Operation = 'Save'
+                    Scenario = 'Warm'
+                    Engine = 'Managed'
+                    Iteration = 2
+                    Status = 'Succeeded'
+                    ElapsedMilliseconds = 300
+                },
+                [pscustomobject]@{
+                    Operation = 'Save'
+                    Scenario = 'Warm'
+                    Engine = 'Managed'
+                    Iteration = 3
+                    Status = 'Succeeded'
+                    ElapsedMilliseconds = 500
+                }
+            )
+
+            $summary = @(New-Summary -Rows $rows)
+            [pscustomobject]@{
+                Summary = $summary[0]
+                Comparison = @(New-Comparison -SummaryRows $summary)[0]
+            }
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var output = Assert.Single(results);
+        var summary = (PSObject)output.Properties["Summary"].Value;
+        var comparison = (PSObject)output.Properties["Comparison"].Value;
+        Assert.Equal(500.0, NumericProperty(summary, "MedianMs"));
+        Assert.Equal(2.0, NumericProperty(summary, "WarmRuns"));
+        Assert.Equal(400.0, NumericProperty(summary, "WarmMedianMs"));
+        Assert.Equal(300.0, NumericProperty(summary, "WarmMinMs"));
+        Assert.Equal(500.0, NumericProperty(summary, "WarmMaxMs"));
+        Assert.Equal(400.0, NumericProperty(comparison, "FastestWarmMedianMs"));
+        Assert.Equal(2.0, NumericProperty(comparison, "ManagedWarmRuns"));
+        Assert.Equal(400.0, NumericProperty(comparison, "ManagedWarmMedianMs"));
+        Assert.Equal(300.0, NumericProperty(comparison, "ManagedWarmMinMs"));
+        Assert.Equal(500.0, NumericProperty(comparison, "ManagedWarmMaxMs"));
+    }
+
+    [Fact]
     public void Comparison_ExposesManagedFirstAndLastCacheMetrics()
     {
         using var ps = CreateBenchmarkPowerShell("""

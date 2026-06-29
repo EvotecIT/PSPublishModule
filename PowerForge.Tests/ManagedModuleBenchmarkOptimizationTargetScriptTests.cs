@@ -16,6 +16,10 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     Host = 'PowerShell7'
                     Operation = 'Save'
                     ManagedMs = '1000'
+                    ManagedWarmRuns = '2'
+                    ManagedWarmMedianMs = '450'
+                    ManagedWarmMinMs = '400'
+                    ManagedWarmMaxMs = '500'
                     ManagedRank = '1'
                     ManagedVsFastest = '1x'
                     ManagedOutputBytes = '10485760'
@@ -101,6 +105,10 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal("60%", Property(row, "BottleneckShare"));
         Assert.Equal(60.0, NumericProperty(row, "BottleneckShareRaw"));
         Assert.Equal(string.Empty, Property(row, "TimingNote"));
+        Assert.Equal(2.0, NumericProperty(row, "WarmRuns"));
+        Assert.Equal(450.0, NumericProperty(row, "WarmMedianMs"));
+        Assert.Equal(400.0, NumericProperty(row, "WarmMinMs"));
+        Assert.Equal(500.0, NumericProperty(row, "WarmMaxMs"));
         Assert.Equal(2.0, NumericProperty(row, "DownloadMB"));
         Assert.Equal(2.0, NumericProperty(row, "FirstDownloadMB"));
         Assert.Equal(0.0, NumericProperty(row, "LastDownloadMB"));
