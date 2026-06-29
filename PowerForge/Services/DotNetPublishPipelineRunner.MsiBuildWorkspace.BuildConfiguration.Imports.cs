@@ -169,6 +169,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static int FindGeneratedInstallerBuildFunctionEnd(string value, int startIndex)
     {
         var quote = '\0';
+        var nestedPropertyDepth = 0;
         for (var index = startIndex; index < value.Length; index++)
         {
             var current = value[index];
@@ -182,6 +183,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
+            if (current == '$' &&
+                index + 1 < value.Length &&
+                value[index + 1] == '(')
+            {
+                nestedPropertyDepth++;
+                index++;
+                continue;
+            }
+
             if (current == '\'' || current == '"')
             {
                 quote = current;
@@ -190,6 +200,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
             if (current == ')')
             {
+                if (nestedPropertyDepth > 0)
+                {
+                    nestedPropertyDepth--;
+                    continue;
+                }
+
                 return index;
             }
         }
@@ -275,6 +291,17 @@ public sealed partial class DotNetPublishPipelineRunner
             var project = projectAttribute!.Value;
             if (project.IndexOfAny(new[] { '*', '?' }) >= 0)
             {
+                if (TryRewriteGeneratedInstallerBuildWildcardImport(
+                    projectAttribute,
+                    project,
+                    sourceDirectory,
+                    targetDirectory,
+                    projectRootDirectory,
+                    workingDirectory))
+                {
+                    changed = true;
+                }
+
                 continue;
             }
 
@@ -307,6 +334,43 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             document.Save(targetPath);
         }
+    }
+
+    private static bool TryRewriteGeneratedInstallerBuildWildcardImport(
+        XAttribute projectAttribute,
+        string project,
+        string sourceDirectory,
+        string targetDirectory,
+        string projectRootDirectory,
+        string workingDirectory)
+    {
+        var expanded = NormalizeRelativePathSeparators(ExpandGeneratedInstallerBuildImport(project, sourceDirectory, projectRootDirectory));
+        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
+        {
+            return false;
+        }
+
+        var importPath = Path.IsPathRooted(expanded)
+            ? expanded
+            : Path.Combine(sourceDirectory, expanded);
+        var fullImportPath = Path.GetFullPath(importPath);
+        var projectRoot = AppendDirectorySeparator(Path.GetFullPath(projectRootDirectory));
+        if (!fullImportPath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var rewrittenTarget = GetGeneratedInstallerBuildFileTargetPath(fullImportPath, projectRootDirectory, workingDirectory);
+        var rewrittenProject = GetRelativePathCompat(targetDirectory, rewrittenTarget);
+        projectAttribute.Value = rewrittenProject;
+        var condition = projectAttribute.Parent?.Attribute("Condition");
+        if (condition is not null)
+        {
+            condition.Value = RewriteGeneratedInstallerBuildImportCondition(condition.Value, project, rewrittenProject);
+        }
+
+        return true;
     }
 
     private static string RewriteGeneratedInstallerBuildImportCondition(

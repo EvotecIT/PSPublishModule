@@ -286,6 +286,12 @@ public sealed partial class DotNetPublishPipelineRunner
                             string.Equals((string?)element.Attribute("key"), key, StringComparison.OrdinalIgnoreCase))
                         .Remove();
                 }
+                else
+                {
+                    targetSection.Elements()
+                        .Where(element => string.Equals(element.Name.LocalName, sourceChild.Name.LocalName, StringComparison.OrdinalIgnoreCase))
+                        .Remove();
+                }
 
                 targetSection.Add(new XElement(sourceChild));
             }

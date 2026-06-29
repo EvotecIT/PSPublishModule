@@ -285,6 +285,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
         var assetsDirectory = Path.Combine(inputsDirectory, "Assets");
         var copiedAssets = new Dictionary<string, string>(CreateCurrentFileSystemPathComparer());
+        var fileSystemComparison = CreateCurrentFileSystemStringComparison();
         var changed = false;
 
         foreach (var valueAttribute in document
@@ -298,6 +299,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 sourceDirectory,
                 assetsDirectory,
                 copiedAssets,
+                fileSystemComparison,
                 sourcePayloadDirectory,
                 targetPayloadDirectory))
             {
@@ -316,6 +318,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 sourceDirectory,
                 assetsDirectory,
                 copiedAssets,
+                fileSystemComparison,
                 sourcePayloadDirectory,
                 targetPayloadDirectory))
             {
@@ -334,6 +337,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string sourceDirectory,
         string assetsDirectory,
         IDictionary<string, string> copiedAssets,
+        StringComparison fileSystemComparison,
         string? sourcePayloadDirectory,
         string? targetPayloadDirectory)
     {
@@ -345,12 +349,12 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
 
-            var fullPath = Path.GetFullPath(value);
+        var fullPath = Path.GetFullPath(value);
         if (!string.IsNullOrWhiteSpace(sourcePayloadDirectory) &&
             !string.IsNullOrWhiteSpace(targetPayloadDirectory))
         {
             var sourcePayload = AppendDirectorySeparator(Path.GetFullPath(sourcePayloadDirectory!));
-            if (fullPath.StartsWith(sourcePayload, CreateCurrentFileSystemStringComparison()))
+            if (fullPath.StartsWith(sourcePayload, fileSystemComparison))
             {
                 var relativePayloadPath = fullPath.Substring(sourcePayload.Length);
                 attribute.Value = GetRelativePathCompat(sourceDirectory, Path.Combine(targetPayloadDirectory!, relativePayloadPath));
@@ -377,7 +381,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ? "asset"
             : fileName;
         var candidate = Path.Combine(directory, safeName);
-        if (!File.Exists(candidate))
+        if (!File.Exists(candidate) &&
+            !Directory.Exists(candidate))
         {
             return candidate;
         }
@@ -386,7 +391,8 @@ public sealed partial class DotNetPublishPipelineRunner
         for (var index = 1; ; index++)
         {
             candidate = Path.Combine(directory, $"{name}_{index}", safeName);
-            if (!File.Exists(candidate))
+            if (!File.Exists(candidate) &&
+                !Directory.Exists(candidate))
             {
                 return candidate;
             }
@@ -477,6 +483,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var document = XDocument.Load(harvestPath, LoadOptions.PreserveWhitespace);
         var sourceDirectory = AppendDirectorySeparator(Path.GetFullPath(sourcePayloadDirectory));
         var targetDirectory = Path.GetFullPath(targetPayloadDirectory);
+        var fileSystemComparison = CreateCurrentFileSystemStringComparison();
         var changed = false;
 
         foreach (var sourceAttribute in document
@@ -492,8 +499,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-        var fullPath = Path.GetFullPath(value);
-            if (!fullPath.StartsWith(sourceDirectory, CreateCurrentFileSystemStringComparison()))
+            var fullPath = Path.GetFullPath(value);
+            if (!fullPath.StartsWith(sourceDirectory, fileSystemComparison))
             {
                 continue;
             }
