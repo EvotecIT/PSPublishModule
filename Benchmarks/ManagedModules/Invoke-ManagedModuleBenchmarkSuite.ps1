@@ -269,6 +269,16 @@ function Get-ScenarioManagedMaxVsFastest {
     0.0
 }
 
+function Get-ScenarioManagedMaxWindowsPowerShellVsPowerShell7 {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['ManagedMaxWindowsPowerShellVsPowerShell7']) {
+        return [double] $Scenario.ManagedMaxWindowsPowerShellVsPowerShell7
+    }
+
+    0.0
+}
+
 function Get-ScenarioManagedMinAuthenticodeCheckedFiles {
     param([object] $Scenario)
 
@@ -310,6 +320,19 @@ function Get-EffectiveManagedMaxVsFastest {
     }
     if ($UseScenarioGates.IsPresent) {
         return Get-ScenarioManagedMaxVsFastest -Scenario $Scenario
+    }
+
+    0.0
+}
+
+function Get-EffectiveManagedMaxWindowsPowerShellVsPowerShell7 {
+    param([object] $Scenario)
+
+    if ($ManagedMaxWindowsPowerShellVsPowerShell7 -gt 0) {
+        return $ManagedMaxWindowsPowerShellVsPowerShell7
+    }
+    if ($UseScenarioGates.IsPresent) {
+        return Get-ScenarioManagedMaxWindowsPowerShellVsPowerShell7 -Scenario $Scenario
     }
 
     0.0
@@ -559,6 +582,7 @@ function Add-SummaryRows {
                 RepeatCount = Get-EffectiveRepeatCount -Scenario $Scenario
                 GateManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $Scenario
                 GateManagedMaxVsFastest = Get-EffectiveManagedMaxVsFastest -Scenario $Scenario
+                GateManagedMaxWindowsPowerShellVsPowerShell7 = Get-EffectiveManagedMaxWindowsPowerShellVsPowerShell7 -Scenario $Scenario
                 GateManagedMinAuthenticodeCheckedFiles = Get-EffectiveManagedMinAuthenticodeCheckedFiles -Scenario $Scenario
                 GateManagedMinAuthenticodeCatalogFiles = Get-EffectiveManagedMinAuthenticodeCatalogFiles -Scenario $Scenario
                 UpdateBaselineVersion = $resolvedBaseline
@@ -725,7 +749,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, BenchmarkRole, ComparisonScope, BenchmarkInterpretation, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, AuthenticodeCheck, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest, ManagedMinAuthenticodeCheckedFiles, ManagedMinAuthenticodeCatalogFiles
+    $scenarios | Select-Object Suite, Name, BenchmarkRole, ComparisonScope, BenchmarkInterpretation, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, AuthenticodeCheck, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest, ManagedMaxWindowsPowerShellVsPowerShell7, ManagedMinAuthenticodeCheckedFiles, ManagedMinAuthenticodeCatalogFiles
     return
 }
 
@@ -780,7 +804,7 @@ $notesPath = Join-Path $suiteRoot 'suite-notes.md'
 $gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -MinAuthenticodeCheckedFiles $ManagedMinAuthenticodeCheckedFiles -MinAuthenticodeCatalogFiles $ManagedMinAuthenticodeCatalogFiles -UseScenarioGates:$UseScenarioGates.IsPresent)
 $hostComparisonRows = @(New-ManagedHostComparison -Rows @($summaryRows))
 $scoreboardRows = @(New-ManagedBenchmarkScoreboard -EngineRows @($engineRows))
-$hostGateViolations = @(Get-ManagedHostComparisonGateViolation -Rows @($hostComparisonRows) -MaxComparisonVsBaseline $ManagedMaxWindowsPowerShellVsPowerShell7)
+$hostGateViolations = @(Get-ManagedHostComparisonGateViolation -Rows @($hostComparisonRows) -MaxComparisonVsBaseline $ManagedMaxWindowsPowerShellVsPowerShell7 -UseScenarioGates:$UseScenarioGates.IsPresent)
 $optimizationTargetRows = @(New-ManagedOptimizationTarget -Rows @($summaryRows))
 
 Write-ManagedBenchmarkCsv -InputObject @($summaryRows) -Path $summaryPath
@@ -802,6 +826,9 @@ if ($ManagedMaxRank -gt 0 -or
     Write-ManagedBenchmarkCsv -InputObject @($gateViolations) -Path $gatePath
 }
 if ($ManagedMaxWindowsPowerShellVsPowerShell7 -gt 0) {
+    Write-ManagedBenchmarkCsv -InputObject @($hostGateViolations) -Path $hostGatePath
+}
+elseif ($UseScenarioGates.IsPresent -and @($hostComparisonRows | Where-Object { $_.PSObject.Properties['GateManagedMaxWindowsPowerShellVsPowerShell7'] -and (ConvertTo-ManagedBenchmarkDouble -Value $_.GateManagedMaxWindowsPowerShellVsPowerShell7) -gt 0 }).Count -gt 0) {
     Write-ManagedBenchmarkCsv -InputObject @($hostGateViolations) -Path $hostGatePath
 }
 Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenarios) -SummaryRows @($summaryRows) -EngineRows @($engineRows) -ScoreboardRows @($scoreboardRows) -OptimizationRows @($optimizationTargetRows) -HostComparisonRows @($hostComparisonRows) -HostRows @($hostRows) -GateViolations @($gateViolations) -HostGateViolations @($hostGateViolations) -Path $notesPath
@@ -831,10 +858,12 @@ $metadata = [ordered]@{
                 RepeatCount = Get-EffectiveRepeatCount -Scenario $_
                 ManagedMaxRank = Get-ScenarioManagedMaxRank -Scenario $_
                 ManagedMaxVsFastest = Get-ScenarioManagedMaxVsFastest -Scenario $_
+                ManagedMaxWindowsPowerShellVsPowerShell7 = Get-ScenarioManagedMaxWindowsPowerShellVsPowerShell7 -Scenario $_
                 ManagedMinAuthenticodeCheckedFiles = Get-ScenarioManagedMinAuthenticodeCheckedFiles -Scenario $_
                 ManagedMinAuthenticodeCatalogFiles = Get-ScenarioManagedMinAuthenticodeCatalogFiles -Scenario $_
                 EffectiveManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $_
                 EffectiveManagedMaxVsFastest = Get-EffectiveManagedMaxVsFastest -Scenario $_
+                EffectiveManagedMaxWindowsPowerShellVsPowerShell7 = Get-EffectiveManagedMaxWindowsPowerShellVsPowerShell7 -Scenario $_
                 EffectiveManagedMinAuthenticodeCheckedFiles = Get-EffectiveManagedMinAuthenticodeCheckedFiles -Scenario $_
                 EffectiveManagedMinAuthenticodeCatalogFiles = Get-EffectiveManagedMinAuthenticodeCatalogFiles -Scenario $_
             }
