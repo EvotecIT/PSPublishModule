@@ -567,6 +567,14 @@ function Add-SummaryRows {
                 ManagedLastRepositoryRequests = $row.ManagedLastRepositoryRequests
                 ManagedFirstPackageRepositoryRequests = $row.ManagedFirstPackageRepositoryRequests
                 ManagedLastPackageRepositoryRequests = $row.ManagedLastPackageRepositoryRequests
+                ManagedFirstRootDependencyMs = $row.ManagedFirstRootDependencyMs
+                ManagedLastRootDependencyMs = $row.ManagedLastRootDependencyMs
+                ManagedFirstDownloadMs = $row.ManagedFirstDownloadMs
+                ManagedLastDownloadMs = $row.ManagedLastDownloadMs
+                ManagedFirstExtractionMs = $row.ManagedFirstExtractionMs
+                ManagedLastExtractionMs = $row.ManagedLastExtractionMs
+                ManagedFirstPromotionMs = $row.ManagedFirstPromotionMs
+                ManagedLastPromotionMs = $row.ManagedLastPromotionMs
                 ManagedFirstDownloadBytes = $row.ManagedFirstDownloadBytes
                 ManagedLastDownloadBytes = $row.ManagedLastDownloadBytes
                 ManagedFirstCacheHits = $row.ManagedFirstCacheHits
