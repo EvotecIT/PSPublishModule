@@ -165,7 +165,8 @@ public sealed partial class ManagedModuleInstallService
             modulePath,
             TimeSpan.Zero,
             TimeSpan.Zero,
-            repositoryRequestCount: 0);
+            repositoryRequestCount: 0,
+            installLockWaitElapsed: TimeSpan.Zero);
         return true;
     }
 

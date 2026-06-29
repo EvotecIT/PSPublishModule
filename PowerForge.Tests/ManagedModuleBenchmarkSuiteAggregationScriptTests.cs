@@ -23,6 +23,9 @@ public sealed class ManagedModuleBenchmarkSuiteAggregationScriptTests
                      "ManagedLastPromotionMs",
                      "ManagedFirstCoalescedWaitMs",
                      "ManagedLastCoalescedWaitMs",
+                     "ManagedFirstInstallLockWaitMs",
+                     "ManagedLastInstallLockWaitMs",
+                     "ManagedLastSlowestInstallLockWaitName",
                      "ManagedLastSlowestMaterializedPackageMs"
                  })
         {

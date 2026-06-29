@@ -55,6 +55,25 @@ public sealed class ManagedModuleInstallCoalescingTests
     }
 
     [Fact]
+    public void Context_branches_share_completed_install_targets()
+    {
+        var context = new ManagedModuleInstallContext();
+        var branch = context.CreateBranch();
+        var result = new ManagedModuleInstallResult
+        {
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Status = ManagedModuleInstallStatus.Installed
+        };
+
+        context.RecordCompletedInstall("module|1.0.0", result);
+
+        Assert.True(branch.TryGetCompletedInstall("module|1.0.0", out var completed));
+        Assert.Same(result, completed);
+        Assert.False(branch.TryGetCompletedInstall("module|2.0.0", out _));
+    }
+
+    [Fact]
     public void Install_coalescing_key_is_disabled_for_force_or_credentials()
     {
         var request = CreateRequest();

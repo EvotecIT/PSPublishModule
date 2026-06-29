@@ -48,6 +48,10 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastCoalescedWaitMs = '125'
                     ManagedLastSlowestCoalescedWaitName = 'Company.Shared'
                     ManagedLastSlowestCoalescedWaitMs = '125'
+                    ManagedInstallLockWaitMs = '80'
+                    ManagedLastInstallLockWaitMs = '35'
+                    ManagedLastSlowestInstallLockWaitName = 'Company.Lock'
+                    ManagedLastSlowestInstallLockWaitMs = '35'
                     ManagedSlowestMaterializedPackageMs = '650'
                     ManagedLastSlowestMaterializedPackageName = 'Company.Files'
                     ManagedLastSlowestMaterializedPackageMs = '400'
@@ -91,6 +95,10 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(125.0, NumericProperty(row, "LastCoalescedWaitMs"));
         Assert.Equal("Company.Shared", Property(row, "LastSlowestCoalescedWait"));
         Assert.Equal(125.0, NumericProperty(row, "LastSlowestCoalescedWaitMs"));
+        Assert.Equal(80.0, NumericProperty(row, "InstallLockWaitMs"));
+        Assert.Equal(35.0, NumericProperty(row, "LastInstallLockWaitMs"));
+        Assert.Equal("Company.Lock", Property(row, "LastSlowestInstallLockWait"));
+        Assert.Equal(35.0, NumericProperty(row, "LastSlowestInstallLockWaitMs"));
         Assert.Equal(650.0, NumericProperty(row, "SlowestMaterializedPackageMs"));
         Assert.Equal("Company.Files", Property(row, "LastSlowestMaterializedPackage"));
         Assert.Equal(400.0, NumericProperty(row, "LastSlowestMaterializedPackageMs"));
