@@ -437,6 +437,38 @@ public sealed partial class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_reinstalls_existing_version_when_expected_sha256_is_supplied()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var packagePath = Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "marker.txt"), "old");
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            ExpectedPackageSha256 = ComputeSha256(packagePath),
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.NotNull(result.Download);
+        Assert.False(File.Exists(Path.Combine(installedPath, "marker.txt")));
+        Assert.True(File.Exists(Path.Combine(installedPath, "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public async Task PlanInstallAsync_rejects_untrusted_repository_when_policy_requires_trust()
     {
         using var feed = new TemporaryDirectory();
@@ -1148,6 +1180,13 @@ public sealed partial class ManagedModuleInstallServiceTests
             if (Directory.Exists(root))
                 Assert.Empty(Directory.EnumerateDirectories(root, ".pfmm-stage-*", SearchOption.AllDirectories));
         }
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return string.Concat(sha256.ComputeHash(stream).Select(static value => value.ToString("x2")));
     }
 
     private static void CreateDuplicateEntryPackage(string packagePath, string id, string version)

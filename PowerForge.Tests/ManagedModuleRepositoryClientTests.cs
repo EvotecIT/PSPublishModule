@@ -246,6 +246,21 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_uses_absolute_latest_filter_for_nuget_v2_prerelease_search()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        await repositoryClient.SearchPackagesAsync(repository, "Company.*", includePrerelease: true, take: 10);
+
+        Assert.Contains(
+            requests,
+            request => request.Url == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsAbsoluteLatestVersion&$top=10");
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_applies_basic_credentials_to_repository_requests()
     {
         var requests = new List<RecordedRequest>();
@@ -384,6 +399,30 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
         Assert.Equal(0, result.RedirectCount);
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
+    }
+
+    [Fact]
+    public async Task PlanInstallAsync_enriches_nuget_v3_version_with_package_license_metadata()
+    {
+        var requests = new List<RecordedRequest>();
+        using var moduleRoot = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json"),
+            Name = "Company.Tools",
+            Version = "1.1.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.True(plan.LicenseAcceptanceRequired);
+        Assert.Equal("expression:MIT", plan.License);
+        Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
     }
 
     [Fact]
@@ -884,6 +923,13 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties><d:Id>Other.Module</d:Id><d:Version>9.0.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
+            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsAbsoluteLatestVersion&$top=10")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
+                    "<entry><content><m:properties><d:Id>Company.Tools</d:Id><d:Version>1.2.0-preview1</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
             if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/Packages()?$filter=substringof('Pester',Id)%20and%20IsLatestVersion&$top=100")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
@@ -897,7 +943,7 @@ public sealed class ManagedModuleRepositoryClientTests
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg")
             {
-                var bytes = TestPackageFactory.CreateBytes("Company.Tools", "1.1.0");
+                var bytes = TestPackageFactory.CreateBytes("Company.Tools", "1.1.0", requireLicenseAcceptance: true);
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)

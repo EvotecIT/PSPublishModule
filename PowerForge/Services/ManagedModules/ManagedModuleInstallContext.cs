@@ -198,13 +198,28 @@ internal sealed class ManagedModuleInstallContext
 
         try
         {
-            return Directory.GetDirectories(moduleFolder)
+            var versions = Directory.GetDirectories(moduleFolder)
                 .Select(Path.GetFileName)
                 .Where(static version => !string.IsNullOrWhiteSpace(version))
                 .Select(static version => version!)
                 .Where(static version => !IsManagedStageDirectory(version))
+                .Where(static version => IsInstalledVersionDirectory(version))
                 .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
                 .ToArray();
+            if (versions.Length > 0)
+                return versions;
+
+            var manifestPath = Path.Combine(moduleFolder, moduleName.Trim() + ".psd1");
+            if (!File.Exists(manifestPath))
+                manifestPath = Directory.EnumerateFiles(moduleFolder, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(manifestPath))
+                return Array.Empty<string>();
+
+            var manifestVersion = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ModuleVersion");
+            return IsInstalledVersionDirectory(manifestVersion)
+                ? new[] { manifestVersion!.Trim() }
+                : Array.Empty<string>();
         }
         catch (IOException)
         {
@@ -218,6 +233,26 @@ internal sealed class ManagedModuleInstallContext
 
     internal static bool IsManagedStageDirectory(string directoryName)
         => directoryName.StartsWith(".pfmm-stage-", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsInstalledVersionDirectory(string? directoryName)
+    {
+        if (string.IsNullOrWhiteSpace(directoryName))
+            return false;
+
+        var value = directoryName.Trim();
+        var plusIndex = value.IndexOf('+');
+        if (plusIndex >= 0)
+            value = value.Substring(0, plusIndex);
+
+        var dashIndex = value.IndexOf('-');
+        var numeric = dashIndex >= 0 ? value.Substring(0, dashIndex) : value;
+        if (numeric.Length == 0)
+            return false;
+
+        var parts = numeric.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 0 &&
+               parts.All(static part => part.Length > 0 && part.All(static character => character >= '0' && character <= '9'));
+    }
 
     private bool WouldCreateWaitCycle(ManagedModuleInstallPending pending)
     {

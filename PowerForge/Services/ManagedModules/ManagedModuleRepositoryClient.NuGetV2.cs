@@ -258,8 +258,9 @@ public sealed partial class ManagedModuleRepositoryClient
         var filter = ShouldUsePrefixFilter(pattern)
             ? $"startswith(Id,'{escapedSearch}')"
             : $"substringof('{escapedSearch}',Id)";
-        if (!includePrerelease)
-            filter += " and IsLatestVersion";
+        filter += includePrerelease
+            ? " and IsAbsoluteLatestVersion"
+            : " and IsLatestVersion";
 
         return new Uri(
             new Uri(EnsureTrailingSlash(source)),

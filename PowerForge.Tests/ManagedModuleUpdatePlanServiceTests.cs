@@ -104,6 +104,50 @@ public sealed class ManagedModuleUpdatePlanServiceTests
     }
 
     [Fact]
+    public async Task PlanUpdateAsync_rejects_missing_exact_repository_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.Version = "9.9.9";
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PlanUpdateAsync(request));
+
+        Assert.Contains("9.9.9", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PlanUpdateAsync_filters_flat_layout_child_folders_from_installed_versions()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.2.0.nupkg"),
+            "Company.Tools",
+            "1.2.0",
+            files: CreateModuleFiles("1.2.0"));
+        var flatModulePath = Path.Combine(moduleRoot.Path, "Company.Tools");
+        Directory.CreateDirectory(Path.Combine(flatModulePath, "en-US"));
+        Directory.CreateDirectory(Path.Combine(flatModulePath, "bin"));
+        File.WriteAllText(Path.Combine(flatModulePath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        var service = new ManagedModuleUpdateService(new NullLogger());
+
+        var plan = await service.PlanUpdateAsync(CreateRequest(feed.Path, moduleRoot.Path));
+
+        Assert.Equal(ManagedModuleUpdatePlanAction.Update, plan.Action);
+        Assert.Equal("1.0.0", plan.PreviousVersion);
+        Assert.Equal(new[] { "1.0.0" }, plan.InstalledVersions);
+        Assert.Equal("1.2.0", plan.TargetVersion);
+    }
+
+    [Fact]
     public async Task PlanUpdateAsync_preserves_requested_version_policy()
     {
         using var feed = new TemporaryDirectory();

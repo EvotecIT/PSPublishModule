@@ -245,6 +245,51 @@ public sealed partial class ManagedModuleRepositoryClient
     public ManagedModulePackageMetadata ReadPackageMetadata(string packagePath)
         => _packageReader.ReadMetadata(packagePath);
 
+    /// <summary>
+    /// Reads package metadata for one exact package version, downloading the package to a temporary location when repository indexes omit metadata.
+    /// </summary>
+    /// <param name="repository">Repository to query.</param>
+    /// <param name="packageId">Package id.</param>
+    /// <param name="version">Package version.</param>
+    /// <param name="credential">Optional repository credential.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Package metadata, or <c>null</c> when the package could not be read.</returns>
+    public async Task<ManagedModulePackageMetadata?> GetPackageMetadataAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        string version,
+        RepositoryCredential? credential = null,
+        CancellationToken cancellationToken = default)
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "managed-module-metadata", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempRoot);
+            var download = await DownloadPackageAsync(
+                repository,
+                packageId,
+                version,
+                tempRoot,
+                credential,
+                cancellationToken).ConfigureAwait(false);
+
+            return download.Metadata;
+        }
+        catch (ManagedModuleRepositoryException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            _logger.Verbose($"Managed module metadata read skipped '{packageId}' {version}: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            ManagedModuleExtractedPackageCache.DeleteDirectoryQuietly(tempRoot);
+        }
+    }
+
     private async Task<IReadOnlyList<ManagedModuleVersionInfo>> GetNuGetVersionsWithPowerShellGalleryReadApiAsync(
         ManagedModuleRepository repository,
         string packageId,

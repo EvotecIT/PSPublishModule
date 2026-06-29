@@ -52,7 +52,7 @@ public sealed class ManagedModuleUpdateService
         var action = ResolvePlanAction(currentVersion, targetVersion, request.Force, sourceEvaluation);
         ThrowIfSourcePolicyBlocked(action, sourceEvaluation);
         var targetWouldWrite = ActionWritesFiles(action);
-        var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, cancellationToken).ConfigureAwait(false);
+        var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, resolvePackageMetadata: false, cancellationToken).ConfigureAwait(false);
         ThrowIfFamilyPlanBlocked(familyActions);
 
         if (!targetWouldWrite && !familyActions.Any(static action => action.WouldWriteFiles))
@@ -148,7 +148,7 @@ public sealed class ManagedModuleUpdateService
         var currentModulePath = currentVersion is null ? null : Path.Combine(moduleRoot, request.Name.Trim(), currentVersion);
         var sourceEvaluation = EvaluateSourcePolicy(request, currentModulePath);
         var action = ResolvePlanAction(currentVersion, targetVersion, request.Force, sourceEvaluation);
-        var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, cancellationToken).ConfigureAwait(false);
+        var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, resolvePackageMetadata: true, cancellationToken).ConfigureAwait(false);
         var selectedPathVersion = action is ManagedModuleUpdatePlanAction.SkipUpToDate or ManagedModuleUpdatePlanAction.SourceMismatchBlocked && currentVersion is not null
             ? currentVersion
             : targetVersion;
@@ -247,6 +247,7 @@ public sealed class ManagedModuleUpdateService
         string moduleRoot,
         ManagedModuleUpdateRequest request,
         string targetVersion,
+        bool resolvePackageMetadata,
         CancellationToken cancellationToken)
     {
         var policy = request.FamilyPolicy;
@@ -271,6 +272,7 @@ public sealed class ManagedModuleUpdateService
                 request,
                 familyName,
                 targetVersion,
+                resolvePackageMetadata,
                 cancellationToken).ConfigureAwait(false);
             var repositoryVersionAvailable = repositoryVersion is not null;
             var action = ResolveFamilyPlanAction(currentVersion, targetVersion, request.Force, repositoryVersionAvailable);
@@ -303,6 +305,7 @@ public sealed class ManagedModuleUpdateService
         ManagedModuleUpdateRequest request,
         string moduleName,
         string targetVersion,
+        bool resolvePackageMetadata,
         CancellationToken cancellationToken)
     {
         var versions = await _repositoryClient.GetVersionsAsync(
@@ -311,7 +314,38 @@ public sealed class ManagedModuleUpdateService
             request.IncludePrerelease || ContainsPrereleaseLabel(targetVersion),
             request.Credential,
             cancellationToken).ConfigureAwait(false);
-        return versions.FirstOrDefault(version => version.Version.Equals(targetVersion, StringComparison.OrdinalIgnoreCase));
+        var repositoryVersion = versions.FirstOrDefault(version => version.Version.Equals(targetVersion, StringComparison.OrdinalIgnoreCase));
+        if (repositoryVersion is null)
+            return null;
+
+        return resolvePackageMetadata
+            ? await EnrichVersionInfoWithPackageMetadataAsync(
+                request.Repository,
+                repositoryVersion,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false)
+            : repositoryVersion;
+    }
+
+    private async Task<ManagedModuleVersionInfo?> TryResolveRepositoryVersionWithPackageMetadataAsync(
+        ManagedModuleUpdateRequest request,
+        string moduleName,
+        string targetVersion,
+        CancellationToken cancellationToken)
+    {
+        var repositoryVersion = await TryResolveRepositoryVersionAsync(
+            request,
+            moduleName,
+            targetVersion,
+            resolvePackageMetadata: false,
+            cancellationToken).ConfigureAwait(false);
+        return repositoryVersion is null
+            ? null
+            : await EnrichVersionInfoWithPackageMetadataAsync(
+                request.Repository,
+                repositoryVersion,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false);
     }
 
     private static void ThrowIfLoadedModuleBlocksUpdate(
@@ -362,13 +396,16 @@ public sealed class ManagedModuleUpdateService
             var exactVersion = request.Version!.Trim();
             if (resolveExactMetadata)
             {
-                var exactMatch = await TryResolveRepositoryVersionAsync(
+                var exactMatch = await TryResolveRepositoryVersionWithPackageMetadataAsync(
                     request,
                     request.Name,
                     exactVersion,
                     cancellationToken).ConfigureAwait(false);
                 if (exactMatch is not null)
                     return exactMatch;
+
+                throw new InvalidOperationException(
+                    $"Version '{exactVersion}' of '{request.Name}' was not found in repository '{request.Repository.Name}'.");
             }
 
             return CreateRequestedVersionInfo(request, exactVersion);
@@ -388,8 +425,51 @@ public sealed class ManagedModuleUpdateService
         if (latest is null)
             throw new InvalidOperationException($"No versions of '{request.Name}' satisfying range '{range}' were found in repository '{request.Repository.Name}'.");
 
-        return latest;
+        return resolveExactMetadata
+            ? await EnrichVersionInfoWithPackageMetadataAsync(
+                request.Repository,
+                latest,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false)
+            : latest;
     }
+
+    private async Task<ManagedModuleVersionInfo> EnrichVersionInfoWithPackageMetadataAsync(
+        ManagedModuleRepository repository,
+        ManagedModuleVersionInfo versionInfo,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        if (versionInfo.RequireLicenseAcceptance || !string.IsNullOrWhiteSpace(versionInfo.License))
+            return versionInfo;
+
+        var metadata = await _repositoryClient.GetPackageMetadataAsync(
+            repository,
+            versionInfo.Name,
+            versionInfo.Version,
+            credential,
+            cancellationToken).ConfigureAwait(false);
+
+        return metadata is null
+            ? versionInfo
+            : CopyVersionInfoWithPackageMetadata(versionInfo, metadata);
+    }
+
+    private static ManagedModuleVersionInfo CopyVersionInfoWithPackageMetadata(
+        ManagedModuleVersionInfo versionInfo,
+        ManagedModulePackageMetadata metadata)
+        => new()
+        {
+            Name = versionInfo.Name,
+            Version = versionInfo.Version,
+            RepositoryName = versionInfo.RepositoryName,
+            RepositorySource = versionInfo.RepositorySource,
+            PackageSource = versionInfo.PackageSource,
+            IsPrerelease = versionInfo.IsPrerelease,
+            Listed = versionInfo.Listed,
+            License = metadata.License,
+            RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
+        };
 
     private static ManagedModuleVersionInfo CreateRequestedVersionInfo(ManagedModuleUpdateRequest request, string version)
         => new()

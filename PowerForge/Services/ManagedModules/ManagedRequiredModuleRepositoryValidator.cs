@@ -227,7 +227,8 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             return versions.Any(version => range.IsSatisfiedBy(version.Version));
         }
         catch (Exception ex) when (ModulePublisher.IsRepositoryPackageNotFound(packageId, ex) ||
-                                   ex is DirectoryNotFoundException)
+                                   ex is DirectoryNotFoundException ||
+                                   IsMissingLocalRepository(ex))
         {
             return false;
         }
@@ -245,6 +246,14 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             packageId,
             ManagedModuleVersionRange.Parse("[" + version + "]"),
             cancellationToken);
+
+    private static bool IsMissingLocalRepository(Exception exception)
+        => exception is ManagedModuleRepositoryException
+        {
+            Operation: "VersionQuery",
+            StatusCode: null
+        } managedException &&
+        managedException.Message.Contains("Local repository folder was not found", StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<ManagedModuleDependencyInfo> SelectPackageDependencies(ManagedModulePackageMetadata? metadata)
     {

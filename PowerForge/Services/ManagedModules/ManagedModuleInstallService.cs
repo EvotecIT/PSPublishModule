@@ -100,8 +100,9 @@ public sealed partial class ManagedModuleInstallService
         bool exists,
         ManagedModuleVersionInfo? versionInfo = null)
     {
+        var requiresVerifiedPackage = !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256);
         var action = exists
-            ? request.Force ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
+            ? request.Force || requiresVerifiedPackage ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
             : ManagedModuleInstallPlanAction.Install;
 
         return new ManagedModuleInstallPlan
@@ -347,6 +348,8 @@ public sealed partial class ManagedModuleInstallService
         version = string.Empty;
         if (request.Force)
             return false;
+        if (!string.IsNullOrWhiteSpace(request.ExpectedPackageSha256))
+            return false;
 
         var installedVersion = GetInstalledVersions(moduleRoot, request.Name, context)
             .Where(candidate => AllowsInstalledNoOpVersion(candidate, request))
@@ -371,6 +374,9 @@ public sealed partial class ManagedModuleInstallService
 
         return range.IsSatisfiedBy(version);
     }
+
+    private static bool RequiresVerifiedPackage(ManagedModuleInstallRequest request)
+        => !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256);
 
     private async Task<ManagedModuleInstallResult> InstallResolvedAsync(
         ManagedModuleInstallRequest request,
@@ -398,7 +404,7 @@ public sealed partial class ManagedModuleInstallService
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedLockWaitElapsed))
             {
                 installLockWaitElapsed += resolvedLockWaitElapsed;
-                if (Directory.Exists(modulePath) && !request.Force)
+                if (Directory.Exists(modulePath) && !request.Force && !RequiresVerifiedPackage(request))
                 {
                     _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
                     context.RecordInstalledVersion(moduleRoot, request.Name, version);
@@ -493,7 +499,7 @@ public sealed partial class ManagedModuleInstallService
                 {
                     promotionLockWaitElapsed += resolvedPromotionLockWaitElapsed;
                     installLockWaitElapsed += resolvedPromotionLockWaitElapsed;
-                    if (Directory.Exists(modulePath) && !request.Force)
+                    if (Directory.Exists(modulePath) && !request.Force && !RequiresVerifiedPackage(request))
                     {
                         _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
                         context.RecordInstalledVersion(moduleRoot, request.Name, version);
@@ -644,7 +650,13 @@ public sealed partial class ManagedModuleInstallService
             if (latestVersion is null)
                 throw new InvalidOperationException($"No versions of '{request.Name}' were found in repository '{request.Repository.Name}'.");
 
-            return latestVersion;
+            return resolveExactMetadata
+                ? await EnrichVersionInfoWithPackageMetadataAsync(
+                    request.Repository,
+                    latestVersion,
+                    request.Credential,
+                    cancellationToken).ConfigureAwait(false)
+                : latestVersion;
         }
 
         var versions = await _repositoryClient.GetVersionsAsync(
@@ -660,7 +672,13 @@ public sealed partial class ManagedModuleInstallService
         if (latest is null)
             throw new InvalidOperationException($"No versions of '{request.Name}' satisfying range '{range}' were found in repository '{request.Repository.Name}'.");
 
-        return latest;
+        return resolveExactMetadata
+            ? await EnrichVersionInfoWithPackageMetadataAsync(
+                request.Repository,
+                latest,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false)
+            : latest;
     }
 
     private async Task<ManagedModuleVersionInfo?> TryResolveExactVersionInfoAsync(
@@ -675,8 +693,52 @@ public sealed partial class ManagedModuleInstallService
             request.Credential,
             cancellationToken).ConfigureAwait(false);
 
-        return versions.FirstOrDefault(version => version.Version.Equals(exactVersion, StringComparison.OrdinalIgnoreCase));
+        var exactMatch = versions.FirstOrDefault(version => version.Version.Equals(exactVersion, StringComparison.OrdinalIgnoreCase));
+        return exactMatch is null
+            ? null
+            : await EnrichVersionInfoWithPackageMetadataAsync(
+                request.Repository,
+                exactMatch,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false);
     }
+
+    private async Task<ManagedModuleVersionInfo> EnrichVersionInfoWithPackageMetadataAsync(
+        ManagedModuleRepository repository,
+        ManagedModuleVersionInfo versionInfo,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        if (versionInfo.RequireLicenseAcceptance || !string.IsNullOrWhiteSpace(versionInfo.License))
+            return versionInfo;
+
+        var metadata = await _repositoryClient.GetPackageMetadataAsync(
+            repository,
+            versionInfo.Name,
+            versionInfo.Version,
+            credential,
+            cancellationToken).ConfigureAwait(false);
+
+        return metadata is null
+            ? versionInfo
+            : CopyVersionInfoWithPackageMetadata(versionInfo, metadata);
+    }
+
+    private static ManagedModuleVersionInfo CopyVersionInfoWithPackageMetadata(
+        ManagedModuleVersionInfo versionInfo,
+        ManagedModulePackageMetadata metadata)
+        => new()
+        {
+            Name = versionInfo.Name,
+            Version = versionInfo.Version,
+            RepositoryName = versionInfo.RepositoryName,
+            RepositorySource = versionInfo.RepositorySource,
+            PackageSource = versionInfo.PackageSource,
+            IsPrerelease = versionInfo.IsPrerelease,
+            Listed = versionInfo.Listed,
+            License = metadata.License,
+            RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
+        };
 
     private static ManagedModuleVersionInfo CreateRequestedVersionInfo(ManagedModuleInstallRequest request, string version)
         => new()
