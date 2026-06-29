@@ -418,6 +418,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-29: The corrected full PowerShell 7 `Graph.Full.ProviderMatrix` install proof measured managed first at 5080 ms, ModuleFast at 7133 ms, PSResourceGet at 53379 ms, and PowerShellGet at 67082 ms. All four engines succeeded under provider-default execution, so this is the clean full-Graph default-provider scoreboard after the ModuleFast source-default fix.
 - [x] 2026-06-29: The corrected full PowerShell 7 `Az.Full.ProviderMatrix` install proof measured managed first at 6928 ms while PSResourceGet and PowerShellGet completed at 149062 ms and 140901 ms. ModuleFast still failed under provider-default execution because its own default path could not resolve `Az.DataTransfer(1.0.0)` from `https://pwsh.gallery/index.json`. Keep this as compatibility/source evidence: managed can install full Az quickly and the native providers complete slowly, but the current ModuleFast full-Az row is not a successful speed comparison.
 - [x] 2026-06-29: `RepairGate` now promotes repair planning into named suite scenarios for stale versions, source drift, scope drift, family coherence, loaded-module safety, and cleanup planning. The focused loaded-module safety and cleanup planning proof passed with strict managed-rank gates on PowerShell 7 and Windows PowerShell 5.1: loaded-module safety planned in 678 ms on PowerShell 7 and 712 ms on Windows PowerShell 5.1 with one action and three findings; cleanup planning planned in 660 ms and 663 ms with two actions and two findings. ModuleFast, PSResourceGet, and PowerShellGet remain explicit skips because they do not expose equivalent module-estate repair planning.
+- [x] 2026-06-29: The benchmark README now separates install scoreboards, save scoreboards, and managed-only save cache diagnosis so full-family save evidence is not confused with install lifecycle rows. Install speed claims include ModuleFast where it has an equivalent command; save speed claims compare against `Save-Module` and `Save-PSResource`, while `HeavySaveCacheGate` remains a managed-only materialization microscope.
 
 ### Next Optimization Targets
 
@@ -460,7 +461,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 ### Compatibility Semantics Gates
 
 - [x] Define and test exact `-Force` behavior for install/save/update exact-version reinstall, update reinstall, no-op, downgrade blocking, and no implied cleanup.
-- [ ] Define and test exact `-Force` behavior for repair, receipt repair, cleanup planning, and explicit downgrade policy.
+- [x] Define and test exact `-Force` behavior for repair, receipt repair, cleanup planning, and explicit downgrade policy.
 - [x] Define and test exact `-AllowClobber` behavior versus PSResourceGet `-NoClobber` for manifest-declared command conflicts in the selected target root.
 - [ ] Define repair-time cross-scope command-conflict behavior so estate maintenance can report conflicts beyond one install target root without surprising normal installs.
 - [x] Define and test exact `-AcceptLicense` behavior for root modules, dependencies, and unattended managed delivery.

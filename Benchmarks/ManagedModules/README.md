@@ -42,13 +42,15 @@ Use repeated, rotated engine order for fairer timing:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite Graph -ScenarioName Graph.Full -HostName PowerShell7 -Operation Find -RepeatCount 3 -RotateEngineOrder
 ```
 
+### Install Scoreboards
+
 Run the named same-source Graph install speed gate against ModuleFast:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SpeedGate -ScenarioName Graph.Full.SameSource -HostName PowerShell7 -RepeatCount 3 -RotateEngineOrder -UseScenarioGates -RemoveOutputRoots -SkipBuild
 ```
 
-Run the Graph install provider matrix with ModuleFast, PSResourceGet, and PowerShellGet in the comparison. This is the best scoreboard for seeing whether managed install is beating the common provider stack, while the same-source row stays the strict Managed-vs-ModuleFast gate:
+Run the Graph install provider matrix with ModuleFast, PSResourceGet, and PowerShellGet in the comparison. This is the best install scoreboard for seeing whether managed install is beating the common provider stack, while the same-source row stays the strict Managed-vs-ModuleFast gate:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SpeedGate -ScenarioName Graph.Full.ProviderMatrix -HostName PowerShell7 -RepeatCount 1 -RotateEngineOrder -RemoveOutputRoots -SkipBuild
@@ -60,6 +62,8 @@ Run the Az provider matrix. `Az.Accounts.ProviderMatrix` is the shorter proof la
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SpeedGate -ScenarioName Az.Accounts.ProviderMatrix -HostName PowerShell7 -RepeatCount 1 -RotateEngineOrder -RemoveOutputRoots -SkipBuild
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite SpeedGate -ScenarioName Az.Full.ProviderMatrix -HostName PowerShell7 -RepeatCount 1 -RotateEngineOrder -RemoveOutputRoots -SkipBuild
 ```
+
+### Save Scoreboards
 
 Run the named Graph.Authentication save stability gate across PowerShell 7 and Windows PowerShell 5.1. The scenario-owned gate is strict: managed must rank first on each host.
 
@@ -91,21 +95,23 @@ Run the heavy full-family no-op/force install gates only when validating a broad
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavyLifecycleGate -ScenarioName Graph.Full.InstallExact.NoOpForce,Az.Full.InstallExact.NoOpForce -HostName PowerShell7 -RepeatCount 3 -RotateEngineOrder -CacheMode Warm -UseScenarioGates -RemoveOutputRoots -SkipBuild
 ```
 
-Run the heavy full-family save gates when validating broad save throughput separately from install lifecycle behavior. These rows compare managed against save-capable providers; ModuleFast is intentionally not included because it does not expose an equivalent save command:
+Run the heavy full-family save gates when validating broad save throughput separately from install lifecycle behavior. These rows are the official full-family save scoreboard: managed is compared against save-capable providers only. ModuleFast is intentionally not included because it does not expose an equivalent save command:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveGate -ScenarioName Graph.Full.Save -HostName PowerShell7 -RepeatCount 1 -RotateEngineOrder -UseScenarioGates -RemoveOutputRoots -SkipBuild
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveGate -ScenarioName Az.Full.Save -HostName PowerShell7 -RepeatCount 1 -RotateEngineOrder -UseScenarioGates -RemoveOutputRoots -SkipBuild
 ```
 
-Run the managed-only heavy save cache lane when separating package download/source cost from repeated save materialization. These scenarios default to `CacheMode=Warm` and `RepeatCount=2`; command-line `-CacheMode` or `-RepeatCount` still override those defaults for experiments. Read `ManagedCacheHits` as package-cache reuse and `ManagedExtractionCacheHits` as expanded-payload reuse:
+### Managed Save Cache Diagnosis
+
+Run the managed-only heavy save cache lane when separating package download/source cost from repeated save materialization. This is not a provider scoreboard. These scenarios default to `CacheMode=Warm` and `RepeatCount=2`; command-line `-CacheMode` or `-RepeatCount` still override those defaults for experiments. Read `ManagedCacheHits` as package-cache reuse and `ManagedExtractionCacheHits` as expanded-payload reuse:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveCacheGate -ScenarioName Graph.Full.Save.ManagedWarmCache -HostName PowerShell7 -RemoveOutputRoots -SkipBuild
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveCacheGate -ScenarioName Az.Full.Save.ManagedWarmCache -HostName PowerShell7 -RemoveOutputRoots -SkipBuild
 ```
 
-Do not read `HeavySaveCacheGate` as managed losing a save race. It is a managed-only microscope for finding remaining cost after downloads disappear. The official save scoreboard is `HeavySaveGate`, where managed is compared with save-capable providers and currently ranks first in the recorded Graph and Az full-family evidence. ModuleFast is install-only in this benchmark suite, so install speed claims include it, while save speed claims compare against `Save-Module` and `Save-PSResource`.
+Do not read `HeavySaveCacheGate` as managed losing a save race. It is a managed-only microscope for finding remaining cost after downloads disappear. Full-family save still has to materialize the module tree into a fresh destination, while install no-op/force rows often do little or no disk work because the selected modules are already present. The official save scoreboard is `HeavySaveGate`, where managed is compared with save-capable providers and currently ranks first in the recorded Graph and Az full-family evidence. ModuleFast is install-only in this benchmark suite, so install speed claims include it, while save speed claims compare against `Save-Module` and `Save-PSResource`.
 
 Run the publish evidence lane against local folder feeds. The fixture module and feed are synthetic and benchmark-owned, repository registration happens outside the timed publish operation, and ModuleFast is kept as an explicit skipped row because it has no publish command:
 
