@@ -144,6 +144,11 @@ function New-ManagedOptimizationTarget {
         $lastRootDependencyUnattributedMs = if ($row.PSObject.Properties['ManagedLastRootDependencyUnattributedMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyUnattributedMs } else { 0.0 }
         $lastRootDependencyCriticalPathGapMs = if ($row.PSObject.Properties['ManagedLastRootDependencyCriticalPathGapMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyCriticalPathGapMs } else { $lastRootDependencyUnattributedMs }
         $lastDependencyBranchParallelismRatio = if ($row.PSObject.Properties['ManagedLastDependencyBranchParallelismRatio']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyBranchParallelismRatio } else { 0.0 }
+        $dependencyBranchElapsedMs = if ($row.PSObject.Properties['ManagedDependencyBranchElapsedMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDependencyBranchElapsedMs } else { 0.0 }
+        $dependencyBranchOverheadMs = if ($row.PSObject.Properties['ManagedDependencyBranchOverheadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDependencyBranchOverheadMs } else { 0.0 }
+        $firstDependencyBranchElapsedMs = if ($row.PSObject.Properties['ManagedFirstDependencyBranchElapsedMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstDependencyBranchElapsedMs } else { 0.0 }
+        $lastDependencyBranchElapsedMs = if ($row.PSObject.Properties['ManagedLastDependencyBranchElapsedMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyBranchElapsedMs } else { 0.0 }
+        $lastDependencyBranchOverheadMs = if ($row.PSObject.Properties['ManagedLastDependencyBranchOverheadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyBranchOverheadMs } else { 0.0 }
         $lastDownloadMs = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 }
         $lastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
         $lastPromotionMoveMs = if ($row.PSObject.Properties['ManagedLastPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMoveMs } else { 0.0 }
@@ -235,6 +240,8 @@ function New-ManagedOptimizationTarget {
             RootDependencyMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootDependencyMs), 2)
             RootDependencyUnattributedMs = if ($row.PSObject.Properties['ManagedRootDependencyUnattributedMs']) { [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootDependencyUnattributedMs), 2) } else { 0.0 }
             DependencyQueueWaitMs = if ($row.PSObject.Properties['ManagedDependencyQueueWaitMs']) { [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDependencyQueueWaitMs), 2) } else { 0.0 }
+            DependencyBranchElapsedMs = [math]::Round($dependencyBranchElapsedMs, 2)
+            DependencyBranchOverheadMs = [math]::Round($dependencyBranchOverheadMs, 2)
             DependencyMs = if ($row.PSObject.Properties['ManagedDependencyMs']) { [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDependencyMs), 2) } else { 0.0 }
             DownloadMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadMs), 2)
             ExtractionMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionMs), 2)
@@ -305,6 +312,9 @@ function New-ManagedOptimizationTarget {
             LastRootDependencyUnattributedMs = $lastRootDependencyUnattributedMs
             LastRootDependencyCriticalPathGapMs = $lastRootDependencyCriticalPathGapMs
             LastDependencyBranchParallelismRatio = $lastDependencyBranchParallelismRatio
+            FirstDependencyBranchElapsedMs = $firstDependencyBranchElapsedMs
+            LastDependencyBranchElapsedMs = $lastDependencyBranchElapsedMs
+            LastDependencyBranchOverheadMs = $lastDependencyBranchOverheadMs
             LastDependencyQueueWaitMs = $lastDependencyQueueWaitMs
             LastDependencyMs = $lastDependencyMs
             LastDownloadMs = $lastDownloadMs

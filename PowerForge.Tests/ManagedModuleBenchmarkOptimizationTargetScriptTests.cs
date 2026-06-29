@@ -186,6 +186,8 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedRootElapsedMs = '3900'
                     ManagedHarnessOverheadMs = '100'
                     ManagedRootDependencyMs = '3500'
+                    ManagedDependencyBranchElapsedMs = '9800'
+                    ManagedDependencyBranchOverheadMs = '5600'
                     ManagedDependencyMs = '4600'
                     ManagedDownloadMs = '0'
                     ManagedExtractionMs = '700'
@@ -201,6 +203,9 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastRootDependencyMs = '3300'
                     ManagedLastRootDependencyCriticalPathGapMs = '2400'
                     ManagedLastDependencyBranchParallelismRatio = '7.1'
+                    ManagedFirstDependencyBranchElapsedMs = '11200'
+                    ManagedLastDependencyBranchElapsedMs = '9200'
+                    ManagedLastDependencyBranchOverheadMs = '5000'
                     ManagedLastDependencyMs = '4200'
                     ManagedLastDownloadMs = '0'
                     ManagedLastExtractionMs = '600'
@@ -249,6 +254,11 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(3300.0, NumericProperty(row, "LastCriticalRootBranchMs"));
         Assert.Equal(2400.0, NumericProperty(row, "LastRootDependencyCriticalPathGapMs"));
         Assert.Equal(7.1, NumericProperty(row, "LastDependencyBranchParallelismRatio"));
+        Assert.Equal(9800.0, NumericProperty(row, "DependencyBranchElapsedMs"));
+        Assert.Equal(5600.0, NumericProperty(row, "DependencyBranchOverheadMs"));
+        Assert.Equal(11200.0, NumericProperty(row, "FirstDependencyBranchElapsedMs"));
+        Assert.Equal(9200.0, NumericProperty(row, "LastDependencyBranchElapsedMs"));
+        Assert.Equal(5000.0, NumericProperty(row, "LastDependencyBranchOverheadMs"));
         Assert.Equal("Az.Advisor", Property(row, "LastCriticalDependencyBranch"));
         Assert.Equal(900.0, NumericProperty(row, "LastCriticalDependencyBranchMs"));
         Assert.Equal("Az.Files", Property(row, "LastCriticalMaterializationBranch"));
