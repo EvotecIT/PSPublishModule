@@ -86,6 +86,11 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan VersionResolutionElapsed { get; set; }
 
     /// <summary>
+    /// Elapsed time spent waiting for another branch in the same install graph to select a dependency version.
+    /// </summary>
+    public TimeSpan VersionSelectionWaitElapsed { get; set; }
+
+    /// <summary>
     /// Elapsed time spent waiting for another in-flight install of the same resolved module target.
     /// </summary>
     public TimeSpan CoalescedWaitElapsed { get; set; }

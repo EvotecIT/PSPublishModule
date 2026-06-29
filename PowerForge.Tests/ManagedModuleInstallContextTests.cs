@@ -66,8 +66,10 @@ public sealed class ManagedModuleInstallContextTests
                 return Task.FromResult("1.3.0");
             });
 
-        Assert.Equal("1.2.0", selected);
-        Assert.Equal("1.2.0", branchSelected);
+        Assert.Equal("1.2.0", selected.Version);
+        Assert.False(selected.Shared);
+        Assert.Equal("1.2.0", branchSelected.Version);
+        Assert.True(branchSelected.Shared);
         Assert.Equal(2, attempts);
     }
 }

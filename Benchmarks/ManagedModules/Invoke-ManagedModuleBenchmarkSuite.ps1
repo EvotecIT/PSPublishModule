@@ -596,6 +596,7 @@ function Add-SummaryRows {
                 ManagedSlowestInstallLockWaitMs = $row.ManagedSlowestInstallLockWaitMs
                 ManagedSlowestDependencyPackageMs = $row.ManagedSlowestDependencyPackageMs
                 ManagedSlowestDependencyQueueWaitMs = $row.ManagedSlowestDependencyQueueWaitMs
+                ManagedSlowestVersionSelectionWaitMs = $row.ManagedSlowestVersionSelectionWaitMs
                 ManagedSlowestMaterializedPackageMs = $row.ManagedSlowestMaterializedPackageMs
                 ManagedCriticalDependencyBranchMs = $row.ManagedCriticalDependencyBranchMs
                 ManagedCriticalRootBranchMs = $row.ManagedCriticalRootBranchMs
@@ -610,6 +611,8 @@ function Add-SummaryRows {
                 ManagedLastRootDependencyMs = $row.ManagedLastRootDependencyMs
                 ManagedFirstRootDependencyUnattributedMs = $row.ManagedFirstRootDependencyUnattributedMs
                 ManagedLastRootDependencyUnattributedMs = $row.ManagedLastRootDependencyUnattributedMs
+                ManagedFirstVersionSelectionWaitMs = $row.ManagedFirstVersionSelectionWaitMs
+                ManagedLastVersionSelectionWaitMs = $row.ManagedLastVersionSelectionWaitMs
                 ManagedFirstDependencyQueueWaitMs = $row.ManagedFirstDependencyQueueWaitMs
                 ManagedLastDependencyQueueWaitMs = $row.ManagedLastDependencyQueueWaitMs
                 ManagedFirstDependencyBranchElapsedMs = $row.ManagedFirstDependencyBranchElapsedMs
@@ -661,6 +664,8 @@ function Add-SummaryRows {
                 ManagedLastSlowestDependencyPackageMs = $row.ManagedLastSlowestDependencyPackageMs
                 ManagedLastSlowestDependencyQueueWaitName = $row.ManagedLastSlowestDependencyQueueWaitName
                 ManagedLastSlowestDependencyQueueWaitMs = $row.ManagedLastSlowestDependencyQueueWaitMs
+                ManagedLastSlowestVersionSelectionWaitName = $row.ManagedLastSlowestVersionSelectionWaitName
+                ManagedLastSlowestVersionSelectionWaitMs = $row.ManagedLastSlowestVersionSelectionWaitMs
                 ManagedLastSlowestMaterializedPackageName = $row.ManagedLastSlowestMaterializedPackageName
                 ManagedLastSlowestMaterializedPackageMs = $row.ManagedLastSlowestMaterializedPackageMs
                 ManagedLastSlowestMaterializedPackageExtractionMs = $row.ManagedLastSlowestMaterializedPackageExtractionMs
@@ -691,6 +696,7 @@ function Add-SummaryRows {
                 ManagedMaintenanceFindings = $row.ManagedMaintenanceFindings
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs
                 ManagedRootDependencyUnattributedMs = $row.ManagedRootDependencyUnattributedMs
+                ManagedVersionSelectionWaitMs = $row.ManagedVersionSelectionWaitMs
                 ManagedDependencyQueueWaitMs = $row.ManagedDependencyQueueWaitMs
                 ManagedDependencyBranchElapsedMs = $row.ManagedDependencyBranchElapsedMs
                 ManagedDependencyBranchOverheadMs = $row.ManagedDependencyBranchOverheadMs

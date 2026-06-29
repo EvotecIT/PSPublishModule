@@ -144,7 +144,7 @@ public sealed partial class ManagedModuleInstallService
             {
                 Repository = request.Repository,
                 Name = dependency.Id,
-                Version = dependencyVersion,
+                Version = dependencyVersion.Version,
                 VersionPolicy = null,
                 IncludePrerelease = request.IncludePrerelease || range.AllowsPrerelease,
                 Scope = request.Scope,
@@ -162,7 +162,10 @@ public sealed partial class ManagedModuleInstallService
             },
             context,
             cancellationToken).ConfigureAwait(false);
-        result.VersionResolutionElapsed += dependencyVersionStopwatch.Elapsed;
+        if (dependencyVersion.Shared)
+            result.VersionSelectionWaitElapsed += dependencyVersionStopwatch.Elapsed;
+        else
+            result.VersionResolutionElapsed += dependencyVersionStopwatch.Elapsed;
         return result;
     }
 
@@ -227,7 +230,7 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallContext? context = null)
         => context?.GetInstalledVersions(moduleRoot, moduleName) ?? ManagedModuleInstallContext.EnumerateInstalledVersions(moduleRoot, moduleName);
 
-    private async Task<string> ResolveDependencyVersionAsync(
+    private async Task<ManagedModuleDependencyVersionSelection> ResolveDependencyVersionAsync(
         ManagedModuleInstallRequest request,
         string dependencyName,
         ManagedModuleVersionRange range,
@@ -235,7 +238,7 @@ public sealed partial class ManagedModuleInstallService
         CancellationToken cancellationToken)
     {
         if (range.ExactVersion is not null)
-            return range.ExactVersion;
+            return new ManagedModuleDependencyVersionSelection(range.ExactVersion, shared: false);
 
         var includePrerelease = request.IncludePrerelease || range.AllowsPrerelease;
         var cacheKey = TryCreateDependencyVersionSelectionKey(
@@ -256,12 +259,13 @@ public sealed partial class ManagedModuleInstallService
                     cancellationToken)).ConfigureAwait(false);
         }
 
-        return await ResolveDependencyVersionUncachedAsync(
+        var version = await ResolveDependencyVersionUncachedAsync(
             request,
             dependencyName,
             range,
             includePrerelease,
             cancellationToken).ConfigureAwait(false);
+        return new ManagedModuleDependencyVersionSelection(version, shared: false);
     }
 
     private async Task<string> ResolveDependencyVersionUncachedAsync(
