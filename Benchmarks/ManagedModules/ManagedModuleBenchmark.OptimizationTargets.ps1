@@ -119,6 +119,7 @@ function New-ManagedOptimizationTarget {
         $managedMs = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedMs
         $phases = @(
             [pscustomobject]@{ Name = 'RootDependency'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootDependencyMs }
+            [pscustomobject]@{ Name = 'DependencyQueueWait'; Milliseconds = if ($row.PSObject.Properties['ManagedDependencyQueueWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDependencyQueueWaitMs } else { 0.0 } }
             [pscustomobject]@{ Name = 'Dependency'; Milliseconds = if ($row.PSObject.Properties['ManagedDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDependencyMs } else { 0.0 } }
             [pscustomobject]@{ Name = 'Download'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadMs }
             [pscustomobject]@{ Name = 'Extraction'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionMs }
@@ -130,6 +131,7 @@ function New-ManagedOptimizationTarget {
         $lastMs = if ($row.PSObject.Properties['ManagedLastMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastMs } else { 0.0 }
         $lastPhases = @(
             [pscustomobject]@{ Name = 'RootDependency'; Milliseconds = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 } }
+            [pscustomobject]@{ Name = 'DependencyQueueWait'; Milliseconds = if ($row.PSObject.Properties['ManagedLastDependencyQueueWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyQueueWaitMs } else { 0.0 } }
             [pscustomobject]@{ Name = 'Dependency'; Milliseconds = if ($row.PSObject.Properties['ManagedLastDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyMs } else { 0.0 } }
             [pscustomobject]@{ Name = 'Download'; Milliseconds = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 } }
             [pscustomobject]@{ Name = 'Extraction'; Milliseconds = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 } }
@@ -138,6 +140,8 @@ function New-ManagedOptimizationTarget {
         )
         $lastBottleneck = Get-ManagedBenchmarkBottleneck -ManagedMilliseconds $lastMs -Phases $lastPhases
         $lastDependencyMs = if ($row.PSObject.Properties['ManagedLastDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyMs } else { 0.0 }
+        $lastDependencyQueueWaitMs = if ($row.PSObject.Properties['ManagedLastDependencyQueueWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyQueueWaitMs } else { 0.0 }
+        $lastRootDependencyUnattributedMs = if ($row.PSObject.Properties['ManagedLastRootDependencyUnattributedMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyUnattributedMs } else { 0.0 }
         $lastDownloadMs = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 }
         $lastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
         $lastPromotionMoveMs = if ($row.PSObject.Properties['ManagedLastPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMoveMs } else { 0.0 }
@@ -227,6 +231,8 @@ function New-ManagedOptimizationTarget {
             RootElapsedMs = [math]::Round($rootElapsedMs, 2)
             HarnessOverheadMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedHarnessOverheadMs), 2)
             RootDependencyMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootDependencyMs), 2)
+            RootDependencyUnattributedMs = if ($row.PSObject.Properties['ManagedRootDependencyUnattributedMs']) { [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootDependencyUnattributedMs), 2) } else { 0.0 }
+            DependencyQueueWaitMs = if ($row.PSObject.Properties['ManagedDependencyQueueWaitMs']) { [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDependencyQueueWaitMs), 2) } else { 0.0 }
             DependencyMs = if ($row.PSObject.Properties['ManagedDependencyMs']) { [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDependencyMs), 2) } else { 0.0 }
             DownloadMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadMs), 2)
             ExtractionMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionMs), 2)
@@ -263,9 +269,12 @@ function New-ManagedOptimizationTarget {
             LastSlowestInstallLockWait = if ($row.PSObject.Properties['ManagedLastSlowestInstallLockWaitName']) { [string] $row.ManagedLastSlowestInstallLockWaitName } else { '' }
             LastSlowestInstallLockWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestInstallLockWaitMs } else { 0.0 }
             SlowestDependencyPackageMs = if ($row.PSObject.Properties['ManagedSlowestDependencyPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedSlowestDependencyPackageMs } else { 0.0 }
+            SlowestDependencyQueueWaitMs = if ($row.PSObject.Properties['ManagedSlowestDependencyQueueWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedSlowestDependencyQueueWaitMs } else { 0.0 }
             LastSlowestDependencyPackage = if ($row.PSObject.Properties['ManagedLastSlowestDependencyPackageName']) { [string] $row.ManagedLastSlowestDependencyPackageName } else { '' }
             LastSlowestDependencyPackageParent = if ($row.PSObject.Properties['ManagedLastSlowestDependencyPackageParent']) { [string] $row.ManagedLastSlowestDependencyPackageParent } else { '' }
             LastSlowestDependencyPackageMs = if ($row.PSObject.Properties['ManagedLastSlowestDependencyPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestDependencyPackageMs } else { 0.0 }
+            LastSlowestDependencyQueueWait = if ($row.PSObject.Properties['ManagedLastSlowestDependencyQueueWaitName']) { [string] $row.ManagedLastSlowestDependencyQueueWaitName } else { '' }
+            LastSlowestDependencyQueueWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestDependencyQueueWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestDependencyQueueWaitMs } else { 0.0 }
             SlowestMaterializedPackageMs = if ($row.PSObject.Properties['ManagedSlowestMaterializedPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedSlowestMaterializedPackageMs } else { 0.0 }
             LastSlowestMaterializedPackage = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageName']) { [string] $row.ManagedLastSlowestMaterializedPackageName } else { '' }
             LastSlowestMaterializedPackageMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackageMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackageMs } else { 0.0 }
@@ -291,6 +300,8 @@ function New-ManagedOptimizationTarget {
             LastCriticalOptimizationLaneMs = [math]::Round([double] $lastCriticalLane.Milliseconds, 2)
             LastCriticalOptimizationQuestion = [string] $lastCriticalLane.Question
             LastRootDependencyMs = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 }
+            LastRootDependencyUnattributedMs = $lastRootDependencyUnattributedMs
+            LastDependencyQueueWaitMs = $lastDependencyQueueWaitMs
             LastDependencyMs = $lastDependencyMs
             LastDownloadMs = $lastDownloadMs
             LastExtractionMs = $lastExtractionMs
