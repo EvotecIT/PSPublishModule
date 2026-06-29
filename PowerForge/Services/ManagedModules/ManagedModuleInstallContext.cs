@@ -9,6 +9,7 @@ internal sealed class ManagedModuleInstallContext
     private readonly ConcurrentDictionary<string, ManagedModuleInstallPending> _inFlightInstalls;
     private readonly ConcurrentDictionary<string, ManagedModuleInstallResult> _completedInstalls;
     private readonly ConcurrentDictionary<string, string[]> _installedVersions;
+    private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _dependencyVersionSelections;
 
     public ManagedModuleInstallContext()
         : this(
@@ -16,7 +17,8 @@ internal sealed class ManagedModuleInstallContext
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, ManagedModuleInstallPending>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, ManagedModuleInstallResult>(StringComparer.OrdinalIgnoreCase),
-            new ConcurrentDictionary<string, string[]>(StringComparer.OrdinalIgnoreCase))
+            new ConcurrentDictionary<string, string[]>(StringComparer.OrdinalIgnoreCase),
+            new ConcurrentDictionary<string, Lazy<Task<string>>>(StringComparer.OrdinalIgnoreCase))
     {
     }
 
@@ -25,13 +27,15 @@ internal sealed class ManagedModuleInstallContext
         HashSet<string> ownedInstallKeys,
         ConcurrentDictionary<string, ManagedModuleInstallPending> inFlightInstalls,
         ConcurrentDictionary<string, ManagedModuleInstallResult> completedInstalls,
-        ConcurrentDictionary<string, string[]> installedVersions)
+        ConcurrentDictionary<string, string[]> installedVersions,
+        ConcurrentDictionary<string, Lazy<Task<string>>> dependencyVersionSelections)
     {
         _active = active;
         _ownedInstallKeys = ownedInstallKeys;
         _inFlightInstalls = inFlightInstalls;
         _completedInstalls = completedInstalls;
         _installedVersions = installedVersions;
+        _dependencyVersionSelections = dependencyVersionSelections;
     }
 
     public ManagedModuleInstallContext CreateBranch()
@@ -40,7 +44,8 @@ internal sealed class ManagedModuleInstallContext
             new HashSet<string>(_ownedInstallKeys, StringComparer.OrdinalIgnoreCase),
             _inFlightInstalls,
             _completedInstalls,
-            _installedVersions);
+            _installedVersions,
+            _dependencyVersionSelections);
 
     public IDisposable Enter(string moduleName)
     {
@@ -146,8 +151,35 @@ internal sealed class ManagedModuleInstallContext
             });
     }
 
+    public Task<string> GetOrAddDependencyVersionSelection(string key, Func<Task<string>> factory)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Dependency version selection key is required.", nameof(key));
+        if (factory is null)
+            throw new ArgumentNullException(nameof(factory));
+
+        var lazy = _dependencyVersionSelections.GetOrAdd(
+            key,
+            _ => new Lazy<Task<string>>(factory, LazyThreadSafetyMode.ExecutionAndPublication));
+        return CompleteDependencyVersionSelectionAsync(key, lazy);
+    }
+
     private static string CreateInstalledVersionKey(string moduleRoot, string moduleName)
         => string.Join("|", NormalizePath(moduleRoot), moduleName.Trim());
+
+    private async Task<string> CompleteDependencyVersionSelectionAsync(string key, Lazy<Task<string>> lazy)
+    {
+        try
+        {
+            return await lazy.Value.ConfigureAwait(false);
+        }
+        catch
+        {
+            ((ICollection<KeyValuePair<string, Lazy<Task<string>>>>)_dependencyVersionSelections)
+                .Remove(new KeyValuePair<string, Lazy<Task<string>>>(key, lazy));
+            throw;
+        }
+    }
 
     private static string NormalizePath(string path)
         => Path.GetFullPath(path.Trim().Trim('"')).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
