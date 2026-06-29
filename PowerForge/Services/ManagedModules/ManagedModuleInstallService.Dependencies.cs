@@ -15,7 +15,7 @@ public sealed partial class ManagedModuleInstallService
 
         if (dependencies.Length == 1)
         {
-            var singleResult = await InstallDependencyCoreAsync(
+            var singleResult = await InstallDependencyBranchAsync(
                 request,
                 dependencies[0],
                 cacheDirectory,
@@ -68,6 +68,7 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallResult[] results,
         CancellationToken cancellationToken)
     {
+        var branchStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var gateWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         gateWaitStopwatch.Stop();
@@ -79,13 +80,34 @@ public sealed partial class ManagedModuleInstallService
                 cacheDirectory,
                 context,
                 cancellationToken).ConfigureAwait(false);
+            branchStopwatch.Stop();
             result.DependencyQueueWaitElapsed += gateWaitStopwatch.Elapsed;
+            result.DependencyBranchElapsed += branchStopwatch.Elapsed;
             results[index] = result;
         }
         finally
         {
             gate.Release();
         }
+    }
+
+    private async Task<ManagedModuleInstallResult> InstallDependencyBranchAsync(
+        ManagedModuleInstallRequest request,
+        ManagedModuleDependencyInfo dependency,
+        string cacheDirectory,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken)
+    {
+        var branchStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = await InstallDependencyCoreAsync(
+            request,
+            dependency,
+            cacheDirectory,
+            context,
+            cancellationToken).ConfigureAwait(false);
+        branchStopwatch.Stop();
+        result.DependencyBranchElapsed += branchStopwatch.Elapsed;
+        return result;
     }
 
     private async Task<ManagedModuleInstallResult> InstallDependencyCoreAsync(

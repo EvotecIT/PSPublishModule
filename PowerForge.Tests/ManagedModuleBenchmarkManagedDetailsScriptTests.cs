@@ -95,6 +95,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         ExtractionCacheLockWaitElapsed = [TimeSpan]::FromMilliseconds(15)
                         DependencyElapsed = [TimeSpan]::FromMilliseconds(65)
                         DependencyQueueWaitElapsed = [TimeSpan]::FromMilliseconds(200)
+                        DependencyBranchElapsed = [TimeSpan]::FromMilliseconds(760)
                         PromotionElapsed = [TimeSpan]::FromMilliseconds(70)
                         PromotionLockWaitElapsed = [TimeSpan]::FromMilliseconds(12)
                         PromotionMoveElapsed = [TimeSpan]::FromMilliseconds(58)
@@ -149,6 +150,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(0.0, NumericProperty(bigPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal(40.0, NumericProperty(bigPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal(200.0, NumericProperty(bigPackage, "DependencyQueueWaitMilliseconds"));
+        Assert.Equal(760.0, NumericProperty(bigPackage, "DependencyBranchElapsedMilliseconds"));
         Assert.Equal(15.0, NumericProperty(bigPackage, "ExtractionCacheLockWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(summary, "SlowestMaterializedPackageMilliseconds"));
@@ -160,10 +162,11 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(58.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionMoveMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "CriticalDependencyBranchName"));
         Assert.Equal("Company.Root", Property(summary, "CriticalDependencyBranchParent"));
-        Assert.Equal(650.0, NumericProperty(summary, "CriticalDependencyBranchMilliseconds"));
+        Assert.Equal(760.0, NumericProperty(summary, "CriticalDependencyBranchMilliseconds"));
         Assert.Equal("Extraction", Property(summary, "CriticalDependencyBranchDominantPhase"));
         Assert.Equal(320.0, NumericProperty(summary, "CriticalDependencyBranchDominantPhaseMilliseconds"));
-        Assert.Equal(150.0, NumericProperty(summary, "RootDependencyUnattributedMilliseconds"));
+        Assert.Equal(40.0, NumericProperty(summary, "RootDependencyUnattributedMilliseconds"));
+        Assert.Equal(960.0, NumericProperty(summary, "TotalDependencyBranchElapsedMilliseconds"));
         Assert.Equal("Company.Root", Property(summary, "CriticalRootBranchName"));
         Assert.Equal(1000.0, NumericProperty(summary, "CriticalRootBranchMilliseconds"));
         Assert.Equal("Dependency", Property(summary, "CriticalRootBranchDominantPhase"));
