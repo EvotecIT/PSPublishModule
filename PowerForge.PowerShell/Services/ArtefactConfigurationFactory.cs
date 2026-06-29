@@ -185,11 +185,24 @@ public sealed class ArtefactConfigurationFactory
 
     private static bool StartsWithPathSegment(string path, string segment)
     {
-        var cleaned = PathValueResolver.Clean(path);
+        var cleaned = StripCurrentDirectoryPrefix(PathValueResolver.Clean(path));
         var normalizedSegment = segment.Trim(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return cleaned.Equals(normalizedSegment, StringComparison.OrdinalIgnoreCase) ||
                cleaned.StartsWith(normalizedSegment + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
                cleaned.StartsWith(normalizedSegment + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string StripCurrentDirectoryPrefix(string path)
+    {
+        var cleaned = path;
+        while (cleaned.Length >= 2 &&
+               cleaned[0] == '.' &&
+               (cleaned[1] == Path.DirectorySeparatorChar || cleaned[1] == Path.AltDirectorySeparatorChar))
+        {
+            cleaned = cleaned.Substring(2);
+        }
+
+        return cleaned;
     }
 
     private static ArtefactCopyMapping[]? NormalizeMappings(ArtefactCopyMapping[]? input)

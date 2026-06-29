@@ -217,7 +217,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
     EnableSpecified = $true
     Enable = $true
     Path = 'Module/Artefacts/WorkspaceFileBacked/<TagModuleVersionWithPreRelease>'
-    PreScriptMergePath = 'Module/Build/workspace-header.ps1'
+    PreScriptMergePath = '.\Module\Build\workspace-header.ps1'
 })
 [PowerForge.ConfigurationAppleAppSegment]@{
     Configuration = [PowerForge.AppleAppConfiguration]@{
@@ -889,9 +889,11 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var installRoot = Path.Combine(root.FullName, "Artifacts", "Modules");
             var externalInstallRoot = Path.Combine(Path.GetTempPath(), "PowerShell", "Modules");
             var diagnosticsBaselinePath = Path.Combine(root.FullName, "Build", "diagnostics.json");
-            var netProject = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "SampleModule.PowerShell.csproj");
             var developmentBinaries = Path.Combine(root.FullName, "Sources", "SampleModule.PowerShell", "bin");
+            var externalNetProject = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalProject-" + Guid.NewGuid().ToString("N"), "External.PowerShell.csproj");
+            var externalDevelopmentBinaries = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalBinaries-" + Guid.NewGuid().ToString("N"));
             var packageRoot = Path.Combine(root.FullName, "Sources");
+            var externalPackageOutputPath = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalPackageOutput-" + Guid.NewGuid().ToString("N"));
             var stagingRoot = Path.Combine(root.FullName, "Artifacts", "Packages", "Staging");
             var packagePublishKey = Path.Combine(Path.GetTempPath(), "PowerForge", "Secrets-" + Guid.NewGuid().ToString("N"), "nuget.key");
             var packageCredentialSecret = Path.Combine(Path.GetTempPath(), "PowerForge", "Secrets-" + Guid.NewGuid().ToString("N"), "nuget.secret");
@@ -900,10 +902,12 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var artefactRoot = Path.Combine(root.FullName, "Module", "Artefacts", "Packed");
             var artefactRequiredModules = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "RequiredModules");
             var artefactModules = Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "Modules");
+            var externalArtefactRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalArtefacts-" + Guid.NewGuid().ToString("N"));
             var publishKey = Path.Combine(Path.GetTempPath(), "PowerForge", "Secrets-" + Guid.NewGuid().ToString("N"), "psgallery.key");
             var actionFile = Path.Combine(Path.GetTempPath(), "PowerForge", "Actions-" + Guid.NewGuid().ToString("N"), "Test-ReleaseReady.ps1");
             var actionWorkingDirectory = Path.Combine(Path.GetTempPath(), "PowerForge", "Actions-" + Guid.NewGuid().ToString("N"));
-            var testsPath = Path.Combine(root.FullName, "Tests");
+            var externalTestsPath = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalTests-" + Guid.NewGuid().ToString("N"));
+            var externalValidationTestsPath = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalValidationTests-" + Guid.NewGuid().ToString("N"));
             var signingPfxPath = Path.Combine(Path.GetTempPath(), "PowerForge", "Secrets-" + Guid.NewGuid().ToString("N"), "cert.pfx");
             var documentationPath = Path.Combine(root.FullName, "Module", "Docs");
             var documentationReadmePath = Path.Combine(root.FullName, "README.md");
@@ -914,7 +918,6 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var projectOptionsOutputPath = Path.Combine(root.FullName, "Artifacts", "ProjectBuild", "options");
             var projectOptionsPlanPath = Path.Combine(root.FullName, "Build", "project-options-plan.json");
             var packageOptionsOutputPath = Path.Combine(root.FullName, "Artifacts", "PackageBuild", "options");
-            var packageOptionsPlanPath = Path.Combine(root.FullName, "Build", "package-options-plan.json");
             var packageOptionsCredentialPath = Path.Combine(Path.GetTempPath(), "PowerForge", "OptionSecrets-" + Guid.NewGuid().ToString("N"), "nuget-option.key");
             var spec = new ModulePipelineSpec
             {
@@ -954,7 +957,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                     {
                         BuildLibraries = new BuildLibrariesConfiguration
                         {
-                            NETProjectPath = netProject,
+                            NETProjectPath = externalNetProject,
+                            DevelopmentBinariesPath = externalDevelopmentBinaries,
                             NETDevelopmentBinariesPath = developmentBinaries
                         }
                     },
@@ -964,7 +968,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                         {
                             RootPath = packageRoot,
                             StagingPath = stagingRoot,
-                            OutputPath = Path.Combine(root.FullName, "Artifacts", "Packages", "NuGet"),
+                            OutputPath = externalPackageOutputPath,
                             PlanOutputPath = Path.Combine(root.FullName, "Artifacts", "Packages", "plan.json"),
                             PublishApiKeyFilePath = packagePublishKey,
                             NugetCredentialSecretFilePath = packageCredentialSecret,
@@ -972,7 +976,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                             Options = new Dictionary<string, object?>
                             {
                                 ["OutputPath"] = packageOptionsOutputPath,
-                                ["PlanOutputPath"] = packageOptionsPlanPath,
+                                ["PlanOutputPath"] = externalPackageOutputPath,
                                 ["PublishApiKeyFilePath"] = packageOptionsCredentialPath
                             }
                         }
@@ -1011,11 +1015,19 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                             }
                         }
                     },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Path = externalArtefactRoot
+                        }
+                    },
                     new ConfigurationTestSegment
                     {
                         Configuration = new TestConfiguration
                         {
-                            TestsPath = testsPath
+                            TestsPath = externalTestsPath
                         }
                     },
                     new ConfigurationOptionsSegment
@@ -1052,7 +1064,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                             Tests = new TestSuiteValidationSettings
                             {
                                 Enable = true,
-                                TestPath = testsPath
+                                TestPath = externalValidationTestsPath
                             }
                         }
                     },
@@ -1096,29 +1108,32 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"Artifacts/Modules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"BaselinePath\": \"../Build/diagnostics.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"ConfigPath\": \"Build/project.build.json\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"NETProjectPath\": \"Sources/SampleModule.PowerShell/SampleModule.PowerShell.csproj\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"NETProjectPath\": \"{externalNetProject.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"\"DevelopmentBinariesPath\": \"{externalDevelopmentBinaries.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"NETDevelopmentBinariesPath\": \"Sources/SampleModule.PowerShell/bin\"", json, StringComparison.Ordinal);
             Assert.Contains("\"RootPath\": \"Sources\"", json, StringComparison.Ordinal);
             Assert.Contains("\"StagingPath\": \"Artifacts/Packages/Staging\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"OutputPath\": \"{externalPackageOutputPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"PlanOutputPath\": \"Artifacts/Packages/plan.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputPath\": \"Artifacts/ProjectBuild/options\"", json, StringComparison.Ordinal);
             Assert.Contains("\"PlanOutputPath\": \"Build/project-options-plan.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputPath\": \"Artifacts/PackageBuild/options\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"PlanOutputPath\": \"Build/package-options-plan.json\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"PlanOutputPath\": \"{externalPackageOutputPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains($"\"PublishApiKeyFilePath\": \"{packagePublishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains($"\"NugetCredentialSecretFilePath\": \"{packageCredentialSecret.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains($"\"GitHubAccessTokenFilePath\": \"{packageGitHubToken.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains($"\"PublishApiKeyFilePath\": \"{packageOptionsCredentialPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"Path\": \"Module/Artefacts/Packed/RequiredModules\"", json, StringComparison.Ordinal);
             Assert.Contains("\"ModulesPath\": \"Module/Artefacts/Packed/Modules\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"Path\": \"{externalArtefactRoot.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"Source\": \"Build/Templates\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Source\": \"Build/NOTICE.txt\"", json, StringComparison.Ordinal);
             Assert.Contains($"\"Source\": \"{externalCopyFileSource.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"TestsPath\": \"Tests\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"TestsPath\": \"{externalTestsPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains($"\"CertificatePFXPath\": \"{signingPfxPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"Path\": \"Module/Docs\"", json, StringComparison.Ordinal);
             Assert.Contains("\"PathReadme\": \"README.md\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"TestPath\": \"Tests\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"TestPath\": \"{externalValidationTestsPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"AboutTopicsSourcePath\": [", json, StringComparison.Ordinal);
             Assert.Contains("\"Help/About\"", json, StringComparison.Ordinal);
             Assert.Contains($"\"ApiKeyFilePath\": \"{publishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
@@ -1141,26 +1156,29 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(jsonSpec.Segments[1]);
             var packageBuild = Assert.IsType<ConfigurationPackageBuildSegment>(jsonSpec.Segments[2]);
             var artefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec.Segments[3]);
-            var test = Assert.IsType<ConfigurationTestSegment>(jsonSpec.Segments[4]);
-            var options = Assert.IsType<ConfigurationOptionsSegment>(jsonSpec.Segments[5]);
-            var documentation = Assert.IsType<ConfigurationDocumentationSegment>(jsonSpec.Segments[6]);
-            var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(jsonSpec.Segments[7]);
-            var validation = Assert.IsType<ConfigurationValidationSegment>(jsonSpec.Segments[8]);
-            var publish = Assert.IsType<ConfigurationPublishSegment>(jsonSpec.Segments[9]);
-            var action = Assert.IsType<ConfigurationActionSegment>(jsonSpec.Segments[10]);
-            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[11]);
+            var externalArtefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec.Segments[4]);
+            var test = Assert.IsType<ConfigurationTestSegment>(jsonSpec.Segments[5]);
+            var options = Assert.IsType<ConfigurationOptionsSegment>(jsonSpec.Segments[6]);
+            var documentation = Assert.IsType<ConfigurationDocumentationSegment>(jsonSpec.Segments[7]);
+            var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(jsonSpec.Segments[8]);
+            var validation = Assert.IsType<ConfigurationValidationSegment>(jsonSpec.Segments[9]);
+            var publish = Assert.IsType<ConfigurationPublishSegment>(jsonSpec.Segments[10]);
+            var action = Assert.IsType<ConfigurationActionSegment>(jsonSpec.Segments[11]);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[12]);
             Assert.Equal(projectConfig, projectBuild.Configuration.ConfigPath);
             Assert.Equal(projectOptionsOutputPath, projectBuild.Configuration.Options!["OutputPath"]);
             Assert.Equal(projectOptionsPlanPath, projectBuild.Configuration.Options["PlanOutputPath"]);
-            Assert.Equal(netProject, buildLibraries.BuildLibraries.NETProjectPath);
+            Assert.Equal(externalNetProject, buildLibraries.BuildLibraries.NETProjectPath);
+            Assert.Equal(externalDevelopmentBinaries, buildLibraries.BuildLibraries.DevelopmentBinariesPath);
             Assert.Equal(developmentBinaries, buildLibraries.BuildLibraries.NETDevelopmentBinariesPath);
             Assert.Equal(packageRoot, packageBuild.Configuration.RootPath);
             Assert.Equal(stagingRoot, packageBuild.Configuration.StagingPath);
+            Assert.Equal(externalPackageOutputPath, packageBuild.Configuration.OutputPath);
             Assert.Equal(packagePublishKey, packageBuild.Configuration.PublishApiKeyFilePath);
             Assert.Equal(packageCredentialSecret, packageBuild.Configuration.NugetCredentialSecretFilePath);
             Assert.Equal(packageGitHubToken, packageBuild.Configuration.GitHubAccessTokenFilePath);
             Assert.Equal(packageOptionsOutputPath, packageBuild.Configuration.Options!["OutputPath"]);
-            Assert.Equal(packageOptionsPlanPath, packageBuild.Configuration.Options["PlanOutputPath"]);
+            Assert.Equal(externalPackageOutputPath.Replace('\\', '/'), packageBuild.Configuration.Options["PlanOutputPath"]);
             Assert.Equal(packageOptionsCredentialPath.Replace('\\', '/'), packageBuild.Configuration.Options["PublishApiKeyFilePath"]);
             Assert.Equal(artefactRoot, artefact.Configuration.Path);
             Assert.Equal(artefactRequiredModules, artefact.Configuration.RequiredModules.Path);
@@ -1171,12 +1189,13 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal("NOTICE.txt", artefact.Configuration.FilesOutput[0].Destination);
             Assert.Equal(externalCopyFileSource.Replace('\\', '/'), artefact.Configuration.FilesOutput[1].Source);
             Assert.Equal("ExternalNotice.txt", artefact.Configuration.FilesOutput[1].Destination);
-            Assert.Equal(testsPath, test.Configuration.TestsPath);
+            Assert.Equal(externalArtefactRoot, externalArtefact.Configuration.Path);
+            Assert.Equal(externalTestsPath, test.Configuration.TestsPath);
             Assert.Equal(signingPfxPath, options.Options.Signing!.CertificatePFXPath);
             Assert.Equal(documentationPath, documentation.Configuration.Path);
             Assert.Equal(documentationReadmePath, documentation.Configuration.PathReadme);
             Assert.Equal("Help/About", buildDocumentation.Configuration.AboutTopicsSourcePath[0]);
-            Assert.Equal(testsPath, validation.Settings.Tests.TestPath);
+            Assert.Equal(externalValidationTestsPath, validation.Settings.Tests.TestPath);
             Assert.Equal(publishKey, publish.Configuration.ApiKeyFilePath);
             Assert.Equal(actionFile, action.Configuration.FilePath);
             Assert.Equal(actionWorkingDirectory, action.Configuration.WorkingDirectory);
