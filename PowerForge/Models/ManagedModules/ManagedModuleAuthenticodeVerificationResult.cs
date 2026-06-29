@@ -14,4 +14,14 @@ public sealed class ManagedModuleAuthenticodeVerificationResult
     /// Relative paths of files whose Authenticode signatures were validated.
     /// </summary>
     public IReadOnlyList<string> Files { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Number of catalog files inspected as signable files.
+    /// </summary>
+    public int CatalogFiles { get; set; }
+
+    /// <summary>
+    /// Relative paths of catalog files inspected as signable files.
+    /// </summary>
+    public IReadOnlyList<string> CatalogFilePaths { get; set; } = Array.Empty<string>();
 }

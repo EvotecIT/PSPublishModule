@@ -42,6 +42,8 @@ param(
 
     [int] $ManagedMinAuthenticodeCheckedFiles = 0,
 
+    [int] $ManagedMinAuthenticodeCatalogFiles = 0,
+
     [double] $ManagedMaxWindowsPowerShellVsPowerShell7 = 0,
 
     [switch] $UseScenarioGates,
@@ -271,6 +273,16 @@ function Get-ScenarioManagedMinAuthenticodeCheckedFiles {
     0
 }
 
+function Get-ScenarioManagedMinAuthenticodeCatalogFiles {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['ManagedMinAuthenticodeCatalogFiles']) {
+        return [int] $Scenario.ManagedMinAuthenticodeCatalogFiles
+    }
+
+    0
+}
+
 function Get-EffectiveManagedMaxRank {
     param([object] $Scenario)
 
@@ -305,6 +317,19 @@ function Get-EffectiveManagedMinAuthenticodeCheckedFiles {
     }
     if ($UseScenarioGates.IsPresent) {
         return Get-ScenarioManagedMinAuthenticodeCheckedFiles -Scenario $Scenario
+    }
+
+    0
+}
+
+function Get-EffectiveManagedMinAuthenticodeCatalogFiles {
+    param([object] $Scenario)
+
+    if ($ManagedMinAuthenticodeCatalogFiles -gt 0) {
+        return $ManagedMinAuthenticodeCatalogFiles
+    }
+    if ($UseScenarioGates.IsPresent) {
+        return Get-ScenarioManagedMinAuthenticodeCatalogFiles -Scenario $Scenario
     }
 
     0
@@ -507,6 +532,7 @@ function Add-SummaryRows {
                 GateManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $Scenario
                 GateManagedMaxVsFastest = Get-EffectiveManagedMaxVsFastest -Scenario $Scenario
                 GateManagedMinAuthenticodeCheckedFiles = Get-EffectiveManagedMinAuthenticodeCheckedFiles -Scenario $Scenario
+                GateManagedMinAuthenticodeCatalogFiles = Get-EffectiveManagedMinAuthenticodeCatalogFiles -Scenario $Scenario
                 UpdateBaselineVersion = $resolvedBaseline
                 UpdateTargetVersion = $resolvedTarget
                 Host = $HostLabel
@@ -535,6 +561,7 @@ function Add-SummaryRows {
                 ManagedCacheHits = $row.ManagedCacheHits
                 ManagedExtractionCacheHits = $row.ManagedExtractionCacheHits
                 ManagedAuthenticodeCheckedFiles = $row.ManagedAuthenticodeCheckedFiles
+                ManagedAuthenticodeCatalogFiles = $row.ManagedAuthenticodeCatalogFiles
                 ManagedFirstRepositoryRequests = $row.ManagedFirstRepositoryRequests
                 ManagedLastRepositoryRequests = $row.ManagedLastRepositoryRequests
                 ManagedFirstPackageRepositoryRequests = $row.ManagedFirstPackageRepositoryRequests
@@ -561,7 +588,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, BenchmarkRole, ComparisonScope, BenchmarkInterpretation, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, AuthenticodeCheck, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest, ManagedMinAuthenticodeCheckedFiles
+    $scenarios | Select-Object Suite, Name, BenchmarkRole, ComparisonScope, BenchmarkInterpretation, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, AuthenticodeCheck, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest, ManagedMinAuthenticodeCheckedFiles, ManagedMinAuthenticodeCatalogFiles
     return
 }
 
@@ -606,7 +633,7 @@ $hostsPath = Join-Path $suiteRoot 'suite-hosts.csv'
 $gatePath = Join-Path $suiteRoot 'suite-gate.csv'
 $hostGatePath = Join-Path $suiteRoot 'suite-host-gate.csv'
 $metadataPath = Join-Path $suiteRoot 'metadata.json'
-$gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -MinAuthenticodeCheckedFiles $ManagedMinAuthenticodeCheckedFiles -UseScenarioGates:$UseScenarioGates.IsPresent)
+$gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -MinAuthenticodeCheckedFiles $ManagedMinAuthenticodeCheckedFiles -MinAuthenticodeCatalogFiles $ManagedMinAuthenticodeCatalogFiles -UseScenarioGates:$UseScenarioGates.IsPresent)
 $hostComparisonRows = @(New-ManagedHostComparison -Rows @($summaryRows))
 $hostGateViolations = @(Get-ManagedHostComparisonGateViolation -Rows @($hostComparisonRows) -MaxComparisonVsBaseline $ManagedMaxWindowsPowerShellVsPowerShell7)
 $optimizationTargetRows = @(New-ManagedOptimizationTarget -Rows @($summaryRows))
@@ -618,7 +645,11 @@ Write-ManagedBenchmarkJson -InputObject @($hostComparisonRows) -Path $hostCompar
 Write-ManagedBenchmarkCsv -InputObject @($optimizationTargetRows) -Path $optimizationTargetsPath
 Write-ManagedBenchmarkJson -InputObject @($optimizationTargetRows) -Path $optimizationTargetsJsonPath -Depth 8
 Write-ManagedBenchmarkCsv -InputObject @($hostRows) -Path $hostsPath
-if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0 -or $UseScenarioGates.IsPresent) {
+if ($ManagedMaxRank -gt 0 -or
+    $ManagedMaxVsFastest -gt 0 -or
+    $ManagedMinAuthenticodeCheckedFiles -gt 0 -or
+    $ManagedMinAuthenticodeCatalogFiles -gt 0 -or
+    $UseScenarioGates.IsPresent) {
     Write-ManagedBenchmarkCsv -InputObject @($gateViolations) -Path $gatePath
 }
 if ($ManagedMaxWindowsPowerShellVsPowerShell7 -gt 0) {
@@ -651,9 +682,11 @@ $metadata = [ordered]@{
                 ManagedMaxRank = Get-ScenarioManagedMaxRank -Scenario $_
                 ManagedMaxVsFastest = Get-ScenarioManagedMaxVsFastest -Scenario $_
                 ManagedMinAuthenticodeCheckedFiles = Get-ScenarioManagedMinAuthenticodeCheckedFiles -Scenario $_
+                ManagedMinAuthenticodeCatalogFiles = Get-ScenarioManagedMinAuthenticodeCatalogFiles -Scenario $_
                 EffectiveManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $_
                 EffectiveManagedMaxVsFastest = Get-EffectiveManagedMaxVsFastest -Scenario $_
                 EffectiveManagedMinAuthenticodeCheckedFiles = Get-EffectiveManagedMinAuthenticodeCheckedFiles -Scenario $_
+                EffectiveManagedMinAuthenticodeCatalogFiles = Get-EffectiveManagedMinAuthenticodeCatalogFiles -Scenario $_
             }
         })
     Hosts = $HostName
@@ -672,6 +705,7 @@ $metadata = [ordered]@{
     ManagedMaxRank = $ManagedMaxRank
     ManagedMaxVsFastest = $ManagedMaxVsFastest
     ManagedMinAuthenticodeCheckedFiles = $ManagedMinAuthenticodeCheckedFiles
+    ManagedMinAuthenticodeCatalogFiles = $ManagedMinAuthenticodeCatalogFiles
     ManagedMaxWindowsPowerShellVsPowerShell7 = $ManagedMaxWindowsPowerShellVsPowerShell7
     UseScenarioGates = $UseScenarioGates.IsPresent
     ManagedPerformanceGatePassed = $gateViolations.Count -eq 0

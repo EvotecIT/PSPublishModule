@@ -88,6 +88,7 @@ function New-BenchmarkScenario {
         [int] $ScenarioManagedMaxRank = 0,
         [double] $ScenarioManagedMaxVsFastest = 0,
         [int] $ScenarioManagedMinAuthenticodeCheckedFiles = 0,
+        [int] $ScenarioManagedMinAuthenticodeCatalogFiles = 0,
         [bool] $ScenarioAuthenticodeCheck = $false,
         [ValidateSet('', 'Default', 'Cold', 'Warm')]
         [string] $ScenarioCacheMode = '',
@@ -122,6 +123,7 @@ function New-BenchmarkScenario {
         ManagedMaxRank = $ScenarioManagedMaxRank
         ManagedMaxVsFastest = $ScenarioManagedMaxVsFastest
         ManagedMinAuthenticodeCheckedFiles = $ScenarioManagedMinAuthenticodeCheckedFiles
+        ManagedMinAuthenticodeCatalogFiles = $ScenarioManagedMinAuthenticodeCatalogFiles
         CacheMode = $ScenarioCacheMode
         RepeatCount = $ScenarioRepeatCount
     }
