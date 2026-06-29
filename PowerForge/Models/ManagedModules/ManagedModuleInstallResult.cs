@@ -51,6 +51,11 @@ public sealed class ManagedModuleInstallResult
     public string? VersionPolicy { get; set; }
 
     /// <summary>
+    /// NuGet-style version range declared by the parent package for this dependency result, when applicable.
+    /// </summary>
+    public string? DependencyVersionRange { get; set; }
+
+    /// <summary>
     /// Expected SHA256 hash supplied by the caller, when package integrity verification was requested.
     /// </summary>
     public string? ExpectedPackageSha256 { get; set; }

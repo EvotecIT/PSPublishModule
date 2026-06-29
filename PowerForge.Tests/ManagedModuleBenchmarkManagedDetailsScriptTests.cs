@@ -92,6 +92,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         Name = 'Company.Big'
                         Version = '1.0.0'
                         Status = 'Installed'
+                        DependencyVersionRange = '[1.0.0,2.0.0)'
                         ModulePath = '{{EscapePowerShellString(Path.Combine(temp.Path, "Company.Big", "1.0.0"))}}'
                         Elapsed = [TimeSpan]::FromMilliseconds(450)
                         InstallLockWaitElapsed = [TimeSpan]::FromMilliseconds(40)
@@ -163,6 +164,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(0.0, NumericProperty(noOpPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(bigPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal(40.0, NumericProperty(bigPackage, "InstallLockWaitMilliseconds"));
+        Assert.Equal("[1.0.0,2.0.0)", Property(bigPackage, "DependencyVersionRange"));
         Assert.Equal(25.0, NumericProperty(bigPackage, "VersionSelectionWaitMilliseconds"));
         Assert.Equal(200.0, NumericProperty(bigPackage, "DependencyQueueWaitMilliseconds"));
         Assert.Equal(760.0, NumericProperty(bigPackage, "DependencyBranchElapsedMilliseconds"));
