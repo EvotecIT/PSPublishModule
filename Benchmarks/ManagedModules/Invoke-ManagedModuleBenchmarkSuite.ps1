@@ -506,6 +506,7 @@ function Add-SummaryRows {
                 ManagedDownloadBytes = $row.ManagedDownloadBytes
                 ManagedCacheHits = $row.ManagedCacheHits
                 ManagedExtractionCacheHits = $row.ManagedExtractionCacheHits
+                ManagedAuthenticodeCheckedFiles = $row.ManagedAuthenticodeCheckedFiles
                 ManagedFirstRepositoryRequests = $row.ManagedFirstRepositoryRequests
                 ManagedLastRepositoryRequests = $row.ManagedLastRepositoryRequests
                 ManagedFirstPackageRepositoryRequests = $row.ManagedFirstPackageRepositoryRequests
