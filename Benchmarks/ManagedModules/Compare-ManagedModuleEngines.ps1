@@ -42,6 +42,8 @@ param(
 
     [int] $ImportTimeoutSeconds = 120,
 
+    [int] $ChildTimeoutSeconds = 900,
+
     [switch] $RotateEngineOrder,
 
     [int] $ManagedMaxRank = 0,
@@ -76,6 +78,7 @@ $validOperations = @('Find', 'Save', 'SaveNoOp', 'SaveForce', 'Install', 'Instal
 $validRepairScenarios = @('StaleVersion', 'SourceDrift', 'ScopeDrift', 'FamilyCoherence', 'LoadedModuleSafety', 'CleanupPlanning')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Artifacts.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Process.ps1')
 
 function Resolve-TokenList {
     param(
@@ -924,6 +927,7 @@ $metadata = [ordered]@{
     CacheMode = $CacheMode
     ValidateImport = $ValidateImport.IsPresent
     ImportTimeoutSeconds = $ImportTimeoutSeconds
+    ChildTimeoutSeconds = $ChildTimeoutSeconds
     RotateEngineOrder = $RotateEngineOrder.IsPresent
     ManagedMaxRank = $ManagedMaxRank
     ManagedMaxVsFastest = $ManagedMaxVsFastest
