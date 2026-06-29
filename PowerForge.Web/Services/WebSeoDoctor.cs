@@ -346,7 +346,8 @@ public static partial class WebSeoDoctor
             {
                 ValidateHreflang(
                     relativePath,
-                    options.RequireHreflang && !isGeneratedApiReferencePage,
+                    options.RequireHreflang,
+                    suppressMissingHreflang: isGeneratedApiReferencePage,
                     options.RequireHreflangXDefault,
                     hreflangAlternates,
                     AddIssue);
@@ -763,20 +764,20 @@ public static partial class WebSeoDoctor
         if (doc.Head is null)
             return Array.Empty<HreflangAlternateScan>();
 
-        return doc.Head.QuerySelectorAll("link[rel][hreflang][href]")
+        return doc.Head.QuerySelectorAll("link[rel][hreflang]")
             .Where(link => ContainsRelToken(link.GetAttribute("rel"), "alternate"))
             .Select(link => new HreflangAlternateScan
             {
                 HrefLang = NormalizeWhitespace(link.GetAttribute("hreflang")).ToLowerInvariant(),
                 Href = NormalizeWhitespace(link.GetAttribute("href"))
             })
-            .Where(value => !string.IsNullOrWhiteSpace(value.HrefLang) && !string.IsNullOrWhiteSpace(value.Href))
             .ToArray();
     }
 
     private static void ValidateHreflang(
         string relativePath,
         bool requireHreflang,
+        bool suppressMissingHreflang,
         bool requireXDefault,
         HreflangAlternateScan[] alternates,
         Action<string, string, string?, string, string?, string?> addIssue)
@@ -785,12 +786,13 @@ public static partial class WebSeoDoctor
 
         if (alternates.Length == 0)
         {
-            if (requireHreflang)
+            if (requireHreflang && !suppressMissingHreflang)
                 addIssue("warning", "hreflang", relativePath, "missing hreflang alternates.", "hreflang-missing", null);
             return;
         }
 
         var duplicateLanguageGroups = alternates
+            .Where(value => !string.IsNullOrWhiteSpace(value.HrefLang))
             .GroupBy(value => value.HrefLang, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
@@ -805,7 +807,14 @@ public static partial class WebSeoDoctor
 
         foreach (var alternate in alternates)
         {
-            if (!HreflangTokenPattern.IsMatch(alternate.HrefLang))
+            if (string.IsNullOrWhiteSpace(alternate.HrefLang))
+            {
+                addIssue("warning", "hreflang", relativePath,
+                    "hreflang alternate is missing a language value.",
+                    "hreflang-language-missing",
+                    alternate.Href);
+            }
+            else if (!HreflangTokenPattern.IsMatch(alternate.HrefLang))
             {
                 addIssue("warning", "hreflang", relativePath,
                     $"invalid hreflang value '{alternate.HrefLang}'.",
@@ -813,7 +822,14 @@ public static partial class WebSeoDoctor
                     alternate.HrefLang);
             }
 
-            if (!IsAbsoluteHttpUrl(alternate.Href))
+            if (string.IsNullOrWhiteSpace(alternate.Href))
+            {
+                addIssue("warning", "hreflang", relativePath,
+                    $"hreflang '{alternate.HrefLang}' is missing an href value.",
+                    "hreflang-href-missing",
+                    alternate.HrefLang);
+            }
+            else if (!IsAbsoluteHttpUrl(alternate.Href))
             {
                 addIssue("warning", "hreflang", relativePath,
                     $"hreflang '{alternate.HrefLang}' should use an absolute http(s) URL but was '{alternate.Href}'.",
