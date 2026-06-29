@@ -12,6 +12,15 @@ function Add-ManagedBenchmarkEngineRows {
     }
 
     foreach ($row in (Import-Csv -LiteralPath $summaryPath)) {
+        $medianMs = ConvertTo-ManagedBenchmarkDouble -Value $row.MedianMs
+        $outputBytes = ConvertTo-ManagedBenchmarkDouble -Value $row.MedianOutputBytes
+        $outputFiles = ConvertTo-ManagedBenchmarkDouble -Value $row.MedianOutputFileCount
+        $outputMbRaw = $outputBytes / 1MB
+        $outputMb = [math]::Round($outputMbRaw, 2)
+        $elapsedSeconds = if ($medianMs -gt 0) { $medianMs / 1000 } else { 0.0 }
+        $outputMbPerSecond = if ($elapsedSeconds -gt 0 -and $outputMbRaw -gt 0) { [math]::Round($outputMbRaw / $elapsedSeconds, 2) } else { 0.0 }
+        $outputFilesPerSecond = if ($elapsedSeconds -gt 0 -and $outputFiles -gt 0) { [math]::Round($outputFiles / $elapsedSeconds, 2) } else { 0.0 }
+
         $Rows.Add([pscustomobject]@{
             Suite = $Scenario.Suite
             Scenario = $Scenario.Name
@@ -36,6 +45,9 @@ function Add-ManagedBenchmarkEngineRows {
             MaxMs = $row.MaxMs
             MedianOutputFileCount = $row.MedianOutputFileCount
             MedianOutputBytes = $row.MedianOutputBytes
+            MedianOutputMB = $outputMb
+            MedianOutputMBPerSecond = $outputMbPerSecond
+            MedianOutputFilesPerSecond = $outputFilesPerSecond
             RunPath = $RunPath
         })
     }
