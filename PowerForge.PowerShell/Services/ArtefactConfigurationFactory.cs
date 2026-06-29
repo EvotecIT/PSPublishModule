@@ -187,9 +187,15 @@ public sealed class ArtefactConfigurationFactory
     {
         var cleaned = StripCurrentDirectoryPrefix(PathValueResolver.Clean(path));
         var normalizedSegment = segment.Trim(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return cleaned.Equals(normalizedSegment, StringComparison.OrdinalIgnoreCase) ||
-               cleaned.StartsWith(normalizedSegment + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-               cleaned.StartsWith(normalizedSegment + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(cleaned) || string.IsNullOrWhiteSpace(normalizedSegment))
+            return false;
+
+        var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+        var firstSegment = cleaned
+            .Split(separators, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault() ?? string.Empty;
+
+        return ModuleBuildPathPolicy.SamePathSegment(firstSegment, normalizedSegment);
     }
 
     private static string StripCurrentDirectoryPrefix(string path)

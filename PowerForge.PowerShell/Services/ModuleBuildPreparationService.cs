@@ -928,7 +928,7 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static bool UsesRepositoryModuleLayout(DirectoryInfo projectDirectory)
-        => string.Equals(projectDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) &&
+        => ModuleBuildPathPolicy.SamePathSegment(projectDirectory.Name, "Module") &&
            projectDirectory.Parent is not null &&
            HasRepositoryRootMarker(projectDirectory.Parent.FullName) &&
            File.Exists(Path.Combine(projectDirectory.FullName, "Build", "Build-Module.ps1"));
@@ -956,9 +956,7 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static string MakeReleaseStageRootPathForJson(string projectRoot, string workspaceRoot, string stageRoot)
-        => ContainsPathToken(stageRoot)
-            ? MakeRelativeForProjectRoot(projectRoot, stageRoot, preserveExternalRooted: true, workspaceRoot) ?? NormalizePathSeparators(stageRoot)
-            : MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, stageRoot));
+        => MakeRelativeForProjectRoot(projectRoot, stageRoot, preserveExternalRooted: true, workspaceRoot) ?? NormalizePathSeparators(stageRoot);
 
     private static void MakeCopyMappingSourcesRelative(ArtefactCopyMapping[]? mappings, string projectRoot, string workspaceRoot)
     {

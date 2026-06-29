@@ -950,6 +950,52 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
     }
 
     [Fact]
+    public void WritePipelineSpecJson_preserves_external_release_stage_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-release-external-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
+            var externalReleaseRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "Release-" + Guid.NewGuid().ToString("N"));
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = root.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = externalReleaseRoot
+                        }
+                    }
+                }
+            };
+
+            var service = new ModuleBuildPreparationService();
+            service.WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains($"\"StageRoot\": \"{externalReleaseRoot.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
+
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            Assert.NotNull(jsonSpec);
+            service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(Assert.Single(jsonSpec!.Segments.OfType<ConfigurationReleaseSegment>()));
+            Assert.Equal(Path.GetFullPath(externalReleaseRoot), release.Configuration.StageRoot);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void WritePipelineSpecJson_keeps_apple_and_xcode_paths_relative_to_project_root()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-apple-" + Guid.NewGuid().ToString("N")));
