@@ -411,6 +411,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-29: Windows PowerShell 5.1 full `Az` 16.0.0 save after the short-root fix measured managed first at 31864 ms and PowerShellGet at 130163 ms; PSResourceGet still failed after 84214 ms in its own temp extraction path for `Az.MachineLearningServices`. Managed saved about 623 MB across 2789 files, recorded 204 package rows, 103 unique package outputs, 210 whole-operation repository requests, 206 package-delivery requests, and 137.5 MB downloaded. Detail evidence still points the next heavy save optimization question at download/source/cache behavior rather than extraction or promotion.
 - [x] 2026-06-29: Warm managed package caches now use a run-scoped short temp root shared across repeated save/install/update rows and are removed after artifact capture when `-RemoveOutputRoots` is used. A PowerShell 7 repeated warm managed `ThreadJob` 2.1.0 save proof showed iteration 1 downloading 82971 bytes with zero cache hits, then iteration 2 using two cache hits, zero downloaded bytes, and no package-delivery requests.
 - [x] 2026-06-29: `HeavySaveCacheGate` now has managed-only full Graph/Az warm-cache save scenarios with scenario-owned `CacheMode=Warm` and `RepeatCount=2`. Suite summary and optimization-target artifacts now expose first/last managed timing, request, download, and cache-hit fields. The first PowerShell 7 full `Microsoft.Graph` 2.38.0 warm-cache run measured iteration 1 at 3645 ms with 40 package requests, 186.5 MB downloaded, and zero cache hits; iteration 2 measured 1944 ms with zero repository/package requests, zero downloaded bytes, and 40 cache hits.
+- [x] 2026-06-29: The PowerShell 7 full `Az` 16.0.0 `HeavySaveCacheGate` run measured iteration 1 at 4136 ms with 107 repository requests, 103 package requests, 137.5 MB downloaded, and zero cache hits. Iteration 2 measured 3587 ms with 4 metadata requests, zero package requests, zero downloaded bytes, and 103 cache hits while still writing the same 2789-file, 623 MB output tree. This confirms package-cache reuse but shows the next full Az save optimization has to focus on materialization/extraction/output work, not just package transfer.
 
 ### Next Optimization Targets
 
@@ -446,7 +447,8 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Prove warm managed package cache reuse survives repeated save rows and output-root cleanup.
 - [x] Add named package-source/cache experiments for heavy save rows now that full Graph/Az evidence points at download/source/cache behavior.
 - [x] Run the named full Graph heavy save cache experiment and record how warm package reuse changes package requests, downloaded bytes, and cache hits.
-- [ ] Run the named full Az heavy save cache experiment and record whether the larger module tree shows the same cache/materialization split.
+- [x] Run the named full Az heavy save cache experiment and record whether the larger module tree shows the same cache/materialization split.
+- [ ] Use the heavy save cache evidence to optimize materialization/extraction/output work for full Az without weakening package integrity, receipts, or rollback behavior.
 
 ### Compatibility Semantics Gates
 
