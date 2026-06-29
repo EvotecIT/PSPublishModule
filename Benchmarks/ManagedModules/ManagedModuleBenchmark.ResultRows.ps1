@@ -82,6 +82,11 @@ function New-SkippedRow {
         ManagedSlowestVersionSelectionWaitMilliseconds = 0
         ManagedSlowestMaterializedPackageName = ''
         ManagedSlowestMaterializedPackageMilliseconds = 0
+        ManagedSlowestMaterializedPackageFileCount = 0
+        ManagedSlowestMaterializedPackageExtractedBytes = 0
+        ManagedSlowestMaterializedPackageExtractedMB = 0
+        ManagedSlowestMaterializedPackageMBPerSecond = 0
+        ManagedSlowestMaterializedPackageFilesPerSecond = 0
         ManagedSlowestMaterializedPackageExtractionMilliseconds = 0
         ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds = 0
         ManagedSlowestMaterializedPackagePromotionMilliseconds = 0

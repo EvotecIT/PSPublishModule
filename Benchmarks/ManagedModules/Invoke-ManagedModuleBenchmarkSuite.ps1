@@ -698,6 +698,10 @@ function Add-SummaryRows {
                 ManagedLastSlowestVersionSelectionWaitMs = $row.ManagedLastSlowestVersionSelectionWaitMs
                 ManagedLastSlowestMaterializedPackageName = $row.ManagedLastSlowestMaterializedPackageName
                 ManagedLastSlowestMaterializedPackageMs = $row.ManagedLastSlowestMaterializedPackageMs
+                ManagedLastSlowestMaterializedPackageFileCount = $row.ManagedLastSlowestMaterializedPackageFileCount
+                ManagedLastSlowestMaterializedPackageExtractedBytes = $row.ManagedLastSlowestMaterializedPackageExtractedBytes
+                ManagedLastSlowestMaterializedPackageMBPerSecond = $row.ManagedLastSlowestMaterializedPackageMBPerSecond
+                ManagedLastSlowestMaterializedPackageFilesPerSecond = $row.ManagedLastSlowestMaterializedPackageFilesPerSecond
                 ManagedLastSlowestMaterializedPackageExtractionMs = $row.ManagedLastSlowestMaterializedPackageExtractionMs
                 ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs = $row.ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs
                 ManagedLastSlowestMaterializedPackagePromotionMs = $row.ManagedLastSlowestMaterializedPackagePromotionMs
