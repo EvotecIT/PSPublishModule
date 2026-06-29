@@ -73,9 +73,10 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "</fallbackPackageFolders><packageSourceCredentials>" +
                 "<private><add key=\"Username\" value=\"parent\" /></private>" +
                 "</packageSourceCredentials></configuration>");
+            File.WriteAllText(Path.Combine(root, "Directory.Build.rsp"), "/p:RepoRsp=true");
             var importedBuildProps = Path.Combine(root, "Build", "Props", "Generated.props");
             Directory.CreateDirectory(Path.GetDirectoryName(importedBuildProps)!);
-            File.WriteAllText(importedBuildProps, "<Project />");
+            File.WriteAllText(importedBuildProps, "<Project><PropertyGroup><RepoRootBuildProps>true</RepoRootBuildProps></PropertyGroup></Project>");
             var rootBuildTargets = Path.Combine(root, "Directory.Build.targets");
             File.WriteAllText(rootBuildTargets, "<Project><PropertyGroup><RootBuildTargets>true</RootBuildTargets></PropertyGroup></Project>");
             var parentBuildTargets = Path.Combine(root, "Artifacts", "Directory.Build.targets");
@@ -107,10 +108,14 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "generated");
             var nestedConfigPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Directory.Build.targets");
             Directory.CreateDirectory(Path.GetDirectoryName(nestedConfigPath)!);
+            var generatedProjectImportPath = Path.Combine(sourceDir, "Build", "Generated.props");
+            Directory.CreateDirectory(Path.GetDirectoryName(generatedProjectImportPath)!);
+            File.WriteAllText(generatedProjectImportPath, "<Project><PropertyGroup><GeneratedProjectBuildProps>true</GeneratedProjectBuildProps></PropertyGroup></Project>");
             File.WriteAllText(
                 Path.Combine(root, "Artifacts", "DotNetPublish", "NuGet.config"),
-                "<configuration><packageSources>" +
+                "<configuration><packageSources><clear />" +
                 "<add key=\"nested\" value=\"NestedPackages\" />" +
+                "<add key=\"file\" value=\"file:///C:/packages\" />" +
                 "</packageSources><packageSourceCredentials>" +
                 "<private><add key=\"Username\" value=\"nested\" /></private>" +
                 "</packageSourceCredentials></configuration>");
@@ -119,6 +124,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "<Project><PropertyGroup>" +
                 "<RepoToolPath>$(MSBuildThisFileDirectory)Tools</RepoToolPath>" +
                 "</PropertyGroup>" +
+                "<Import Project=\"$(MSBuildProjectDirectory)\\Build\\Generated.props\" " +
+                "Condition=\"Exists('$(MSBuildProjectDirectory)\\Build\\Generated.props')\" />" +
                 "<Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)..'))\" " +
                 "Condition=\"'$([MSBuild]::GetPathOfFileAbove(Directory.Build.targets, $(MSBuildThisFileDirectory)..))' != '' And '$(DisableParentImports)' != 'true'\" />" +
                 "</Project>");
@@ -157,6 +164,9 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var licensePath = Path.Combine(root, "Build", "Installer", "DesktopManager-License.rtf");
             Directory.CreateDirectory(Path.GetDirectoryName(licensePath)!);
             File.WriteAllText(licensePath, "{\\rtf1 DesktopManager}");
+            var relativeBannerPath = Path.GetFullPath(Path.Combine(sourceDir, "..", "Installer", "banner.bmp"));
+            Directory.CreateDirectory(Path.GetDirectoryName(relativeBannerPath)!);
+            File.WriteAllText(relativeBannerPath, "banner");
             var harvestPath = Path.Combine(root, "Artifacts", "DotNetPublish", "Msi", "DesktopManager.App.MSI", "HarvestedPayload.wxs");
             Directory.CreateDirectory(Path.GetDirectoryName(harvestPath)!);
             File.WriteAllText(
@@ -182,6 +192,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">" +
                 "<Package Name=\"DesktopManager\">" +
                 $"<WixVariable Id=\"WixUILicenseRtf\" Value=\"{licensePath}\" />" +
+                "<WixVariable Id=\"WixUIBannerBmp\" Value=\"..\\Installer\\banner.bmp\" />" +
                 $"<File Id=\"LiteralPayloadExe\" Source=\"{payloadFile}\" />" +
                 $"<File Id=\"ExternalOne\" Source=\"{firstExternalAsset}\" />" +
                 $"<File Id=\"ExternalTwo\" Source=\"{secondExternalAsset}\" />" +
@@ -218,6 +229,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "NuGet.config")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets")));
+                Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Build.rsp")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Directory.Packages.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "Build", "Props", "Generated.props")));
                 Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "BuildConfig", "Directory.Build.targets")));
@@ -226,9 +238,22 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 Assert.True(File.Exists(copiedParentTargetsPath));
                 Assert.True(File.Exists(copiedParentCommonTargetsPath));
                 var copiedNestedTargets = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "Directory.Build.targets"));
-                var copiedNestedImportElement = copiedNestedTargets
+                var copiedNestedImports = copiedNestedTargets
                     .Descendants()
-                    .Single(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase));
+                    .Where(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var copiedNestedProjectImportElement = copiedNestedImports
+                    .Single(element => ((string?)element.Attribute("Project"))?.IndexOf("Generated.props", StringComparison.OrdinalIgnoreCase) >= 0);
+                var copiedNestedProjectImport = copiedNestedProjectImportElement
+                    .Attribute("Project")!
+                    .Value;
+                var copiedNestedProjectImportTarget = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, copiedNestedProjectImport));
+                Assert.True(File.Exists(copiedNestedProjectImportTarget));
+                Assert.Contains("GeneratedProjectBuildProps", File.ReadAllText(copiedNestedProjectImportTarget), StringComparison.Ordinal);
+                Assert.DoesNotContain("RepoRootBuildProps", File.ReadAllText(copiedNestedProjectImportTarget), StringComparison.Ordinal);
+                Assert.DoesNotContain(Path.Combine(root, "Build"), copiedNestedProjectImportTarget, StringComparison.OrdinalIgnoreCase);
+                var copiedNestedImportElement = copiedNestedImports
+                    .Single(element => ((string?)element.Attribute("Project"))?.IndexOf("Directory.Build.targets", StringComparison.OrdinalIgnoreCase) >= 0);
                 var copiedNestedImport = copiedNestedImportElement
                     .Attribute("Project")!
                     .Value;
@@ -277,15 +302,16 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     Path.GetFullPath(Path.Combine(root, "Artifacts", "DotNetPublish", "Tools")),
                     Path.GetFullPath(repoToolPath));
                 var copiedNuGetConfig = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "NuGet.config"));
-                var localPackageSource = copiedNuGetConfig
+                Assert.Empty(copiedNuGetConfig
                     .Descendants()
-                    .Single(element =>
+                    .Where(element =>
                         string.Equals(element.Name.LocalName, "add", StringComparison.OrdinalIgnoreCase) &&
                         string.Equals((string?)element.Attribute("key"), "local", StringComparison.OrdinalIgnoreCase))
-                    .Attribute("value")!
-                    .Value;
-                Assert.Equal(Path.GetFullPath(Path.Combine(root, "LocalPackages")), Path.GetFullPath(localPackageSource));
-                Assert.DoesNotContain(workspace.WorkingDirectory, localPackageSource, StringComparison.OrdinalIgnoreCase);
+                    .ToArray());
+                Assert.Contains(copiedNuGetConfig
+                    .Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "packageSources", StringComparison.OrdinalIgnoreCase))
+                    .Elements(), element => string.Equals(element.Name.LocalName, "clear", StringComparison.OrdinalIgnoreCase));
                 var filePackageSource = copiedNuGetConfig
                     .Descendants()
                     .Single(element =>
@@ -361,13 +387,23 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 var product = XDocument.Load(Path.Combine(workspace.WorkingDirectory, "Product.wxs"));
                 var licenseValue = product
                     .Descendants(wix + "WixVariable")
-                    .Single()
+                    .Single(element => string.Equals((string?)element.Attribute("Id"), "WixUILicenseRtf", StringComparison.OrdinalIgnoreCase))
                     .Attribute("Value")!
                     .Value;
                 Assert.DoesNotContain(licensePath, licenseValue, StringComparison.OrdinalIgnoreCase);
                 var copiedLicensePath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, licenseValue));
                 Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedLicensePath, StringComparison.OrdinalIgnoreCase);
                 Assert.True(File.Exists(copiedLicensePath));
+                var bannerValue = product
+                    .Descendants(wix + "WixVariable")
+                    .Single(element => string.Equals((string?)element.Attribute("Id"), "WixUIBannerBmp", StringComparison.OrdinalIgnoreCase))
+                    .Attribute("Value")!
+                    .Value;
+                Assert.DoesNotContain("..\\Installer\\banner.bmp", bannerValue, StringComparison.OrdinalIgnoreCase);
+                var copiedBannerPath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, bannerValue));
+                Assert.StartsWith(Path.Combine(workspace.WorkingDirectory, "PowerForgeInputs", "Assets"), copiedBannerPath, StringComparison.OrdinalIgnoreCase);
+                Assert.True(File.Exists(copiedBannerPath));
+                Assert.Equal("banner", File.ReadAllText(copiedBannerPath));
                 var literalSource = product
                     .Descendants(wix + "File")
                     .Single(element => string.Equals((string?)element.Attribute("Id"), "LiteralPayloadExe", StringComparison.OrdinalIgnoreCase))

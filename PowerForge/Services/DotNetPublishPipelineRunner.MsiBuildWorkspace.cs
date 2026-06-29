@@ -149,7 +149,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 throw new FileNotFoundException($"Temporary generated WiX project file not found: {projectPath}", projectPath);
             }
 
-            var externalFiles = PrepareGeneratedInstallerExternalFiles(workingDirectory, projectPath, prepare);
+            var externalFiles = PrepareGeneratedInstallerExternalFiles(workingDirectory, projectPath, sourceDirectory, prepare);
 
             return new GeneratedInstallerBuildWorkspace(
                 workingDirectory,
@@ -167,6 +167,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static GeneratedInstallerExternalFiles PrepareGeneratedInstallerExternalFiles(
         string workingDirectory,
         string projectPath,
+        string sourceProjectDirectory,
         DotNetPublishMsiPrepareResult? prepare)
     {
         if (prepare is null)
@@ -192,6 +193,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         RewriteGeneratedInstallerAssetPaths(
             Path.Combine(workingDirectory, "Product.wxs"),
+            Path.Combine(sourceProjectDirectory, "Product.wxs"),
             inputsDirectory,
             prepare.StagingDir,
             payloadDirectory);
@@ -272,6 +274,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static void RewriteGeneratedInstallerAssetPaths(
         string sourcePath,
+        string originalSourcePath,
         string inputsDirectory,
         string? sourcePayloadDirectory,
         string? targetPayloadDirectory)
@@ -283,6 +286,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var document = XDocument.Load(sourcePath, LoadOptions.PreserveWhitespace);
         var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
+        var originalSourceDirectory = Path.GetDirectoryName(originalSourcePath)!;
         var assetsDirectory = Path.Combine(inputsDirectory, "Assets");
         var copiedAssets = new Dictionary<string, string>(CreateCurrentFileSystemPathComparer());
         var fileSystemComparison = CreateCurrentFileSystemStringComparison();
@@ -297,6 +301,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (TryRewriteGeneratedInstallerFileAttribute(
                 valueAttribute!,
                 sourceDirectory,
+                originalSourceDirectory,
                 assetsDirectory,
                 copiedAssets,
                 fileSystemComparison,
@@ -316,6 +321,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (TryRewriteGeneratedInstallerFileAttribute(
                 sourceAttribute!,
                 sourceDirectory,
+                originalSourceDirectory,
                 assetsDirectory,
                 copiedAssets,
                 fileSystemComparison,
@@ -335,6 +341,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryRewriteGeneratedInstallerFileAttribute(
         XAttribute attribute,
         string sourceDirectory,
+        string originalSourceDirectory,
         string assetsDirectory,
         IDictionary<string, string> copiedAssets,
         StringComparison fileSystemComparison,
@@ -342,14 +349,18 @@ public sealed partial class DotNetPublishPipelineRunner
         string? targetPayloadDirectory)
     {
         var value = attribute.Value;
-        if (string.IsNullOrWhiteSpace(value) ||
-            !Path.IsPathRooted(value) ||
-            !File.Exists(value))
+        if (string.IsNullOrWhiteSpace(value))
         {
             return false;
         }
 
-        var fullPath = Path.GetFullPath(value);
+        var fullPath = Path.GetFullPath(Path.IsPathRooted(value)
+            ? value
+            : Path.Combine(originalSourceDirectory, NormalizeRelativePathSeparators(value)));
+        if (!File.Exists(fullPath))
+        {
+            return false;
+        }
         if (!string.IsNullOrWhiteSpace(sourcePayloadDirectory) &&
             !string.IsNullOrWhiteSpace(targetPayloadDirectory))
         {

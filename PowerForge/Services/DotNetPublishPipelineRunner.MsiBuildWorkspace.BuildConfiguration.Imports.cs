@@ -8,7 +8,11 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static IEnumerable<string> ResolveGeneratedInstallerBuildImports(string sourcePath, string projectRoot)
+    private static IEnumerable<string> ResolveGeneratedInstallerBuildImports(
+        string sourcePath,
+        string projectRoot,
+        string sourceProjectDirectory,
+        string sourceProjectFullPath)
     {
         XDocument document;
         try
@@ -30,7 +34,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(attribute => attribute!.Value)
             .Where(value => !string.IsNullOrWhiteSpace(value)))
         {
-            foreach (var path in ResolveGeneratedInstallerBuildImport(import, sourceDirectory, projectRootDirectory))
+            foreach (var path in ResolveGeneratedInstallerBuildImport(import, sourceDirectory, projectRootDirectory, sourceProjectDirectory, sourceProjectFullPath))
             {
                 yield return path;
             }
@@ -40,9 +44,11 @@ public sealed partial class DotNetPublishPipelineRunner
     private static IEnumerable<string> ResolveGeneratedInstallerBuildImport(
         string import,
         string sourceDirectory,
-        string projectRootDirectory)
+        string projectRootDirectory,
+        string sourceProjectDirectory,
+        string sourceProjectFullPath)
     {
-        var expanded = NormalizeRelativePathSeparators(ExpandGeneratedInstallerBuildImport(import, sourceDirectory, projectRootDirectory));
+        var expanded = NormalizeRelativePathSeparators(ExpandGeneratedInstallerBuildImport(import, sourceDirectory, projectRootDirectory, sourceProjectDirectory, sourceProjectFullPath));
         foreach (var path in ResolveGeneratedInstallerGetPathOfFileAboveImport(expanded, sourceDirectory, projectRootDirectory))
         {
             yield return path;
@@ -266,6 +272,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string sourcePath,
         string projectRootDirectory,
         string workingDirectory,
+        string sourceProjectDirectory,
+        string sourceProjectFullPath,
         IDictionary<string, string> copiedFiles,
         IReadOnlyDictionary<string, string> plannedTargets)
     {
@@ -297,7 +305,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     sourceDirectory,
                     targetDirectory,
                     projectRootDirectory,
-                    workingDirectory))
+                    workingDirectory,
+                    sourceProjectDirectory,
+                    sourceProjectFullPath))
                 {
                     changed = true;
                 }
@@ -305,7 +315,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-            var resolvedPaths = ResolveGeneratedInstallerBuildImport(project, sourceDirectory, projectRootDirectory)
+            var resolvedPaths = ResolveGeneratedInstallerBuildImport(project, sourceDirectory, projectRootDirectory, sourceProjectDirectory, sourceProjectFullPath)
                 .Take(2)
                 .ToArray();
             if (resolvedPaths.Length != 1)
@@ -342,9 +352,11 @@ public sealed partial class DotNetPublishPipelineRunner
         string sourceDirectory,
         string targetDirectory,
         string projectRootDirectory,
-        string workingDirectory)
+        string workingDirectory,
+        string sourceProjectDirectory,
+        string sourceProjectFullPath)
     {
-        var expanded = NormalizeRelativePathSeparators(ExpandGeneratedInstallerBuildImport(project, sourceDirectory, projectRootDirectory));
+        var expanded = NormalizeRelativePathSeparators(ExpandGeneratedInstallerBuildImport(project, sourceDirectory, projectRootDirectory, sourceProjectDirectory, sourceProjectFullPath));
         if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
             expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
         {

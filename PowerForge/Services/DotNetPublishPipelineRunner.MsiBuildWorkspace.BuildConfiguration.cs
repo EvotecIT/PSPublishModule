@@ -25,6 +25,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "NuGet.config",
             "Directory.Build.props",
             "Directory.Build.targets",
+            "Directory.Build.rsp",
             "Directory.Packages.props",
             "Directory.Packages.targets",
             "global.json"
@@ -37,6 +38,8 @@ public sealed partial class DotNetPublishPipelineRunner
         var nuGetConfigs = new List<string>();
         var visibleConfigNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var projectRootDirectory = AppendDirectorySeparator(Path.GetFullPath(projectRootPath));
+        var sourceProjectFullPath = Path.GetFullPath(sourceProjectPath);
+        var sourceProjectDirectory = Path.GetDirectoryName(sourceProjectFullPath)!;
         var queue = new Queue<string>();
         foreach (var directory in GetGeneratedInstallerBuildConfigurationDirectories(projectRootPath, sourceProjectPath))
         {
@@ -65,7 +68,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach (var source in plannedSources)
         {
-            CopyGeneratedInstallerBuildFile(source, projectRootPath, workingDirectory, copiedFiles, queue, plannedTargets);
+            CopyGeneratedInstallerBuildFile(source, projectRootPath, workingDirectory, sourceProjectDirectory, sourceProjectFullPath, copiedFiles, queue, plannedTargets);
         }
 
         CopyGeneratedInstallerNuGetConfiguration(nuGetConfigs, workingDirectory);
@@ -73,9 +76,9 @@ public sealed partial class DotNetPublishPipelineRunner
         while (queue.Count > 0)
         {
             var copiedSource = queue.Dequeue();
-            foreach (var importPath in ResolveGeneratedInstallerBuildImports(copiedSource, projectRootPath))
+            foreach (var importPath in ResolveGeneratedInstallerBuildImports(copiedSource, projectRootPath, sourceProjectDirectory, sourceProjectFullPath))
             {
-                CopyGeneratedInstallerBuildFile(importPath, projectRootPath, workingDirectory, copiedFiles, queue, plannedTargets);
+                CopyGeneratedInstallerBuildFile(importPath, projectRootPath, workingDirectory, sourceProjectDirectory, sourceProjectFullPath, copiedFiles, queue, plannedTargets);
             }
         }
     }
@@ -129,6 +132,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string sourcePath,
         string projectRoot,
         string workingDirectory,
+        string sourceProjectDirectory,
+        string sourceProjectFullPath,
         IDictionary<string, string> copiedFiles,
         Queue<string> queue,
         IReadOnlyDictionary<string, string> plannedTargets)
@@ -150,7 +155,7 @@ public sealed partial class DotNetPublishPipelineRunner
         copiedFiles[sourceFullPath] = targetPath;
         RebaseNuGetConfigPaths(targetPath, Path.GetDirectoryName(sourceFullPath)!);
         RewriteGeneratedInstallerBuildFileDirectoryProperties(targetPath, sourceFullPath);
-        RewriteGeneratedInstallerBuildImports(targetPath, sourceFullPath, projectRootDirectory, workingDirectory, copiedFiles, plannedTargets);
+        RewriteGeneratedInstallerBuildImports(targetPath, sourceFullPath, projectRootDirectory, workingDirectory, sourceProjectDirectory, sourceProjectFullPath, copiedFiles, plannedTargets);
         queue.Enqueue(sourceFullPath);
     }
 
@@ -274,6 +279,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (string.Equals(sourceChild.Name.LocalName, "clear", StringComparison.OrdinalIgnoreCase))
                 {
                     targetSection.RemoveNodes();
+                    targetSection.Add(new XElement(sourceChild));
                     continue;
                 }
 
@@ -392,12 +398,14 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string ExpandGeneratedInstallerBuildImport(
         string import,
         string sourceDirectory,
-        string projectRootDirectory)
+        string projectRootDirectory,
+        string sourceProjectDirectory,
+        string sourceProjectFullPath)
     {
         return import
             .Replace("$(MSBuildThisFileDirectory)", EnsureTrailingDirectorySeparator(sourceDirectory))
-            .Replace("$(MSBuildProjectDirectory)", projectRootDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
-            .Replace("$(MSBuildProjectFullPath)", Path.Combine(projectRootDirectory, "PowerForge.Generated.wixproj"))
+            .Replace("$(MSBuildProjectDirectory)", sourceProjectDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            .Replace("$(MSBuildProjectFullPath)", sourceProjectFullPath)
             .Replace("$(MSBuildProjectExtension)", ".wixproj");
     }
 
