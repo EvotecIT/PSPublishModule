@@ -559,8 +559,8 @@ public sealed partial class ManagedModuleInstallServiceTests
             "1.0.0",
             dependencies: new[]
             {
-                new TestDependency("Company.A", "[1.0.0]", null),
-                new TestDependency("Company.B", "[1.0.0]", null)
+                new TestDependency("Company.B", "[1.0.0]", null),
+                new TestDependency("Company.A", "[1.0.0]", null)
             },
             files: CreateModuleFiles("1.0.0"));
         var service = new ManagedModuleInstallService(new NullLogger());
@@ -574,7 +574,7 @@ public sealed partial class ManagedModuleInstallServiceTests
             ModuleRoot = moduleRoot.Path
         });
 
-        Assert.Equal(new[] { "Company.A", "Company.B" }, result.DependencyResults.Select(dependency => dependency.Name).ToArray());
+        Assert.Equal(new[] { "Company.B", "Company.A" }, result.DependencyResults.Select(dependency => dependency.Name).ToArray());
         var sharedResults = result.DependencyResults
             .SelectMany(dependency => dependency.DependencyResults)
             .Where(dependency => dependency.Name == "Company.Shared")

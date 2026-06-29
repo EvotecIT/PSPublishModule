@@ -268,8 +268,7 @@ public sealed partial class ManagedModuleInstallService
             .Select(static group => group
                 .OrderBy(static dependency => string.IsNullOrWhiteSpace(dependency.TargetFramework) ? 0 : 1)
                 .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
-                .First())
-            .OrderBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase);
+                .First());
     }
 
     private static ManagedModuleTrustPolicy? ResolveDependencyTrustPolicy(ManagedModuleTrustPolicy? trustPolicy)

@@ -16,8 +16,8 @@ public sealed class ManagedModulePackageReaderTests
             "1.2.0",
             dependencies: new[]
             {
-                new TestDependency("Company.Core", "[1.0.0,2.0.0)", "net472"),
-                new TestDependency("Company.Shared", "1.5.0", null)
+                new TestDependency("Company.Shared", "1.5.0", null),
+                new TestDependency("Company.Core", "[1.0.0,2.0.0)", "net472")
             });
 
         var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
@@ -30,6 +30,7 @@ public sealed class ManagedModulePackageReaderTests
         Assert.True(metadata.PackageBytes > 0);
         Assert.True(metadata.UncompressedBytes > 0);
         Assert.Equal(2, metadata.Dependencies.Count);
+        Assert.Equal(new[] { "Company.Shared", "Company.Core" }, metadata.Dependencies.Select(static dependency => dependency.Id).ToArray());
         Assert.Contains(metadata.Dependencies, dependency =>
             dependency.Id == "Company.Core" &&
             dependency.VersionRange == "[1.0.0,2.0.0)" &&
