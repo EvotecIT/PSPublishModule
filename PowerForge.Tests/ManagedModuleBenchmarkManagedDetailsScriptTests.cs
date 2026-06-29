@@ -156,6 +156,10 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(450.0, NumericProperty(summary, "CriticalDependencyBranchMilliseconds"));
         Assert.Equal("Extraction", Property(summary, "CriticalDependencyBranchDominantPhase"));
         Assert.Equal(320.0, NumericProperty(summary, "CriticalDependencyBranchDominantPhaseMilliseconds"));
+        Assert.Equal("Company.Root", Property(summary, "CriticalRootBranchName"));
+        Assert.Equal(1000.0, NumericProperty(summary, "CriticalRootBranchMilliseconds"));
+        Assert.Equal("Dependency", Property(summary, "CriticalRootBranchDominantPhase"));
+        Assert.Equal(800.0, NumericProperty(summary, "CriticalRootBranchDominantPhaseMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "CriticalMaterializationBranchName"));
         Assert.Equal(378.0, NumericProperty(summary, "CriticalMaterializationBranchMilliseconds"));
         Assert.Equal("Extraction", Property(summary, "CriticalMaterializationDominantPhase"));

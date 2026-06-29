@@ -516,6 +516,10 @@ function Invoke-TimedOperation {
         ManagedCriticalDependencyBranchMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalDependencyBranchMilliseconds')
         ManagedCriticalDependencyBranchDominantPhase = Get-DetailText -InputObject $detailSummary -Name 'CriticalDependencyBranchDominantPhase'
         ManagedCriticalDependencyBranchDominantPhaseMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalDependencyBranchDominantPhaseMilliseconds')
+        ManagedCriticalRootBranchName = Get-DetailText -InputObject $detailSummary -Name 'CriticalRootBranchName'
+        ManagedCriticalRootBranchMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalRootBranchMilliseconds')
+        ManagedCriticalRootBranchDominantPhase = Get-DetailText -InputObject $detailSummary -Name 'CriticalRootBranchDominantPhase'
+        ManagedCriticalRootBranchDominantPhaseMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalRootBranchDominantPhaseMilliseconds')
         ManagedCriticalMaterializationBranchName = Get-DetailText -InputObject $detailSummary -Name 'CriticalMaterializationBranchName'
         ManagedCriticalMaterializationBranchMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalMaterializationBranchMilliseconds')
         ManagedCriticalMaterializationDominantPhase = Get-DetailText -InputObject $detailSummary -Name 'CriticalMaterializationDominantPhase'

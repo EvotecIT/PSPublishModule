@@ -143,20 +143,31 @@ function New-ManagedOptimizationTarget {
         $lastPromotionMoveMs = if ($row.PSObject.Properties['ManagedLastPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMoveMs } else { 0.0 }
         $lastInstallLockWaitMs = if ($row.PSObject.Properties['ManagedLastInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastInstallLockWaitMs } else { 0.0 }
         $lastCriticalDependencyBranchMs = if ($row.PSObject.Properties['ManagedLastCriticalDependencyBranchMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCriticalDependencyBranchMs } else { 0.0 }
+        $lastCriticalRootBranchMs = if ($row.PSObject.Properties['ManagedLastCriticalRootBranchMs']) {
+            ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCriticalRootBranchMs
+        } elseif ($row.PSObject.Properties['ManagedLastRootDependencyMs']) {
+            ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs
+        } else {
+            0.0
+        }
         $lastCriticalMaterializationBranchMs = if ($row.PSObject.Properties['ManagedLastCriticalMaterializationBranchMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCriticalMaterializationBranchMs } else { 0.0 }
-        $lastCriticalLane = if ($lastCriticalDependencyBranchMs -ge $lastCriticalMaterializationBranchMs) {
+        $lastCriticalLane = @(
+            [pscustomobject]@{
+                Name = 'RootBranch'
+                Milliseconds = $lastCriticalRootBranchMs
+                Question = 'Can the root branch dependency coordination, installed-version reuse, or repository lookup fan-out be shortened?'
+            }
             [pscustomobject]@{
                 Name = 'DependencyBranch'
                 Milliseconds = $lastCriticalDependencyBranchMs
                 Question = 'Can the slowest dependency branch be shortened without optimizing summed parallel work that is not on the wall-clock path?'
             }
-        } else {
             [pscustomobject]@{
                 Name = 'MaterializationBranch'
                 Milliseconds = $lastCriticalMaterializationBranchMs
                 Question = 'Can the slowest package materialization branch be shortened without over-optimizing summed concurrent extraction or promotion work?'
             }
-        }
+        ) | Sort-Object Milliseconds -Descending | Select-Object -First 1
         $lastWarmLane = Get-ManagedWarmOptimizationLane `
             -DependencyMilliseconds $lastDependencyMs `
             -DownloadMilliseconds $lastDownloadMs `
@@ -268,6 +279,10 @@ function New-ManagedOptimizationTarget {
             LastCriticalDependencyBranchMs = $lastCriticalDependencyBranchMs
             LastCriticalDependencyBranchDominantPhase = if ($row.PSObject.Properties['ManagedLastCriticalDependencyBranchDominantPhase']) { [string] $row.ManagedLastCriticalDependencyBranchDominantPhase } else { '' }
             LastCriticalDependencyBranchDominantPhaseMs = if ($row.PSObject.Properties['ManagedLastCriticalDependencyBranchDominantPhaseMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCriticalDependencyBranchDominantPhaseMs } else { 0.0 }
+            LastCriticalRootBranch = if ($row.PSObject.Properties['ManagedLastCriticalRootBranchName']) { [string] $row.ManagedLastCriticalRootBranchName } elseif ($row.PSObject.Properties['ModuleName']) { [string] $row.ModuleName } else { '' }
+            LastCriticalRootBranchMs = $lastCriticalRootBranchMs
+            LastCriticalRootBranchDominantPhase = if ($row.PSObject.Properties['ManagedLastCriticalRootBranchDominantPhase']) { [string] $row.ManagedLastCriticalRootBranchDominantPhase } elseif ($lastCriticalRootBranchMs -gt 0) { 'Dependency' } else { '' }
+            LastCriticalRootBranchDominantPhaseMs = if ($row.PSObject.Properties['ManagedLastCriticalRootBranchDominantPhaseMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCriticalRootBranchDominantPhaseMs } else { $lastCriticalRootBranchMs }
             LastCriticalMaterializationBranch = if ($row.PSObject.Properties['ManagedLastCriticalMaterializationBranchName']) { [string] $row.ManagedLastCriticalMaterializationBranchName } else { '' }
             LastCriticalMaterializationBranchMs = $lastCriticalMaterializationBranchMs
             LastCriticalMaterializationDominantPhase = if ($row.PSObject.Properties['ManagedLastCriticalMaterializationDominantPhase']) { [string] $row.ManagedLastCriticalMaterializationDominantPhase } else { '' }

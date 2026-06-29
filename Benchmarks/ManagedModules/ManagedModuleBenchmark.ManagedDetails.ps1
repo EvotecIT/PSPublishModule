@@ -236,6 +236,12 @@ function Write-ManagedInstallDetail {
     } else {
         [pscustomobject]@{ Name = ''; Milliseconds = 0.0 }
     }
+    $rootBranch = @($packages | Where-Object { [int] $_.Depth -eq 0 } | Select-Object -First 1)
+    $rootBranchPhase = if ($rootBranch.Count) {
+        Get-ManagedDetailDominantPhase -Row $rootBranch[0] -PhaseNames @('Download', 'Extraction', 'Dependency', 'Promotion', 'CoalescedWait', 'InstallLock')
+    } else {
+        [pscustomobject]@{ Name = ''; Milliseconds = 0.0 }
+    }
     $criticalMaterializationBranch = @(
         $packages |
             Where-Object { $_.Status -eq 'Installed' } |
@@ -300,6 +306,10 @@ function Write-ManagedInstallDetail {
         CriticalDependencyBranchMilliseconds = if ($criticalDependencyBranch.Count) { [double] $criticalDependencyBranch[0].ElapsedMilliseconds } else { 0.0 }
         CriticalDependencyBranchDominantPhase = [string] $criticalDependencyBranchPhase.Name
         CriticalDependencyBranchDominantPhaseMilliseconds = [double] $criticalDependencyBranchPhase.Milliseconds
+        CriticalRootBranchName = if ($rootBranch.Count) { [string] $rootBranch[0].Name } else { '' }
+        CriticalRootBranchMilliseconds = if ($rootBranch.Count) { [double] $rootBranch[0].ElapsedMilliseconds } else { 0.0 }
+        CriticalRootBranchDominantPhase = [string] $rootBranchPhase.Name
+        CriticalRootBranchDominantPhaseMilliseconds = [double] $rootBranchPhase.Milliseconds
         CriticalMaterializationBranchName = if ($criticalMaterializationBranch.Count) { [string] $criticalMaterializationBranch[0].Name } else { '' }
         CriticalMaterializationBranchMilliseconds = $criticalMaterializationBranchMs
         CriticalMaterializationDominantPhase = [string] $criticalMaterializationBranchPhase.Name

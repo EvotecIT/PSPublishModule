@@ -57,6 +57,10 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedCriticalDependencyBranchMilliseconds = 780
                     ManagedCriticalDependencyBranchDominantPhase = 'Dependency'
                     ManagedCriticalDependencyBranchDominantPhaseMilliseconds = 700
+                    ManagedCriticalRootBranchName = 'Company.Root'
+                    ManagedCriticalRootBranchMilliseconds = 4200
+                    ManagedCriticalRootBranchDominantPhase = 'Dependency'
+                    ManagedCriticalRootBranchDominantPhaseMilliseconds = 3540
                     ManagedCriticalMaterializationBranchName = 'Company.Big'
                     ManagedCriticalMaterializationBranchMilliseconds = 560
                     ManagedCriticalMaterializationDominantPhase = 'Extraction'
@@ -114,6 +118,10 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedCriticalDependencyBranchMilliseconds = 520
                     ManagedCriticalDependencyBranchDominantPhase = 'Dependency'
                     ManagedCriticalDependencyBranchDominantPhaseMilliseconds = 500
+                    ManagedCriticalRootBranchName = 'Company.Root'
+                    ManagedCriticalRootBranchMilliseconds = 1773
+                    ManagedCriticalRootBranchDominantPhase = 'Dependency'
+                    ManagedCriticalRootBranchDominantPhaseMilliseconds = 1773
                     ManagedCriticalMaterializationBranchName = 'Company.Files'
                     ManagedCriticalMaterializationBranchMilliseconds = 390
                     ManagedCriticalMaterializationDominantPhase = 'Extraction'
@@ -174,12 +182,17 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(320.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageExtractionMs"));
         Assert.Equal(70.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackagePromotionMs"));
         Assert.Equal(650.0, NumericProperty(row, "ManagedCriticalDependencyBranchMs"));
+        Assert.Equal(2986.5, NumericProperty(row, "ManagedCriticalRootBranchMs"));
         Assert.Equal(475.0, NumericProperty(row, "ManagedCriticalMaterializationBranchMs"));
         Assert.Equal("Company.BranchWarm", Property(row, "ManagedLastCriticalDependencyBranchName"));
         Assert.Equal("Company.Shared", Property(row, "ManagedLastCriticalDependencyBranchParent"));
         Assert.Equal(520.0, NumericProperty(row, "ManagedLastCriticalDependencyBranchMs"));
         Assert.Equal("Dependency", Property(row, "ManagedLastCriticalDependencyBranchDominantPhase"));
         Assert.Equal(500.0, NumericProperty(row, "ManagedLastCriticalDependencyBranchDominantPhaseMs"));
+        Assert.Equal("Company.Root", Property(row, "ManagedLastCriticalRootBranchName"));
+        Assert.Equal(1773.0, NumericProperty(row, "ManagedLastCriticalRootBranchMs"));
+        Assert.Equal("Dependency", Property(row, "ManagedLastCriticalRootBranchDominantPhase"));
+        Assert.Equal(1773.0, NumericProperty(row, "ManagedLastCriticalRootBranchDominantPhaseMs"));
         Assert.Equal("Company.Files", Property(row, "ManagedLastCriticalMaterializationBranchName"));
         Assert.Equal(390.0, NumericProperty(row, "ManagedLastCriticalMaterializationBranchMs"));
         Assert.Equal("Extraction", Property(row, "ManagedLastCriticalMaterializationDominantPhase"));
