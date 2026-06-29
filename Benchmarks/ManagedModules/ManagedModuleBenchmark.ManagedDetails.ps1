@@ -49,6 +49,23 @@ function Add-ManagedInstallDetail {
 
     $download = $Result.Download
     $authenticode = $Result.AuthenticodeVerification
+    $elapsedMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.Elapsed
+    $downloadMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DownloadElapsed
+    $extractionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.ExtractionElapsed
+    $dependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
+    $promotionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.PromotionElapsed
+    $coalescedWaitMilliseconds = if (
+        [string] $Result.Status -eq 'AlreadyInstalled' -and
+        [double] $elapsedMilliseconds -gt 0 -and
+        [double] $downloadMilliseconds -eq 0 -and
+        [double] $extractionMilliseconds -eq 0 -and
+        [double] $dependencyMilliseconds -eq 0 -and
+        [double] $promotionMilliseconds -eq 0) {
+        $elapsedMilliseconds
+    } else {
+        0
+    }
+
     $Rows.Add([pscustomobject]@{
         Name = [string] $Result.Name
         Version = [string] $Result.Version
@@ -56,12 +73,13 @@ function Add-ManagedInstallDetail {
         ModulePath = [string] $Result.ModulePath
         Parent = $Parent
         Depth = $Depth
-        ElapsedMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.Elapsed
+        ElapsedMilliseconds = $elapsedMilliseconds
         VersionResolutionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.VersionResolutionElapsed
-        DownloadMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DownloadElapsed
-        ExtractionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.ExtractionElapsed
-        DependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
-        PromotionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.PromotionElapsed
+        DownloadMilliseconds = $downloadMilliseconds
+        ExtractionMilliseconds = $extractionMilliseconds
+        DependencyMilliseconds = $dependencyMilliseconds
+        PromotionMilliseconds = $promotionMilliseconds
+        CoalescedWaitMilliseconds = $coalescedWaitMilliseconds
         RepositoryRequestCount = [long] $Result.RepositoryRequestCount
         PackageRepositoryRequestCount = [long] (Get-NumericPropertyValue -InputObject $Result -Name 'PackageRepositoryRequestCount')
         PackageRepositoryRedirectCount = [long] (Get-NumericPropertyValue -InputObject $Result -Name 'PackageRepositoryRedirectCount')
@@ -111,17 +129,12 @@ function Write-ManagedInstallDetail {
     $coalescedWaits = @(
         $packages |
             Where-Object {
-                $_.Status -eq 'AlreadyInstalled' -and
-                [double] $_.ElapsedMilliseconds -gt 0 -and
-                [double] $_.DownloadMilliseconds -eq 0 -and
-                [double] $_.ExtractionMilliseconds -eq 0 -and
-                [double] $_.DependencyMilliseconds -eq 0 -and
-                [double] $_.PromotionMilliseconds -eq 0
+                [double] $_.CoalescedWaitMilliseconds -gt 0
             }
     )
     $slowestCoalescedWait = @(
         $coalescedWaits |
-            Sort-Object @{ Expression = { [double] $_.ElapsedMilliseconds }; Descending = $true } |
+            Sort-Object @{ Expression = { [double] $_.CoalescedWaitMilliseconds }; Descending = $true } |
             Select-Object -First 1
     )
     $slowestMaterializedPackage = @(
@@ -152,9 +165,9 @@ function Write-ManagedInstallDetail {
         TotalAuthenticodeCheckedFiles = [long] (($packages | Measure-Object AuthenticodeCheckedFiles -Sum).Sum)
         TotalAuthenticodeCatalogFiles = [long] (($packages | Measure-Object AuthenticodeCatalogFiles -Sum).Sum)
         CoalescedWaitCount = $coalescedWaits.Count
-        TotalCoalescedWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $coalescedWaits -Name 'ElapsedMilliseconds'), 2)
+        TotalCoalescedWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $coalescedWaits -Name 'CoalescedWaitMilliseconds'), 2)
         SlowestCoalescedWaitName = if ($slowestCoalescedWait.Count) { [string] $slowestCoalescedWait[0].Name } else { '' }
-        SlowestCoalescedWaitMilliseconds = if ($slowestCoalescedWait.Count) { [double] $slowestCoalescedWait[0].ElapsedMilliseconds } else { 0.0 }
+        SlowestCoalescedWaitMilliseconds = if ($slowestCoalescedWait.Count) { [double] $slowestCoalescedWait[0].CoalescedWaitMilliseconds } else { 0.0 }
         SlowestMaterializedPackageName = if ($slowestMaterializedPackage.Count) { [string] $slowestMaterializedPackage[0].Name } else { '' }
         SlowestMaterializedPackageMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ElapsedMilliseconds } else { 0.0 }
         SlowestMaterializedPackageExtractionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionMilliseconds } else { 0.0 }
