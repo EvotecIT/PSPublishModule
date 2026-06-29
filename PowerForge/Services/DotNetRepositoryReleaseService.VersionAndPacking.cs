@@ -52,7 +52,11 @@ public sealed partial class DotNetRepositoryReleaseService
         return VersionPatternStepper.Step(expectedVersion!, current);
     }
 
-    private static DotNetPackResult PackProject(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec, ILogger logger)
+    private static DotNetPackResult PackProject(
+        DotNetRepositoryProjectResult project,
+        DotNetRepositoryReleaseSpec spec,
+        ILogger logger,
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies)
     {
         var result = new DotNetPackResult();
 
@@ -71,8 +75,37 @@ public sealed partial class DotNetRepositoryReleaseService
         var packageRoot = outputPath ?? Path.Combine(csprojDir, "bin", configuration);
         var existingPackages = SnapshotPackages(packageRoot);
 
-        var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, out var stdErr, out var stdOut, out var duration);
-        result.Duration = duration;
+        var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
+        if (shouldSignAssemblies)
+        {
+            var buildExitCode = RunDotnetBuild(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, out var buildStdErr, out var buildStdOut, out var buildDuration);
+            result.Duration += buildDuration;
+            if (buildExitCode != 0)
+            {
+                result.ErrorMessage = $"dotnet build failed for {project.ProjectName} (exit {buildExitCode}). {SummarizeProcessFailureOutput(buildStdErr, buildStdOut)}".Trim();
+                return result;
+            }
+
+            try
+            {
+                signAssemblies!(new DotNetReleaseBuildAssemblySigningRequest
+                {
+                    ReleasePath = Path.Combine(csprojDir, "bin", configuration),
+                    LocalStore = spec.CertificateStore,
+                    CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
+                    TimeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim(),
+                    IncludePatterns = new[] { "*.dll", "*.exe" }
+                });
+            }
+            catch (Exception ex)
+            {
+                result.ErrorMessage = $"Assembly signing failed for {project.ProjectName}. {ex.Message}";
+                return result;
+            }
+        }
+
+        var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, shouldSignAssemblies, out var stdErr, out var stdOut, out var duration);
+        result.Duration += duration;
         if (exitCode != 0)
         {
             result.ErrorMessage = $"dotnet pack failed for {project.ProjectName} (exit {exitCode}). {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
@@ -222,6 +255,7 @@ public sealed partial class DotNetRepositoryReleaseService
         string? outputPath,
         string projectName,
         ILogger logger,
+        bool noBuild,
         out string stdErr,
         out string stdOut,
         out TimeSpan duration)
@@ -243,6 +277,8 @@ public sealed partial class DotNetRepositoryReleaseService
 
 #if NET472
         var args = new List<string> { "pack", csproj, "--configuration", configuration };
+        if (noBuild)
+            args.Add("--no-build");
         if (!string.IsNullOrWhiteSpace(outputPath))
         {
             args.Add("-o");
@@ -254,6 +290,8 @@ public sealed partial class DotNetRepositoryReleaseService
         psi.ArgumentList.Add(csproj);
         psi.ArgumentList.Add("--configuration");
         psi.ArgumentList.Add(configuration);
+        if (noBuild)
+            psi.ArgumentList.Add("--no-build");
         if (!string.IsNullOrWhiteSpace(outputPath))
         {
             psi.ArgumentList.Add("-o");
@@ -269,6 +307,51 @@ public sealed partial class DotNetRepositoryReleaseService
             out stdOut,
             out duration);
         LogProcessOutput(logger, projectName, "dotnet pack", stdOut, stdErr);
+        return exitCode;
+    }
+
+    private static int RunDotnetBuild(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string projectName,
+        ILogger logger,
+        out string stdErr,
+        out string stdOut,
+        out TimeSpan duration)
+    {
+        stdErr = string.Empty;
+        stdOut = string.Empty;
+        duration = TimeSpan.Zero;
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDirectory
+        };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
+
+#if NET472
+        psi.Arguments = BuildWindowsArgumentString(new[] { "build", csproj, "--configuration", configuration });
+#else
+        psi.ArgumentList.Add("build");
+        psi.ArgumentList.Add(csproj);
+        psi.ArgumentList.Add("--configuration");
+        psi.ArgumentList.Add(configuration);
+#endif
+
+        var exitCode = RunProcessWithHeartbeat(
+            psi,
+            logger,
+            elapsed => $"{projectName}: dotnet build still running ({FormatDuration(elapsed)} elapsed).",
+            out stdErr,
+            out stdOut,
+            out duration);
+        LogProcessOutput(logger, projectName, "dotnet build", stdOut, stdErr);
         return exitCode;
     }
 

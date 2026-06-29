@@ -107,6 +107,8 @@ internal sealed class ProjectBuildPreparationService
             CertificateThumbprint = config.CertificateThumbprint,
             CertificateStore = ProjectBuildSupportService.ParseCertificateStore(config.CertificateStore),
             TimeStampServer = config.TimeStampServer,
+            SignAssemblies = ResolveSigningEnabled(config.SignAssemblies, config.CertificateThumbprint),
+            SignPackages = ResolveSigningEnabled(config.SignPackages, config.CertificateThumbprint),
             Pack = context.Build || context.PublishNuget || context.PublishGitHub,
             CreateReleaseZip = context.CreateReleaseZip,
             Publish = context.PublishNuget,
@@ -119,4 +121,7 @@ internal sealed class ProjectBuildPreparationService
 
         return context;
     }
+
+    private static bool ResolveSigningEnabled(bool? configuredValue, string? certificateThumbprint)
+        => configuredValue ?? !string.IsNullOrWhiteSpace(certificateThumbprint);
 }

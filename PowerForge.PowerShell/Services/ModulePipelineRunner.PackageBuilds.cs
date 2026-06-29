@@ -264,6 +264,10 @@ public sealed partial class ModulePipelineRunner
             target.PublishGitHub = reference.PublishGitHub;
         if (reference.CreateReleaseZip is not null)
             target.CreateReleaseZip = reference.CreateReleaseZip;
+        if (reference.SignAssemblies is not null)
+            target.SignAssemblies = reference.SignAssemblies;
+        if (reference.SignPackages is not null)
+            target.SignPackages = reference.SignPackages;
     }
 
     private static void ApplyProjectBuildGateDefaults(
@@ -519,6 +523,8 @@ public sealed partial class ModulePipelineRunner
             CertificateThumbprint = source.CertificateThumbprint,
             CertificateStore = source.CertificateStore,
             TimeStampServer = source.TimeStampServer,
+            SignAssemblies = source.SignAssemblies,
+            SignPackages = source.SignPackages,
             NugetCredentialUserName = source.NugetCredentialUserName,
             NugetCredentialSecret = source.NugetCredentialSecret,
             NugetCredentialSecretFilePath = source.NugetCredentialSecretFilePath,

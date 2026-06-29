@@ -818,6 +818,80 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
+    public void Run_InlinePackageBuild_PreservesSigningPhaseOptions()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPath));
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "InlinePackages",
+                            RootPath = "Sources",
+                            CertificateThumbprint = "ABC123",
+                            SignAssemblies = false,
+                            SignPackages = false,
+                            BuildBeforeModule = true,
+                            Build = true
+                        }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            var call = Assert.Single(calls);
+            Assert.Single(result.ProjectBuildResults);
+            Assert.Equal("ABC123", call.Configuration?.CertificateThumbprint);
+            Assert.False(call.Configuration?.SignAssemblies);
+            Assert.False(call.Configuration?.SignPackages);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_ExecutesPostModulePackageBuildsBeforeUnifiedReleaseStaging()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

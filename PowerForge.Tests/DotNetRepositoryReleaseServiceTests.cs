@@ -314,6 +314,110 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_WithAssemblySigning_SignsBuildOutputsBeforePacking()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Class1.cs"), "namespace Sample.Package; public static class Class1 { public static string Value => \"signed\"; }");
+
+            var signedMarker = string.Empty;
+            var signingCalls = 0;
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "packages"),
+                ReleaseZipOutputPath = Path.Combine(root.FullName, "releases"),
+                Pack = true,
+                Publish = false,
+                UpdateVersions = false,
+                CreateReleaseZip = true,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true,
+                SignPackages = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec, request =>
+            {
+                signingCalls++;
+                Assert.Equal(CertificateStoreLocation.CurrentUser, request.LocalStore);
+                Assert.Equal("ABC123", request.CertificateThumbprint);
+                var assembly = Directory.EnumerateFiles(request.ReleasePath, "Sample.Package.dll", SearchOption.AllDirectories)
+                    .SingleOrDefault();
+                Assert.False(string.IsNullOrWhiteSpace(assembly));
+                signedMarker = Path.Combine(Path.GetDirectoryName(assembly!)!, "signed.marker");
+                File.WriteAllText(signedMarker, "signed-before-pack");
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, signingCalls);
+            Assert.True(File.Exists(signedMarker));
+            var project = Assert.Single(result.Projects, item => item.IsPackable);
+            Assert.Single(project.Packages);
+            Assert.True(File.Exists(project.Packages[0]));
+            Assert.True(File.Exists(project.ReleaseZipPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_FailsClearlyWhenAssemblySigningIsRequestedWithoutHandler()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Pack = true,
+                Publish = false,
+                UpdateVersions = false,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true,
+                SignPackages = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.False(result.Success);
+            Assert.Contains("assembly signing handler", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData(5_400_000, "1h 30.0m")]
     [InlineData(65_000, "1.1m")]

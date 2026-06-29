@@ -24,6 +24,8 @@ internal sealed class DotNetRepositoryReleasePreparationRequest
     public string? CertificateThumbprint { get; set; }
     public CertificateStoreLocation CertificateStore { get; set; } = CertificateStoreLocation.CurrentUser;
     public string? TimeStampServer { get; set; }
+    public bool? SignAssemblies { get; set; }
+    public bool? SignPackages { get; set; }
     public bool SkipPack { get; set; }
     public bool Publish { get; set; }
     public string? PublishSource { get; set; }

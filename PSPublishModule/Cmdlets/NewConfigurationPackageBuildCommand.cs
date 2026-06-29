@@ -63,6 +63,14 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
     [Parameter]
     public SwitchParameter CreateReleaseZip { get; set; }
 
+    /// <summary>Whether assemblies should be signed before packages are created, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter SignAssemblies { get; set; }
+
+    /// <summary>Whether generated NuGet packages should be signed, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter SignPackages { get; set; }
+
     /// <summary>Additional project-build JSON overrides for less common fields.</summary>
     [Parameter]
     public IDictionary? Options { get; set; }
@@ -85,6 +93,8 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
                 PublishNuget = BoundSwitch(nameof(PublishNuget), PublishNuget),
                 PublishGitHub = BoundSwitch(nameof(PublishGitHub), PublishGitHub),
                 CreateReleaseZip = BoundSwitch(nameof(CreateReleaseZip), CreateReleaseZip),
+                SignAssemblies = BoundSwitch(nameof(SignAssemblies), SignAssemblies),
+                SignPackages = BoundSwitch(nameof(SignPackages), SignPackages),
                 Options = PackageBuildConfiguration.ToObjectDictionary(Options)
             }
         });
@@ -233,6 +243,12 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
     /// <summary>Timestamp server URL for package signing.</summary>
     [Parameter] public string? TimeStampServer { get; set; }
 
+    /// <summary>Whether assemblies should be signed before packages are created.</summary>
+    [Parameter] public SwitchParameter SignAssemblies { get; set; }
+
+    /// <summary>Whether generated NuGet packages should be signed.</summary>
+    [Parameter] public SwitchParameter SignPackages { get; set; }
+
     /// <summary>NuGet version lookup credential user name.</summary>
     [Parameter] public string? NugetCredentialUserName { get; set; }
 
@@ -337,6 +353,8 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
                 CertificateThumbprint = Normalize(CertificateThumbprint),
                 CertificateStore = Normalize(CertificateStore),
                 TimeStampServer = Normalize(TimeStampServer),
+                SignAssemblies = BoundSwitch(nameof(SignAssemblies), SignAssemblies),
+                SignPackages = BoundSwitch(nameof(SignPackages), SignPackages),
                 NugetCredentialUserName = Normalize(NugetCredentialUserName),
                 NugetCredentialSecret = NugetCredentialSecret,
                 NugetCredentialSecretFilePath = Normalize(NugetCredentialSecretFilePath),

@@ -31,6 +31,8 @@ public sealed class DotNetRepositoryReleasePreparationServiceTests
                 OutputPath = "artifacts",
                 CertificateStore = CertificateStoreLocation.LocalMachine,
                 TimeStampServer = "http://timestamp.test",
+                SignAssemblies = false,
+                SignPackages = false,
                 Publish = true,
                 PublishFailFast = true,
                 SkipDuplicate = true
@@ -47,6 +49,8 @@ public sealed class DotNetRepositoryReleasePreparationServiceTests
             Assert.Equal("publish-from-env", context.Spec.PublishApiKey);
             Assert.Equal(Path.Combine(root.FullName, "repo", "artifacts"), context.Spec.OutputPath);
             Assert.Equal(PowerForge.CertificateStoreLocation.LocalMachine, context.Spec.CertificateStore);
+            Assert.False(context.Spec.SignAssemblies);
+            Assert.False(context.Spec.SignPackages);
             Assert.Equal("Debug", context.Spec.Configuration);
             Assert.True(context.Spec.Publish);
             Assert.True(context.Spec.PublishFailFast);
@@ -56,6 +60,21 @@ public sealed class DotNetRepositoryReleasePreparationServiceTests
             Environment.SetEnvironmentVariable(envName, null);
             try { root.Delete(recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void Prepare_enables_signing_by_default_when_certificate_is_configured()
+    {
+        var request = new DotNetRepositoryReleasePreparationRequest
+        {
+            CurrentPath = Directory.GetCurrentDirectory(),
+            CertificateThumbprint = "ABC123"
+        };
+
+        var context = new DotNetRepositoryReleasePreparationService().Prepare(request);
+
+        Assert.True(context.Spec.SignAssemblies);
+        Assert.True(context.Spec.SignPackages);
     }
 
     [Fact]

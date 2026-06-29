@@ -60,6 +60,8 @@ internal sealed class DotNetRepositoryReleasePreparationService
                 CertificateThumbprint = request.CertificateThumbprint,
                 CertificateStore = mappedStore,
                 TimeStampServer = request.TimeStampServer,
+                SignAssemblies = ResolveSigningEnabled(request.SignAssemblies, request.CertificateThumbprint),
+                SignPackages = ResolveSigningEnabled(request.SignPackages, request.CertificateThumbprint),
                 Pack = !request.SkipPack,
                 Publish = request.Publish,
                 PublishSource = request.PublishSource,
@@ -69,6 +71,9 @@ internal sealed class DotNetRepositoryReleasePreparationService
             }
         };
     }
+
+    private static bool ResolveSigningEnabled(bool? configuredValue, string? certificateThumbprint)
+        => configuredValue ?? !string.IsNullOrWhiteSpace(certificateThumbprint);
 
     private static Dictionary<string, string> ParseExpectedVersionMap(IDictionary? entries)
     {

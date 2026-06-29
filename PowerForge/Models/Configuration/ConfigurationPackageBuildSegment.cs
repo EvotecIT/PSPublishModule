@@ -53,6 +53,12 @@ public sealed class ProjectBuildConfigurationReference
     /// <summary>Whether release ZIPs should be created, overriding the referenced JSON when set.</summary>
     public bool? CreateReleaseZip { get; set; }
 
+    /// <summary>Whether assemblies should be signed before packages are created, overriding the referenced JSON when set.</summary>
+    public bool? SignAssemblies { get; set; }
+
+    /// <summary>Whether generated NuGet packages should be signed, overriding the referenced JSON when set.</summary>
+    public bool? SignPackages { get; set; }
+
     /// <summary>Additional project-build JSON overrides for less common fields.</summary>
     public Dictionary<string, object?>? Options { get; set; }
 }
@@ -193,6 +199,12 @@ public sealed class PackageBuildConfiguration
 
     /// <summary>Timestamp server URL for package signing.</summary>
     public string? TimeStampServer { get; set; }
+
+    /// <summary>Whether assemblies should be signed before packages are created.</summary>
+    public bool? SignAssemblies { get; set; }
+
+    /// <summary>Whether generated NuGet packages should be signed.</summary>
+    public bool? SignPackages { get; set; }
 
     /// <summary>NuGet version lookup credential user name.</summary>
     public string? NugetCredentialUserName { get; set; }
