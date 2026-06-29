@@ -78,13 +78,14 @@ $packageOptions['OutputPath'] = 'Artefacts/PackageBuild/options'
 $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 [PowerForge.ConfigurationBuildLibrariesSegment]@{
     BuildLibraries = [PowerForge.BuildLibrariesConfiguration]@{
-        NETProjectPath = 'DbaClientX.PowerShell/DbaClientX.PowerShell.csproj'
-        NETDevelopmentBinariesPath = 'DbaClientX.PowerShell/bin'
+        NETProjectPath = '../DbaClientX.PowerShell/DbaClientX.PowerShell.csproj'
+        DevelopmentBinariesPath = 'Sources/Local/bin'
+        NETDevelopmentBinariesPath = '../DbaClientX.PowerShell/bin'
     }
 }
 [PowerForge.ConfigurationProjectBuildSegment]@{
     Configuration = [PowerForge.ProjectBuildConfigurationReference]@{
-        ConfigPath = 'Build/project.build.json'
+        ConfigPath = '../Build/project.build.json'
         BuildBeforeModule = $true
         Options = $projectOptions
     }
@@ -267,11 +268,12 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(Path.Combine(root.FullName, "Build", "powerforge.json"), prepared.JsonOutputPath);
 
                 var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(prepared.PipelineSpec.Segments[0]);
-                Assert.Equal(Path.Combine(root.FullName, "DbaClientX.PowerShell", "DbaClientX.PowerShell.csproj"), buildLibraries.BuildLibraries.NETProjectPath);
-                Assert.Equal(Path.Combine(root.FullName, "DbaClientX.PowerShell", "bin"), buildLibraries.BuildLibraries.NETDevelopmentBinariesPath);
+                Assert.Equal("../DbaClientX.PowerShell/DbaClientX.PowerShell.csproj", buildLibraries.BuildLibraries.NETProjectPath);
+                Assert.Equal("Sources/Local/bin", buildLibraries.BuildLibraries.DevelopmentBinariesPath);
+                Assert.Equal("../DbaClientX.PowerShell/bin", buildLibraries.BuildLibraries.NETDevelopmentBinariesPath);
 
                 var projectBuild = Assert.IsType<ConfigurationProjectBuildSegment>(prepared.PipelineSpec.Segments[1]);
-                Assert.Equal(Path.Combine(root.FullName, "Build", "project.build.json"), projectBuild.Configuration.ConfigPath);
+                Assert.Equal("../Build/project.build.json", projectBuild.Configuration.ConfigPath);
                 Assert.Equal(Path.Combine(root.FullName, "Artefacts", "ProjectBuild", "options"), projectBuild.Configuration.Options!["OutputPath"]);
                 Assert.Equal(Path.Combine(root.FullName, "Build", "project-options-plan.json"), projectBuild.Configuration.Options["PlanOutputPath"]);
 
@@ -572,6 +574,87 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"StagingPath\": \"../staging\"", json, StringComparison.Ordinal);
             Assert.Contains("\"CsprojPath\": \"../src/SampleModule.csproj\"", json, StringComparison.Ordinal);
             Assert.Contains("\"BaselinePath\": \"baseline.json\"", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void WritePipelineSpecJson_keeps_workspace_paths_portable_from_module_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-workspace-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var jsonPath = Path.Combine(root.FullName, "Build", "powerforge.json");
+            var externalRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "External-" + Guid.NewGuid().ToString("N"));
+            var externalPublishKey = Path.Combine(externalRoot, "psgallery.key");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = moduleRoot.FullName,
+                    BinaryConflictSearchRoots = new[] { Path.Combine(root.FullName, "Modules") }
+                },
+                Install = new ModulePipelineInstallOptions
+                {
+                    Roots = new[] { Path.Combine(root.FullName, "Artefacts", "Modules") }
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Signing = new SigningOptionsConfiguration
+                            {
+                                CertificatePFXPath = Path.Combine(root.FullName, "Build", "cert.pfx")
+                            }
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Destination = PublishDestination.PowerShellGallery,
+                            ApiKeyFilePath = Path.Combine(root.FullName, "Build", "psgallery.key")
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Destination = PublishDestination.PowerShellGallery,
+                            ApiKeyFilePath = externalPublishKey
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            FilePath = Path.Combine(root.FullName, "Build", "Test-ReleaseReady.ps1"),
+                            WorkingDirectory = Path.Combine(root.FullName, "Build")
+                        }
+                    }
+                }
+            };
+
+            new ModuleBuildPreparationService().WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"SourcePath\": \"../Module\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"../Modules\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Roots\": [", json, StringComparison.Ordinal);
+            Assert.Contains("\"../Artefacts/Modules\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"CertificatePFXPath\": \"../Build/cert.pfx\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"ApiKeyFilePath\": \"../Build/psgallery.key\"", json, StringComparison.Ordinal);
+            Assert.Contains($"\"ApiKeyFilePath\": \"{externalPublishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"FilePath\": \"../Build/Test-ReleaseReady.ps1\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"WorkingDirectory\": \"../Build\"", json, StringComparison.Ordinal);
         }
         finally
         {

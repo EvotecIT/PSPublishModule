@@ -405,18 +405,23 @@ internal sealed class ModuleBuildPreparationService
         if (segments.Count == 0 || SamePath(workspaceRoot, projectRoot))
             return;
 
+        var preserveModuleLocalBuildPaths = UsesModuleFolderLayout(workspaceRoot, projectRoot);
         foreach (var segment in segments)
         {
             switch (segment)
             {
                 case ConfigurationBuildLibrariesSegment buildLibraries:
                     var libraries = buildLibraries.BuildLibraries;
-                    libraries.NETProjectPath = ResolveWorkspacePath(workspaceRoot, libraries.NETProjectPath);
-                    libraries.DevelopmentBinariesPath = ResolveWorkspacePath(workspaceRoot, libraries.DevelopmentBinariesPath);
-                    libraries.NETDevelopmentBinariesPath = ResolveWorkspacePath(workspaceRoot, libraries.NETDevelopmentBinariesPath);
+                    if (!preserveModuleLocalBuildPaths)
+                    {
+                        libraries.NETProjectPath = ResolveWorkspacePath(workspaceRoot, libraries.NETProjectPath);
+                        libraries.DevelopmentBinariesPath = ResolveWorkspacePath(workspaceRoot, libraries.DevelopmentBinariesPath);
+                        libraries.NETDevelopmentBinariesPath = ResolveWorkspacePath(workspaceRoot, libraries.NETDevelopmentBinariesPath);
+                    }
                     break;
                 case ConfigurationProjectBuildSegment projectBuild:
-                    projectBuild.Configuration.ConfigPath = ResolveWorkspacePath(workspaceRoot, projectBuild.Configuration.ConfigPath) ?? string.Empty;
+                    if (!preserveModuleLocalBuildPaths)
+                        projectBuild.Configuration.ConfigPath = ResolveWorkspacePath(workspaceRoot, projectBuild.Configuration.ConfigPath) ?? string.Empty;
                     ResolvePackageBuildOptionPaths(projectBuild.Configuration.Options, workspaceRoot);
                     break;
                 case ConfigurationPackageBuildSegment packageBuild:
@@ -469,6 +474,17 @@ internal sealed class ModuleBuildPreparationService
                     break;
             }
         }
+    }
+
+    private static bool UsesModuleFolderLayout(string workspaceRoot, string projectRoot)
+    {
+        if (SamePath(workspaceRoot, projectRoot))
+            return false;
+
+        var projectDirectory = new DirectoryInfo(Path.GetFullPath(projectRoot));
+        return string.Equals(projectDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) &&
+               projectDirectory.Parent is not null &&
+               SamePath(workspaceRoot, projectDirectory.Parent.FullName);
     }
 
     private static void ResolveWorkspaceRelativeArtefactPaths(ArtefactConfiguration configuration, string workspaceRoot, string projectRoot)
@@ -728,18 +744,19 @@ internal sealed class ModuleBuildPreparationService
         var baseDir = Path.GetDirectoryName(jsonFullPath);
         if (string.IsNullOrWhiteSpace(baseDir)) return;
         var projectRoot = ResolveConfigPath(baseDir, spec.Build.SourcePath);
+        var workspaceRoot = ResolveJsonWorkspaceRoot(projectRoot);
 
         spec.Build.SourcePath = MakeRelativeForConfig(baseDir, spec.Build.SourcePath);
         spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = MakeRelativeForConfigNullable(baseDir, spec.Build.CsprojPath);
         spec.Build.DevelopmentBinariesPath = MakeRelativeForConfigNullable(baseDir, spec.Build.DevelopmentBinariesPath);
-        spec.Build.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Build.BinaryConflictSearchRoots, preserveExternalRooted: true);
+        spec.Build.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Build.BinaryConflictSearchRoots, preserveExternalRooted: true, workspaceRoot);
         if (spec.Install?.Roots is not null)
-            spec.Install.Roots = MakePathsRelativeForProjectRoot(projectRoot, spec.Install.Roots, preserveExternalRooted: true);
+            spec.Install.Roots = MakePathsRelativeForProjectRoot(projectRoot, spec.Install.Roots, preserveExternalRooted: true, workspaceRoot);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
             spec.Diagnostics.BaselinePath = MakeRelativeForConfig(baseDir, spec.Diagnostics.BaselinePath!);
         if (spec.Diagnostics is not null)
-            spec.Diagnostics.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Diagnostics.BinaryConflictSearchRoots, preserveExternalRooted: true);
+            spec.Diagnostics.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Diagnostics.BinaryConflictSearchRoots, preserveExternalRooted: true, workspaceRoot);
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationAppleAppSegment>() ?? Enumerable.Empty<ConfigurationAppleAppSegment>())
         {
@@ -761,7 +778,7 @@ internal sealed class ModuleBuildPreparationService
             if (cfg is null) continue;
             if (!string.IsNullOrWhiteSpace(cfg.ConfigPath))
                 cfg.ConfigPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.ConfigPath));
-            MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot);
+            MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot, workspaceRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationBuildLibrariesSegment>() ?? Enumerable.Empty<ConfigurationBuildLibrariesSegment>())
@@ -781,10 +798,10 @@ internal sealed class ModuleBuildPreparationService
             cfg.ReleaseZipOutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.ReleaseZipOutputPath);
             cfg.StagingPath = MakeRelativeForProjectRoot(projectRoot, cfg.StagingPath);
             cfg.PlanOutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.PlanOutputPath);
-            cfg.PublishApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.PublishApiKeyFilePath, preserveExternalRooted: true);
-            cfg.NugetCredentialSecretFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.NugetCredentialSecretFilePath, preserveExternalRooted: true);
-            cfg.GitHubAccessTokenFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.GitHubAccessTokenFilePath, preserveExternalRooted: true);
-            MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot);
+            cfg.PublishApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.PublishApiKeyFilePath, preserveExternalRooted: true, workspaceRoot);
+            cfg.NugetCredentialSecretFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.NugetCredentialSecretFilePath, preserveExternalRooted: true, workspaceRoot);
+            cfg.GitHubAccessTokenFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.GitHubAccessTokenFilePath, preserveExternalRooted: true, workspaceRoot);
+            MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot, workspaceRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationDocumentationSegment>() ?? Enumerable.Empty<ConfigurationDocumentationSegment>())
@@ -819,7 +836,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var signing = segment.Options?.Signing;
             if (signing is null) continue;
-            signing.CertificatePFXPath = MakeRelativeForProjectRoot(projectRoot, signing.CertificatePFXPath, preserveExternalRooted: true);
+            signing.CertificatePFXPath = MakeRelativeForProjectRoot(projectRoot, signing.CertificatePFXPath, preserveExternalRooted: true, workspaceRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationReleaseSegment>() ?? Enumerable.Empty<ConfigurationReleaseSegment>())
@@ -833,15 +850,15 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.ApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.ApiKeyFilePath, preserveExternalRooted: true);
+            cfg.ApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.ApiKeyFilePath, preserveExternalRooted: true, workspaceRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationActionSegment>() ?? Enumerable.Empty<ConfigurationActionSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.FilePath = MakeRelativeForProjectRoot(projectRoot, cfg.FilePath, preserveExternalRooted: true);
-            cfg.WorkingDirectory = MakeRelativeForProjectRoot(projectRoot, cfg.WorkingDirectory, preserveExternalRooted: true);
+            cfg.FilePath = MakeRelativeForProjectRoot(projectRoot, cfg.FilePath, preserveExternalRooted: true, workspaceRoot);
+            cfg.WorkingDirectory = MakeRelativeForProjectRoot(projectRoot, cfg.WorkingDirectory, preserveExternalRooted: true, workspaceRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationArtefactSegment>() ?? Enumerable.Empty<ConfigurationArtefactSegment>())
@@ -851,9 +868,17 @@ internal sealed class ModuleBuildPreparationService
             cfg.Path = MakeRelativeForProjectRoot(projectRoot, cfg.Path);
             cfg.RequiredModules.Path = MakeArtefactLayoutPathForJson(projectRoot, cfg.Path, cfg.RequiredModules.Path);
             cfg.RequiredModules.ModulesPath = MakeArtefactLayoutPathForJson(projectRoot, cfg.Path, cfg.RequiredModules.ModulesPath);
-            MakeCopyMappingSourcesRelative(cfg.DirectoryOutput, projectRoot);
-            MakeCopyMappingSourcesRelative(cfg.FilesOutput, projectRoot);
+            MakeCopyMappingSourcesRelative(cfg.DirectoryOutput, projectRoot, workspaceRoot);
+            MakeCopyMappingSourcesRelative(cfg.FilesOutput, projectRoot, workspaceRoot);
         }
+    }
+
+    private static string ResolveJsonWorkspaceRoot(string projectRoot)
+    {
+        var projectDirectory = new DirectoryInfo(Path.GetFullPath(projectRoot));
+        return string.Equals(projectDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) && projectDirectory.Parent is not null
+            ? projectDirectory.Parent.FullName
+            : projectRoot;
     }
 
     private static string? MakeArtefactLayoutPathForJson(string projectRoot, string? artefactPath, string? layoutPath)
@@ -874,7 +899,7 @@ internal sealed class ModuleBuildPreparationService
             : NormalizePathSeparators(layoutPath!);
     }
 
-    private static void MakeCopyMappingSourcesRelative(ArtefactCopyMapping[]? mappings, string projectRoot)
+    private static void MakeCopyMappingSourcesRelative(ArtefactCopyMapping[]? mappings, string projectRoot, string workspaceRoot)
     {
         if (mappings is null)
             return;
@@ -884,7 +909,7 @@ internal sealed class ModuleBuildPreparationService
             if (mapping is null || string.IsNullOrWhiteSpace(mapping.Source))
                 continue;
 
-            mapping.Source = MakeRelativeForProjectRoot(projectRoot, mapping.Source, preserveExternalRooted: true) ?? string.Empty;
+            mapping.Source = MakeRelativeForProjectRoot(projectRoot, mapping.Source, preserveExternalRooted: true, workspaceRoot) ?? string.Empty;
         }
     }
 
@@ -895,19 +920,27 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static string? MakeRelativeForProjectRoot(string projectRoot, string? path, bool preserveExternalRooted)
+        => MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted, projectRoot);
+
+    private static string? MakeRelativeForProjectRoot(string projectRoot, string? path, bool preserveExternalRooted, string workspaceRoot)
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
         if (ContainsPathToken(path!))
             return MakeTokenizedPathRelativeForProjectRoot(projectRoot, path!);
 
         var resolved = ResolveConfigPath(projectRoot, path);
-        if (preserveExternalRooted && Path.IsPathRooted(PathValueResolver.Clean(path!)) && !IsSameOrChildPath(projectRoot, resolved))
+        if (preserveExternalRooted &&
+            Path.IsPathRooted(PathValueResolver.Clean(path!)) &&
+            !IsSameOrChildPath(projectRoot, resolved) &&
+            !IsSameOrChildPath(workspaceRoot, resolved))
+        {
             return NormalizePathSeparators(resolved);
+        }
 
         return MakeRelativeForConfig(projectRoot, resolved);
     }
 
-    private static void MakePackageBuildOptionPathsRelative(Dictionary<string, object?>? options, string projectRoot)
+    private static void MakePackageBuildOptionPathsRelative(Dictionary<string, object?>? options, string projectRoot, string workspaceRoot)
     {
         if (options is null || options.Count == 0)
             return;
@@ -921,7 +954,7 @@ internal sealed class ModuleBuildPreparationService
             if (string.IsNullOrWhiteSpace(path))
                 continue;
 
-            options[optionName] = MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted: IsPackageCredentialPathName(optionName));
+            options[optionName] = MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted: IsPackageCredentialPathName(optionName), workspaceRoot);
         }
     }
 
@@ -931,12 +964,15 @@ internal sealed class ModuleBuildPreparationService
            string.Equals(optionName, nameof(PackageBuildConfiguration.GitHubAccessTokenFilePath), StringComparison.OrdinalIgnoreCase);
 
     private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths, bool preserveExternalRooted = false)
+        => MakePathsRelativeForProjectRoot(projectRoot, paths, preserveExternalRooted, projectRoot);
+
+    private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths, bool preserveExternalRooted, string workspaceRoot)
     {
         if (paths is null || paths.Length == 0)
             return Array.Empty<string>();
 
         return paths
-            .Select(path => MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted) ?? string.Empty)
+            .Select(path => MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted, workspaceRoot) ?? string.Empty)
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .ToArray();
     }
