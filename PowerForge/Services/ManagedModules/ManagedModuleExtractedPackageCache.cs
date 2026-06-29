@@ -141,6 +141,10 @@ internal sealed class ManagedModuleExtractedPackageCache
         var sourceRoot = Path.GetFullPath(sourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var destinationRoot = Path.GetFullPath(destinationPath);
         Directory.CreateDirectory(destinationRoot);
+        var createdDirectories = new HashSet<string>(StringComparer.Ordinal)
+        {
+            destinationRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        };
 
         var fileCount = 0;
         long bytesWritten = 0;
@@ -148,22 +152,37 @@ internal sealed class ManagedModuleExtractedPackageCache
         {
             cancellationToken.ThrowIfCancellationRequested();
             var targetDirectory = Path.Combine(destinationRoot, directory.Substring(sourceRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            Directory.CreateDirectory(targetDirectory);
+            CreateDirectoryOnce(targetDirectory, createdDirectories);
         }
 
         foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var targetFile = Path.Combine(destinationRoot, file.Substring(sourceRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
-            using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, FileOptions.SequentialScan);
-            using var destination = new FileStream(targetFile, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize, FileOptions.SequentialScan);
-            source.CopyTo(destination, CopyBufferSize);
+            CreateDirectoryOnce(Path.GetDirectoryName(targetFile)!, createdDirectories);
+            var sourceInfo = new FileInfo(file);
+#if NETFRAMEWORK
+            // Windows PowerShell 5.1/net472 benefits from the platform copy path in warm-cache save diagnostics.
+            File.Copy(file, targetFile, overwrite: false);
+#else
+            using (var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, FileOptions.SequentialScan))
+            using (var destination = new FileStream(targetFile, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize, FileOptions.SequentialScan))
+            {
+                source.CopyTo(destination, CopyBufferSize);
+            }
+#endif
             fileCount++;
-            bytesWritten += destination.Length;
+            bytesWritten += sourceInfo.Length;
         }
 
         return new DirectoryCopyResult(fileCount, bytesWritten);
+    }
+
+    private static void CreateDirectoryOnce(string path, HashSet<string> createdDirectories)
+    {
+        var normalized = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (createdDirectories.Add(normalized))
+            Directory.CreateDirectory(normalized);
     }
 
     private static void DeleteDirectoryQuietly(string path)
