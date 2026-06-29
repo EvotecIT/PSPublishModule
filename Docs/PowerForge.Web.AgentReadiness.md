@@ -92,6 +92,10 @@ PowerForge can also generate Markdown artifacts itself. This is separate from
 live HTTP negotiation: the static site can contain `/index.md` and
 `/docs/index.md`, but the deployed host or edge still needs a rule if the same
 HTML route should return Markdown for `Accept: text/markdown`.
+When a live scan sees a valid direct Markdown artifact but the homepage still
+returns HTML for `Accept: text/markdown`, PowerForge reports the negotiation as
+a warning instead of a failure so sites without header-aware edge caching can
+still pass on the portable direct-artifact path.
 
 ## Site Configuration
 
