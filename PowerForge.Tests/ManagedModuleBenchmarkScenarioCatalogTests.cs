@@ -42,6 +42,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Property(row, "Name") == "Graph.Full.Save.ManagedWarmCache" &&
             Property(row, "BenchmarkRole") == "Diagnostic" &&
             Property(row, "ComparisonScope") == "ManagedOnlySaveCache" &&
+            Property(row, "BenchmarkInterpretation").Contains("do not rank it against providers", StringComparison.OrdinalIgnoreCase) &&
             Property(row, "ModuleName") == "Microsoft.Graph" &&
             Property(row, "Version") == "2.38.0" &&
             Property(row, "CacheMode") == "Warm" &&
@@ -53,6 +54,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Property(row, "Name") == "Az.Full.Save.ManagedWarmCache" &&
             Property(row, "BenchmarkRole") == "Diagnostic" &&
             Property(row, "ComparisonScope") == "ManagedOnlySaveCache" &&
+            Property(row, "BenchmarkInterpretation").Contains("materialization cost", StringComparison.OrdinalIgnoreCase) &&
             Property(row, "ModuleName") == "Az" &&
             Property(row, "Version") == "16.0.0" &&
             Property(row, "CacheMode") == "Warm" &&
@@ -63,6 +65,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Property(row, "Name") == "Graph.Authentication.Save" &&
             Property(row, "BenchmarkRole") == "Scoreboard" &&
             Property(row, "ComparisonScope") == "SaveCapableProviders" &&
+            Property(row, "BenchmarkInterpretation").Contains("ModuleFast has no equivalent save command", StringComparison.OrdinalIgnoreCase) &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1 &&
             DoubleProperty(row, "ManagedMaxVsFastest") == 0);
@@ -79,6 +82,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Property(row, "Name") == "Graph.Full.InstallExact.NoOpForce" &&
             Property(row, "BenchmarkRole") == "Scoreboard" &&
             Property(row, "ComparisonScope") == "InstallWithModuleFast" &&
+            Property(row, "BenchmarkInterpretation").Contains("ModuleFast participates", StringComparison.OrdinalIgnoreCase) &&
             Property(row, "ModuleName") == "Microsoft.Graph" &&
             Property(row, "Version") == "2.38.0" &&
             Property(row, "Repository") == "https://pwsh.gallery/index.json" &&

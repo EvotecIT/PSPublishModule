@@ -57,6 +57,7 @@ function New-ManagedOptimizationTarget {
             Scenario = [string] $row.Scenario
             BenchmarkRole = if ($row.PSObject.Properties['BenchmarkRole']) { [string] $row.BenchmarkRole } else { '' }
             ComparisonScope = if ($row.PSObject.Properties['ComparisonScope']) { [string] $row.ComparisonScope } else { '' }
+            BenchmarkInterpretation = if ($row.PSObject.Properties['BenchmarkInterpretation']) { [string] $row.BenchmarkInterpretation } else { '' }
             ModuleName = if ($row.PSObject.Properties['ModuleName']) { [string] $row.ModuleName } else { '' }
             Host = if ($row.PSObject.Properties['Host']) { [string] $row.Host } else { '' }
             Operation = [string] $row.Operation
