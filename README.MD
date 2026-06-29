@@ -323,19 +323,27 @@ Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 Current local benchmark evidence is tracked as contributor proof, not as a
 shipped cmdlet. The suite runs from [Benchmarks/ManagedModules](Benchmarks/ManagedModules)
 and compares the managed engine against install-capable and save-capable
-providers on PowerShell 7 and Windows PowerShell 5.1.
+providers on PowerShell 7 and Windows PowerShell 5.1. In the table below,
+Managed is the `1.00x` baseline for each row. Other values show how many times
+slower that engine was for the same scenario, with the measured time in
+parentheses.
 
-| Scenario | Current local evidence |
-| --- | --- |
-| Full `Microsoft.Graph` install on PowerShell 7 | Managed completed in about 4.45s in the same-source speed gate and about 5.08s in the provider matrix. The install-only speed baseline was about 6.08s; PSResourceGet and PowerShellGet were about 53.38s and 67.08s in the provider matrix. |
-| `Az.Accounts` install on PowerShell 7 | Managed completed in about 1.51s. The install-only speed baseline was about 2.10s; PSResourceGet and PowerShellGet were about 2.29s and 9.07s. |
-| Full `Microsoft.Graph` save on PowerShell 7 / 5.1 | Managed completed in about 4.82s / 5.47s. PSResourceGet measured about 53.28s / 55.36s, and PowerShellGet measured about 68.95s / 89.47s. |
-| Full `Az` save on PowerShell 7 / 5.1 | Managed completed in about 5.73s / 8.56s. PowerShellGet measured about 128.87s / 151.05s; PSResourceGet measured about 146.36s on PowerShell 7 and failed the Windows PowerShell 5.1 row after producing no output. |
+| Scenario | Managed | Install-only speed baseline | PSResourceGet | PowerShellGet | Notes |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `Microsoft.Graph` full install, PowerShell 7, same source | 1.00x (4.45s) | 1.37x (6.08s) | Not in this gate | Not in this gate | Strict engine-speed gate with both install engines pointed at the same package source. |
+| `Microsoft.Graph` full install, PowerShell 7, provider matrix | 1.00x (5.08s) | 1.40x (7.13s) | 10.51x (53.38s) | 13.20x (67.08s) | Provider-default install comparison. |
+| `Az.Accounts` install, PowerShell 7, provider matrix | 1.00x (1.51s) | 1.39x (2.10s) | 1.52x (2.29s) | 6.01x (9.07s) | Shorter Az proof lane. |
+| `Microsoft.Graph` full save, PowerShell 7 | 1.00x (4.82s) | Not equivalent | 11.05x (53.28s) | 14.30x (68.95s) | Save-capable providers only. |
+| `Microsoft.Graph` full save, Windows PowerShell 5.1 | 1.00x (5.47s) | Not equivalent | 10.12x (55.36s) | 16.36x (89.47s) | Save-capable providers only. |
+| `Az` full save, PowerShell 7 | 1.00x (5.73s) | Not equivalent | 25.54x (146.36s) | 22.49x (128.87s) | Save-capable providers only. |
+| `Az` full save, Windows PowerShell 5.1 | 1.00x (8.56s) | Not equivalent | Failed after 84.26s with no output | 17.65x (151.05s) | Save-capable providers only. |
 
 Before release, this table should be regenerated from the final benchmark
 artifacts and kept to repeatable, named gates: install speed, save throughput,
 update/no-op/force behavior, publish proof, repair planning, security checks,
-and PowerShell 5.1 versus PowerShell 7 host drift.
+and PowerShell 5.1 versus PowerShell 7 host drift. The final public table
+should keep this normalized shape so readers can see both raw time and relative
+speed at a glance.
 
 See [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
 for the switching matrix, [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
