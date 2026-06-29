@@ -58,6 +58,23 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                 }
             )
             $hostRows = @([pscustomobject]@{ Host = 'PowerShell7'; Status = 'Available'; Executable = 'pwsh'; Reason = '' })
+            $scoreboardRows = @(
+                [pscustomobject]@{
+                    BenchmarkRole = 'Scoreboard'
+                    Suite = 'HeavySaveGate'
+                    Scenario = 'Graph.Full.Save'
+                    Host = 'PowerShell7'
+                    Operation = 'Save'
+                    Managed = '4815.85 ms (1x)'
+                    ModuleFast = 'Skipped'
+                    PSResourceGet = '53277.79 ms (11.06x)'
+                    PowerShellGet = '68945.98 ms (14.32x)'
+                    FastestEngine = 'Managed'
+                    ManagedRank = '1'
+                    ManagedVsFastest = '1x'
+                    BenchmarkInterpretation = 'Save scoreboard: compare save-capable providers only; ModuleFast has no equivalent save command.'
+                }
+            )
             $hostComparisonRows = @(
                 [pscustomobject]@{
                     BenchmarkRole = 'Diagnostic'
@@ -163,7 +180,7 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                 }
             )
 
-            Write-ManagedBenchmarkSuiteNotes -Scenarios $scenarios -SummaryRows $summaryRows -OptimizationRows $optimizationRows -HostComparisonRows $hostComparisonRows -HostRows $hostRows -GateViolations @() -HostGateViolations @() -Path '{{EscapePowerShellString(notesPath)}}' -GeneratedAt ([datetime]'2026-06-29T00:00:00Z')
+            Write-ManagedBenchmarkSuiteNotes -Scenarios $scenarios -SummaryRows $summaryRows -ScoreboardRows $scoreboardRows -OptimizationRows $optimizationRows -HostComparisonRows $hostComparisonRows -HostRows $hostRows -GateViolations @() -HostGateViolations @() -Path '{{EscapePowerShellString(notesPath)}}' -GeneratedAt ([datetime]'2026-06-29T00:00:00Z')
             """);
 
         ps.Invoke();
@@ -180,6 +197,11 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("do not rank it against providers or install rows", markdown, StringComparison.Ordinal);
         Assert.Contains("| Diagnostic | HeavySaveCacheGate | Graph.Full.Save.ManagedWarmCache |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Host Comparisons", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Provider Scoreboard", markdown, StringComparison.Ordinal);
+        Assert.Contains("README-ready evidence", markdown, StringComparison.Ordinal);
+        Assert.Contains("4815.85 ms (1x)", markdown, StringComparison.Ordinal);
+        Assert.Contains("53277.79 ms (11.06x)", markdown, StringComparison.Ordinal);
+        Assert.Contains("Skipped", markdown, StringComparison.Ordinal);
         Assert.Contains("Median columns feed the host gate", markdown, StringComparison.Ordinal);
         Assert.Contains("BaselineLastMs", markdown, StringComparison.Ordinal);
         Assert.Contains("1.67x", markdown, StringComparison.Ordinal);

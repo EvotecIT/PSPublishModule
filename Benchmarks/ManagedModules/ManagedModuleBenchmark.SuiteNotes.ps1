@@ -62,6 +62,7 @@ function Write-ManagedBenchmarkSuiteNotes {
         [object[]] $Scenarios,
         [object[]] $SummaryRows,
         [object[]] $EngineRows,
+        [object[]] $ScoreboardRows,
         [object[]] $OptimizationRows,
         [object[]] $HostComparisonRows,
         [object[]] $HostRows,
@@ -96,6 +97,15 @@ function Write-ManagedBenchmarkSuiteNotes {
     $lines.Add('')
     Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $SummaryRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'FastestEngine', 'FastestMs', 'ManagedMs', 'ManagedRank', 'ManagedVsFastest')
     $lines.Add('')
+
+    if ($ScoreboardRows -and $ScoreboardRows.Count -gt 0) {
+        $lines.Add('## Provider Scoreboard')
+        $lines.Add('')
+        $lines.Add('This table is the wide comparison view for README-ready evidence: managed first, then each comparison engine with its median time and ratio against the fastest successful engine for that scenario. `Skipped` means the engine had no equivalent operation or was unavailable on that host.')
+        $lines.Add('')
+        Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $ScoreboardRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet', 'FastestEngine', 'ManagedRank', 'ManagedVsFastest', 'BenchmarkInterpretation')
+        $lines.Add('')
+    }
 
     if ($EngineRows -and $EngineRows.Count -gt 0) {
         $lines.Add('## Engine Medians')

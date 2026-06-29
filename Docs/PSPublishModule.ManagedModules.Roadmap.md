@@ -360,6 +360,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Promote managed-only full-family Graph/Az warm-cache save experiments into a named `HeavySaveCacheGate` suite so download/source/cache behavior is measured separately from save-capable provider races.
 - [x] Move save benchmark payload roots to short disposable temp paths while keeping CSV/JSON artifacts under the benchmark run directory, so Windows PowerShell 5.1/native-provider comparisons are not distorted by deep repository-backed paths.
 - [x] Move warm managed package-cache roots to short run-scoped temp paths so repeated rows can prove cache reuse even when expanded output roots are deleted after measurement.
+- [x] Emit README-ready wide provider scoreboards as `suite-scoreboard.csv` and `suite-scoreboard.json`, with managed, ModuleFast, PSResourceGet, and PowerShellGet columns plus fastest-engine ratios per scenario, host, and operation.
 - [x] Measure Graph/Az/Teams/Exchange-heavy scenario presets on PowerShell 5.1 and PowerShell 7+.
 
 The benchmark harness is intentionally outside the shipped module. The module owns managed module behavior; the repository benchmark scripts own measurement, comparison, and artifact layout.
