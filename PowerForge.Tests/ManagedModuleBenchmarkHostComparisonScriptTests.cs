@@ -257,6 +257,31 @@ public sealed class ManagedModuleBenchmarkHostComparisonScriptTests
         Assert.Contains("MissingComparison", Property(row, "Reason"), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void HostComparisonGate_CanIgnoreMissingHostForFocusedSingleHostRuns()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $comparison = New-ManagedHostComparison -Rows @(
+                [pscustomobject]@{
+                    Suite = 'LifecycleGate'
+                    Scenario = 'Az.Accounts.InstallExact.NoOpForce'
+                    ModuleName = 'Az.Accounts'
+                    Operation = 'InstallForce'
+                    Host = 'PowerShell7'
+                    ManagedMs = '741'
+                    GateManagedMaxWindowsPowerShellVsPowerShell7 = 2.0
+                }
+            )
+
+            Get-ManagedHostComparisonGateViolation -Rows $comparison -UseScenarioGates -IgnoreMissingHosts
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        Assert.Empty(results);
+    }
+
     private static PowerShell CreateBenchmarkPowerShell(string script)
     {
         var hostComparisonScript = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "ManagedModuleBenchmark.HostComparison.ps1");

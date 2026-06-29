@@ -141,7 +141,8 @@ function Get-ManagedHostComparisonGateViolation {
     param(
         [object[]] $Rows,
         [double] $MaxComparisonVsBaseline = 0,
-        [switch] $UseScenarioGates
+        [switch] $UseScenarioGates,
+        [switch] $IgnoreMissingHosts
     )
 
     if ($MaxComparisonVsBaseline -le 0 -and -not $UseScenarioGates.IsPresent) {
@@ -160,6 +161,10 @@ function Get-ManagedHostComparisonGateViolation {
         $status = if ($row.PSObject.Properties['Status']) { [string] $row.Status } else { '' }
         $ratio = ConvertFrom-ManagedHostComparisonRatio -Value $row.ComparisonVsBaseline
         $missingHost = -not [string]::Equals($status, 'Compared', [StringComparison]::OrdinalIgnoreCase)
+        if ($missingHost -and $IgnoreMissingHosts.IsPresent) {
+            continue
+        }
+
         $ratioFailed = -not $missingHost -and $ratio -gt $rowMaxComparisonVsBaseline
 
         if (-not ($missingHost -or $ratioFailed)) {

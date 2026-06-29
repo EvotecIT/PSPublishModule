@@ -804,7 +804,10 @@ $notesPath = Join-Path $suiteRoot 'suite-notes.md'
 $gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -MinAuthenticodeCheckedFiles $ManagedMinAuthenticodeCheckedFiles -MinAuthenticodeCatalogFiles $ManagedMinAuthenticodeCatalogFiles -UseScenarioGates:$UseScenarioGates.IsPresent)
 $hostComparisonRows = @(New-ManagedHostComparison -Rows @($summaryRows))
 $scoreboardRows = @(New-ManagedBenchmarkScoreboard -EngineRows @($engineRows))
-$hostGateViolations = @(Get-ManagedHostComparisonGateViolation -Rows @($hostComparisonRows) -MaxComparisonVsBaseline $ManagedMaxWindowsPowerShellVsPowerShell7 -UseScenarioGates:$UseScenarioGates.IsPresent)
+$requestedPowerShell7 = @($HostName | Where-Object { [string]::Equals($_, 'PowerShell7', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+$requestedWindowsPowerShell = @($HostName | Where-Object { [string]::Equals($_, 'WindowsPowerShell', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+$ignoreMissingHostComparison = -not ($requestedPowerShell7 -and $requestedWindowsPowerShell)
+$hostGateViolations = @(Get-ManagedHostComparisonGateViolation -Rows @($hostComparisonRows) -MaxComparisonVsBaseline $ManagedMaxWindowsPowerShellVsPowerShell7 -UseScenarioGates:$UseScenarioGates.IsPresent -IgnoreMissingHosts:$ignoreMissingHostComparison)
 $optimizationTargetRows = @(New-ManagedOptimizationTarget -Rows @($summaryRows))
 
 Write-ManagedBenchmarkCsv -InputObject @($summaryRows) -Path $summaryPath
