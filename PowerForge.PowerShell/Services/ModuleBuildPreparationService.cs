@@ -438,6 +438,10 @@ internal sealed class ModuleBuildPreparationService
                     documentation.Configuration.PathReadme = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, documentation.Configuration.PathReadme) ?? string.Empty;
                     break;
                 case ConfigurationBuildDocumentationSegment buildDocumentation:
+                    buildDocumentation.Configuration.AboutTopicsSourcePath = ResolveWorkspaceQualifiedStagingRelativePaths(
+                        workspaceRoot,
+                        projectRoot,
+                        buildDocumentation.Configuration.AboutTopicsSourcePath);
                     break;
                 case ConfigurationTestSegment test:
                     test.Configuration.TestsPath = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, test.Configuration.TestsPath) ?? string.Empty;
@@ -502,26 +506,10 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static string? ResolveWorkspacePath(string workspaceRoot, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path))
-            return path;
-
-        if (ContainsPathToken(path!))
-            return Path.Combine(workspaceRoot, PathValueResolver.Clean(path!));
-
-        return PathValueResolver.Resolve(workspaceRoot, path!);
-    }
+        => ModuleBuildPathPolicy.ResolveWorkspacePath(workspaceRoot, path);
 
     private static string[] ResolveWorkspacePaths(string workspaceRoot, string[]? paths)
-    {
-        if (paths is null || paths.Length == 0)
-            return Array.Empty<string>();
-
-        return paths
-            .Select(path => ResolveWorkspacePath(workspaceRoot, path) ?? string.Empty)
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .ToArray();
-    }
+        => ModuleBuildPathPolicy.ResolveWorkspacePaths(workspaceRoot, paths);
 
     private static string? ResolveWorkspaceQualifiedPath(string workspaceRoot, string projectRoot, string? path)
     {
@@ -535,30 +523,7 @@ internal sealed class ModuleBuildPreparationService
         return ResolveWorkspacePath(workspaceRoot, path);
     }
 
-    private static bool ContainsPathToken(string path)
-        => path.Contains("<TagName>", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("{TagName}", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("<ModuleVersion>", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("{ModuleVersion}", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("<ModuleVersionWithPreRelease>", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("{ModuleVersionWithPreRelease}", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("<TagModuleVersionWithPreRelease>", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("{TagModuleVersionWithPreRelease}", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("<ModuleName>", StringComparison.OrdinalIgnoreCase) ||
-           path.Contains("{ModuleName}", StringComparison.OrdinalIgnoreCase);
-
-    private static string[] ResolveConfigPaths(string rootPath, string[]? paths)
-    {
-        if (paths is null || paths.Length == 0)
-            return Array.Empty<string>();
-
-        return paths
-            .Select(path => ResolveConfigPathNullable(rootPath, path) ?? string.Empty)
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .ToArray();
-    }
-
-    private static string[] ResolveRootedConfigPaths(string rootPath, string[]? paths)
+    private static string[] ResolveWorkspaceQualifiedStagingRelativePaths(string workspaceRoot, string projectRoot, string[]? paths)
     {
         if (paths is null || paths.Length == 0)
             return Array.Empty<string>();
@@ -566,17 +531,26 @@ internal sealed class ModuleBuildPreparationService
         return paths
             .Select(path =>
             {
-                if (string.IsNullOrWhiteSpace(path))
+                var resolved = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, path);
+                if (string.IsNullOrWhiteSpace(resolved))
                     return string.Empty;
 
-                var cleaned = PathValueResolver.Clean(path);
-                return Path.IsPathRooted(cleaned)
-                    ? ResolveConfigPath(rootPath, path)
-                    : NormalizePathSeparators(path);
+                return Path.IsPathRooted(resolved!) && IsSameOrChildPath(projectRoot, resolved!)
+                    ? MakeRelativeForConfig(projectRoot, resolved!)
+                    : NormalizePathSeparators(resolved!);
             })
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .ToArray();
     }
+
+    private static bool ContainsPathToken(string path)
+        => ModuleBuildPathPolicy.ContainsToken(path);
+
+    private static string[] ResolveConfigPaths(string rootPath, string[]? paths)
+        => ModuleBuildPathPolicy.ResolveConfigPaths(rootPath, paths);
+
+    private static string[] ResolveRootedConfigPaths(string rootPath, string[]? paths)
+        => ModuleBuildPathPolicy.ResolveRootedConfigPaths(rootPath, paths);
 
     private static IConfigurationSegment[] CollectSettingsFromWorkspace(ScriptBlock? settings, string workspaceRoot)
     {
@@ -722,13 +696,7 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static bool SamePath(string left, string right)
-    {
-        var normalizedLeft = Path.GetFullPath(left)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var normalizedRight = Path.GetFullPath(right)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
-    }
+        => ModuleBuildPathPolicy.SamePath(left, right);
 
     private static string[] BuildStageExcludeFiles(string[]? excludeFiles, string moduleName)
     {
@@ -779,24 +747,13 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static string ResolveConfigPath(string baseDir, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
-        return PathValueResolver.Resolve(baseDir, path!);
-    }
+        => ModuleBuildPathPolicy.ResolveConfigPath(baseDir, path);
 
     private static string? ResolveConfigPathNullable(string baseDir, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        return ResolveConfigPath(baseDir, path);
-    }
+        => ModuleBuildPathPolicy.ResolveConfigPathNullable(baseDir, path);
 
     private static string? ResolveTokenAwareConfigPathNullable(string baseDir, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        return ContainsPathToken(path!)
-            ? NormalizePathSeparators(path!)
-            : ResolveConfigPath(baseDir, path);
-    }
+        => ModuleBuildPathPolicy.ResolveTokenAwareConfigPathNullable(baseDir, path);
 
     private static void PrepareSpecForJsonExport(ModulePipelineSpec spec, string jsonFullPath)
     {
@@ -938,10 +895,15 @@ internal sealed class ModuleBuildPreparationService
     private static string ResolveJsonWorkspaceRoot(string projectRoot)
     {
         var projectDirectory = new DirectoryInfo(Path.GetFullPath(projectRoot));
-        return string.Equals(projectDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) && projectDirectory.Parent is not null
-            ? projectDirectory.Parent.FullName
+        return UsesRepositoryModuleLayout(projectDirectory)
+            ? projectDirectory.Parent!.FullName
             : projectRoot;
     }
+
+    private static bool UsesRepositoryModuleLayout(DirectoryInfo projectDirectory)
+        => string.Equals(projectDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) &&
+           projectDirectory.Parent is not null &&
+           File.Exists(Path.Combine(projectDirectory.FullName, "Build", "Build-Module.ps1"));
 
     private static string? MakeArtefactLayoutPathForJson(string projectRoot, string workspaceRoot, string? artefactPath, string? layoutPath)
     {
@@ -981,31 +943,13 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static string? MakeRelativeForProjectRoot(string projectRoot, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        return MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted: false);
-    }
+        => ModuleBuildPathPolicy.MakeRelativeForProjectRoot(projectRoot, path);
 
     private static string? MakeRelativeForProjectRoot(string projectRoot, string? path, bool preserveExternalRooted)
-        => MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted, projectRoot);
+        => ModuleBuildPathPolicy.MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted);
 
     private static string? MakeRelativeForProjectRoot(string projectRoot, string? path, bool preserveExternalRooted, string workspaceRoot)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        if (ContainsPathToken(path!))
-            return MakeTokenizedPathRelativeForProjectRoot(projectRoot, path!);
-
-        var resolved = ResolveConfigPath(projectRoot, path);
-        if (preserveExternalRooted &&
-            Path.IsPathRooted(PathValueResolver.Clean(path!)) &&
-            !IsSameOrChildPath(projectRoot, resolved) &&
-            !IsSameOrChildPath(workspaceRoot, resolved))
-        {
-            return NormalizePathSeparators(resolved);
-        }
-
-        return MakeRelativeForConfig(projectRoot, resolved);
-    }
+        => ModuleBuildPathPolicy.MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted, workspaceRoot);
 
     private static void MakePackageBuildOptionPathsRelative(Dictionary<string, object?>? options, string projectRoot, string workspaceRoot)
     {
@@ -1026,76 +970,10 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths, bool preserveExternalRooted = false)
-        => MakePathsRelativeForProjectRoot(projectRoot, paths, preserveExternalRooted, projectRoot);
+        => ModuleBuildPathPolicy.MakePathsRelativeForProjectRoot(projectRoot, paths, preserveExternalRooted);
 
     private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths, bool preserveExternalRooted, string workspaceRoot)
-    {
-        if (paths is null || paths.Length == 0)
-            return Array.Empty<string>();
-
-        return paths
-            .Select(path => MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted, workspaceRoot) ?? string.Empty)
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .ToArray();
-    }
-
-    private static string MakeTokenizedPathRelativeForProjectRoot(string projectRoot, string path)
-    {
-        var cleaned = PathValueResolver.Clean(path);
-        if (!Path.IsPathRooted(cleaned))
-            return NormalizePathSeparators(cleaned);
-
-        var tokenIndex = IndexOfPathToken(cleaned);
-        if (tokenIndex < 0)
-            return NormalizePathSeparators(cleaned);
-
-        var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
-        var prefix = cleaned.Substring(0, tokenIndex).TrimEnd(separators);
-        if (string.IsNullOrWhiteSpace(prefix))
-            return NormalizePathSeparators(cleaned);
-
-        var prefixFullPath = Path.GetFullPath(prefix);
-        if (!IsSameOrChildPath(projectRoot, prefixFullPath))
-            return NormalizePathSeparators(cleaned);
-
-        var relativePrefix = MakeRelativeForConfig(projectRoot, prefixFullPath);
-        var tokenStartsNewSegment = tokenIndex == 0 || separators.Contains(cleaned[tokenIndex - 1]);
-        var suffix = tokenStartsNewSegment
-            ? cleaned.Substring(tokenIndex).TrimStart(separators)
-            : cleaned.Substring(tokenIndex);
-        return string.Equals(relativePrefix, ".", StringComparison.Ordinal)
-            ? NormalizePathSeparators(suffix)
-            : NormalizePathSeparators(tokenStartsNewSegment
-                ? Path.Combine(relativePrefix, suffix)
-                : relativePrefix + suffix);
-    }
-
-    private static int IndexOfPathToken(string path)
-    {
-        var tokens = new[]
-        {
-            "<TagName>",
-            "{TagName}",
-            "<ModuleVersion>",
-            "{ModuleVersion}",
-            "<ModuleVersionWithPreRelease>",
-            "{ModuleVersionWithPreRelease}",
-            "<TagModuleVersionWithPreRelease>",
-            "{TagModuleVersionWithPreRelease}",
-            "<ModuleName>",
-            "{ModuleName}"
-        };
-
-        var index = -1;
-        foreach (var token in tokens)
-        {
-            var tokenIndex = path.IndexOf(token, StringComparison.OrdinalIgnoreCase);
-            if (tokenIndex >= 0 && (index < 0 || tokenIndex < index))
-                index = tokenIndex;
-        }
-
-        return index;
-    }
+        => ModuleBuildPathPolicy.MakePathsRelativeForProjectRoot(projectRoot, paths, preserveExternalRooted, workspaceRoot);
 
     private static string? GetStringOptionValue(object? value)
     {
@@ -1108,71 +986,14 @@ internal sealed class ModuleBuildPreparationService
     }
 
     private static string MakeRelativeForConfig(string baseDir, string path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return path;
-
-        try
-        {
-            var full = Path.GetFullPath(path);
-            var rel = GetRelativePath(baseDir, full);
-            return rel.Replace('\\', '/');
-        }
-        catch
-        {
-            return path.Replace('\\', '/');
-        }
-    }
+        => ModuleBuildPathPolicy.MakeRelativeForConfig(baseDir, path);
 
     private static string? MakeRelativeForConfigNullable(string baseDir, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        return MakeRelativeForConfig(baseDir, path!);
-    }
+        => ModuleBuildPathPolicy.MakeRelativeForConfigNullable(baseDir, path);
 
     private static string NormalizePathSeparators(string path)
-        => path.Replace('\\', '/');
+        => ModuleBuildPathPolicy.NormalizeForJson(path);
 
     private static bool IsSameOrChildPath(string rootPath, string candidatePath)
-    {
-        var root = Path.GetFullPath(rootPath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var candidate = Path.GetFullPath(candidatePath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        if (string.Equals(root, candidate, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        var rootWithSeparator = root + Path.DirectorySeparatorChar;
-        var candidateWithSeparator = candidate + Path.DirectorySeparatorChar;
-        return candidateWithSeparator.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetRelativePath(string baseDir, string fullPath)
-    {
-#if NET472
-        var baseFull = EnsureTrailingSeparator(Path.GetFullPath(baseDir));
-        var baseUri = new Uri(baseFull);
-        var pathUri = new Uri(Path.GetFullPath(fullPath));
-
-        if (!string.Equals(baseUri.Scheme, pathUri.Scheme, StringComparison.OrdinalIgnoreCase))
-            return fullPath;
-
-        var relativeUri = baseUri.MakeRelativeUri(pathUri);
-        var relative = Uri.UnescapeDataString(relativeUri.ToString());
-        return relative.Replace('/', Path.DirectorySeparatorChar);
-#else
-        return Path.GetRelativePath(baseDir, fullPath);
-#endif
-
-#if NET472
-        static string EnsureTrailingSeparator(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return input;
-            if (input.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
-                input.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-                return input;
-            return input + Path.DirectorySeparatorChar;
-        }
-#endif
-    }
+        => ModuleBuildPathPolicy.IsSameOrChildPath(rootPath, candidatePath);
 }

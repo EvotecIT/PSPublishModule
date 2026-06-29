@@ -202,7 +202,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 [PowerForge.ConfigurationBuildDocumentationSegment]@{
     Configuration = [PowerForge.BuildDocumentationConfiguration]@{
         Enable = $true
-        AboutTopicsSourcePath = @('Help/About')
+        AboutTopicsSourcePath = @('Help/About', 'Module/Help/Workspace')
     }
 }
 [PowerForge.ArtefactConfigurationFactory]::new([PowerForge.NullLogger]::new()).Create([PowerForge.ArtefactConfigurationRequest]@{
@@ -344,7 +344,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal("Docs/Readme.md", documentation.Configuration.PathReadme);
 
                 var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(prepared.PipelineSpec.Segments[12]);
-                Assert.Equal(new[] { "Help/About" }, buildDocumentation.Configuration.AboutTopicsSourcePath);
+                Assert.Equal(new[] { "Help/About", "Help/Workspace" }, buildDocumentation.Configuration.AboutTopicsSourcePath);
 
                 var fileBackedArtefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[13]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "FileBacked", "<TagModuleVersionWithPreRelease>"), fileBackedArtefact.Configuration.Path);
@@ -603,6 +603,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         try
         {
             var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var buildRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            File.WriteAllText(Path.Combine(buildRoot.FullName, "Build-Module.ps1"), string.Empty);
             var jsonPath = Path.Combine(root.FullName, "Build", "powerforge.json");
             var externalRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "External-" + Guid.NewGuid().ToString("N"));
             var externalPublishKey = Path.Combine(externalRoot, "psgallery.key");
@@ -669,6 +671,48 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains($"\"ApiKeyFilePath\": \"{externalPublishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"FilePath\": \"../Build/Test-ReleaseReady.ps1\"", json, StringComparison.Ordinal);
             Assert.Contains("\"WorkingDirectory\": \"../Build\"", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void WritePipelineSpecJson_preserves_external_sibling_paths_for_standalone_module_folder()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-standalone-module-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var siblingSecretPath = Path.Combine(root.FullName, "Secrets", "psgallery.key");
+            var jsonPath = Path.Combine(moduleRoot.FullName, ".powerforge", "powerforge.json");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = moduleRoot.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Destination = PublishDestination.PowerShellGallery,
+                            ApiKeyFilePath = siblingSecretPath
+                        }
+                    }
+                }
+            };
+
+            new ModuleBuildPreparationService().WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains($"\"ApiKeyFilePath\": \"{siblingSecretPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"ApiKeyFilePath\": \"../Secrets/psgallery.key\"", json, StringComparison.Ordinal);
         }
         finally
         {
