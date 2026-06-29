@@ -331,13 +331,12 @@ Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 ```
 
-Current local benchmark evidence is tracked as contributor proof, not as a
-shipped cmdlet. The suite runs from [Benchmarks/ManagedModules](Benchmarks/ManagedModules)
-and compares the managed engine against install-capable and save-capable
-providers on PowerShell 7 and Windows PowerShell 5.1. In the table below,
-Managed is the `1.00x` baseline for each row. Other values show how many times
-slower that engine was for the same scenario, with the measured time in
-parentheses.
+Benchmarking stays outside the shipped module surface. The suite runs from
+[Benchmarks/ManagedModules](Benchmarks/ManagedModules) and compares the managed
+engine against install-capable and save-capable providers on PowerShell 7 and
+Windows PowerShell 5.1. In the table below, Managed is the `1.00x` baseline for
+each row. Other values show how many times slower that engine was for the same
+scenario, with the measured time in parentheses.
 
 <!-- managed-module-benchmark-table:start -->
 #### Install
@@ -384,13 +383,11 @@ parentheses.
 Generate the table from retained `suite-scoreboard.csv` artifacts with
 `Benchmarks/ManagedModules/Export-ManagedModuleBenchmarkReadmeTable.ps1`.
 Use `-LatestPerScenario -SplitByOperation -ReadmePath .\README.MD` when
-refreshing this README from the local retained artifacts.
-Before release, refresh it from the final benchmark artifacts and keep the rows
-to repeatable, named gates: install speed, save throughput,
-update/no-op/force behavior, publish proof, repair planning, security checks,
-and PowerShell 5.1 versus PowerShell 7 host drift. The final public table
-should keep this normalized shape so readers can see both raw time and relative
-speed at a glance.
+refreshing this README. Keep public rows tied to repeatable, named gates:
+install speed, save throughput, update/no-op/force behavior, publish proof,
+repair planning, security checks, and PowerShell 5.1 versus PowerShell 7 host
+drift. This normalized shape lets readers see both raw time and relative speed
+at a glance.
 
 See [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
 for the switching matrix, [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
