@@ -93,8 +93,9 @@ public sealed partial class ManagedModuleInstallService
 
         var results = new ManagedModuleInstallResult[dependencies.Length];
         var startIndex = 0;
-        var concurrency = Math.Min(dependencies.Length, MaxDependencyInstallConcurrency);
-        if (dependencies.Length > MaxDependencyInstallConcurrency)
+        var concurrencyLimit = ResolveDependencyInstallConcurrency(request);
+        var concurrency = Math.Min(dependencies.Length, concurrencyLimit);
+        if (dependencies.Length > concurrencyLimit)
         {
             results[0] = await InstallDependencyBranchAsync(
                 request,
@@ -103,7 +104,7 @@ public sealed partial class ManagedModuleInstallService
                 context.CreateBranch(),
                 cancellationToken).ConfigureAwait(false);
             startIndex = 1;
-            concurrency = Math.Min(dependencies.Length - startIndex, MaxDependencyInstallConcurrency);
+            concurrency = Math.Min(dependencies.Length - startIndex, concurrencyLimit);
         }
 
         using var gate = new SemaphoreSlim(concurrency, concurrency);
@@ -239,6 +240,7 @@ public sealed partial class ManagedModuleInstallService
                 AllowClobber = request.AllowClobber,
                 AcceptLicense = request.AcceptLicense,
                 AuthenticodeCheck = request.AuthenticodeCheck,
+                DependencyConcurrency = request.DependencyConcurrency,
                 SkipDependencyCheck = false
             },
             context,
@@ -497,6 +499,11 @@ public sealed partial class ManagedModuleInstallService
                 .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
                 .First());
     }
+
+    private static int ResolveDependencyInstallConcurrency(ManagedModuleInstallRequest request)
+        => request.DependencyConcurrency > 0
+            ? request.DependencyConcurrency
+            : DefaultDependencyInstallConcurrency;
 
     private static ManagedModuleTrustPolicy? ResolveDependencyTrustPolicy(ManagedModuleTrustPolicy? trustPolicy)
     {

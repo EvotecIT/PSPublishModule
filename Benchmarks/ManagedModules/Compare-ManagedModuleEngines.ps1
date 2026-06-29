@@ -27,6 +27,8 @@ param(
 
     [int] $SetupRetryCount = 2,
 
+    [int] $ManagedDependencyConcurrency = 0,
+
     [string] $OutputDirectory = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules'),
 
     [ValidateSet('Debug', 'Release')]
@@ -628,6 +630,9 @@ function Invoke-SaveEngineCommand {
             if (-not [string]::IsNullOrWhiteSpace($PackageCacheDirectory)) {
                 $parameters.PackageCacheDirectory = $PackageCacheDirectory
             }
+            if ($ManagedDependencyConcurrency -gt 0) {
+                $parameters.DependencyConcurrency = $ManagedDependencyConcurrency
+            }
             Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AcceptLicense' -Enabled $AcceptLicense.IsPresent
             Add-SwitchParameterIfSupported -Parameters $parameters -CommandName 'Save-ManagedModule' -ParameterName 'AuthenticodeCheck' -Enabled $AuthenticodeCheck.IsPresent
             $result = Save-ManagedModule @parameters
@@ -750,7 +755,7 @@ function Invoke-InstallScenario {
     if (Test-BenchmarkOperationRequiresExistingTarget -OperationName $OperationName) {
         try {
             Invoke-BenchmarkSetupOperation -Label 'Preseed install' -ScriptBlock {
-                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -PackageCacheDirectory $packageCacheDirectory -Force $true
+                Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -PackageCacheDirectory $packageCacheDirectory -ManagedDependencyConcurrency $ManagedDependencyConcurrency -Force $true
             }
         } catch {
             return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $_.Exception.Message -OutputRoot $destination
@@ -767,7 +772,7 @@ function Invoke-InstallScenario {
     }
 
     Invoke-TimedOperation -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Install' -PackageCacheDirectory $packageCacheDirectory -Force $force
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Install' -PackageCacheDirectory $packageCacheDirectory -ManagedDependencyConcurrency $ManagedDependencyConcurrency -Force $force
     }
 }
 
@@ -813,7 +818,7 @@ function Invoke-UpdateScenario {
 
     try {
         Invoke-BenchmarkSetupOperation -Label 'Preseed install' -ScriptBlock {
-            Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $preseedVersion -PackageCacheDirectory $packageCacheDirectory -Force $true
+            Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath '' -OperationName 'Install' -VersionOverride $preseedVersion -PackageCacheDirectory $packageCacheDirectory -ManagedDependencyConcurrency $ManagedDependencyConcurrency -Force $true
         }
     } catch {
         return New-FailedRow -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -Reason $_.Exception.Message -OutputRoot $destination
@@ -829,7 +834,7 @@ function Invoke-UpdateScenario {
     }
 
     Invoke-TimedOperation -OperationName $OperationName -EngineName $EngineName -Iteration $Iteration -OutputRoot $destination -DetailPath $detailPath -ScriptBlock {
-        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Update' -PackageCacheDirectory $packageCacheDirectory -Force $force
+        Invoke-IsolatedInstallHost -EngineName $EngineName -Destination $destination -DetailPath $detailPath -OperationName 'Update' -PackageCacheDirectory $packageCacheDirectory -ManagedDependencyConcurrency $ManagedDependencyConcurrency -Force $force
     }
 }
 
@@ -953,6 +958,7 @@ $metadata = [ordered]@{
     RepairScenarios = $RepairScenario
     RepeatCount = $RepeatCount
     SetupRetryCount = $SetupRetryCount
+    ManagedDependencyConcurrency = $ManagedDependencyConcurrency
     ModuleBinary = $moduleBinary
     OutputDirectory = $workRoot
     SaveOutputDirectory = $saveWorkRoot

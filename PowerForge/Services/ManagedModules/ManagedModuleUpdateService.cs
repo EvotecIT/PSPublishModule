@@ -203,6 +203,7 @@ public sealed class ManagedModuleUpdateService
                 ShellEdition = request.ShellEdition,
                 ModuleRoot = request.ModuleRoot,
                 PackageCacheDirectory = request.PackageCacheDirectory,
+                DependencyConcurrency = request.DependencyConcurrency,
                 ExpectedPackageSha256 = string.Equals(moduleName, request.Name, StringComparison.OrdinalIgnoreCase)
                     ? request.ExpectedPackageSha256
                     : null,
@@ -617,6 +618,11 @@ public sealed class ManagedModuleUpdateService
             throw new ArgumentException("VersionPolicy cannot be combined with MinimumVersion or MaximumVersion.", nameof(request));
         if (request.Scope == ManagedModuleInstallScope.Custom && string.IsNullOrWhiteSpace(request.ModuleRoot))
             throw new ArgumentException("ModuleRoot is required when Scope is Custom.", nameof(request));
+        if (request.DependencyConcurrency < 0 || request.DependencyConcurrency > ManagedModuleInstallService.MaximumDependencyInstallConcurrency)
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                request.DependencyConcurrency,
+                $"DependencyConcurrency must be between 0 and {ManagedModuleInstallService.MaximumDependencyInstallConcurrency}. Use 0 for the engine default.");
         if (request.FamilyPolicy is not null &&
             request.FamilyPolicy.RequireSameVersion &&
             string.IsNullOrWhiteSpace(request.FamilyPolicy.ModuleNamePrefix) &&

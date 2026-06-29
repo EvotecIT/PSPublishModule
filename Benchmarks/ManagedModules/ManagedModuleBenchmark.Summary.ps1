@@ -1,13 +1,18 @@
 function Get-Median {
     param([double[]] $Values)
 
-    if (-not $Values -or $Values.Count -eq 0) {
+    $items = [Collections.Generic.List[double]]::new()
+    foreach ($value in @($Values)) {
+        $items.Add([double]$value)
+    }
+    if ($items.Count -eq 0) {
         return 0
     }
 
-    $sorted = @($Values | Sort-Object)
-    $middle = [int][Math]::Floor($sorted.Count / 2)
-    if ($sorted.Count % 2 -eq 1) {
+    [double[]] $sorted = $items.ToArray()
+    [Array]::Sort($sorted)
+    $middle = [int][Math]::Floor($sorted.Length / 2)
+    if ($sorted.Length % 2 -eq 1) {
         return [math]::Round($sorted[$middle], 2)
     }
 
@@ -20,13 +25,21 @@ function Get-MedianProperty {
         [string] $Name
     )
 
-    Get-Median -Values @($Rows | ForEach-Object {
-        if ($_.PSObject.Properties[$Name]) {
-            [double] $_.$Name
+    $values = [Collections.Generic.List[double]]::new()
+    foreach ($row in @($Rows)) {
+        $property = if ($null -ne $row) {
+            $row.PSObject.Properties | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
         } else {
-            0.0
+            $null
         }
-    })
+        if ($null -ne $property) {
+            $values.Add([double] $property.Value)
+        } else {
+            $values.Add(0.0)
+        }
+    }
+
+    Get-Median -Values $values.ToArray()
 }
 
 function Get-IterationValue {
@@ -76,178 +89,200 @@ function Get-OrderedSucceededRows {
     @($Rows | Sort-Object @{ Expression = { Get-IterationValue -Row $_ } }, @{ Expression = { [double]$_.ElapsedMilliseconds } })
 }
 
+function Get-ItemCount {
+    param([object] $Value)
+
+    $count = 0
+    foreach ($item in @($Value)) {
+        if ($null -ne $item) {
+            $count++
+        }
+    }
+
+    $count
+}
+
 function New-Summary {
     param([object[]] $Rows)
 
     foreach ($group in ($Rows | Group-Object Operation, Scenario, Engine)) {
-        $passed = @($group.Group | Where-Object Status -eq 'Succeeded')
-        $orderedPassed = @(Get-OrderedSucceededRows -Rows $passed)
-        $firstPassed = if ($orderedPassed.Count) { $orderedPassed[0] } else { $null }
-        $lastPassed = if ($orderedPassed.Count) { $orderedPassed[$orderedPassed.Count - 1] } else { $null }
-        $warmPassed = if ($orderedPassed.Count -gt 1) { @($orderedPassed | Select-Object -Skip 1) } else { @() }
+        [object[]] $groupRows = @($group.Group)
+        [object[]] $passed = @($groupRows | Where-Object Status -eq 'Succeeded')
+        [object[]] $failed = @($groupRows | Where-Object Status -eq 'Failed')
+        [object[]] $skipped = @($groupRows | Where-Object Status -eq 'Skipped')
+        [object[]] $orderedPassed = @(Get-OrderedSucceededRows -Rows $passed)
+        $groupRowCount = Get-ItemCount -Value $groupRows
+        $passedCount = Get-ItemCount -Value $passed
+        $failedCount = Get-ItemCount -Value $failed
+        $skippedCount = Get-ItemCount -Value $skipped
+        $orderedPassedCount = Get-ItemCount -Value $orderedPassed
+        $firstPassed = if ($orderedPassedCount -gt 0) { $orderedPassed[0] } else { $null }
+        $lastPassed = if ($orderedPassedCount -gt 0) { $orderedPassed[$orderedPassedCount - 1] } else { $null }
+        [object[]] $warmPassed = if ($orderedPassedCount -gt 1) { @($orderedPassed | Select-Object -Skip 1) } else { @() }
+        $warmPassedCount = Get-ItemCount -Value $warmPassed
         [pscustomobject]@{
-            Operation = [string]$group.Group[0].Operation
-            Scenario = [string]$group.Group[0].Scenario
-            Engine = [string]$group.Group[0].Engine
-            Runs = $group.Count
-            Succeeded = $passed.Count
-            Failed = @($group.Group | Where-Object Status -eq 'Failed').Count
-            Skipped = @($group.Group | Where-Object Status -eq 'Skipped').Count
-            MedianMs = Get-Median -Values @($passed | ForEach-Object { [double]$_.ElapsedMilliseconds })
-            WarmRuns = $warmPassed.Count
-            WarmMedianMs = Get-Median -Values @($warmPassed | ForEach-Object { [double]$_.ElapsedMilliseconds })
-            WarmMinMs = if ($warmPassed.Count) { [math]::Round(($warmPassed | Measure-Object ElapsedMilliseconds -Minimum).Minimum, 2) } else { 0 }
-            WarmMaxMs = if ($warmPassed.Count) { [math]::Round(($warmPassed | Measure-Object ElapsedMilliseconds -Maximum).Maximum, 2) } else { 0 }
-            FirstIteration = if ($firstPassed) { Get-IterationValue -Row $firstPassed } else { 0 }
-            LastIteration = if ($lastPassed) { Get-IterationValue -Row $lastPassed } else { 0 }
-            FirstMs = if ($firstPassed) { [math]::Round([double]$firstPassed.ElapsedMilliseconds, 2) } else { 0 }
-            LastMs = if ($lastPassed) { [math]::Round([double]$lastPassed.ElapsedMilliseconds, 2) } else { 0 }
-            MinMs = if ($passed.Count) { [math]::Round(($passed | Measure-Object ElapsedMilliseconds -Minimum).Minimum, 2) } else { 0 }
-            MaxMs = if ($passed.Count) { [math]::Round(($passed | Measure-Object ElapsedMilliseconds -Maximum).Maximum, 2) } else { 0 }
-            MedianOutputFileCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'OutputFileCount' } else { 0 }
-            MedianOutputBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'OutputBytes' } else { 0 }
-            MedianManagedPackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageCount' } else { 0 }
-            MedianManagedDependencyCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDependencyCount' } else { 0 }
-            MedianManagedUniquePackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedUniquePackageCount' } else { 0 }
-            MedianManagedUniqueDependencyCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedUniqueDependencyCount' } else { 0 }
-            MedianManagedInstalledPackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedInstalledPackageCount' } else { 0 }
-            MedianManagedAlreadyInstalledPackageCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedAlreadyInstalledPackageCount' } else { 0 }
-            MedianManagedRootElapsedMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootElapsedMilliseconds' } else { 0 }
-            MedianManagedHarnessOverheadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedHarnessOverheadMilliseconds' } else { 0 }
-            MedianManagedRootDependencyMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyMilliseconds' } else { 0 }
-            MedianManagedRootDependencyUnattributedMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyUnattributedMilliseconds' } else { 0 }
-            MedianManagedRootDependencyCriticalPathGapMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyCriticalPathGapMilliseconds' } else { 0 }
-            MedianManagedDependencyBranchParallelismRatio = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDependencyBranchParallelismRatio' } else { 0 }
-            MedianManagedVersionSelectionWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalVersionSelectionWaitMilliseconds' } else { 0 }
-            MedianManagedDependencyQueueWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyQueueWaitMilliseconds' } else { 0 }
-            MedianManagedDependencyBranchElapsedMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyBranchElapsedMilliseconds' } else { 0 }
-            MedianManagedDependencyBranchOverheadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyBranchOverheadMilliseconds' } else { 0 }
-            MedianManagedDownloadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDownloadMilliseconds' } else { 0 }
-            MedianManagedExtractionMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionMilliseconds' } else { 0 }
-            MedianManagedExtractionCacheLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionCacheLockWaitMilliseconds' } else { 0 }
-            MedianManagedDependencyMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyMilliseconds' } else { 0 }
-            MedianManagedPromotionMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionMilliseconds' } else { 0 }
-            MedianManagedPromotionLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionLockWaitMilliseconds' } else { 0 }
-            MedianManagedPromotionMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionMoveMilliseconds' } else { 0 }
-            MedianManagedPromotionFinalMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionFinalMoveMilliseconds' } else { 0 }
-            MedianManagedPromotionBackupMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionBackupMoveMilliseconds' } else { 0 }
-            MedianManagedPromotionBackupCleanupMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionBackupCleanupMilliseconds' } else { 0 }
-            MedianManagedPromotionOverwriteCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPromotionOverwriteCount' } else { 0 }
-            MedianManagedDirectMaterializationCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDirectMaterializationCount' } else { 0 }
-            MedianManagedPromotionDirectMaterializationMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionDirectMaterializationMilliseconds' } else { 0 }
-            MedianManagedRepositoryRequests = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRepositoryRequestCount' } else { 0 }
-            MedianManagedPackageRepositoryRequests = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRequestCount' } else { 0 }
-            MedianManagedPackageRepositoryRedirects = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRedirectCount' } else { 0 }
-            MedianManagedDownloadBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDownloadBytes' } else { 0 }
-            MedianManagedCacheHits = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCacheHitCount' } else { 0 }
-            MedianManagedExtractionCacheHits = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedExtractionCacheHitCount' } else { 0 }
-            MedianManagedCoalescedWaitCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCoalescedWaitCount' } else { 0 }
-            MedianManagedCoalescedWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalCoalescedWaitMilliseconds' } else { 0 }
-            MedianManagedSlowestCoalescedWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestCoalescedWaitMilliseconds' } else { 0 }
-            MedianManagedInstallLockWaitCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedInstallLockWaitCount' } else { 0 }
-            MedianManagedInstallLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalInstallLockWaitMilliseconds' } else { 0 }
-            MedianManagedSlowestInstallLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestInstallLockWaitMilliseconds' } else { 0 }
-            MedianManagedSlowestDependencyPackageMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestDependencyPackageMilliseconds' } else { 0 }
-            MedianManagedSlowestDependencyQueueWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestDependencyQueueWaitMilliseconds' } else { 0 }
-            MedianManagedSlowestVersionSelectionWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestVersionSelectionWaitMilliseconds' } else { 0 }
-            MedianManagedSlowestMaterializedPackageMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageMilliseconds' } else { 0 }
-            MedianManagedSlowestMaterializedPackageFileCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageFileCount' } else { 0 }
-            MedianManagedSlowestMaterializedPackageExtractedBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageExtractedBytes' } else { 0 }
-            MedianManagedSlowestMaterializedPackageMBPerSecond = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageMBPerSecond' } else { 0 }
-            MedianManagedSlowestMaterializedPackageFilesPerSecond = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageFilesPerSecond' } else { 0 }
-            MedianManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds' } else { 0 }
-            MedianManagedSlowestMaterializedPackagePromotionMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionMoveMilliseconds' } else { 0 }
-            MedianManagedSlowestMaterializedPackagePromotionFinalMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionFinalMoveMilliseconds' } else { 0 }
-            MedianManagedSlowestMaterializedPackagePromotionDirectMaterializationMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionDirectMaterializationMilliseconds' } else { 0 }
-            MedianManagedCriticalDependencyBranchMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalDependencyBranchMilliseconds' } else { 0 }
-            MedianManagedCriticalRootBranchMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalRootBranchMilliseconds' } else { 0 }
-            MedianManagedCriticalMaterializationBranchMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalMaterializationBranchMilliseconds' } else { 0 }
-            MedianManagedAuthenticodeCheckedFiles = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedAuthenticodeCheckedFileCount' } else { 0 }
-            MedianManagedAuthenticodeCatalogFiles = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedAuthenticodeCatalogFileCount' } else { 0 }
-            FirstManagedRepositoryRequests = if ($firstPassed) { [double]$firstPassed.ManagedRepositoryRequestCount } else { 0 }
-            LastManagedRepositoryRequests = if ($lastPassed) { [double]$lastPassed.ManagedRepositoryRequestCount } else { 0 }
-            FirstManagedPackageRepositoryRequests = if ($firstPassed) { [double]$firstPassed.ManagedPackageRepositoryRequestCount } else { 0 }
-            LastManagedPackageRepositoryRequests = if ($lastPassed) { [double]$lastPassed.ManagedPackageRepositoryRequestCount } else { 0 }
-            FirstManagedRootDependencyMs = if ($firstPassed) { [double]$firstPassed.ManagedRootDependencyMilliseconds } else { 0 }
-            LastManagedRootDependencyMs = if ($lastPassed) { [double]$lastPassed.ManagedRootDependencyMilliseconds } else { 0 }
-            FirstManagedRootDependencyUnattributedMs = if ($firstPassed) { [double]$firstPassed.ManagedRootDependencyUnattributedMilliseconds } else { 0 }
-            LastManagedRootDependencyUnattributedMs = if ($lastPassed) { [double]$lastPassed.ManagedRootDependencyUnattributedMilliseconds } else { 0 }
-            FirstManagedRootDependencyCriticalPathGapMs = if ($firstPassed) { [double]$firstPassed.ManagedRootDependencyCriticalPathGapMilliseconds } else { 0 }
-            LastManagedRootDependencyCriticalPathGapMs = if ($lastPassed) { [double]$lastPassed.ManagedRootDependencyCriticalPathGapMilliseconds } else { 0 }
-            FirstManagedDependencyBranchParallelismRatio = if ($firstPassed) { [double]$firstPassed.ManagedDependencyBranchParallelismRatio } else { 0 }
-            LastManagedDependencyBranchParallelismRatio = if ($lastPassed) { [double]$lastPassed.ManagedDependencyBranchParallelismRatio } else { 0 }
-            FirstManagedVersionSelectionWaitMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalVersionSelectionWaitMilliseconds } else { 0 }
-            LastManagedVersionSelectionWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalVersionSelectionWaitMilliseconds } else { 0 }
-            FirstManagedDependencyQueueWaitMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDependencyQueueWaitMilliseconds } else { 0 }
-            LastManagedDependencyQueueWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDependencyQueueWaitMilliseconds } else { 0 }
-            FirstManagedDependencyBranchElapsedMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDependencyBranchElapsedMilliseconds } else { 0 }
-            LastManagedDependencyBranchElapsedMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDependencyBranchElapsedMilliseconds } else { 0 }
-            FirstManagedDependencyBranchOverheadMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDependencyBranchOverheadMilliseconds } else { 0 }
-            LastManagedDependencyBranchOverheadMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDependencyBranchOverheadMilliseconds } else { 0 }
-            FirstManagedDownloadMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDownloadMilliseconds } else { 0 }
-            LastManagedDownloadMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDownloadMilliseconds } else { 0 }
-            FirstManagedExtractionMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalExtractionMilliseconds } else { 0 }
-            LastManagedExtractionMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalExtractionMilliseconds } else { 0 }
-            FirstManagedExtractionCacheLockWaitMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalExtractionCacheLockWaitMilliseconds } else { 0 }
-            LastManagedExtractionCacheLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalExtractionCacheLockWaitMilliseconds } else { 0 }
-            FirstManagedDependencyMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDependencyMilliseconds } else { 0 }
-            LastManagedDependencyMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDependencyMilliseconds } else { 0 }
-            FirstManagedPromotionMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionMilliseconds } else { 0 }
-            LastManagedPromotionMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionMilliseconds } else { 0 }
-            FirstManagedPromotionLockWaitMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionLockWaitMilliseconds } else { 0 }
-            LastManagedPromotionLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionLockWaitMilliseconds } else { 0 }
-            FirstManagedPromotionMoveMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionMoveMilliseconds } else { 0 }
-            LastManagedPromotionMoveMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionMoveMilliseconds } else { 0 }
-            FirstManagedPromotionFinalMoveMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionFinalMoveMilliseconds } else { 0 }
-            LastManagedPromotionFinalMoveMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionFinalMoveMilliseconds } else { 0 }
-            FirstManagedPromotionBackupMoveMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionBackupMoveMilliseconds } else { 0 }
-            LastManagedPromotionBackupMoveMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionBackupMoveMilliseconds } else { 0 }
-            FirstManagedPromotionBackupCleanupMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionBackupCleanupMilliseconds } else { 0 }
-            LastManagedPromotionBackupCleanupMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionBackupCleanupMilliseconds } else { 0 }
-            FirstManagedPromotionOverwriteCount = if ($firstPassed) { [double]$firstPassed.ManagedPromotionOverwriteCount } else { 0 }
-            LastManagedPromotionOverwriteCount = if ($lastPassed) { [double]$lastPassed.ManagedPromotionOverwriteCount } else { 0 }
-            FirstManagedDirectMaterializationCount = if ($firstPassed) { [double]$firstPassed.ManagedDirectMaterializationCount } else { 0 }
-            LastManagedDirectMaterializationCount = if ($lastPassed) { [double]$lastPassed.ManagedDirectMaterializationCount } else { 0 }
-            FirstManagedPromotionDirectMaterializationMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionDirectMaterializationMilliseconds } else { 0 }
-            LastManagedPromotionDirectMaterializationMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionDirectMaterializationMilliseconds } else { 0 }
-            FirstManagedDownloadBytes = if ($firstPassed) { [double]$firstPassed.ManagedDownloadBytes } else { 0 }
-            LastManagedDownloadBytes = if ($lastPassed) { [double]$lastPassed.ManagedDownloadBytes } else { 0 }
-            FirstManagedCacheHits = if ($firstPassed) { [double]$firstPassed.ManagedCacheHitCount } else { 0 }
-            LastManagedCacheHits = if ($lastPassed) { [double]$lastPassed.ManagedCacheHitCount } else { 0 }
-            FirstManagedExtractionCacheHits = if ($firstPassed) { [double]$firstPassed.ManagedExtractionCacheHitCount } else { 0 }
-            LastManagedExtractionCacheHits = if ($lastPassed) { [double]$lastPassed.ManagedExtractionCacheHitCount } else { 0 }
-            FirstManagedCoalescedWaitMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalCoalescedWaitMilliseconds } else { 0 }
-            LastManagedCoalescedWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalCoalescedWaitMilliseconds } else { 0 }
+            Operation = [string]$groupRows[0].Operation
+            Scenario = [string]$groupRows[0].Scenario
+            Engine = [string]$groupRows[0].Engine
+            Runs = $groupRowCount
+            Succeeded = $passedCount
+            Failed = $failedCount
+            Skipped = $skippedCount
+            MedianMs = (Get-MedianProperty -Rows $passed -Name 'ElapsedMilliseconds')
+            WarmRuns = $warmPassedCount
+            WarmMedianMs = (Get-MedianProperty -Rows $warmPassed -Name 'ElapsedMilliseconds')
+            WarmMinMs = if ($warmPassedCount) { [math]::Round(($warmPassed | Measure-Object ElapsedMilliseconds -Minimum).Minimum, 2) } else { 0 }
+            WarmMaxMs = if ($warmPassedCount) { [math]::Round(($warmPassed | Measure-Object ElapsedMilliseconds -Maximum).Maximum, 2) } else { 0 }
+            FirstIteration = if ($null -ne $firstPassed) { Get-IterationValue -Row $firstPassed } else { 0 }
+            LastIteration = if ($null -ne $lastPassed) { Get-IterationValue -Row $lastPassed } else { 0 }
+            FirstMs = if ($null -ne $firstPassed) { [math]::Round([double]$firstPassed.ElapsedMilliseconds, 2) } else { 0 }
+            LastMs = if ($null -ne $lastPassed) { [math]::Round([double]$lastPassed.ElapsedMilliseconds, 2) } else { 0 }
+            MinMs = if ($passedCount) { [math]::Round(($passed | Measure-Object ElapsedMilliseconds -Minimum).Minimum, 2) } else { 0 }
+            MaxMs = if ($passedCount) { [math]::Round(($passed | Measure-Object ElapsedMilliseconds -Maximum).Maximum, 2) } else { 0 }
+            MedianOutputFileCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'OutputFileCount' } else { 0 }
+            MedianOutputBytes = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'OutputBytes' } else { 0 }
+            MedianManagedPackageCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageCount' } else { 0 }
+            MedianManagedDependencyCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedDependencyCount' } else { 0 }
+            MedianManagedUniquePackageCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedUniquePackageCount' } else { 0 }
+            MedianManagedUniqueDependencyCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedUniqueDependencyCount' } else { 0 }
+            MedianManagedInstalledPackageCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedInstalledPackageCount' } else { 0 }
+            MedianManagedAlreadyInstalledPackageCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedAlreadyInstalledPackageCount' } else { 0 }
+            MedianManagedRootElapsedMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedRootElapsedMilliseconds' } else { 0 }
+            MedianManagedHarnessOverheadMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedHarnessOverheadMilliseconds' } else { 0 }
+            MedianManagedRootDependencyMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyMilliseconds' } else { 0 }
+            MedianManagedRootDependencyUnattributedMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyUnattributedMilliseconds' } else { 0 }
+            MedianManagedRootDependencyCriticalPathGapMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyCriticalPathGapMilliseconds' } else { 0 }
+            MedianManagedDependencyBranchParallelismRatio = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedDependencyBranchParallelismRatio' } else { 0 }
+            MedianManagedVersionSelectionWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalVersionSelectionWaitMilliseconds' } else { 0 }
+            MedianManagedDependencyQueueWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyQueueWaitMilliseconds' } else { 0 }
+            MedianManagedDependencyBranchElapsedMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyBranchElapsedMilliseconds' } else { 0 }
+            MedianManagedDependencyBranchOverheadMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyBranchOverheadMilliseconds' } else { 0 }
+            MedianManagedDownloadMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDownloadMilliseconds' } else { 0 }
+            MedianManagedExtractionMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionMilliseconds' } else { 0 }
+            MedianManagedExtractionCacheLockWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionCacheLockWaitMilliseconds' } else { 0 }
+            MedianManagedDependencyMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyMilliseconds' } else { 0 }
+            MedianManagedPromotionMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionMilliseconds' } else { 0 }
+            MedianManagedPromotionLockWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionLockWaitMilliseconds' } else { 0 }
+            MedianManagedPromotionMoveMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionMoveMilliseconds' } else { 0 }
+            MedianManagedPromotionFinalMoveMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionFinalMoveMilliseconds' } else { 0 }
+            MedianManagedPromotionBackupMoveMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionBackupMoveMilliseconds' } else { 0 }
+            MedianManagedPromotionBackupCleanupMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionBackupCleanupMilliseconds' } else { 0 }
+            MedianManagedPromotionOverwriteCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedPromotionOverwriteCount' } else { 0 }
+            MedianManagedDirectMaterializationCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedDirectMaterializationCount' } else { 0 }
+            MedianManagedPromotionDirectMaterializationMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionDirectMaterializationMilliseconds' } else { 0 }
+            MedianManagedRepositoryRequests = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedRepositoryRequestCount' } else { 0 }
+            MedianManagedPackageRepositoryRequests = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRequestCount' } else { 0 }
+            MedianManagedPackageRepositoryRedirects = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRedirectCount' } else { 0 }
+            MedianManagedDownloadBytes = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedDownloadBytes' } else { 0 }
+            MedianManagedCacheHits = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedCacheHitCount' } else { 0 }
+            MedianManagedExtractionCacheHits = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedExtractionCacheHitCount' } else { 0 }
+            MedianManagedCoalescedWaitCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedCoalescedWaitCount' } else { 0 }
+            MedianManagedCoalescedWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalCoalescedWaitMilliseconds' } else { 0 }
+            MedianManagedSlowestCoalescedWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestCoalescedWaitMilliseconds' } else { 0 }
+            MedianManagedInstallLockWaitCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedInstallLockWaitCount' } else { 0 }
+            MedianManagedInstallLockWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalInstallLockWaitMilliseconds' } else { 0 }
+            MedianManagedSlowestInstallLockWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestInstallLockWaitMilliseconds' } else { 0 }
+            MedianManagedSlowestDependencyPackageMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestDependencyPackageMilliseconds' } else { 0 }
+            MedianManagedSlowestDependencyQueueWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestDependencyQueueWaitMilliseconds' } else { 0 }
+            MedianManagedSlowestVersionSelectionWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestVersionSelectionWaitMilliseconds' } else { 0 }
+            MedianManagedSlowestMaterializedPackageMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageMilliseconds' } else { 0 }
+            MedianManagedSlowestMaterializedPackageFileCount = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageFileCount' } else { 0 }
+            MedianManagedSlowestMaterializedPackageExtractedBytes = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageExtractedBytes' } else { 0 }
+            MedianManagedSlowestMaterializedPackageMBPerSecond = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageMBPerSecond' } else { 0 }
+            MedianManagedSlowestMaterializedPackageFilesPerSecond = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageFilesPerSecond' } else { 0 }
+            MedianManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds' } else { 0 }
+            MedianManagedSlowestMaterializedPackagePromotionMoveMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionMoveMilliseconds' } else { 0 }
+            MedianManagedSlowestMaterializedPackagePromotionFinalMoveMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionFinalMoveMilliseconds' } else { 0 }
+            MedianManagedSlowestMaterializedPackagePromotionDirectMaterializationMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionDirectMaterializationMilliseconds' } else { 0 }
+            MedianManagedCriticalDependencyBranchMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalDependencyBranchMilliseconds' } else { 0 }
+            MedianManagedCriticalRootBranchMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalRootBranchMilliseconds' } else { 0 }
+            MedianManagedCriticalMaterializationBranchMs = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalMaterializationBranchMilliseconds' } else { 0 }
+            MedianManagedAuthenticodeCheckedFiles = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedAuthenticodeCheckedFileCount' } else { 0 }
+            MedianManagedAuthenticodeCatalogFiles = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedAuthenticodeCatalogFileCount' } else { 0 }
+            FirstManagedRepositoryRequests = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedRepositoryRequestCount } else { 0 }
+            LastManagedRepositoryRequests = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedRepositoryRequestCount } else { 0 }
+            FirstManagedPackageRepositoryRequests = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedPackageRepositoryRequestCount } else { 0 }
+            LastManagedPackageRepositoryRequests = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedPackageRepositoryRequestCount } else { 0 }
+            FirstManagedRootDependencyMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedRootDependencyMilliseconds } else { 0 }
+            LastManagedRootDependencyMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedRootDependencyMilliseconds } else { 0 }
+            FirstManagedRootDependencyUnattributedMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedRootDependencyUnattributedMilliseconds } else { 0 }
+            LastManagedRootDependencyUnattributedMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedRootDependencyUnattributedMilliseconds } else { 0 }
+            FirstManagedRootDependencyCriticalPathGapMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedRootDependencyCriticalPathGapMilliseconds } else { 0 }
+            LastManagedRootDependencyCriticalPathGapMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedRootDependencyCriticalPathGapMilliseconds } else { 0 }
+            FirstManagedDependencyBranchParallelismRatio = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedDependencyBranchParallelismRatio } else { 0 }
+            LastManagedDependencyBranchParallelismRatio = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedDependencyBranchParallelismRatio } else { 0 }
+            FirstManagedVersionSelectionWaitMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalVersionSelectionWaitMilliseconds } else { 0 }
+            LastManagedVersionSelectionWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalVersionSelectionWaitMilliseconds } else { 0 }
+            FirstManagedDependencyQueueWaitMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalDependencyQueueWaitMilliseconds } else { 0 }
+            LastManagedDependencyQueueWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalDependencyQueueWaitMilliseconds } else { 0 }
+            FirstManagedDependencyBranchElapsedMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalDependencyBranchElapsedMilliseconds } else { 0 }
+            LastManagedDependencyBranchElapsedMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalDependencyBranchElapsedMilliseconds } else { 0 }
+            FirstManagedDependencyBranchOverheadMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalDependencyBranchOverheadMilliseconds } else { 0 }
+            LastManagedDependencyBranchOverheadMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalDependencyBranchOverheadMilliseconds } else { 0 }
+            FirstManagedDownloadMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalDownloadMilliseconds } else { 0 }
+            LastManagedDownloadMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalDownloadMilliseconds } else { 0 }
+            FirstManagedExtractionMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalExtractionMilliseconds } else { 0 }
+            LastManagedExtractionMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalExtractionMilliseconds } else { 0 }
+            FirstManagedExtractionCacheLockWaitMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalExtractionCacheLockWaitMilliseconds } else { 0 }
+            LastManagedExtractionCacheLockWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalExtractionCacheLockWaitMilliseconds } else { 0 }
+            FirstManagedDependencyMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalDependencyMilliseconds } else { 0 }
+            LastManagedDependencyMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalDependencyMilliseconds } else { 0 }
+            FirstManagedPromotionMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalPromotionMilliseconds } else { 0 }
+            LastManagedPromotionMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalPromotionMilliseconds } else { 0 }
+            FirstManagedPromotionLockWaitMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalPromotionLockWaitMilliseconds } else { 0 }
+            LastManagedPromotionLockWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalPromotionLockWaitMilliseconds } else { 0 }
+            FirstManagedPromotionMoveMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalPromotionMoveMilliseconds } else { 0 }
+            LastManagedPromotionMoveMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalPromotionMoveMilliseconds } else { 0 }
+            FirstManagedPromotionFinalMoveMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalPromotionFinalMoveMilliseconds } else { 0 }
+            LastManagedPromotionFinalMoveMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalPromotionFinalMoveMilliseconds } else { 0 }
+            FirstManagedPromotionBackupMoveMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalPromotionBackupMoveMilliseconds } else { 0 }
+            LastManagedPromotionBackupMoveMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalPromotionBackupMoveMilliseconds } else { 0 }
+            FirstManagedPromotionBackupCleanupMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalPromotionBackupCleanupMilliseconds } else { 0 }
+            LastManagedPromotionBackupCleanupMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalPromotionBackupCleanupMilliseconds } else { 0 }
+            FirstManagedPromotionOverwriteCount = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedPromotionOverwriteCount } else { 0 }
+            LastManagedPromotionOverwriteCount = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedPromotionOverwriteCount } else { 0 }
+            FirstManagedDirectMaterializationCount = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedDirectMaterializationCount } else { 0 }
+            LastManagedDirectMaterializationCount = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedDirectMaterializationCount } else { 0 }
+            FirstManagedPromotionDirectMaterializationMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalPromotionDirectMaterializationMilliseconds } else { 0 }
+            LastManagedPromotionDirectMaterializationMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalPromotionDirectMaterializationMilliseconds } else { 0 }
+            FirstManagedDownloadBytes = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedDownloadBytes } else { 0 }
+            LastManagedDownloadBytes = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedDownloadBytes } else { 0 }
+            FirstManagedCacheHits = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedCacheHitCount } else { 0 }
+            LastManagedCacheHits = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedCacheHitCount } else { 0 }
+            FirstManagedExtractionCacheHits = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedExtractionCacheHitCount } else { 0 }
+            LastManagedExtractionCacheHits = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedExtractionCacheHitCount } else { 0 }
+            FirstManagedCoalescedWaitMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalCoalescedWaitMilliseconds } else { 0 }
+            LastManagedCoalescedWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalCoalescedWaitMilliseconds } else { 0 }
             LastManagedSlowestCoalescedWaitName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestCoalescedWaitName'
-            LastManagedSlowestCoalescedWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestCoalescedWaitMilliseconds } else { 0 }
-            FirstManagedInstallLockWaitMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalInstallLockWaitMilliseconds } else { 0 }
-            LastManagedInstallLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalInstallLockWaitMilliseconds } else { 0 }
+            LastManagedSlowestCoalescedWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestCoalescedWaitMilliseconds } else { 0 }
+            FirstManagedInstallLockWaitMs = if ($null -ne $firstPassed) { [double]$firstPassed.ManagedTotalInstallLockWaitMilliseconds } else { 0 }
+            LastManagedInstallLockWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedTotalInstallLockWaitMilliseconds } else { 0 }
             LastManagedSlowestInstallLockWaitName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestInstallLockWaitName'
-            LastManagedSlowestInstallLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestInstallLockWaitMilliseconds } else { 0 }
+            LastManagedSlowestInstallLockWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestInstallLockWaitMilliseconds } else { 0 }
             LastManagedSlowestDependencyPackageName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestDependencyPackageName'
             LastManagedSlowestDependencyPackageParent = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestDependencyPackageParent'
-            LastManagedSlowestDependencyPackageMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestDependencyPackageMilliseconds } else { 0 }
+            LastManagedSlowestDependencyPackageMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestDependencyPackageMilliseconds } else { 0 }
             LastManagedSlowestDependencyQueueWaitName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestDependencyQueueWaitName'
-            LastManagedSlowestDependencyQueueWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestDependencyQueueWaitMilliseconds } else { 0 }
+            LastManagedSlowestDependencyQueueWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestDependencyQueueWaitMilliseconds } else { 0 }
             LastManagedSlowestVersionSelectionWaitName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestVersionSelectionWaitName'
-            LastManagedSlowestVersionSelectionWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestVersionSelectionWaitMilliseconds } else { 0 }
+            LastManagedSlowestVersionSelectionWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestVersionSelectionWaitMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackageName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestMaterializedPackageName'
-            LastManagedSlowestMaterializedPackageMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackageFileCount = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageFileCount } else { 0 }
-            LastManagedSlowestMaterializedPackageExtractedBytes = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractedBytes } else { 0 }
-            LastManagedSlowestMaterializedPackageMBPerSecond = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageMBPerSecond } else { 0 }
-            LastManagedSlowestMaterializedPackageFilesPerSecond = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageFilesPerSecond } else { 0 }
-            LastManagedSlowestMaterializedPackageExtractionMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractionMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackagePromotionMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackagePromotionLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionLockWaitMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackagePromotionMoveMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionMoveMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackagePromotionFinalMoveMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionFinalMoveMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackagePromotionBackupMoveMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionBackupMoveMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackagePromotionBackupCleanupMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionBackupCleanupMilliseconds } else { 0 }
-            LastManagedSlowestMaterializedPackagePromotionHadExistingTarget = if ($lastPassed) { [bool]$lastPassed.ManagedSlowestMaterializedPackagePromotionHadExistingTarget } else { $false }
-            LastManagedSlowestMaterializedPackagePromotionMaterializedDirectly = if ($lastPassed) { [bool]$lastPassed.ManagedSlowestMaterializedPackagePromotionMaterializedDirectly } else { $false }
-            LastManagedSlowestMaterializedPackagePromotionDirectMaterializationMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionDirectMaterializationMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackageMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackageFileCount = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageFileCount } else { 0 }
+            LastManagedSlowestMaterializedPackageExtractedBytes = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractedBytes } else { 0 }
+            LastManagedSlowestMaterializedPackageMBPerSecond = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageMBPerSecond } else { 0 }
+            LastManagedSlowestMaterializedPackageFilesPerSecond = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageFilesPerSecond } else { 0 }
+            LastManagedSlowestMaterializedPackageExtractionMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractionMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackagePromotionMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackagePromotionLockWaitMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionLockWaitMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackagePromotionMoveMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionMoveMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackagePromotionFinalMoveMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionFinalMoveMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackagePromotionBackupMoveMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionBackupMoveMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackagePromotionBackupCleanupMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionBackupCleanupMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackagePromotionHadExistingTarget = if ($null -ne $lastPassed) { [bool]$lastPassed.ManagedSlowestMaterializedPackagePromotionHadExistingTarget } else { $false }
+            LastManagedSlowestMaterializedPackagePromotionMaterializedDirectly = if ($null -ne $lastPassed) { [bool]$lastPassed.ManagedSlowestMaterializedPackagePromotionMaterializedDirectly } else { $false }
+            LastManagedSlowestMaterializedPackagePromotionDirectMaterializationMs = if ($null -ne $lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionDirectMaterializationMilliseconds } else { 0 }
             LastManagedCriticalDependencyBranchName = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchName'
             LastManagedCriticalDependencyBranchParent = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchParent'
             LastManagedCriticalDependencyBranchMs = Get-DoubleProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchMilliseconds'
@@ -261,8 +296,8 @@ function New-Summary {
             LastManagedCriticalMaterializationBranchMs = Get-DoubleProperty -Row $lastPassed -Name 'ManagedCriticalMaterializationBranchMilliseconds'
             LastManagedCriticalMaterializationDominantPhase = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalMaterializationDominantPhase'
             LastManagedCriticalMaterializationDominantPhaseMs = Get-DoubleProperty -Row $lastPassed -Name 'ManagedCriticalMaterializationDominantPhaseMilliseconds'
-            MedianManagedMaintenanceActions = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceActionCount' } else { 0 }
-            MedianManagedMaintenanceFindings = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceFindingCount' } else { 0 }
+            MedianManagedMaintenanceActions = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceActionCount' } else { 0 }
+            MedianManagedMaintenanceFindings = if ($passedCount) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceFindingCount' } else { 0 }
         }
     }
 }
