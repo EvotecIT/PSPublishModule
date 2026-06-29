@@ -146,6 +146,41 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         Assert.All(dependencies, dependency => Assert.Equal(1, dependency.PackageRepositoryRequestCount));
     }
 
+    [Fact]
+    public async Task InstallAsync_shares_latest_dependency_selection_across_lower_bound_ranges()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var handler = new SharedLatestDependencyFeedHandler();
+        using var httpClient = new HttpClient(handler);
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json"),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            TrustPolicy = new ManagedModuleTrustPolicy
+            {
+                AllowedAuthors = new[] { "Evotec" },
+                ApplyToDependencies = true
+            }
+        });
+
+        var coreDependencies = result.DependencyResults
+            .SelectMany(static dependency => dependency.DependencyResults)
+            .Where(static dependency => dependency.Name == "Company.Core")
+            .OrderBy(static dependency => dependency.DependencyVersionRange, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        Assert.Equal(2, coreDependencies.Length);
+        Assert.Equal(new[] { "1.0.0", "1.1.0" }, coreDependencies.Select(static dependency => dependency.DependencyVersionRange));
+        Assert.All(coreDependencies, static dependency => Assert.Equal("1.2.0", dependency.Version));
+        Assert.Contains(coreDependencies, static dependency => dependency.VersionSelectionWaitElapsed > TimeSpan.Zero);
+        Assert.Equal(1, handler.CoreVersionQueryCount);
+    }
+
     private static IReadOnlyDictionary<string, string> CreateToolFiles(string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -313,6 +348,86 @@ public sealed class ManagedModuleDependencyInstallServiceTests
                 {
                     [id + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
                 });
+            return File.ReadAllBytes(packagePath);
+        }
+    }
+
+    private sealed class SharedLatestDependencyFeedHandler : HttpMessageHandler
+    {
+        private int _coreVersionQueryCount;
+
+        public int CoreVersionQueryCount => System.Threading.Volatile.Read(ref _coreVersionQueryCount);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            if (uri == "https://example.test/v3/index.json")
+            {
+                return Json("{\"resources\":[" +
+                            "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}" +
+                            "]}");
+            }
+
+            if (uri == "https://example.test/packages/company.core/index.json")
+            {
+                System.Threading.Interlocked.Increment(ref _coreVersionQueryCount);
+                await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+                return Json("{\"versions\":[\"1.0.0\",\"1.1.0\",\"1.2.0\"]}");
+            }
+
+            if (uri == "https://example.test/packages/company.tools/1.0.0/company.tools.1.0.0.nupkg")
+            {
+                return Package("Company.Tools", "1.0.0", new[]
+                {
+                    new TestDependency("Company.A", "1.0.0", null),
+                    new TestDependency("Company.B", "1.0.0", null)
+                });
+            }
+
+            if (uri == "https://example.test/packages/company.a/index.json" ||
+                uri == "https://example.test/packages/company.b/index.json")
+            {
+                return Json("{\"versions\":[\"1.0.0\"]}");
+            }
+
+            if (uri == "https://example.test/packages/company.a/1.0.0/company.a.1.0.0.nupkg")
+                return Package("Company.A", "1.0.0", new[] { new TestDependency("Company.Core", "1.0.0", null) });
+
+            if (uri == "https://example.test/packages/company.b/1.0.0/company.b.1.0.0.nupkg")
+                return Package("Company.B", "1.0.0", new[] { new TestDependency("Company.Core", "1.1.0", null) });
+
+            if (uri == "https://example.test/packages/company.core/1.2.0/company.core.1.2.0.nupkg")
+                return Package("Company.Core", "1.2.0", dependencies: null);
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        }
+
+        private static HttpResponseMessage Json(string json)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+            };
+
+        private static HttpResponseMessage Package(string id, string version, IReadOnlyList<TestDependency>? dependencies)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(CreatePackageBytes(id, version, dependencies))
+            };
+
+        private static byte[] CreatePackageBytes(string id, string version, IReadOnlyList<TestDependency>? dependencies)
+        {
+            using var directory = new TemporaryDirectory();
+            var packagePath = Path.Combine(directory.Path, id + "." + version + ".nupkg");
+            TestPackageFactory.Create(
+                packagePath,
+                id,
+                version,
+                dependencies,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [id + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
+                },
+                authors: "Evotec");
             return File.ReadAllBytes(packagePath);
         }
     }
