@@ -59,7 +59,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `-WhatIf` and `-Confirm` on mutating cmdlets.
 - [x] Return typed result objects with enough data to audit source, target path, version policy, resolved version, dependency actions, elapsed time, and receipt state.
 - [x] Support `Update-ManagedModule` without `-Name` so the command updates installed modules from the selected roots like `Update-Module`.
-- [ ] Finish exact `-Force`, `-TrustRepository`, `-SkipPublisherCheck`, and signature-check semantics so compatibility choices are explicit and unsurprising.
+- [x] Finish exact `-Force`, `-TrustRepository`, and `-SkipPublisherCheck` semantics so compatibility choices are explicit and unsurprising.
 - [x] Define exact install/save/update semantics for `-Force`, `-AllowClobber`, and `-AcceptLicense` so the common managed delivery path is explicit and unsurprising.
 - [ ] Complete managed Authenticode/catalog validation compatible with PowerShellGet/PSResourceGet expectations, including explicit catalog policy evidence, timestamped signatures, and short-lived certificate behavior.
 - [x] Add initial Windows managed `-AuthenticodeCheck` support for install/save/update by validating extracted signable files before promotion.
@@ -472,8 +472,10 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [ ] Decide whether public `-Proxy` and `-ProxyCredential` parameters are required on managed cmdlets or remain repository/profile policy.
 - [x] Add initial Windows managed `-AuthenticodeCheck` support for install/save/update signable files before promotion.
 - [ ] Complete Authenticode/catalog parity with PSResourceGet, including catalog-specific evidence, timestamped signatures, short-lived certificate chains, and signed live fixtures.
-- [ ] Decide whether to expose migration aliases for `-TrustRepository`, `-SkipPublisherCheck`, `-AllowPrerelease`, and `-RequiredVersion` where the managed canonical parameter differs.
-- [ ] Document non-module PSResourceGet resource-kind gaps so scripts, command search, DSC/resource-kind search, and provider bootstrap behavior do not look silently supported.
+- [x] Decide whether to expose migration aliases for `-TrustRepository`, `-SkipPublisherCheck`, `-AllowPrerelease`, and `-RequiredVersion` where the managed canonical parameter differs.
+  - [x] 2026-06-29: `-RequiredVersion` and `-AllowPrerelease` are exposed as safe aliases where they map to the same managed behavior, including repair flows. `-TrustRepository` and `-SkipPublisherCheck` are intentionally not exposed as aliases or no-op switches because managed trust and publisher/signature policy are explicit safety concepts; callers should use `-RequireTrustedRepository`, repository profiles, expected package hashes, allowed-author policy, and `-AuthenticodeCheck`.
+- [x] Document non-module PSResourceGet resource-kind gaps so scripts, command search, DSC/resource-kind search, and provider bootstrap behavior do not look silently supported.
+  - [x] 2026-06-29: `Docs/PSPublishModule.ManagedModules.Compatibility.md` now states that the managed engine is a module lifecycle engine and documents scripts, DSC/resource-kind search, role capability search, command-name search, and provider bootstrap as compatibility/native-provider gaps until those have their own managed model, tests, and benchmark evidence.
 
 ## Benchmark Scenarios
 

@@ -137,6 +137,26 @@ Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSu
 | WhatIf/Confirm | Supported | Mutating cmdlets use PowerShell `ShouldProcess` |
 | Summaries | Supported | Spectre.Console summaries remain host-side; result objects are still pipeline-friendly |
 
+## Migration Alias Decisions
+
+Compatibility aliases are exposed only when the old name maps to the same managed behavior. `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` are safe aliases because they do not change the safety model.
+
+`-TrustRepository` is not exposed as an alias. In PowerShellGet and PSResourceGet it is commonly used to skip an untrusted-repository prompt for that invocation. The managed engine does not prompt inside the reusable core; it uses repository profile trust evidence and the explicit `-RequireTrustedRepository` policy. A direct alias would invert the meaning and could make automation less safe.
+
+`-SkipPublisherCheck` is not exposed as an alias or no-op switch. Managed install, save, update, and repair currently use source trust, allowed-author policy, expected package SHA256, license acceptance, clobber checks, and optional `-AuthenticodeCheck`. Cloning PowerShellGet publisher-check behavior needs a separate signed fixture and catalog evidence before it becomes a public compatibility switch.
+
+## PSResourceGet Resource-Kind Scope
+
+The managed engine is a module lifecycle engine. It supports module packages for find, save, install, update, publish, and estate repair. It does not currently claim support for the other PSResourceGet resource kinds or provider bootstrap behaviors:
+
+- scripts as first-class resources
+- DSC resources as a separate resource-kind search/install surface
+- command-name search across package contents
+- role capability search
+- provider-specific bootstrap, registration, credential-provider installation, or repository plugin behavior
+
+Those scenarios should continue through compatibility transport or native provider commands until they have a managed model, tests, and benchmark evidence. They are intentionally documented gaps, not silently supported module-engine behavior.
+
 ## Compatibility Checklist
 
 This checklist is the guardrail for replacing common PowerShellGet and PSResourceGet usage without surprises. Matching a parameter name is not enough; each item needs behavior proof, tests, and benchmark evidence when it can affect speed.
@@ -150,15 +170,15 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] PSResourceGet-style `-TrustRepository` behavior maps to trusted repository profiles and `-RequireTrustedRepository` policy instead of hidden prompts.
 - [ ] Decide whether public proxy parameters should be added to managed cmdlets or kept as repository/profile policy only. The managed repository client has proxy behavior, but `-Proxy` and `-ProxyCredential` are not currently public compatibility parameters.
 - [x] Define exact public semantics for `-Force` on install/save/update, including exact-version reinstall, no-op plans, rollback-protected replacement, downgrade blocking, and no implied cleanup.
-- [ ] Define exact public semantics for `-Force` in repair and maintenance flows, including receipt repair and cleanup interactions.
+- [x] Define exact public semantics for `-Force` in repair and maintenance flows, including receipt repair and cleanup interactions.
 - [x] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts in the selected target root.
 - [x] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
-- [ ] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, and package hash policies instead of cloning PowerShellGet's publisher-check switch.
+- [x] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, package hash, and optional Authenticode policies instead of cloning PowerShellGet's publisher-check switch; no public switch is exposed until true publisher-check semantics exist.
 - [ ] Complete managed Authenticode/catalog validation parity with PSResourceGet `-AuthenticodeCheck`, including explicit catalog policy evidence and timestamped short-lived certificate chains.
 - [x] Add initial managed `-AuthenticodeCheck` support for install/save/update on Windows using native WinTrust validation of extracted signable files before promotion.
 - [x] Expose semantically equivalent migration aliases such as `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` where they map cleanly to managed cmdlet behavior.
-- [ ] Decide whether to add explicit `-TrustRepository` and `-SkipPublisherCheck` compatibility parameters. They should not be aliases unless their behavior is intentionally defined because repository trust and publisher checks are different safety concepts in the managed engine.
-- [ ] Document unsupported non-module resource use cases explicitly: scripts, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
+- [x] Decide whether to add explicit `-TrustRepository` and `-SkipPublisherCheck` compatibility parameters. They are not aliases because repository trust and publisher checks are different safety concepts in the managed engine; use `-RequireTrustedRepository` and `-AuthenticodeCheck`/integrity policies instead.
+- [x] Document unsupported non-module resource use cases explicitly: scripts, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
 - [x] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, and family coherence.
 - [x] Add repair/maintenance benchmark lanes for loaded-module safety and cleanup planning, with command-level plan tests that prove loaded-module findings and cleanup actions remain visible without mutation.
 - [x] Add install/save/update no-op and force benchmark lanes so existing-target behavior is measured across managed, PowerShellGet, PSResourceGet, and the install-only speed gate where an equivalent operation exists.

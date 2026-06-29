@@ -113,6 +113,11 @@ public sealed class ManagedModuleAliasCommandTests
     [InlineData("Update-ManagedModule", "Prerelease", "AllowPrerelease")]
     [InlineData("Update-ManagedModule", "ModuleRoot", "Path")]
     [InlineData("Update-ManagedModule", "SkipDependencyCheck", "SkipDependenciesCheck")]
+    [InlineData("Repair-ManagedModule", "Version", "RequiredVersion")]
+    [InlineData("Repair-ManagedModule", "Repository", "Source")]
+    [InlineData("Repair-ManagedModule", "Repository", "RepositoryUri")]
+    [InlineData("Repair-ManagedModule", "Prerelease", "AllowPrerelease")]
+    [InlineData("Repair-ManagedModule", "ModuleRoot", "Path")]
     [InlineData("Publish-ManagedModule", "Path", "ModulePath")]
     [InlineData("Publish-ManagedModule", "Repository", "RepositoryUri")]
     [InlineData("Publish-ManagedModule", "Repository", "Source")]
@@ -130,6 +135,29 @@ public sealed class ManagedModuleAliasCommandTests
         AssertNoPowerShellErrors(ps);
         Assert.True(command.Parameters.TryGetValue(parameterName, out var parameter), $"Parameter '{parameterName}' was not found on {commandName}.");
         Assert.Contains(aliasName, parameter.Aliases);
+    }
+
+    [Theory]
+    [InlineData("Install-ManagedModule")]
+    [InlineData("Save-ManagedModule")]
+    [InlineData("Update-ManagedModule")]
+    [InlineData("Repair-ManagedModule")]
+    public void Managed_module_delivery_commands_do_not_expose_unsafe_migration_switches(string commandName)
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument(commandName);
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+        var aliases = command.Parameters.Values
+            .SelectMany(static parameter => parameter.Aliases)
+            .ToArray();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.False(command.Parameters.ContainsKey("TrustRepository"), $"{commandName} should use RequireTrustedRepository instead of a misleading TrustRepository switch.");
+        Assert.False(command.Parameters.ContainsKey("SkipPublisherCheck"), $"{commandName} should not expose SkipPublisherCheck until managed publisher-check semantics exist.");
+        Assert.DoesNotContain("TrustRepository", aliases);
+        Assert.DoesNotContain("SkipPublisherCheck", aliases);
     }
 
     [Fact]
