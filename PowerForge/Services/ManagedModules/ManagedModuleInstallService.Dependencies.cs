@@ -284,15 +284,12 @@ public sealed partial class ManagedModuleInstallService
     {
         if (trustPolicy is null || !ManagedModuleTrustEvaluator.HasPolicy(trustPolicy))
             return null;
+        var allowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(trustPolicy.AllowedAuthors);
+        if (allowedAuthors.Count == 0)
+            return null;
         if (trustPolicy.ApplyToDependencies)
             return trustPolicy;
-        if (!trustPolicy.RequireTrustedRepository)
-            return null;
 
-        return new ManagedModuleTrustPolicy
-        {
-            RequireTrustedRepository = true,
-            ApplyToDependencies = false
-        };
+        return null;
     }
 }
