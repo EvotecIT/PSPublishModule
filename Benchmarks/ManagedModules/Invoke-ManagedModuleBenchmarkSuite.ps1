@@ -591,7 +591,12 @@ function Add-SummaryRows {
                 Operation = $row.Operation
                 FastestEngine = $row.FastestEngine
                 FastestMs = $row.FastestMs
+                FastestWarmMedianMs = $row.FastestWarmMedianMs
                 ManagedMs = $row.ManagedMs
+                ManagedWarmRuns = $row.ManagedWarmRuns
+                ManagedWarmMedianMs = $row.ManagedWarmMedianMs
+                ManagedWarmMinMs = $row.ManagedWarmMinMs
+                ManagedWarmMaxMs = $row.ManagedWarmMaxMs
                 ManagedRank = $row.ManagedRank
                 ManagedVsFastest = $row.ManagedVsFastest
                 ManagedFirstIteration = $row.ManagedFirstIteration

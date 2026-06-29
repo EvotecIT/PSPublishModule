@@ -84,6 +84,7 @@ function New-Summary {
         $orderedPassed = @(Get-OrderedSucceededRows -Rows $passed)
         $firstPassed = if ($orderedPassed.Count) { $orderedPassed[0] } else { $null }
         $lastPassed = if ($orderedPassed.Count) { $orderedPassed[$orderedPassed.Count - 1] } else { $null }
+        $warmPassed = if ($orderedPassed.Count -gt 1) { @($orderedPassed | Select-Object -Skip 1) } else { @() }
         [pscustomobject]@{
             Operation = [string]$group.Group[0].Operation
             Scenario = [string]$group.Group[0].Scenario
@@ -93,6 +94,10 @@ function New-Summary {
             Failed = @($group.Group | Where-Object Status -eq 'Failed').Count
             Skipped = @($group.Group | Where-Object Status -eq 'Skipped').Count
             MedianMs = Get-Median -Values @($passed | ForEach-Object { [double]$_.ElapsedMilliseconds })
+            WarmRuns = $warmPassed.Count
+            WarmMedianMs = Get-Median -Values @($warmPassed | ForEach-Object { [double]$_.ElapsedMilliseconds })
+            WarmMinMs = if ($warmPassed.Count) { [math]::Round(($warmPassed | Measure-Object ElapsedMilliseconds -Minimum).Minimum, 2) } else { 0 }
+            WarmMaxMs = if ($warmPassed.Count) { [math]::Round(($warmPassed | Measure-Object ElapsedMilliseconds -Maximum).Maximum, 2) } else { 0 }
             FirstIteration = if ($firstPassed) { Get-IterationValue -Row $firstPassed } else { 0 }
             LastIteration = if ($lastPassed) { Get-IterationValue -Row $lastPassed } else { 0 }
             FirstMs = if ($firstPassed) { [math]::Round([double]$firstPassed.ElapsedMilliseconds, 2) } else { 0 }
@@ -274,7 +279,12 @@ function New-Comparison {
             Scenario = [string]$operationGroup.Group[0].Scenario
             FastestEngine = if ($fastest.Count) { [string]$fastest[0].Engine } else { '' }
             FastestMs = if ($fastest.Count) { [double]$fastest[0].MedianMs } else { 0 }
+            FastestWarmMedianMs = if ($fastest.Count) { [double]$fastest[0].WarmMedianMs } else { 0 }
             ManagedMs = if ($managed.Count) { [double]$managed[0].MedianMs } else { 0 }
+            ManagedWarmRuns = if ($managed.Count) { [double] $managed[0].WarmRuns } else { 0 }
+            ManagedWarmMedianMs = if ($managed.Count) { [double] $managed[0].WarmMedianMs } else { 0 }
+            ManagedWarmMinMs = if ($managed.Count) { [double] $managed[0].WarmMinMs } else { 0 }
+            ManagedWarmMaxMs = if ($managed.Count) { [double] $managed[0].WarmMaxMs } else { 0 }
             ManagedRank = if ($managed.Count -and $successful.Count) {
                 1 + @($successful | Where-Object { $_.MedianMs -lt $managed[0].MedianMs }).Count
             } else {

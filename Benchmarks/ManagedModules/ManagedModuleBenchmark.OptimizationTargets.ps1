@@ -228,6 +228,10 @@ function New-ManagedOptimizationTarget {
             Host = if ($row.PSObject.Properties['Host']) { [string] $row.Host } else { '' }
             Operation = [string] $row.Operation
             ManagedMs = [math]::Round($managedMs, 2)
+            WarmRuns = if ($row.PSObject.Properties['ManagedWarmRuns']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedWarmRuns } else { 0.0 }
+            WarmMedianMs = if ($row.PSObject.Properties['ManagedWarmMedianMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedWarmMedianMs } else { 0.0 }
+            WarmMinMs = if ($row.PSObject.Properties['ManagedWarmMinMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedWarmMinMs } else { 0.0 }
+            WarmMaxMs = if ($row.PSObject.Properties['ManagedWarmMaxMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedWarmMaxMs } else { 0.0 }
             ManagedRank = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRank
             ManagedVsFastest = if ($row.PSObject.Properties['ManagedVsFastest']) { [string] $row.ManagedVsFastest } else { '' }
             OutputFileCount = $outputFiles
