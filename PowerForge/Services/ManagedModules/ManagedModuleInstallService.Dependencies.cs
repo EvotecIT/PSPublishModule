@@ -243,6 +243,27 @@ public sealed partial class ManagedModuleInstallService
             return new ManagedModuleDependencyVersionSelection(range.ExactVersion, shared: false);
 
         var includePrerelease = request.IncludePrerelease || range.AllowsPrerelease;
+        if (range.MaximumVersion is null)
+        {
+            var latestCacheKey = TryCreateDependencyLatestVersionSelectionKey(
+                request,
+                dependencyName,
+                includePrerelease,
+                cancellationToken);
+            if (latestCacheKey is not null)
+            {
+                var latest = await context.GetOrAddDependencyVersionSelection(
+                    latestCacheKey,
+                    () => ResolveLatestDependencyVersionAsync(
+                        request,
+                        dependencyName,
+                        includePrerelease,
+                        cancellationToken)).ConfigureAwait(false);
+                if (range.IsSatisfiedBy(latest.Version))
+                    return latest;
+            }
+        }
+
         var cacheKey = TryCreateDependencyVersionSelectionKey(
             request,
             dependencyName,
@@ -268,6 +289,24 @@ public sealed partial class ManagedModuleInstallService
             includePrerelease,
             cancellationToken).ConfigureAwait(false);
         return new ManagedModuleDependencyVersionSelection(version, shared: false);
+    }
+
+    private async Task<string> ResolveLatestDependencyVersionAsync(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        bool includePrerelease,
+        CancellationToken cancellationToken)
+    {
+        var latestVersion = await _repositoryClient.GetLatestVersionAsync(
+            request.Repository,
+            dependencyName,
+            includePrerelease,
+            request.Credential,
+            cancellationToken).ConfigureAwait(false);
+        if (latestVersion is null)
+            throw new InvalidOperationException($"No dependency versions of '{dependencyName}' were found in repository '{request.Repository.Name}'.");
+
+        return latestVersion.Version;
     }
 
     private async Task<string> ResolveDependencyVersionUncachedAsync(
@@ -305,6 +344,24 @@ public sealed partial class ManagedModuleInstallService
             throw new InvalidOperationException($"No dependency version of '{dependencyName}' satisfies range '{range}' in repository '{request.Repository.Name}'.");
 
         return selected.Version;
+    }
+
+    private static string? TryCreateDependencyLatestVersionSelectionKey(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        bool includePrerelease,
+        CancellationToken cancellationToken)
+    {
+        if (request.Credential is not null || cancellationToken.CanBeCanceled)
+            return null;
+
+        return string.Join(
+            "|",
+            "dependency-latest-version",
+            request.Repository.Kind.ToString(),
+            NormalizeDependencyVersionCacheValue(request.Repository.Source),
+            NormalizeDependencyVersionCacheValue(dependencyName),
+            includePrerelease ? "pre" : "stable");
     }
 
     private static string? TryCreateDependencyVersionSelectionKey(
