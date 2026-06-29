@@ -40,6 +40,7 @@ function New-SkippedRow {
         ManagedHarnessOverheadMilliseconds = 0
         ManagedRootDependencyMilliseconds = 0
         ManagedRootDependencyUnattributedMilliseconds = 0
+        ManagedTotalVersionSelectionWaitMilliseconds = 0
         ManagedTotalDependencyQueueWaitMilliseconds = 0
         ManagedTotalDependencyBranchElapsedMilliseconds = 0
         ManagedTotalDependencyBranchOverheadMilliseconds = 0
@@ -75,6 +76,8 @@ function New-SkippedRow {
         ManagedSlowestDependencyPackageMilliseconds = 0
         ManagedSlowestDependencyQueueWaitName = ''
         ManagedSlowestDependencyQueueWaitMilliseconds = 0
+        ManagedSlowestVersionSelectionWaitName = ''
+        ManagedSlowestVersionSelectionWaitMilliseconds = 0
         ManagedSlowestMaterializedPackageName = ''
         ManagedSlowestMaterializedPackageMilliseconds = 0
         ManagedSlowestMaterializedPackageExtractionMilliseconds = 0

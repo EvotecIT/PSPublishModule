@@ -96,6 +96,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         Elapsed = [TimeSpan]::FromMilliseconds(450)
                         InstallLockWaitElapsed = [TimeSpan]::FromMilliseconds(40)
                         VersionResolutionElapsed = [TimeSpan]::Zero
+                        VersionSelectionWaitElapsed = [TimeSpan]::FromMilliseconds(25)
                         DownloadElapsed = [TimeSpan]::FromMilliseconds(20)
                         ExtractionElapsed = [TimeSpan]::FromMilliseconds(320)
                         ExtractionCacheLockWaitElapsed = [TimeSpan]::FromMilliseconds(15)
@@ -153,15 +154,19 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(200.0, NumericProperty(summary, "TotalDependencyQueueWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestDependencyQueueWaitName"));
         Assert.Equal(200.0, NumericProperty(summary, "SlowestDependencyQueueWaitMilliseconds"));
+        Assert.Equal(25.0, NumericProperty(summary, "TotalVersionSelectionWaitMilliseconds"));
+        Assert.Equal("Company.Big", Property(summary, "SlowestVersionSelectionWaitName"));
+        Assert.Equal(25.0, NumericProperty(summary, "SlowestVersionSelectionWaitMilliseconds"));
         Assert.Equal(90.0, NumericProperty(waitPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal(30.0, NumericProperty(waitPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(noOpPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(noOpPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(bigPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal(40.0, NumericProperty(bigPackage, "InstallLockWaitMilliseconds"));
+        Assert.Equal(25.0, NumericProperty(bigPackage, "VersionSelectionWaitMilliseconds"));
         Assert.Equal(200.0, NumericProperty(bigPackage, "DependencyQueueWaitMilliseconds"));
         Assert.Equal(760.0, NumericProperty(bigPackage, "DependencyBranchElapsedMilliseconds"));
-        Assert.Equal(45.0, NumericProperty(bigPackage, "DependencyBranchOverheadMilliseconds"));
+        Assert.Equal(20.0, NumericProperty(bigPackage, "DependencyBranchOverheadMilliseconds"));
         Assert.Equal(15.0, NumericProperty(bigPackage, "ExtractionCacheLockWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(summary, "SlowestMaterializedPackageMilliseconds"));
@@ -182,7 +187,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(320.0, NumericProperty(summary, "CriticalDependencyBranchDominantPhaseMilliseconds"));
         Assert.Equal(40.0, NumericProperty(summary, "RootDependencyUnattributedMilliseconds"));
         Assert.Equal(960.0, NumericProperty(summary, "TotalDependencyBranchElapsedMilliseconds"));
-        Assert.Equal(45.0, NumericProperty(summary, "TotalDependencyBranchOverheadMilliseconds"));
+        Assert.Equal(20.0, NumericProperty(summary, "TotalDependencyBranchOverheadMilliseconds"));
         Assert.Equal("Company.Root", Property(summary, "CriticalRootBranchName"));
         Assert.Equal(1000.0, NumericProperty(summary, "CriticalRootBranchMilliseconds"));
         Assert.Equal("Dependency", Property(summary, "CriticalRootBranchDominantPhase"));

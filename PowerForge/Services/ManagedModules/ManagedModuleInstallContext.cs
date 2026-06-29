@@ -151,27 +151,33 @@ internal sealed class ManagedModuleInstallContext
             });
     }
 
-    public Task<string> GetOrAddDependencyVersionSelection(string key, Func<Task<string>> factory)
+    public Task<ManagedModuleDependencyVersionSelection> GetOrAddDependencyVersionSelection(string key, Func<Task<string>> factory)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("Dependency version selection key is required.", nameof(key));
         if (factory is null)
             throw new ArgumentNullException(nameof(factory));
 
+        var newLazy = new Lazy<Task<string>>(factory, LazyThreadSafetyMode.ExecutionAndPublication);
         var lazy = _dependencyVersionSelections.GetOrAdd(
             key,
-            _ => new Lazy<Task<string>>(factory, LazyThreadSafetyMode.ExecutionAndPublication));
-        return CompleteDependencyVersionSelectionAsync(key, lazy);
+            _ => newLazy);
+
+        return CompleteDependencyVersionSelectionAsync(key, lazy, !ReferenceEquals(lazy, newLazy));
     }
 
     private static string CreateInstalledVersionKey(string moduleRoot, string moduleName)
         => string.Join("|", NormalizePath(moduleRoot), moduleName.Trim());
 
-    private async Task<string> CompleteDependencyVersionSelectionAsync(string key, Lazy<Task<string>> lazy)
+    private async Task<ManagedModuleDependencyVersionSelection> CompleteDependencyVersionSelectionAsync(
+        string key,
+        Lazy<Task<string>> lazy,
+        bool shared)
     {
         try
         {
-            return await lazy.Value.ConfigureAwait(false);
+            var version = await lazy.Value.ConfigureAwait(false);
+            return new ManagedModuleDependencyVersionSelection(version, shared);
         }
         catch
         {
@@ -263,6 +269,19 @@ internal sealed class ManagedModuleInstallContext
                 pending.SetWaitingFor(null);
         }
     }
+}
+
+internal readonly struct ManagedModuleDependencyVersionSelection
+{
+    public ManagedModuleDependencyVersionSelection(string version, bool shared)
+    {
+        Version = version;
+        Shared = shared;
+    }
+
+    public string Version { get; }
+
+    public bool Shared { get; }
 }
 
 internal sealed class ManagedModuleInstallPending : IDisposable

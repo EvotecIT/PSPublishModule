@@ -79,6 +79,11 @@ function Add-ManagedInstallDetail {
     $authenticode = $Result.AuthenticodeVerification
     $elapsedMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.Elapsed
     $versionResolutionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.VersionResolutionElapsed
+    $versionSelectionWaitMilliseconds = if ($null -ne $Result.PSObject.Properties['VersionSelectionWaitElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.VersionSelectionWaitElapsed
+    } else {
+        0
+    }
     $downloadMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DownloadElapsed
     $extractionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.ExtractionElapsed
     $extractionCacheLockWaitMilliseconds = if ($null -ne $Result.PSObject.Properties['ExtractionCacheLockWaitElapsed']) {
@@ -164,6 +169,7 @@ function Add-ManagedInstallDetail {
         0
     }
     $dependencyBranchKnownMilliseconds = [double] $versionResolutionMilliseconds +
+        [double] $versionSelectionWaitMilliseconds +
         [double] $dependencyQueueWaitMilliseconds +
         [double] $downloadMilliseconds +
         [double] $extractionMilliseconds +
@@ -188,6 +194,7 @@ function Add-ManagedInstallDetail {
         Depth = $Depth
         ElapsedMilliseconds = $elapsedMilliseconds
         VersionResolutionMilliseconds = $versionResolutionMilliseconds
+        VersionSelectionWaitMilliseconds = $versionSelectionWaitMilliseconds
         DownloadMilliseconds = $downloadMilliseconds
         ExtractionMilliseconds = $extractionMilliseconds
         ExtractionCacheLockWaitMilliseconds = $extractionCacheLockWaitMilliseconds
@@ -310,6 +317,12 @@ function Write-ManagedInstallDetail {
                 [int] $_.Depth -gt 0 -and [double] $_.DependencyBranchOverheadMilliseconds -gt 0
             }
     )
+    $versionSelectionWaits = @(
+        $packages |
+            Where-Object {
+                [double] $_.VersionSelectionWaitMilliseconds -gt 0
+            }
+    )
     $slowestDependencyPackage = @(
         $dependencyWork |
             Sort-Object @{ Expression = { [double] $_.DependencyMilliseconds }; Descending = $true } |
@@ -318,6 +331,11 @@ function Write-ManagedInstallDetail {
     $slowestDependencyQueueWait = @(
         $dependencyQueueWaits |
             Sort-Object @{ Expression = { [double] $_.DependencyQueueWaitMilliseconds }; Descending = $true } |
+            Select-Object -First 1
+    )
+    $slowestVersionSelectionWait = @(
+        $versionSelectionWaits |
+            Sort-Object @{ Expression = { [double] $_.VersionSelectionWaitMilliseconds }; Descending = $true } |
             Select-Object -First 1
     )
     $slowestMaterializedPackage = @(
@@ -333,7 +351,7 @@ function Write-ManagedInstallDetail {
             Select-Object -First 1
     )
     $criticalDependencyBranchPhase = if ($criticalDependencyBranch.Count) {
-        Get-ManagedDetailDominantPhase -Row $criticalDependencyBranch[0] -PhaseNames @('VersionResolution', 'DependencyQueueWait', 'Download', 'Extraction', 'Dependency', 'Promotion', 'CoalescedWait', 'InstallLock', 'DependencyBranchOverhead')
+        Get-ManagedDetailDominantPhase -Row $criticalDependencyBranch[0] -PhaseNames @('VersionResolution', 'VersionSelectionWait', 'DependencyQueueWait', 'Download', 'Extraction', 'Dependency', 'Promotion', 'CoalescedWait', 'InstallLock', 'DependencyBranchOverhead')
     } else {
         [pscustomobject]@{ Name = ''; Milliseconds = 0.0 }
     }
@@ -375,6 +393,7 @@ function Write-ManagedInstallDetail {
         RootElapsedMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.Elapsed
         RootDependencyMilliseconds = $rootDependencyMilliseconds
         RootDependencyUnattributedMilliseconds = [math]::Round([math]::Max(0, $rootDependencyMilliseconds - $criticalDependencyBranchMilliseconds), 2)
+        TotalVersionSelectionWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $versionSelectionWaits -Name 'VersionSelectionWaitMilliseconds'), 2)
         TotalDependencyQueueWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyQueueWaits -Name 'DependencyQueueWaitMilliseconds'), 2)
         TotalDependencyBranchElapsedMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyBranches -Name 'DependencyBranchElapsedMilliseconds'), 2)
         TotalDependencyBranchOverheadMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyBranchOverheads -Name 'DependencyBranchOverheadMilliseconds'), 2)
@@ -413,6 +432,8 @@ function Write-ManagedInstallDetail {
         SlowestDependencyPackageMilliseconds = if ($slowestDependencyPackage.Count) { [double] $slowestDependencyPackage[0].DependencyMilliseconds } else { 0.0 }
         SlowestDependencyQueueWaitName = if ($slowestDependencyQueueWait.Count) { [string] $slowestDependencyQueueWait[0].Name } else { '' }
         SlowestDependencyQueueWaitMilliseconds = if ($slowestDependencyQueueWait.Count) { [double] $slowestDependencyQueueWait[0].DependencyQueueWaitMilliseconds } else { 0.0 }
+        SlowestVersionSelectionWaitName = if ($slowestVersionSelectionWait.Count) { [string] $slowestVersionSelectionWait[0].Name } else { '' }
+        SlowestVersionSelectionWaitMilliseconds = if ($slowestVersionSelectionWait.Count) { [double] $slowestVersionSelectionWait[0].VersionSelectionWaitMilliseconds } else { 0.0 }
         SlowestMaterializedPackageName = if ($slowestMaterializedPackage.Count) { [string] $slowestMaterializedPackage[0].Name } else { '' }
         SlowestMaterializedPackageMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ElapsedMilliseconds } else { 0.0 }
         SlowestMaterializedPackageExtractionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionMilliseconds } else { 0.0 }
