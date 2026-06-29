@@ -39,9 +39,14 @@ public sealed partial class ManagedModuleInstallServiceTests
 
         Assert.False(first.Download?.FromCache);
         Assert.False(first.ExtractionFromCache);
+        Assert.False(first.PromotionMaterializedDirectly);
         Assert.True(first.ExtractionCacheLockWaitElapsed >= TimeSpan.Zero);
         Assert.True(second.Download?.FromCache);
         Assert.True(second.ExtractionFromCache);
+        Assert.True(second.PromotionMaterializedDirectly);
+        Assert.True(second.PromotionDirectMaterializationElapsed > TimeSpan.Zero);
+        Assert.Equal(TimeSpan.Zero, second.PromotionFinalMoveElapsed);
+        Assert.Equal(TimeSpan.Zero, second.PromotionMoveElapsed);
         Assert.True(second.ExtractionCacheLockWaitElapsed >= TimeSpan.Zero);
         Assert.Equal(first.FileCount, second.FileCount);
         Assert.Equal(first.ExtractedBytes, second.ExtractedBytes);
@@ -89,6 +94,7 @@ public sealed partial class ManagedModuleInstallServiceTests
         Assert.True(first.FileCount > 0);
         Assert.True(second.Download?.FromCache);
         Assert.False(second.ExtractionFromCache);
+        Assert.False(second.PromotionMaterializedDirectly);
         Assert.True(second.ExtractionCacheLockWaitElapsed >= TimeSpan.Zero);
         Assert.Equal(first.FileCount, second.FileCount);
         Assert.True(File.Exists(Path.Combine(secondModuleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));

@@ -375,6 +375,7 @@ public sealed partial class ManagedModuleInstallService
         var moduleName = request.Name.Trim();
         var stageRoot = CreateStageRoot(moduleRoot, moduleName);
         var stageModulePath = CreateStageModulePath(stageRoot, moduleName, version);
+        ManagedModuleExtractedPackageLease? directPayloadLease = null;
 
         try
         {
@@ -418,17 +419,33 @@ public sealed partial class ManagedModuleInstallService
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
-            var extraction = ownsCache
-                ? _extractor.ExtractPackage(download.PackagePath, stageModulePath)
-                : _extractedPackageCache.MaterializePackage(
-                    download.PackagePath,
+            var validationModulePath = stageModulePath;
+            ManagedModuleArchiveExtractionResult? extraction = null;
+            if (!ownsCache && !request.Force)
+            {
+                directPayloadLease = _extractedPackageCache.TryAcquirePayload(
                     download.PackageSha256,
                     cacheDirectory,
-                    stageModulePath,
-                    _extractor,
                     cancellationToken);
+                if (directPayloadLease is not null)
+                    validationModulePath = directPayloadLease.PayloadPath;
+            }
+
+            if (directPayloadLease is null)
+            {
+                extraction = ownsCache
+                    ? _extractor.ExtractPackage(download.PackagePath, stageModulePath)
+                    : _extractedPackageCache.MaterializePackage(
+                        download.PackagePath,
+                        download.PackageSha256,
+                        cacheDirectory,
+                        stageModulePath,
+                        _extractor,
+                        cancellationToken);
+            }
+
             var authenticode = request.AuthenticodeCheck
-                ? _authenticodeVerifier.VerifyDirectory(stageModulePath)
+                ? _authenticodeVerifier.VerifyDirectory(validationModulePath)
                 : null;
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
@@ -439,7 +456,7 @@ public sealed partial class ManagedModuleInstallService
             dependencyStopwatch.Stop();
 
             if (!request.AllowClobber)
-                ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
+                ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), validationModulePath);
 
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var promotionLockWaitElapsed = TimeSpan.Zero;
@@ -448,6 +465,8 @@ public sealed partial class ManagedModuleInstallService
             var promotionFinalMoveElapsed = TimeSpan.Zero;
             var promotionBackupCleanupElapsed = TimeSpan.Zero;
             var promotionHadExistingTarget = false;
+            var promotionMaterializedDirectly = false;
+            var promotionDirectMaterializationElapsed = TimeSpan.Zero;
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedPromotionLockWaitElapsed))
             {
                 promotionLockWaitElapsed = resolvedPromotionLockWaitElapsed;
@@ -467,16 +486,52 @@ public sealed partial class ManagedModuleInstallService
                         installLockWaitElapsed);
                 }
 
-                var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
-                promotionMoveElapsed = promotionResult.Elapsed;
-                promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
-                promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
-                promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
-                promotionHadExistingTarget = promotionResult.HadExistingTarget;
+                if (directPayloadLease is not null)
+                {
+                    try
+                    {
+                        extraction = _extractedPackageCache.MaterializePackage(directPayloadLease, modulePath, cancellationToken);
+                        promotionMaterializedDirectly = true;
+                        promotionDirectMaterializationElapsed = extraction.Elapsed;
+                    }
+                    catch (Exception ex) when (IsRecoverableCacheMaterializationException(ex))
+                    {
+                        directPayloadLease.Dispose();
+                        directPayloadLease = null;
+                        extraction = _extractedPackageCache.MaterializePackage(
+                            download.PackagePath,
+                            download.PackageSha256,
+                            cacheDirectory,
+                            stageModulePath,
+                            _extractor,
+                            cancellationToken);
+                        if (request.AuthenticodeCheck)
+                            authenticode = _authenticodeVerifier.VerifyDirectory(stageModulePath);
+                        if (!request.AllowClobber)
+                            ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
+
+                        var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
+                        promotionMoveElapsed = promotionResult.Elapsed;
+                        promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
+                        promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
+                        promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
+                        promotionHadExistingTarget = promotionResult.HadExistingTarget;
+                    }
+                }
+                else
+                {
+                    var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
+                    promotionMoveElapsed = promotionResult.Elapsed;
+                    promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
+                    promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
+                    promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
+                    promotionHadExistingTarget = promotionResult.HadExistingTarget;
+                }
             }
 
             CleanupEmptyStage(stageRoot);
             promotionStopwatch.Stop();
+            var materialization = extraction ?? throw new InvalidOperationException("Managed module package materialization did not complete.");
 
             var result = new ManagedModuleInstallResult
             {
@@ -500,11 +555,11 @@ public sealed partial class ManagedModuleInstallService
                 Download = download,
                 AuthenticodeVerification = authenticode,
                 DownloadElapsed = downloadStopwatch.Elapsed,
-                FileCount = extraction.FileCount,
-                ExtractedBytes = extraction.BytesWritten,
-                ExtractionElapsed = extraction.Elapsed,
-                ExtractionFromCache = extraction.FromCache,
-                ExtractionCacheLockWaitElapsed = extraction.CacheLockWaitElapsed,
+                FileCount = materialization.FileCount,
+                ExtractedBytes = materialization.BytesWritten,
+                ExtractionElapsed = materialization.Elapsed,
+                ExtractionFromCache = materialization.FromCache,
+                ExtractionCacheLockWaitElapsed = materialization.CacheLockWaitElapsed,
                 DependencyElapsed = dependencyStopwatch.Elapsed,
                 PromotionElapsed = promotionStopwatch.Elapsed,
                 PromotionLockWaitElapsed = promotionLockWaitElapsed,
@@ -513,6 +568,8 @@ public sealed partial class ManagedModuleInstallService
                 PromotionBackupMoveElapsed = promotionBackupMoveElapsed,
                 PromotionFinalMoveElapsed = promotionFinalMoveElapsed,
                 PromotionBackupCleanupElapsed = promotionBackupCleanupElapsed,
+                PromotionMaterializedDirectly = promotionMaterializedDirectly,
+                PromotionDirectMaterializationElapsed = promotionDirectMaterializationElapsed,
                 RepositoryRequestCount = requestScope.Count,
                 PackageRepositoryRequestCount = packageRepositoryRequestCount,
                 PackageRepositoryRedirectCount = packageRepositoryRedirectCount,
@@ -524,6 +581,7 @@ public sealed partial class ManagedModuleInstallService
         }
         finally
         {
+            directPayloadLease?.Dispose();
             if (Directory.Exists(stageRoot))
                 Directory.Delete(stageRoot, recursive: true);
             if (ownsCache && Directory.Exists(cacheDirectory))
@@ -688,6 +746,16 @@ public sealed partial class ManagedModuleInstallService
         => string.IsNullOrWhiteSpace(versionPolicy)
             ? ManagedModuleVersionRange.FromBounds(minimumVersion, maximumVersion)
             : ManagedModuleVersionRange.Parse(versionPolicy);
+
+    private static bool IsRecoverableCacheMaterializationException(Exception ex)
+    {
+        if (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException)
+            return true;
+
+        return ex is AggregateException aggregate &&
+               aggregate.InnerExceptions.Count > 0 &&
+               aggregate.InnerExceptions.All(IsRecoverableCacheMaterializationException);
+    }
 
     private static string CreateStageRoot(string moduleRoot, string moduleName)
     {

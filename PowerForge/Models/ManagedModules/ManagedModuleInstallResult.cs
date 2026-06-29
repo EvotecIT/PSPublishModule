@@ -186,6 +186,16 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan PromotionBackupCleanupElapsed { get; set; }
 
     /// <summary>
+    /// True when a validated extracted-cache payload was written directly to the final module path.
+    /// </summary>
+    public bool PromotionMaterializedDirectly { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent writing a validated extracted-cache payload directly to the final module path.
+    /// </summary>
+    public TimeSpan PromotionDirectMaterializationElapsed { get; set; }
+
+    /// <summary>
     /// Repository HTTP request attempts observed during this install operation, including dependencies.
     /// </summary>
     public long RepositoryRequestCount { get; set; }

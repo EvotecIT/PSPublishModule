@@ -636,6 +636,10 @@ function Add-SummaryRows {
                 ManagedLastPromotionBackupCleanupMs = $row.ManagedLastPromotionBackupCleanupMs
                 ManagedFirstPromotionOverwriteCount = $row.ManagedFirstPromotionOverwriteCount
                 ManagedLastPromotionOverwriteCount = $row.ManagedLastPromotionOverwriteCount
+                ManagedFirstDirectMaterializationCount = $row.ManagedFirstDirectMaterializationCount
+                ManagedLastDirectMaterializationCount = $row.ManagedLastDirectMaterializationCount
+                ManagedFirstPromotionDirectMaterializationMs = $row.ManagedFirstPromotionDirectMaterializationMs
+                ManagedLastPromotionDirectMaterializationMs = $row.ManagedLastPromotionDirectMaterializationMs
                 ManagedFirstDownloadBytes = $row.ManagedFirstDownloadBytes
                 ManagedLastDownloadBytes = $row.ManagedLastDownloadBytes
                 ManagedFirstCacheHits = $row.ManagedFirstCacheHits
@@ -666,6 +670,8 @@ function Add-SummaryRows {
                 ManagedLastSlowestMaterializedPackagePromotionBackupMoveMs = $row.ManagedLastSlowestMaterializedPackagePromotionBackupMoveMs
                 ManagedLastSlowestMaterializedPackagePromotionBackupCleanupMs = $row.ManagedLastSlowestMaterializedPackagePromotionBackupCleanupMs
                 ManagedLastSlowestMaterializedPackagePromotionHadExistingTarget = $row.ManagedLastSlowestMaterializedPackagePromotionHadExistingTarget
+                ManagedLastSlowestMaterializedPackagePromotionMaterializedDirectly = $row.ManagedLastSlowestMaterializedPackagePromotionMaterializedDirectly
+                ManagedLastSlowestMaterializedPackagePromotionDirectMaterializationMs = $row.ManagedLastSlowestMaterializedPackagePromotionDirectMaterializationMs
                 ManagedLastCriticalDependencyBranchName = $row.ManagedLastCriticalDependencyBranchName
                 ManagedLastCriticalDependencyBranchParent = $row.ManagedLastCriticalDependencyBranchParent
                 ManagedLastCriticalDependencyBranchMs = $row.ManagedLastCriticalDependencyBranchMs
