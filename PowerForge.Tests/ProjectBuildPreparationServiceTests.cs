@@ -119,6 +119,46 @@ public sealed class ProjectBuildPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_enables_assembly_and_package_signing_by_default_when_certificate_is_configured()
+    {
+        var service = new ProjectBuildPreparationService();
+
+        var context = service.Prepare(
+            new ProjectBuildConfiguration
+            {
+                CertificateThumbprint = "ABC123",
+                Build = true
+            },
+            Directory.GetCurrentDirectory(),
+            null,
+            new ProjectBuildRequestedActions());
+
+        Assert.True(context.Spec.SignAssemblies);
+        Assert.True(context.Spec.SignPackages);
+    }
+
+    [Fact]
+    public void Prepare_honors_explicit_signing_opt_outs()
+    {
+        var service = new ProjectBuildPreparationService();
+
+        var context = service.Prepare(
+            new ProjectBuildConfiguration
+            {
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = false,
+                SignPackages = false,
+                Build = true
+            },
+            Directory.GetCurrentDirectory(),
+            null,
+            new ProjectBuildRequestedActions());
+
+        Assert.False(context.Spec.SignAssemblies);
+        Assert.False(context.Spec.SignPackages);
+    }
+
+    [Fact]
     public void Prepare_resolves_github_packages_feed_from_shared_settings()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-githubpackages-" + Guid.NewGuid().ToString("N")));

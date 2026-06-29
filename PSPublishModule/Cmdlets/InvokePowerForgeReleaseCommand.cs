@@ -421,7 +421,11 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
 
             var request = BuildRequest(configFullPath, requestDefaults, boundParameters);
 
-            var result = new PowerForgeReleaseService(logger).Execute(spec, request);
+            var result = new PowerForgeReleaseService(
+                logger,
+                DotNetAssemblySigningCallbackFactory.Create(logger),
+                DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
+                .Execute(spec, request);
             WriteObject(result);
 
             if (!result.Success)

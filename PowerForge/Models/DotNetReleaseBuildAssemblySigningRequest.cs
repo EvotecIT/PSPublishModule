@@ -19,5 +19,7 @@ public sealed class DotNetReleaseBuildAssemblySigningRequest
 
     /// <summary>Glob patterns used to select which files should be signed.</summary>
     public string[] IncludePatterns { get; set; } = Array.Empty<string>();
-}
 
+    /// <summary>Explicit files to sign. When set, signing services can use these instead of enumerating <see cref="ReleasePath"/>.</summary>
+    public string[]? FilePaths { get; set; }
+}

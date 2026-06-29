@@ -106,7 +106,11 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         }
 
         var executeBuild = !preparation.PlanOnly && ShouldProcess(preparation.RootPath, "Build project repository");
-        var workflow = new ProjectBuildWorkflowService(logger).Execute(config, configDir, preparation, executeBuild);
+        var workflow = new ProjectBuildWorkflowService(
+            logger,
+            signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger),
+            validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
+            .Execute(config, configDir, preparation, executeBuild);
         if (interactive && workflow.GitHubPublishSummary is { PerProject: false } publishSummary)
             WriteGitHubSummary(false, publishSummary.SummaryTag, publishSummary.SummaryReleaseUrl, publishSummary.SummaryAssetsCount, workflow.Result.GitHub);
 

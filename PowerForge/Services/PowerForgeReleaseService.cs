@@ -67,9 +67,20 @@ internal sealed class PowerForgeReleaseService
     /// Creates a new unified release service.
     /// </summary>
     public PowerForgeReleaseService(ILogger logger)
+        : this(logger, signAssemblies: null, validateAssemblySigning: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new unified release service with optional package assembly signing callbacks.
+    /// </summary>
+    public PowerForgeReleaseService(
+        ILogger logger,
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning)
         : this(
             logger,
-            (request, config, configPath) => new ProjectBuildHostService(logger).Execute(request, config, configPath),
+            (request, config, configPath) => new ProjectBuildHostService(logger, signAssemblies, validateAssemblySigning).Execute(request, config, configPath),
             (spec, configPath, request) => new PowerForgeToolReleaseService(logger).Plan(spec, configPath, request),
             plan => new PowerForgeToolReleaseService(logger).Run(plan),
             LoadDotNetToolsSpec,

@@ -344,7 +344,11 @@ public sealed class InvokeProjectReleaseCommand : PSCmdlet
                 requestDefaults,
                 BuildInvocationOptions(boundParameters));
 
-            var result = new PowerForgeReleaseService(logger).Execute(spec, request);
+            var result = new PowerForgeReleaseService(
+                logger,
+                DotNetAssemblySigningCallbackFactory.Create(logger),
+                DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
+                .Execute(spec, request);
             WriteObject(result);
 
             if (!result.Success)

@@ -71,14 +71,20 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>Optional output path for release zips.</summary>
     public string? ReleaseZipOutputPath { get; set; }
 
-    /// <summary>Certificate thumbprint used for signing packages (optional).</summary>
+    /// <summary>Certificate thumbprint used for signing assemblies and packages (optional).</summary>
     public string? CertificateThumbprint { get; set; }
 
     /// <summary>Certificate store location used to resolve the signing certificate.</summary>
     public CertificateStoreLocation CertificateStore { get; set; } = CertificateStoreLocation.CurrentUser;
 
-    /// <summary>Timestamp server URL used during package signing.</summary>
+    /// <summary>Timestamp server URL used during signing.</summary>
     public string? TimeStampServer { get; set; }
+
+    /// <summary>When true and a certificate is configured, signs build outputs before packing.</summary>
+    public bool SignAssemblies { get; set; } = true;
+
+    /// <summary>When true and a certificate is configured, signs generated NuGet packages.</summary>
+    public bool SignPackages { get; set; } = true;
 
     /// <summary>When true, publishes packages with dotnet nuget push.</summary>
     public bool Publish { get; set; }

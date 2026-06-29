@@ -107,6 +107,14 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
     [Parameter]
     public string TimeStampServer { get; set; } = "http://timestamp.digicert.com";
 
+    /// <summary>Skip Authenticode signing of build outputs before packages are created.</summary>
+    [Parameter]
+    public SwitchParameter SkipAssemblySigning { get; set; }
+
+    /// <summary>Skip signing generated NuGet packages.</summary>
+    [Parameter]
+    public SwitchParameter SkipPackageSigning { get; set; }
+
     /// <summary>Skip dotnet pack step.</summary>
     [Parameter]
     public SwitchParameter SkipPack { get; set; }
@@ -184,6 +192,8 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
                 ? PowerForge.CertificateStoreLocation.LocalMachine
                 : PowerForge.CertificateStoreLocation.CurrentUser,
             TimeStampServer = TimeStampServer,
+            SignAssemblies = SkipAssemblySigning.IsPresent ? false : null,
+            SignPackages = SkipPackageSigning.IsPresent ? false : null,
             SkipPack = SkipPack.IsPresent,
             Publish = Publish.IsPresent,
             PublishSource = PublishSource,
@@ -195,7 +205,11 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         });
 
         var executeBuild = ShouldProcess(preparation.RootPath, "Release .NET repository packages");
-        var result = new DotNetRepositoryReleaseWorkflowService(logger).Execute(preparation, executeBuild);
+        var result = new DotNetRepositoryReleaseWorkflowService(
+            logger,
+            signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger),
+            validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
+            .Execute(preparation, executeBuild);
         if (interactive)
         {
             var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(result);

@@ -161,16 +161,26 @@ public sealed class AuthenticodeSigningService
         if (files.Length == 0)
             return Array.Empty<PSObject>();
 
+        EnsureSigningCommandsAvailable();
+        return IsWindows()
+            ? SignWithWindowsAuthenticode(files, request)
+            : SignWithOpenAuthenticode(files, request);
+    }
+
+    /// <summary>
+    /// Ensures that the platform-specific Authenticode signing commands are available.
+    /// </summary>
+    public void EnsureSigningCommandsAvailable()
+    {
         if (IsWindows())
         {
             EnsureCommandAvailable("Get-AuthenticodeSignature");
             EnsureCommandAvailable("Set-AuthenticodeSignature");
-            return SignWithWindowsAuthenticode(files, request);
+            return;
         }
 
         EnsureCommandAvailable("Get-OpenAuthenticodeSignature");
         EnsureCommandAvailable("Set-OpenAuthenticodeSignature");
-        return SignWithOpenAuthenticode(files, request);
     }
 
     private IReadOnlyList<PSObject> SignWithWindowsAuthenticode(string[] files, AuthenticodeSignRequest request)

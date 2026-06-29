@@ -16,6 +16,15 @@ public sealed partial class DotNetRepositoryReleaseService
     /// Executes the repository release workflow.
     /// </summary>
     public DotNetRepositoryReleaseResult Execute(DotNetRepositoryReleaseSpec spec)
+        => Execute(spec, signAssemblies: null, validateAssemblySigning: null);
+
+    /// <summary>
+    /// Executes the repository release workflow with optional assembly signing callbacks.
+    /// </summary>
+    public DotNetRepositoryReleaseResult Execute(
+        DotNetRepositoryReleaseSpec spec,
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning)
     {
         var result = new DotNetRepositoryReleaseResult();
 
@@ -164,14 +173,53 @@ public sealed partial class DotNetRepositoryReleaseService
 
             _logger.Info($"Discovered {projects.Count} project(s), {packable.Length} packable.");
 
+            var hasSigningCertificate = spec.Pack && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
+            var signAssemblyOutputs = hasSigningCertificate && spec.SignAssemblies;
+            var signNuGetPackages = hasSigningCertificate && spec.SignPackages;
             string? signingSha256 = null;
-            if (spec.Pack && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint))
+            if (signAssemblyOutputs || signNuGetPackages)
             {
                 var stamp = string.IsNullOrWhiteSpace(spec.TimeStampServer)
                     ? "http://timestamp.digicert.com"
                     : spec.TimeStampServer!.Trim();
                 spec.TimeStampServer = stamp;
+            }
 
+            if (signAssemblyOutputs && signAssemblies is null)
+            {
+                result.Success = false;
+                result.ErrorMessage = "Assembly signing was requested, but no assembly signing handler was provided.";
+                return result;
+            }
+
+            if (signAssemblyOutputs && validateAssemblySigning is null)
+            {
+                result.Success = false;
+                result.ErrorMessage = "Assembly signing was requested, but no assembly signing preflight handler was provided.";
+                return result;
+            }
+
+            if (signAssemblyOutputs)
+            {
+                try
+                {
+                    validateAssemblySigning!(new DotNetReleaseBuildAssemblySigningPreflightRequest
+                    {
+                        LocalStore = spec.CertificateStore,
+                        CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
+                        TimeStampServer = spec.TimeStampServer!
+                    });
+                }
+                catch (Exception ex)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Assembly signing preflight failed. {ex.Message}";
+                    return result;
+                }
+            }
+
+            if (signNuGetPackages)
+            {
                 signingSha256 = GetCertificateSha256(spec.CertificateThumbprint!.Trim(), spec.CertificateStore);
                 if (signingSha256 is null)
                 {
@@ -182,6 +230,8 @@ public sealed partial class DotNetRepositoryReleaseService
 
                 _logger.Info($"Package signing enabled (store {spec.CertificateStore}, thumbprint {spec.CertificateThumbprint}).");
             }
+            if (signAssemblyOutputs)
+                _logger.Info($"Assembly signing enabled (store {spec.CertificateStore}, thumbprint {spec.CertificateThumbprint}).");
 
             var expectedGlobal = string.IsNullOrWhiteSpace(spec.ExpectedVersion) ? null : spec.ExpectedVersion!.Trim();
             if (!string.IsNullOrWhiteSpace(expectedGlobal))
@@ -268,7 +318,9 @@ public sealed partial class DotNetRepositoryReleaseService
             {
                 DotNetPackResult? batchPackResult = null;
                 HashSet<DotNetRepositoryProjectResult>? batchCandidateSet = null;
-                var batchPackRequested = spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf;
+                var batchPackRequested = spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf && !signAssemblyOutputs;
+                if (spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf && signAssemblyOutputs)
+                    _logger.Info("Assembly signing enabled; using per-project pack so build outputs can be signed before packages are created.");
                 if (batchPackRequested)
                 {
                     var batchCandidates = packable
@@ -348,7 +400,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     else
                         _logger.Info($"Packing {project.ProjectName}...");
 
-                    var packResult = useBatchPackResult ? batchPackResult! : PackProject(project, spec, _logger);
+                    var packResult = useBatchPackResult ? batchPackResult! : PackProject(project, spec, _logger, signAssemblyOutputs ? signAssemblies : null);
                     if (!useBatchPackResult && !packResult.Success)
                     {
                         project.ErrorMessage = packResult.ErrorMessage;
@@ -385,7 +437,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         _logger.Success($"{project.ProjectName}: packed {filtered.Count} package(s){packTiming}.");
                     }
 
-                    if (signingSha256 is not null)
+                    if (signNuGetPackages && signingSha256 is not null)
                     {
                         if (project.Packages.Count == 0)
                         {

@@ -67,7 +67,6 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
         var logger = new CmdletLogger(this, isVerbose);
         var service = new DotNetReleaseBuildService(logger);
-        var signingService = new AuthenticodeSigningService(logger);
 
         var mappedStore = LocalStore == CertificateStoreLocation.LocalMachine
             ? PowerForge.CertificateStoreLocation.LocalMachine
@@ -125,27 +124,9 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
                 continue;
             }
 
-            Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null;
-            if (!string.IsNullOrWhiteSpace(CertificateThumbprint))
-            {
-                signAssemblies = req =>
-                {
-                    var lookup = signingService.SelectCertificateFromStore(req.LocalStore, req.CertificateThumbprint);
-                    if (lookup.Certificate is null)
-                        throw new InvalidOperationException($"Certificate '{req.CertificateThumbprint}' not found in {req.LocalStore}\\My store.");
-
-                    var files = signingService.EnumerateFiles(req.ReleasePath, req.IncludePatterns);
-                    signingService.SignFiles(new AuthenticodeSignRequest
-                    {
-                        Certificate = lookup.Certificate,
-                        FilePaths = files,
-                        TimeStampServer = req.TimeStampServer,
-                        HashAlgorithm = "SHA256",
-                        WindowsIncludeChain = "All",
-                        NonWindowsIncludeChain = "WholeChain"
-                    });
-                };
-            }
+            var signAssemblies = !string.IsNullOrWhiteSpace(CertificateThumbprint)
+                ? DotNetAssemblySigningCallbackFactory.Create(logger)
+                : null;
 
             var result = service.Execute(spec, signAssemblies);
             WriteObject(result);
