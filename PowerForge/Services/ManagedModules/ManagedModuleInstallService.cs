@@ -584,10 +584,9 @@ public sealed partial class ManagedModuleInstallService
         finally
         {
             directPayloadLease?.Dispose();
-            if (Directory.Exists(stageRoot))
-                Directory.Delete(stageRoot, recursive: true);
-            if (ownsCache && Directory.Exists(cacheDirectory))
-                Directory.Delete(cacheDirectory, recursive: true);
+            ManagedModuleExtractedPackageCache.DeleteDirectoryQuietly(stageRoot);
+            if (ownsCache)
+                ManagedModuleExtractedPackageCache.DeleteDirectoryQuietly(cacheDirectory);
         }
     }
 
@@ -768,16 +767,12 @@ public sealed partial class ManagedModuleInstallService
     {
         var root = Path.GetFullPath(moduleRoot.Trim().Trim('"'))
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return Path.Combine(root, moduleName.Trim(), ".pfmm-stage-" + NewShortId());
+        return Path.Combine(root, ".pfmm-stage-" + NewShortId());
     }
 
     private static string CreateStageModulePath(string stageRoot, string moduleName, string version)
     {
-#if NET472
-        return Path.Combine(stageRoot, moduleName.Trim(), version);
-#else
         return Path.Combine(stageRoot, version);
-#endif
     }
 
 }

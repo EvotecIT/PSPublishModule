@@ -196,13 +196,24 @@ internal sealed class ManagedModuleInstallContext
         if (!Directory.Exists(moduleFolder))
             return Array.Empty<string>();
 
-        return Directory.EnumerateDirectories(moduleFolder)
-            .Select(Path.GetFileName)
-            .Where(static version => !string.IsNullOrWhiteSpace(version))
-            .Select(static version => version!)
-            .Where(static version => !IsManagedStageDirectory(version))
-            .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
-            .ToArray();
+        try
+        {
+            return Directory.GetDirectories(moduleFolder)
+                .Select(Path.GetFileName)
+                .Where(static version => !string.IsNullOrWhiteSpace(version))
+                .Select(static version => version!)
+                .Where(static version => !IsManagedStageDirectory(version))
+                .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
+                .ToArray();
+        }
+        catch (IOException)
+        {
+            return Array.Empty<string>();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     internal static bool IsManagedStageDirectory(string directoryName)

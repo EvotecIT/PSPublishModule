@@ -830,6 +830,39 @@ public sealed partial class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_ignores_export_conflicts_from_managed_stage_directories()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var stagedExistingPath = Path.Combine(moduleRoot.Path, "Company.Existing", ".pfmm-stage-abcd");
+        Directory.CreateDirectory(stagedExistingPath);
+        File.WriteAllText(
+            Path.Combine(stagedExistingPath, "Company.Existing.psd1"),
+            CreateManifest("1.0.0", "Get-CompanyTool"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = CreateManifest("1.0.0", "Get-CompanyTool")
+            });
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_allows_export_conflicts_with_allow_clobber()
     {
         using var feed = new TemporaryDirectory();
@@ -875,7 +908,15 @@ public sealed partial class ManagedModuleInstallServiceTests
         var stageRoot = Assert.IsType<string>(method!.Invoke(null, new object?[] { moduleRoot.Path, "Company.Tools" }));
 
         Assert.StartsWith(
-            Path.Combine(Path.GetFullPath(moduleRoot.Path), "Company.Tools"),
+            Path.GetFullPath(moduleRoot.Path),
+            stageRoot,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            Path.DirectorySeparatorChar + ".pfmm-stage-",
+            stageRoot,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            Path.DirectorySeparatorChar + "Company.Tools" + Path.DirectorySeparatorChar,
             stageRoot,
             StringComparison.OrdinalIgnoreCase);
     }

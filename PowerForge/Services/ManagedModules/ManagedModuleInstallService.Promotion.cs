@@ -31,14 +31,32 @@ public sealed partial class ManagedModuleInstallService
 
     private static void CleanupEmptyStage(string stageRoot)
     {
-        if (!Directory.Exists(stageRoot))
-            return;
-
-        foreach (var directory in Directory.EnumerateDirectories(stageRoot, "*", SearchOption.AllDirectories)
-                     .OrderByDescending(static path => path.Length))
+        try
         {
-            if (!Directory.EnumerateFileSystemEntries(directory).Any())
-                Directory.Delete(directory);
+            if (!Directory.Exists(stageRoot))
+                return;
+
+            foreach (var directory in Directory.EnumerateDirectories(stageRoot, "*", SearchOption.AllDirectories)
+                         .OrderByDescending(static path => path.Length))
+            {
+                try
+                {
+                    if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                        Directory.Delete(directory);
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
