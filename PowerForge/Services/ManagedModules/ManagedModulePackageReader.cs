@@ -238,8 +238,6 @@ public sealed class ManagedModulePackageReader
 
         return results
             .Where(static dependency => !string.IsNullOrWhiteSpace(dependency.Id))
-            .OrderBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static dependency => dependency.TargetFramework, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -256,8 +254,6 @@ public sealed class ManagedModulePackageReader
                 VersionRange = ToVersionRange(module),
                 TargetFramework = null
             })
-            .OrderBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -305,11 +301,7 @@ public sealed class ManagedModulePackageReader
         var results = new List<ManagedModuleDependencyInfo>(nuspecDependencies);
         var nuspecIds = new HashSet<string>(nuspecDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
         results.AddRange(manifestDependencies.Where(dependency => !nuspecIds.Contains(dependency.Id)));
-        return results
-            .OrderBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static dependency => dependency.TargetFramework, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static dependency => dependency.VersionRange, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        return results;
     }
 
     private static IEnumerable<ManagedModuleDependencyInfo> FilterExternalDependencies(
