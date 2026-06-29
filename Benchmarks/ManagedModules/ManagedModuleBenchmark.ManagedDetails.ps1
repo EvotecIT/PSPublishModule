@@ -91,6 +91,11 @@ function Add-ManagedInstallDetail {
     } else {
         0
     }
+    $dependencyBranchElapsedMilliseconds = if ($null -ne $Result.PSObject.Properties['DependencyBranchElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.DependencyBranchElapsed
+    } else {
+        [math]::Round([double] $dependencyQueueWaitMilliseconds + [double] $elapsedMilliseconds, 2)
+    }
     $promotionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.PromotionElapsed
     $promotionLockWaitMilliseconds = if ($null -ne $Result.PSObject.Properties['PromotionLockWaitElapsed']) {
         ConvertTo-Milliseconds -TimeSpan $Result.PromotionLockWaitElapsed
@@ -141,6 +146,7 @@ function Add-ManagedInstallDetail {
         ExtractionCacheLockWaitMilliseconds = $extractionCacheLockWaitMilliseconds
         DependencyMilliseconds = $dependencyMilliseconds
         DependencyQueueWaitMilliseconds = $dependencyQueueWaitMilliseconds
+        DependencyBranchElapsedMilliseconds = $dependencyBranchElapsedMilliseconds
         PromotionMilliseconds = $promotionMilliseconds
         PromotionLockWaitMilliseconds = $promotionLockWaitMilliseconds
         PromotionMoveMilliseconds = $promotionMoveMilliseconds
@@ -226,6 +232,12 @@ function Write-ManagedInstallDetail {
                 [int] $_.Depth -gt 0 -and [double] $_.DependencyQueueWaitMilliseconds -gt 0
             }
     )
+    $dependencyBranches = @(
+        $packages |
+            Where-Object {
+                [int] $_.Depth -gt 0 -and [double] $_.DependencyBranchElapsedMilliseconds -gt 0
+            }
+    )
     $slowestDependencyPackage = @(
         $dependencyWork |
             Sort-Object @{ Expression = { [double] $_.DependencyMilliseconds }; Descending = $true } |
@@ -245,7 +257,7 @@ function Write-ManagedInstallDetail {
     $criticalDependencyBranch = @(
         $packages |
             Where-Object { [int] $_.Depth -gt 0 } |
-            Sort-Object @{ Expression = { [double] $_.DependencyQueueWaitMilliseconds + [double] $_.ElapsedMilliseconds }; Descending = $true } |
+            Sort-Object @{ Expression = { [double] $_.DependencyBranchElapsedMilliseconds }; Descending = $true } |
             Select-Object -First 1
     )
     $criticalDependencyBranchPhase = if ($criticalDependencyBranch.Count) {
@@ -277,7 +289,7 @@ function Write-ManagedInstallDetail {
     }
     $rootDependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
     $criticalDependencyBranchMilliseconds = if ($criticalDependencyBranch.Count) {
-        [math]::Round([double] $criticalDependencyBranch[0].DependencyQueueWaitMilliseconds + [double] $criticalDependencyBranch[0].ElapsedMilliseconds, 2)
+        [math]::Round([double] $criticalDependencyBranch[0].DependencyBranchElapsedMilliseconds, 2)
     } else {
         0.0
     }
@@ -292,6 +304,7 @@ function Write-ManagedInstallDetail {
         RootDependencyMilliseconds = $rootDependencyMilliseconds
         RootDependencyUnattributedMilliseconds = [math]::Round([math]::Max(0, $rootDependencyMilliseconds - $criticalDependencyBranchMilliseconds), 2)
         TotalDependencyQueueWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyQueueWaits -Name 'DependencyQueueWaitMilliseconds'), 2)
+        TotalDependencyBranchElapsedMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyBranches -Name 'DependencyBranchElapsedMilliseconds'), 2)
         TotalDownloadMilliseconds = [math]::Round((($packages | Measure-Object DownloadMilliseconds -Sum).Sum), 2)
         TotalExtractionMilliseconds = [math]::Round((($packages | Measure-Object ExtractionMilliseconds -Sum).Sum), 2)
         TotalExtractionCacheLockWaitMilliseconds = [math]::Round((($packages | Measure-Object ExtractionCacheLockWaitMilliseconds -Sum).Sum), 2)
