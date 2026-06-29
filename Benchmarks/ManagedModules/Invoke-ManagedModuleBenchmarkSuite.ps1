@@ -71,6 +71,7 @@ $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.HostComparison.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.OptimizationTargets.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Artifacts.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.EngineSummary.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Scenarios.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.SuiteNotes.ps1')
 
@@ -643,6 +644,7 @@ New-Item -Path $suiteRoot -ItemType Directory -Force | Out-Null
 Invoke-LocalBuild
 
 $summaryRows = [Collections.Generic.List[object]]::new()
+$engineRows = [Collections.Generic.List[object]]::new()
 $hostRows = [Collections.Generic.List[object]]::new()
 
 foreach ($hostLabel in $HostName) {
@@ -667,11 +669,14 @@ foreach ($hostLabel in $HostName) {
     foreach ($scenario in $scenarios) {
         $run = Invoke-ScenarioHostRun -Scenario $scenario -HostLabel $hostLabel -Executable $executable
         Add-SummaryRows -Rows $summaryRows -Scenario $scenario -HostLabel $hostLabel -RunPath $run.FullName
+        Add-ManagedBenchmarkEngineRows -Rows $engineRows -Scenario $scenario -HostLabel $hostLabel -RunPath $run.FullName
     }
 }
 
 $summaryPath = Join-Path $suiteRoot 'suite-summary.csv'
 $summaryJsonPath = Join-Path $suiteRoot 'suite-summary.json'
+$engineSummaryPath = Join-Path $suiteRoot 'suite-engine-summary.csv'
+$engineSummaryJsonPath = Join-Path $suiteRoot 'suite-engine-summary.json'
 $hostComparisonPath = Join-Path $suiteRoot 'suite-host-comparison.csv'
 $hostComparisonJsonPath = Join-Path $suiteRoot 'suite-host-comparison.json'
 $optimizationTargetsPath = Join-Path $suiteRoot 'suite-optimization-targets.csv'
@@ -688,6 +693,8 @@ $optimizationTargetRows = @(New-ManagedOptimizationTarget -Rows @($summaryRows))
 
 Write-ManagedBenchmarkCsv -InputObject @($summaryRows) -Path $summaryPath
 Write-ManagedBenchmarkJson -InputObject @($summaryRows) -Path $summaryJsonPath -Depth 8
+Write-ManagedBenchmarkCsv -InputObject @($engineRows) -Path $engineSummaryPath
+Write-ManagedBenchmarkJson -InputObject @($engineRows) -Path $engineSummaryJsonPath -Depth 8
 Write-ManagedBenchmarkCsv -InputObject @($hostComparisonRows) -Path $hostComparisonPath
 Write-ManagedBenchmarkJson -InputObject @($hostComparisonRows) -Path $hostComparisonJsonPath -Depth 8
 Write-ManagedBenchmarkCsv -InputObject @($optimizationTargetRows) -Path $optimizationTargetsPath
@@ -703,7 +710,7 @@ if ($ManagedMaxRank -gt 0 -or
 if ($ManagedMaxWindowsPowerShellVsPowerShell7 -gt 0) {
     Write-ManagedBenchmarkCsv -InputObject @($hostGateViolations) -Path $hostGatePath
 }
-Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenarios) -SummaryRows @($summaryRows) -OptimizationRows @($optimizationTargetRows) -HostComparisonRows @($hostComparisonRows) -HostRows @($hostRows) -GateViolations @($gateViolations) -HostGateViolations @($hostGateViolations) -Path $notesPath
+Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenarios) -SummaryRows @($summaryRows) -EngineRows @($engineRows) -OptimizationRows @($optimizationTargetRows) -HostComparisonRows @($hostComparisonRows) -HostRows @($hostRows) -GateViolations @($gateViolations) -HostGateViolations @($hostGateViolations) -Path $notesPath
 
 $metadata = [ordered]@{
     Suites = $Suite
@@ -759,6 +766,7 @@ $metadata = [ordered]@{
     UseScenarioGates = $UseScenarioGates.IsPresent
     ManagedPerformanceGatePassed = $gateViolations.Count -eq 0
     ManagedHostGatePassed = $hostGateViolations.Count -eq 0
+    EngineSummaryPath = $engineSummaryPath
     HostComparisonPath = $hostComparisonPath
     HostGatePath = $hostGatePath
     OptimizationTargetsPath = $optimizationTargetsPath

@@ -61,6 +61,7 @@ function Write-ManagedBenchmarkSuiteNotes {
     param(
         [object[]] $Scenarios,
         [object[]] $SummaryRows,
+        [object[]] $EngineRows,
         [object[]] $OptimizationRows,
         [object[]] $HostComparisonRows,
         [object[]] $HostRows,
@@ -95,6 +96,15 @@ function Write-ManagedBenchmarkSuiteNotes {
     $lines.Add('')
     Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $SummaryRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'FastestEngine', 'FastestMs', 'ManagedMs', 'ManagedRank', 'ManagedVsFastest')
     $lines.Add('')
+
+    if ($EngineRows -and $EngineRows.Count -gt 0) {
+        $lines.Add('## Engine Medians')
+        $lines.Add('')
+        $lines.Add('These rows show each participating engine median at suite level. Use this table for provider comparisons; use `Optimization Targets` for managed-only bottleneck work.')
+        $lines.Add('')
+        Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $EngineRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'Engine', 'MedianMs', 'Runs', 'Succeeded', 'Failed', 'Skipped', 'FirstMs', 'LastMs')
+        $lines.Add('')
+    }
 
     if ($HostComparisonRows -and $HostComparisonRows.Count -gt 0) {
         $lines.Add('## Host Comparisons')
