@@ -19,6 +19,8 @@ public sealed class ManagedModuleBenchmarkSuiteAggregationScriptTests
                      "ManagedLastDownloadMs",
                      "ManagedFirstExtractionMs",
                      "ManagedLastExtractionMs",
+                     "ManagedFirstDependencyMs",
+                     "ManagedLastDependencyMs",
                      "ManagedFirstPromotionMs",
                      "ManagedLastPromotionMs",
                      "ManagedFirstCoalescedWaitMs",
@@ -26,6 +28,9 @@ public sealed class ManagedModuleBenchmarkSuiteAggregationScriptTests
                      "ManagedFirstInstallLockWaitMs",
                      "ManagedLastInstallLockWaitMs",
                      "ManagedLastSlowestInstallLockWaitName",
+                     "ManagedLastSlowestDependencyPackageName",
+                     "ManagedLastSlowestDependencyPackageParent",
+                     "ManagedLastSlowestDependencyPackageMs",
                      "ManagedLastSlowestMaterializedPackageMs"
                  })
         {

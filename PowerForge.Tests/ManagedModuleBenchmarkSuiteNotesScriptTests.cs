@@ -93,6 +93,10 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastMs = '4815.85'
                     LastBottleneck = 'RootDependency'
                     LastBottleneckMs = '3966.4'
+                    LastDependencyMs = '1400'
+                    LastSlowestDependencyPackage = 'Microsoft.Graph.Authentication'
+                    LastSlowestDependencyPackageParent = 'Microsoft.Graph.Users'
+                    LastSlowestDependencyPackageMs = '500'
                     LastCoalescedWaitMs = '700'
                     LastSlowestMaterializedPackage = 'Microsoft.Graph.Files'
                     LastSlowestMaterializedPackageMs = '450'
@@ -112,6 +116,10 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastMs = '1944.07'
                     LastBottleneck = 'Extraction'
                     LastBottleneckMs = '1100'
+                    LastDependencyMs = '250'
+                    LastSlowestDependencyPackage = 'Microsoft.Graph.Authentication'
+                    LastSlowestDependencyPackageParent = 'Microsoft.Graph.Teams'
+                    LastSlowestDependencyPackageMs = '125'
                     LastCoalescedWaitMs = '125'
                     LastSlowestMaterializedPackage = 'Microsoft.Graph.Teams'
                     LastSlowestMaterializedPackageMs = '478'
@@ -141,6 +149,8 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("1.67x", markdown, StringComparison.Ordinal);
         Assert.Contains("## Optimization Targets", markdown, StringComparison.Ordinal);
         Assert.Contains("Use these rows to decide where the next managed-engine optimization should start.", markdown, StringComparison.Ordinal);
+        Assert.Contains("LastSlowestDependencyPackage", markdown, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.Graph.Authentication", markdown, StringComparison.Ordinal);
         Assert.Contains("LastCoalescedWaitMs", markdown, StringComparison.Ordinal);
         Assert.Contains("Microsoft.Graph.Teams", markdown, StringComparison.Ordinal);
         Assert.Contains("Can archive extraction, path creation, or file writes be reduced safely?", markdown, StringComparison.Ordinal);

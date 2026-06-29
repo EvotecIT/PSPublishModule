@@ -93,6 +93,7 @@ function New-Summary {
             MedianManagedRootDependencyMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyMilliseconds' } else { 0 }
             MedianManagedDownloadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDownloadMilliseconds' } else { 0 }
             MedianManagedExtractionMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalExtractionMilliseconds' } else { 0 }
+            MedianManagedDependencyMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyMilliseconds' } else { 0 }
             MedianManagedPromotionMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionMilliseconds' } else { 0 }
             MedianManagedRepositoryRequests = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRepositoryRequestCount' } else { 0 }
             MedianManagedPackageRepositoryRequests = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRequestCount' } else { 0 }
@@ -106,6 +107,7 @@ function New-Summary {
             MedianManagedInstallLockWaitCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedInstallLockWaitCount' } else { 0 }
             MedianManagedInstallLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalInstallLockWaitMilliseconds' } else { 0 }
             MedianManagedSlowestInstallLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestInstallLockWaitMilliseconds' } else { 0 }
+            MedianManagedSlowestDependencyPackageMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestDependencyPackageMilliseconds' } else { 0 }
             MedianManagedSlowestMaterializedPackageMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageMilliseconds' } else { 0 }
             MedianManagedAuthenticodeCheckedFiles = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedAuthenticodeCheckedFileCount' } else { 0 }
             MedianManagedAuthenticodeCatalogFiles = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedAuthenticodeCatalogFileCount' } else { 0 }
@@ -119,6 +121,8 @@ function New-Summary {
             LastManagedDownloadMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDownloadMilliseconds } else { 0 }
             FirstManagedExtractionMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalExtractionMilliseconds } else { 0 }
             LastManagedExtractionMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalExtractionMilliseconds } else { 0 }
+            FirstManagedDependencyMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDependencyMilliseconds } else { 0 }
+            LastManagedDependencyMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalDependencyMilliseconds } else { 0 }
             FirstManagedPromotionMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionMilliseconds } else { 0 }
             LastManagedPromotionMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionMilliseconds } else { 0 }
             FirstManagedDownloadBytes = if ($firstPassed) { [double]$firstPassed.ManagedDownloadBytes } else { 0 }
@@ -135,6 +139,9 @@ function New-Summary {
             LastManagedInstallLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalInstallLockWaitMilliseconds } else { 0 }
             LastManagedSlowestInstallLockWaitName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestInstallLockWaitName'
             LastManagedSlowestInstallLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestInstallLockWaitMilliseconds } else { 0 }
+            LastManagedSlowestDependencyPackageName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestDependencyPackageName'
+            LastManagedSlowestDependencyPackageParent = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestDependencyPackageParent'
+            LastManagedSlowestDependencyPackageMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestDependencyPackageMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackageName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestMaterializedPackageName'
             LastManagedSlowestMaterializedPackageMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackageExtractionMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractionMilliseconds } else { 0 }
@@ -192,6 +199,7 @@ function New-Comparison {
             ManagedInstallLockWaitCount = if ($managed.Count) { [double] $managed[0].MedianManagedInstallLockWaitCount } else { 0 }
             ManagedInstallLockWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedInstallLockWaitMs } else { 0 }
             ManagedSlowestInstallLockWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestInstallLockWaitMs } else { 0 }
+            ManagedSlowestDependencyPackageMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestDependencyPackageMs } else { 0 }
             ManagedSlowestMaterializedPackageMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageMs } else { 0 }
             ManagedAuthenticodeCheckedFiles = if ($managed.Count) { [double] $managed[0].MedianManagedAuthenticodeCheckedFiles } else { 0 }
             ManagedAuthenticodeCatalogFiles = if ($managed.Count) { [double] $managed[0].MedianManagedAuthenticodeCatalogFiles } else { 0 }
@@ -205,6 +213,8 @@ function New-Comparison {
             ManagedLastDownloadMs = if ($managed.Count) { [double] $managed[0].LastManagedDownloadMs } else { 0 }
             ManagedFirstExtractionMs = if ($managed.Count) { [double] $managed[0].FirstManagedExtractionMs } else { 0 }
             ManagedLastExtractionMs = if ($managed.Count) { [double] $managed[0].LastManagedExtractionMs } else { 0 }
+            ManagedFirstDependencyMs = if ($managed.Count) { [double] $managed[0].FirstManagedDependencyMs } else { 0 }
+            ManagedLastDependencyMs = if ($managed.Count) { [double] $managed[0].LastManagedDependencyMs } else { 0 }
             ManagedFirstPromotionMs = if ($managed.Count) { [double] $managed[0].FirstManagedPromotionMs } else { 0 }
             ManagedLastPromotionMs = if ($managed.Count) { [double] $managed[0].LastManagedPromotionMs } else { 0 }
             ManagedFirstDownloadBytes = if ($managed.Count) { [double] $managed[0].FirstManagedDownloadBytes } else { 0 }
@@ -221,6 +231,9 @@ function New-Comparison {
             ManagedLastInstallLockWaitMs = if ($managed.Count) { [double] $managed[0].LastManagedInstallLockWaitMs } else { 0 }
             ManagedLastSlowestInstallLockWaitName = if ($managed.Count) { [string] $managed[0].LastManagedSlowestInstallLockWaitName } else { '' }
             ManagedLastSlowestInstallLockWaitMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestInstallLockWaitMs } else { 0 }
+            ManagedLastSlowestDependencyPackageName = if ($managed.Count) { [string] $managed[0].LastManagedSlowestDependencyPackageName } else { '' }
+            ManagedLastSlowestDependencyPackageParent = if ($managed.Count) { [string] $managed[0].LastManagedSlowestDependencyPackageParent } else { '' }
+            ManagedLastSlowestDependencyPackageMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestDependencyPackageMs } else { 0 }
             ManagedLastSlowestMaterializedPackageName = if ($managed.Count) { [string] $managed[0].LastManagedSlowestMaterializedPackageName } else { '' }
             ManagedLastSlowestMaterializedPackageMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageMs } else { 0 }
             ManagedLastSlowestMaterializedPackageExtractionMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageExtractionMs } else { 0 }
@@ -230,6 +243,7 @@ function New-Comparison {
             ManagedRootDependencyMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyMs } else { 0 }
             ManagedDownloadMs = if ($managed.Count) { [double] $managed[0].MedianManagedDownloadMs } else { 0 }
             ManagedExtractionMs = if ($managed.Count) { [double] $managed[0].MedianManagedExtractionMs } else { 0 }
+            ManagedDependencyMs = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyMs } else { 0 }
             ManagedPromotionMs = if ($managed.Count) { [double] $managed[0].MedianManagedPromotionMs } else { 0 }
         }
     }

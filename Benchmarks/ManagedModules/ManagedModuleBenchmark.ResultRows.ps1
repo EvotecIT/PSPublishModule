@@ -41,6 +41,7 @@ function New-SkippedRow {
         ManagedRootDependencyMilliseconds = 0
         ManagedTotalDownloadMilliseconds = 0
         ManagedTotalExtractionMilliseconds = 0
+        ManagedTotalDependencyMilliseconds = 0
         ManagedTotalPromotionMilliseconds = 0
         ManagedRepositoryRequestCount = 0
         ManagedPackageRepositoryRequestCount = 0
@@ -56,6 +57,9 @@ function New-SkippedRow {
         ManagedTotalInstallLockWaitMilliseconds = 0
         ManagedSlowestInstallLockWaitName = ''
         ManagedSlowestInstallLockWaitMilliseconds = 0
+        ManagedSlowestDependencyPackageName = ''
+        ManagedSlowestDependencyPackageParent = ''
+        ManagedSlowestDependencyPackageMilliseconds = 0
         ManagedSlowestMaterializedPackageName = ''
         ManagedSlowestMaterializedPackageMilliseconds = 0
         ManagedSlowestMaterializedPackageExtractionMilliseconds = 0

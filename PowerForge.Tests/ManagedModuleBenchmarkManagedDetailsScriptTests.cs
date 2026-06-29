@@ -81,7 +81,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         VersionResolutionElapsed = [TimeSpan]::Zero
                         DownloadElapsed = [TimeSpan]::FromMilliseconds(20)
                         ExtractionElapsed = [TimeSpan]::FromMilliseconds(320)
-                        DependencyElapsed = [TimeSpan]::Zero
+                        DependencyElapsed = [TimeSpan]::FromMilliseconds(65)
                         PromotionElapsed = [TimeSpan]::FromMilliseconds(70)
                         RepositoryRequestCount = 0
                         PackageRepositoryRequestCount = 0
@@ -120,6 +120,10 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(70.0, NumericProperty(summary, "TotalInstallLockWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestInstallLockWaitName"));
         Assert.Equal(40.0, NumericProperty(summary, "SlowestInstallLockWaitMilliseconds"));
+        Assert.Equal(65.0, NumericProperty(summary, "TotalDependencyMilliseconds"));
+        Assert.Equal("Company.Big", Property(summary, "SlowestDependencyPackageName"));
+        Assert.Equal("Company.Root", Property(summary, "SlowestDependencyPackageParent"));
+        Assert.Equal(65.0, NumericProperty(summary, "SlowestDependencyPackageMilliseconds"));
         Assert.Equal(90.0, NumericProperty(waitPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal(30.0, NumericProperty(waitPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(noOpPackage, "CoalescedWaitMilliseconds"));
