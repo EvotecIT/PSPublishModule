@@ -6,6 +6,36 @@ using Xunit;
 public class WebLlmsGeneratorTests
 {
     [Fact]
+    public void Generate_WritesRecommendedLlmsTxtMarkdownLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-markdown-links-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                Overview = "Example Product publishes API docs and implementation guidance.",
+                ApiBase = "/projects/example/api/"
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("# Example Product", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("## Machine-friendly API data", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("- [API index](/projects/example/api/index.json):", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("- [API search](/projects/example/api/search.json):", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("- [API type template](/projects/example/api/types/{slug}.json):", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_UsesProjectDescription_WhenOverviewIsNotProvided()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-project-description-" + Guid.NewGuid().ToString("N"));

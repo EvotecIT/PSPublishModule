@@ -72,7 +72,7 @@ public static class WebLlmsGenerator
         var overview = ResolveOverview(options, projectInfo, siteRoot, name);
         var apiBase = string.IsNullOrWhiteSpace(options.ApiBase) ? "/api" : options.ApiBase;
 
-        WriteLlmsTxt(llmsTxtPath, name, packageId, version, typeCount, apiBase, quickstart);
+        WriteLlmsTxt(llmsTxtPath, name, packageId, version, typeCount, apiBase, overview, quickstart);
         WriteLlmsJson(llmsJsonPath, name, packageId, version, apiBase, quickstart);
         WriteLlmsFull(llmsFullPath, name, packageId, version, typeCount, apiBase, overview, quickstart, options);
 
@@ -254,28 +254,34 @@ public static class WebLlmsGenerator
         string version,
         int? typeCount,
         string apiBase,
+        string overview,
         string[] quickstart)
     {
+        var normalizedApiBase = apiBase.TrimEnd('/');
         var lines = new List<string>
         {
             $"# {name}",
-            $"Version: {version}",
-            $"Package: {packageId}"
+            string.Empty,
+            $"> {overview}",
+            string.Empty,
+            "## Metadata",
+            $"- Version: {version}",
+            $"- Package: {packageId}"
         };
-        if (typeCount.HasValue) lines.Add($"API types: {typeCount.Value}");
+        if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
         lines.Add(string.Empty);
-        lines.Add("Install:");
+        lines.Add("## Install");
         lines.Add($"- dotnet add package {packageId}");
         lines.Add(string.Empty);
-        lines.Add("Quickstart:");
+        lines.Add("## Quickstart");
         lines.Add("```csharp");
         lines.AddRange(quickstart);
         lines.Add("```");
         lines.Add(string.Empty);
-        lines.Add("Machine-friendly API data:");
-        lines.Add($"- {apiBase.TrimEnd('/')}/index.json");
-        lines.Add($"- {apiBase.TrimEnd('/')}/search.json");
-        lines.Add($"- {apiBase.TrimEnd('/')}/types/{{slug}}.json");
+        lines.Add("## Machine-friendly API data");
+        lines.Add($"- [API index]({normalizedApiBase}/index.json): Type and package metadata.");
+        lines.Add($"- [API search]({normalizedApiBase}/search.json): Searchable API data.");
+        lines.Add($"- [API type template]({normalizedApiBase}/types/{{slug}}.json): Per-type API details.");
         lines.Add(string.Empty);
         lines.Add("Slug rule: lower-case, dots/symbols -> dashes.");
 
@@ -346,9 +352,9 @@ public static class WebLlmsGenerator
         lines.Add("```");
         lines.Add(string.Empty);
         lines.Add("## API Resources");
-        lines.Add($"- {apiBase.TrimEnd('/')}/index.json");
-        lines.Add($"- {apiBase.TrimEnd('/')}/search.json");
-        lines.Add($"- {apiBase.TrimEnd('/')}/types/{{slug}}.json");
+        lines.Add($"- [API index]({apiBase.TrimEnd('/')}/index.json): Type and package metadata.");
+        lines.Add($"- [API search]({apiBase.TrimEnd('/')}/search.json): Searchable API data.");
+        lines.Add($"- [API type template]({apiBase.TrimEnd('/')}/types/{{slug}}.json): Per-type API details.");
 
         AppendApiDetails(lines, options, apiBase);
 
