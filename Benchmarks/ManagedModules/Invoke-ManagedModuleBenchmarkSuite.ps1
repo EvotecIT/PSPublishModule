@@ -72,6 +72,7 @@ $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.OptimizationTargets.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Artifacts.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.EngineSummary.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Scoreboard.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Scenarios.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.SuiteNotes.ps1')
 
@@ -697,6 +698,8 @@ $engineSummaryPath = Join-Path $suiteRoot 'suite-engine-summary.csv'
 $engineSummaryJsonPath = Join-Path $suiteRoot 'suite-engine-summary.json'
 $hostComparisonPath = Join-Path $suiteRoot 'suite-host-comparison.csv'
 $hostComparisonJsonPath = Join-Path $suiteRoot 'suite-host-comparison.json'
+$scoreboardPath = Join-Path $suiteRoot 'suite-scoreboard.csv'
+$scoreboardJsonPath = Join-Path $suiteRoot 'suite-scoreboard.json'
 $optimizationTargetsPath = Join-Path $suiteRoot 'suite-optimization-targets.csv'
 $optimizationTargetsJsonPath = Join-Path $suiteRoot 'suite-optimization-targets.json'
 $hostsPath = Join-Path $suiteRoot 'suite-hosts.csv'
@@ -706,6 +709,7 @@ $metadataPath = Join-Path $suiteRoot 'metadata.json'
 $notesPath = Join-Path $suiteRoot 'suite-notes.md'
 $gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -MinAuthenticodeCheckedFiles $ManagedMinAuthenticodeCheckedFiles -MinAuthenticodeCatalogFiles $ManagedMinAuthenticodeCatalogFiles -UseScenarioGates:$UseScenarioGates.IsPresent)
 $hostComparisonRows = @(New-ManagedHostComparison -Rows @($summaryRows))
+$scoreboardRows = @(New-ManagedBenchmarkScoreboard -EngineRows @($engineRows))
 $hostGateViolations = @(Get-ManagedHostComparisonGateViolation -Rows @($hostComparisonRows) -MaxComparisonVsBaseline $ManagedMaxWindowsPowerShellVsPowerShell7)
 $optimizationTargetRows = @(New-ManagedOptimizationTarget -Rows @($summaryRows))
 
@@ -715,6 +719,8 @@ Write-ManagedBenchmarkCsv -InputObject @($engineRows) -Path $engineSummaryPath
 Write-ManagedBenchmarkJson -InputObject @($engineRows) -Path $engineSummaryJsonPath -Depth 8
 Write-ManagedBenchmarkCsv -InputObject @($hostComparisonRows) -Path $hostComparisonPath
 Write-ManagedBenchmarkJson -InputObject @($hostComparisonRows) -Path $hostComparisonJsonPath -Depth 8
+Write-ManagedBenchmarkCsv -InputObject @($scoreboardRows) -Path $scoreboardPath
+Write-ManagedBenchmarkJson -InputObject @($scoreboardRows) -Path $scoreboardJsonPath -Depth 8
 Write-ManagedBenchmarkCsv -InputObject @($optimizationTargetRows) -Path $optimizationTargetsPath
 Write-ManagedBenchmarkJson -InputObject @($optimizationTargetRows) -Path $optimizationTargetsJsonPath -Depth 8
 Write-ManagedBenchmarkCsv -InputObject @($hostRows) -Path $hostsPath
@@ -728,7 +734,7 @@ if ($ManagedMaxRank -gt 0 -or
 if ($ManagedMaxWindowsPowerShellVsPowerShell7 -gt 0) {
     Write-ManagedBenchmarkCsv -InputObject @($hostGateViolations) -Path $hostGatePath
 }
-Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenarios) -SummaryRows @($summaryRows) -EngineRows @($engineRows) -OptimizationRows @($optimizationTargetRows) -HostComparisonRows @($hostComparisonRows) -HostRows @($hostRows) -GateViolations @($gateViolations) -HostGateViolations @($hostGateViolations) -Path $notesPath
+Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenarios) -SummaryRows @($summaryRows) -EngineRows @($engineRows) -ScoreboardRows @($scoreboardRows) -OptimizationRows @($optimizationTargetRows) -HostComparisonRows @($hostComparisonRows) -HostRows @($hostRows) -GateViolations @($gateViolations) -HostGateViolations @($hostGateViolations) -Path $notesPath
 
 $metadata = [ordered]@{
     Suites = $Suite
@@ -786,6 +792,7 @@ $metadata = [ordered]@{
     ManagedHostGatePassed = $hostGateViolations.Count -eq 0
     EngineSummaryPath = $engineSummaryPath
     HostComparisonPath = $hostComparisonPath
+    ScoreboardPath = $scoreboardPath
     HostGatePath = $hostGatePath
     OptimizationTargetsPath = $optimizationTargetsPath
     NotesPath = $notesPath
