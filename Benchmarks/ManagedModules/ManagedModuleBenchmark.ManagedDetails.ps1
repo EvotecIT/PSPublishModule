@@ -111,6 +111,7 @@ function Write-ManagedInstallDetail {
         TotalDownloadBytes = [long] (($packages | Measure-Object DownloadBytes -Sum).Sum)
         CacheHitCount = @($packages | Where-Object DownloadFromCache).Count
         ExtractionCacheHitCount = @($packages | Where-Object ExtractionFromCache).Count
+        TotalAuthenticodeCheckedFiles = [long] (($packages | Measure-Object AuthenticodeCheckedFiles -Sum).Sum)
     }
 
     $parent = Split-Path -Path $Path -Parent

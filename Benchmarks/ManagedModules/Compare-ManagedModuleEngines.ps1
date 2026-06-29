@@ -476,6 +476,7 @@ function Invoke-TimedOperation {
         ManagedDownloadBytes = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadBytes')
         ManagedCacheHitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'CacheHitCount')
         ManagedExtractionCacheHitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'ExtractionCacheHitCount')
+        ManagedAuthenticodeCheckedFileCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalAuthenticodeCheckedFiles')
         ManagedMaintenanceActionCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceActionCount')
         ManagedMaintenanceFindingCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceFindingCount')
         ImportStatus = if ($importValidation) { [string] $importValidation.Status } else { '' }
