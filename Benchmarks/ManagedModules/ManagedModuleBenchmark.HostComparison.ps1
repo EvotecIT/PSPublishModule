@@ -52,6 +52,8 @@ function New-ManagedHostComparison {
         [pscustomobject]@{
             Suite = if ($group.Group[0].PSObject.Properties['Suite']) { [string] $group.Group[0].Suite } else { '' }
             Scenario = [string] $group.Group[0].Scenario
+            BenchmarkRole = if ($group.Group[0].PSObject.Properties['BenchmarkRole']) { [string] $group.Group[0].BenchmarkRole } else { '' }
+            ComparisonScope = if ($group.Group[0].PSObject.Properties['ComparisonScope']) { [string] $group.Group[0].ComparisonScope } else { '' }
             ModuleName = if ($group.Group[0].PSObject.Properties['ModuleName']) { [string] $group.Group[0].ModuleName } else { '' }
             Operation = [string] $group.Group[0].Operation
             Engine = $EngineName
