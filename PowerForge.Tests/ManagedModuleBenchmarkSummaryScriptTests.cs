@@ -52,6 +52,15 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedSlowestMaterializedPackageMilliseconds = 600
                     ManagedSlowestMaterializedPackageExtractionMilliseconds = 500
                     ManagedSlowestMaterializedPackagePromotionMilliseconds = 80
+                    ManagedCriticalDependencyBranchName = 'Company.BranchCold'
+                    ManagedCriticalDependencyBranchParent = 'Company.Root'
+                    ManagedCriticalDependencyBranchMilliseconds = 780
+                    ManagedCriticalDependencyBranchDominantPhase = 'Dependency'
+                    ManagedCriticalDependencyBranchDominantPhaseMilliseconds = 700
+                    ManagedCriticalMaterializationBranchName = 'Company.Big'
+                    ManagedCriticalMaterializationBranchMilliseconds = 560
+                    ManagedCriticalMaterializationDominantPhase = 'Extraction'
+                    ManagedCriticalMaterializationDominantPhaseMilliseconds = 500
                     ManagedAuthenticodeCheckedFileCount = 3
                     ManagedAuthenticodeCatalogFileCount = 1
                     ManagedMaintenanceActionCount = 0
@@ -100,6 +109,15 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedSlowestMaterializedPackageMilliseconds = 450
                     ManagedSlowestMaterializedPackageExtractionMilliseconds = 320
                     ManagedSlowestMaterializedPackagePromotionMilliseconds = 70
+                    ManagedCriticalDependencyBranchName = 'Company.BranchWarm'
+                    ManagedCriticalDependencyBranchParent = 'Company.Shared'
+                    ManagedCriticalDependencyBranchMilliseconds = 520
+                    ManagedCriticalDependencyBranchDominantPhase = 'Dependency'
+                    ManagedCriticalDependencyBranchDominantPhaseMilliseconds = 500
+                    ManagedCriticalMaterializationBranchName = 'Company.Files'
+                    ManagedCriticalMaterializationBranchMilliseconds = 390
+                    ManagedCriticalMaterializationDominantPhase = 'Extraction'
+                    ManagedCriticalMaterializationDominantPhaseMilliseconds = 320
                     ManagedAuthenticodeCheckedFileCount = 5
                     ManagedAuthenticodeCatalogFileCount = 1
                     ManagedMaintenanceActionCount = 0
@@ -155,6 +173,17 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(450.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageMs"));
         Assert.Equal(320.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageExtractionMs"));
         Assert.Equal(70.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackagePromotionMs"));
+        Assert.Equal(650.0, NumericProperty(row, "ManagedCriticalDependencyBranchMs"));
+        Assert.Equal(475.0, NumericProperty(row, "ManagedCriticalMaterializationBranchMs"));
+        Assert.Equal("Company.BranchWarm", Property(row, "ManagedLastCriticalDependencyBranchName"));
+        Assert.Equal("Company.Shared", Property(row, "ManagedLastCriticalDependencyBranchParent"));
+        Assert.Equal(520.0, NumericProperty(row, "ManagedLastCriticalDependencyBranchMs"));
+        Assert.Equal("Dependency", Property(row, "ManagedLastCriticalDependencyBranchDominantPhase"));
+        Assert.Equal(500.0, NumericProperty(row, "ManagedLastCriticalDependencyBranchDominantPhaseMs"));
+        Assert.Equal("Company.Files", Property(row, "ManagedLastCriticalMaterializationBranchName"));
+        Assert.Equal(390.0, NumericProperty(row, "ManagedLastCriticalMaterializationBranchMs"));
+        Assert.Equal("Extraction", Property(row, "ManagedLastCriticalMaterializationDominantPhase"));
+        Assert.Equal(320.0, NumericProperty(row, "ManagedLastCriticalMaterializationDominantPhaseMs"));
         Assert.Equal(4.0, NumericProperty(row, "ManagedAuthenticodeCheckedFiles"));
         Assert.Equal(1.0, NumericProperty(row, "ManagedAuthenticodeCatalogFiles"));
     }

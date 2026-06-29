@@ -95,6 +95,15 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastBottleneckMs = '3966.4'
                     LastWarmOptimizationLane = 'Dependency'
                     LastWarmOptimizationLaneMs = '1400'
+                    LastCriticalOptimizationLane = 'DependencyBranch'
+                    LastCriticalOptimizationLaneMs = '500'
+                    LastCriticalDependencyBranch = 'Microsoft.Graph.Authentication'
+                    LastCriticalDependencyBranchMs = '500'
+                    LastCriticalDependencyBranchDominantPhase = 'Dependency'
+                    LastCriticalMaterializationBranch = 'Microsoft.Graph.Files'
+                    LastCriticalMaterializationBranchMs = '300'
+                    LastCriticalMaterializationDominantPhase = 'Extraction'
+                    LastCriticalOptimizationQuestion = 'Can the slowest dependency branch be shortened without optimizing summed parallel work that is not on the wall-clock path?'
                     LastMaterializationMs = '700'
                     LastMaterializationMBPerSecond = '120'
                     LastMaterializationDominantPhase = 'Extraction'
@@ -124,6 +133,15 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastBottleneckMs = '1100'
                     LastWarmOptimizationLane = 'Materialization'
                     LastWarmOptimizationLaneMs = '1250'
+                    LastCriticalOptimizationLane = 'MaterializationBranch'
+                    LastCriticalOptimizationLaneMs = '478'
+                    LastCriticalDependencyBranch = 'Microsoft.Graph.Authentication'
+                    LastCriticalDependencyBranchMs = '125'
+                    LastCriticalDependencyBranchDominantPhase = 'Dependency'
+                    LastCriticalMaterializationBranch = 'Microsoft.Graph.Teams'
+                    LastCriticalMaterializationBranchMs = '478'
+                    LastCriticalMaterializationDominantPhase = 'PromotionMove'
+                    LastCriticalOptimizationQuestion = 'Can the slowest package materialization branch be shortened without over-optimizing summed concurrent extraction or promotion work?'
                     LastMaterializationMs = '1250'
                     LastMaterializationMBPerSecond = '340'
                     LastMaterializationDominantPhase = 'PromotionMove'
@@ -162,6 +180,10 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("## Optimization Targets", markdown, StringComparison.Ordinal);
         Assert.Contains("Use these rows to decide where the next managed-engine optimization should start.", markdown, StringComparison.Ordinal);
         Assert.Contains("LastWarmOptimizationLane", markdown, StringComparison.Ordinal);
+        Assert.Contains("LastCriticalOptimizationLane", markdown, StringComparison.Ordinal);
+        Assert.Contains("MaterializationBranch", markdown, StringComparison.Ordinal);
+        Assert.Contains("LastCriticalDependencyBranch", markdown, StringComparison.Ordinal);
+        Assert.Contains("LastCriticalMaterializationBranch", markdown, StringComparison.Ordinal);
         Assert.Contains("LastMaterializationMs", markdown, StringComparison.Ordinal);
         Assert.Contains("PromotionMove", markdown, StringComparison.Ordinal);
         Assert.Contains("LastSlowestDependencyPackage", markdown, StringComparison.Ordinal);

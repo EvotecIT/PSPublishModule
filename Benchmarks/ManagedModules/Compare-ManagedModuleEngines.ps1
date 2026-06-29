@@ -511,6 +511,15 @@ function Invoke-TimedOperation {
         ManagedSlowestMaterializedPackagePromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionMilliseconds')
         ManagedSlowestMaterializedPackagePromotionLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionLockWaitMilliseconds')
         ManagedSlowestMaterializedPackagePromotionMoveMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionMoveMilliseconds')
+        ManagedCriticalDependencyBranchName = Get-DetailText -InputObject $detailSummary -Name 'CriticalDependencyBranchName'
+        ManagedCriticalDependencyBranchParent = Get-DetailText -InputObject $detailSummary -Name 'CriticalDependencyBranchParent'
+        ManagedCriticalDependencyBranchMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalDependencyBranchMilliseconds')
+        ManagedCriticalDependencyBranchDominantPhase = Get-DetailText -InputObject $detailSummary -Name 'CriticalDependencyBranchDominantPhase'
+        ManagedCriticalDependencyBranchDominantPhaseMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalDependencyBranchDominantPhaseMilliseconds')
+        ManagedCriticalMaterializationBranchName = Get-DetailText -InputObject $detailSummary -Name 'CriticalMaterializationBranchName'
+        ManagedCriticalMaterializationBranchMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalMaterializationBranchMilliseconds')
+        ManagedCriticalMaterializationDominantPhase = Get-DetailText -InputObject $detailSummary -Name 'CriticalMaterializationDominantPhase'
+        ManagedCriticalMaterializationDominantPhaseMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalMaterializationDominantPhaseMilliseconds')
         ManagedAuthenticodeCheckedFileCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalAuthenticodeCheckedFiles')
         ManagedAuthenticodeCatalogFileCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalAuthenticodeCatalogFiles')
         ManagedMaintenanceActionCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceActionCount')

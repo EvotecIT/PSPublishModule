@@ -64,6 +64,15 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastSlowestMaterializedPackageMs = '400'
                     ManagedLastSlowestMaterializedPackageExtractionMs = '300'
                     ManagedLastSlowestMaterializedPackagePromotionMs = '50'
+                    ManagedLastCriticalDependencyBranchName = 'Company.Branch'
+                    ManagedLastCriticalDependencyBranchParent = 'Company.Root'
+                    ManagedLastCriticalDependencyBranchMs = '220'
+                    ManagedLastCriticalDependencyBranchDominantPhase = 'Dependency'
+                    ManagedLastCriticalDependencyBranchDominantPhaseMs = '200'
+                    ManagedLastCriticalMaterializationBranchName = 'Company.Files'
+                    ManagedLastCriticalMaterializationBranchMs = '350'
+                    ManagedLastCriticalMaterializationDominantPhase = 'Extraction'
+                    ManagedLastCriticalMaterializationDominantPhaseMs = '300'
                     ManagedLastRootDependencyMs = '120'
                     ManagedLastDependencyMs = '200'
                     ManagedLastDownloadMs = '0'
@@ -119,6 +128,18 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(400.0, NumericProperty(row, "LastSlowestMaterializedPackageMs"));
         Assert.Equal(300.0, NumericProperty(row, "LastSlowestMaterializedPackageExtractionMs"));
         Assert.Equal(50.0, NumericProperty(row, "LastSlowestMaterializedPackagePromotionMs"));
+        Assert.Equal("Company.Branch", Property(row, "LastCriticalDependencyBranch"));
+        Assert.Equal("Company.Root", Property(row, "LastCriticalDependencyBranchParent"));
+        Assert.Equal(220.0, NumericProperty(row, "LastCriticalDependencyBranchMs"));
+        Assert.Equal("Dependency", Property(row, "LastCriticalDependencyBranchDominantPhase"));
+        Assert.Equal(200.0, NumericProperty(row, "LastCriticalDependencyBranchDominantPhaseMs"));
+        Assert.Equal("Company.Files", Property(row, "LastCriticalMaterializationBranch"));
+        Assert.Equal(350.0, NumericProperty(row, "LastCriticalMaterializationBranchMs"));
+        Assert.Equal("Extraction", Property(row, "LastCriticalMaterializationDominantPhase"));
+        Assert.Equal(300.0, NumericProperty(row, "LastCriticalMaterializationDominantPhaseMs"));
+        Assert.Equal("MaterializationBranch", Property(row, "LastCriticalOptimizationLane"));
+        Assert.Equal(350.0, NumericProperty(row, "LastCriticalOptimizationLaneMs"));
+        Assert.Contains("materialization", Property(row, "LastCriticalOptimizationQuestion"), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(120.0, NumericProperty(row, "LastRootDependencyMs"));
         Assert.Equal(0.0, NumericProperty(row, "LastDownloadMs"));
         Assert.Equal(300.0, NumericProperty(row, "LastExtractionMs"));
@@ -179,6 +200,15 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastSlowestDependencyPackageName = 'Az.Advisor'
                     ManagedLastSlowestDependencyPackageParent = 'Az'
                     ManagedLastSlowestDependencyPackageMs = '800'
+                    ManagedLastCriticalDependencyBranchName = 'Az.Advisor'
+                    ManagedLastCriticalDependencyBranchParent = 'Az'
+                    ManagedLastCriticalDependencyBranchMs = '900'
+                    ManagedLastCriticalDependencyBranchDominantPhase = 'Dependency'
+                    ManagedLastCriticalDependencyBranchDominantPhaseMs = '800'
+                    ManagedLastCriticalMaterializationBranchName = 'Az.Files'
+                    ManagedLastCriticalMaterializationBranchMs = '675'
+                    ManagedLastCriticalMaterializationDominantPhase = 'Extraction'
+                    ManagedLastCriticalMaterializationDominantPhaseMs = '600'
                 }
             )
 
@@ -198,6 +228,13 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal("Dependency", Property(row, "LastWarmOptimizationLane"));
         Assert.Equal(4200.0, NumericProperty(row, "LastWarmOptimizationLaneMs"));
         Assert.Contains("dependency", Property(row, "LastWarmOptimizationQuestion"), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("DependencyBranch", Property(row, "LastCriticalOptimizationLane"));
+        Assert.Equal(900.0, NumericProperty(row, "LastCriticalOptimizationLaneMs"));
+        Assert.Contains("slowest dependency branch", Property(row, "LastCriticalOptimizationQuestion"), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Az.Advisor", Property(row, "LastCriticalDependencyBranch"));
+        Assert.Equal(900.0, NumericProperty(row, "LastCriticalDependencyBranchMs"));
+        Assert.Equal("Az.Files", Property(row, "LastCriticalMaterializationBranch"));
+        Assert.Equal(675.0, NumericProperty(row, "LastCriticalMaterializationBranchMs"));
         Assert.Equal("Az.Advisor", Property(row, "LastSlowestDependencyPackage"));
         Assert.Equal("Az", Property(row, "LastSlowestDependencyPackageParent"));
         Assert.Equal(800.0, NumericProperty(row, "LastSlowestDependencyPackageMs"));

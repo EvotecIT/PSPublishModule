@@ -151,6 +151,15 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(70.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionMilliseconds"));
         Assert.Equal(12.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionLockWaitMilliseconds"));
         Assert.Equal(58.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionMoveMilliseconds"));
+        Assert.Equal("Company.Big", Property(summary, "CriticalDependencyBranchName"));
+        Assert.Equal("Company.Root", Property(summary, "CriticalDependencyBranchParent"));
+        Assert.Equal(450.0, NumericProperty(summary, "CriticalDependencyBranchMilliseconds"));
+        Assert.Equal("Extraction", Property(summary, "CriticalDependencyBranchDominantPhase"));
+        Assert.Equal(320.0, NumericProperty(summary, "CriticalDependencyBranchDominantPhaseMilliseconds"));
+        Assert.Equal("Company.Big", Property(summary, "CriticalMaterializationBranchName"));
+        Assert.Equal(378.0, NumericProperty(summary, "CriticalMaterializationBranchMilliseconds"));
+        Assert.Equal("Extraction", Property(summary, "CriticalMaterializationDominantPhase"));
+        Assert.Equal(320.0, NumericProperty(summary, "CriticalMaterializationDominantPhaseMilliseconds"));
         Assert.Equal(12.5, NumericProperty(summary, "TotalPromotionLockWaitMilliseconds"));
         Assert.Equal(59.5, NumericProperty(summary, "TotalPromotionMoveMilliseconds"));
     }

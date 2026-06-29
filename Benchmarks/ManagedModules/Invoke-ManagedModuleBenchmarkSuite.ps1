@@ -572,6 +572,8 @@ function Add-SummaryRows {
                 ManagedSlowestInstallLockWaitMs = $row.ManagedSlowestInstallLockWaitMs
                 ManagedSlowestDependencyPackageMs = $row.ManagedSlowestDependencyPackageMs
                 ManagedSlowestMaterializedPackageMs = $row.ManagedSlowestMaterializedPackageMs
+                ManagedCriticalDependencyBranchMs = $row.ManagedCriticalDependencyBranchMs
+                ManagedCriticalMaterializationBranchMs = $row.ManagedCriticalMaterializationBranchMs
                 ManagedAuthenticodeCheckedFiles = $row.ManagedAuthenticodeCheckedFiles
                 ManagedAuthenticodeCatalogFiles = $row.ManagedAuthenticodeCatalogFiles
                 ManagedFirstRepositoryRequests = $row.ManagedFirstRepositoryRequests
@@ -618,6 +620,15 @@ function Add-SummaryRows {
                 ManagedLastSlowestMaterializedPackagePromotionMs = $row.ManagedLastSlowestMaterializedPackagePromotionMs
                 ManagedLastSlowestMaterializedPackagePromotionLockWaitMs = $row.ManagedLastSlowestMaterializedPackagePromotionLockWaitMs
                 ManagedLastSlowestMaterializedPackagePromotionMoveMs = $row.ManagedLastSlowestMaterializedPackagePromotionMoveMs
+                ManagedLastCriticalDependencyBranchName = $row.ManagedLastCriticalDependencyBranchName
+                ManagedLastCriticalDependencyBranchParent = $row.ManagedLastCriticalDependencyBranchParent
+                ManagedLastCriticalDependencyBranchMs = $row.ManagedLastCriticalDependencyBranchMs
+                ManagedLastCriticalDependencyBranchDominantPhase = $row.ManagedLastCriticalDependencyBranchDominantPhase
+                ManagedLastCriticalDependencyBranchDominantPhaseMs = $row.ManagedLastCriticalDependencyBranchDominantPhaseMs
+                ManagedLastCriticalMaterializationBranchName = $row.ManagedLastCriticalMaterializationBranchName
+                ManagedLastCriticalMaterializationBranchMs = $row.ManagedLastCriticalMaterializationBranchMs
+                ManagedLastCriticalMaterializationDominantPhase = $row.ManagedLastCriticalMaterializationDominantPhase
+                ManagedLastCriticalMaterializationDominantPhaseMs = $row.ManagedLastCriticalMaterializationDominantPhaseMs
                 ManagedMaintenanceActions = $row.ManagedMaintenanceActions
                 ManagedMaintenanceFindings = $row.ManagedMaintenanceFindings
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs
