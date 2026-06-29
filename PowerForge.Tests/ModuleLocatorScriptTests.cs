@@ -22,6 +22,9 @@ public sealed class ModuleLocatorScriptTests
 
         Assert.Contains("Compare-SemanticModuleVersion", script, StringComparison.Ordinal);
         Assert.Contains("Select-LatestModule", script, StringComparison.Ordinal);
+        Assert.Contains("$coreParts.Length -gt 4", script, StringComparison.Ordinal);
+        Assert.Contains("Revision = $revision", script, StringComparison.Ordinal);
+        Assert.Contains("$leftVersion.Revision.CompareTo($rightVersion.Revision)", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Sort-Object Version -Descending", script, StringComparison.Ordinal);
     }
 }

@@ -38,14 +38,16 @@ function ConvertTo-SemanticModuleVersionParts([string]$VersionText) {
   $core = if ($prereleaseIndex -ge 0) { $value.Substring(0, $prereleaseIndex) } else { $value }
   $prerelease = if ($prereleaseIndex -ge 0) { $value.Substring($prereleaseIndex + 1) } else { '' }
   $coreParts = $core.Split('.')
-  if ($coreParts.Length -lt 2 -or $coreParts.Length -gt 3) { return $null }
+  if ($coreParts.Length -lt 2 -or $coreParts.Length -gt 4) { return $null }
 
   $major = 0
   $minor = 0
   $patch = 0
+  $revision = 0
   if (-not [int]::TryParse($coreParts[0], [ref]$major)) { return $null }
   if (-not [int]::TryParse($coreParts[1], [ref]$minor)) { return $null }
-  if ($coreParts.Length -eq 3 -and -not [int]::TryParse($coreParts[2], [ref]$patch)) { return $null }
+  if ($coreParts.Length -ge 3 -and -not [int]::TryParse($coreParts[2], [ref]$patch)) { return $null }
+  if ($coreParts.Length -eq 4 -and -not [int]::TryParse($coreParts[3], [ref]$revision)) { return $null }
 
   $prereleaseParts = @()
   if (-not [string]::IsNullOrWhiteSpace($prerelease)) {
@@ -56,6 +58,7 @@ function ConvertTo-SemanticModuleVersionParts([string]$VersionText) {
     Major = $major
     Minor = $minor
     Patch = $patch
+    Revision = $revision
     Prerelease = $prereleaseParts
   }
 }
@@ -114,6 +117,8 @@ function Compare-SemanticModuleVersion([string]$Left, [string]$Right) {
   $comparison = $leftVersion.Minor.CompareTo($rightVersion.Minor)
   if ($comparison -ne 0) { return $comparison }
   $comparison = $leftVersion.Patch.CompareTo($rightVersion.Patch)
+  if ($comparison -ne 0) { return $comparison }
+  $comparison = $leftVersion.Revision.CompareTo($rightVersion.Revision)
   if ($comparison -ne 0) { return $comparison }
 
   $leftStable = $leftVersion.Prerelease.Count -eq 0
