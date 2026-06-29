@@ -169,8 +169,12 @@ public static partial class WebSeoDoctor
             var title = NormalizeWhitespace(doc.Title);
             var description = GetMetaNameValue(doc, "description");
             var bodyText = GetVisibleBodyText(doc.Body);
+            var isGeneratedApiReferencePage = options.ApplyGeneratedApiReferenceSeoProfile &&
+                IsGeneratedApiReferencePage(relativePath, doc);
             var canonicalLinks = GetCanonicalLinks(doc);
-            var hreflangAlternates = GetHreflangAlternates(doc);
+            var hreflangAlternates = GetHreflangAlternates(
+                doc,
+                includeMalformedAlternateCandidates: options.RequireHreflang || isGeneratedApiReferencePage);
             var titleTagCount = doc.QuerySelectorAll("title").Count();
             var visibleH1Count = doc.QuerySelectorAll("h1")
                 .Count(heading => !IsElementHidden(heading));
@@ -187,8 +191,6 @@ public static partial class WebSeoDoctor
                 .Select(image => (image.GetAttribute("src") ?? string.Empty).Trim())
                 .Where(src => !string.IsNullOrWhiteSpace(src))
                 .ToArray();
-            var isGeneratedApiReferencePage = options.ApplyGeneratedApiReferenceSeoProfile &&
-                IsGeneratedApiReferencePage(relativePath, doc);
 
             if (options.CheckContentLeaks)
             {
@@ -759,19 +761,37 @@ public static partial class WebSeoDoctor
         }
     }
 
-    private static HreflangAlternateScan[] GetHreflangAlternates(AngleSharp.Dom.IDocument doc)
+    private static HreflangAlternateScan[] GetHreflangAlternates(
+        AngleSharp.Dom.IDocument doc,
+        bool includeMalformedAlternateCandidates = false)
     {
         if (doc.Head is null)
             return Array.Empty<HreflangAlternateScan>();
 
-        return doc.Head.QuerySelectorAll("link[rel][hreflang]")
+        return doc.Head.QuerySelectorAll("link[rel]")
             .Where(link => ContainsRelToken(link.GetAttribute("rel"), "alternate"))
+            .Where(link => link.HasAttribute("hreflang") ||
+                           (includeMalformedAlternateCandidates && IsLikelyHreflangAlternate(link)))
             .Select(link => new HreflangAlternateScan
             {
                 HrefLang = NormalizeWhitespace(link.GetAttribute("hreflang")).ToLowerInvariant(),
                 Href = NormalizeWhitespace(link.GetAttribute("href"))
             })
             .ToArray();
+    }
+
+    private static bool IsLikelyHreflangAlternate(AngleSharp.Dom.IElement link)
+    {
+        if (link.HasAttribute("type") ||
+            link.HasAttribute("media") ||
+            link.HasAttribute("title") ||
+            link.HasAttribute("sizes"))
+        {
+            return false;
+        }
+
+        var href = NormalizeWhitespace(link.GetAttribute("href"));
+        return !string.IsNullOrWhiteSpace(href);
     }
 
     private static void ValidateHreflang(
