@@ -605,6 +605,14 @@ function Add-SummaryRows {
                 ManagedLastPromotionLockWaitMs = $row.ManagedLastPromotionLockWaitMs
                 ManagedFirstPromotionMoveMs = $row.ManagedFirstPromotionMoveMs
                 ManagedLastPromotionMoveMs = $row.ManagedLastPromotionMoveMs
+                ManagedFirstPromotionFinalMoveMs = $row.ManagedFirstPromotionFinalMoveMs
+                ManagedLastPromotionFinalMoveMs = $row.ManagedLastPromotionFinalMoveMs
+                ManagedFirstPromotionBackupMoveMs = $row.ManagedFirstPromotionBackupMoveMs
+                ManagedLastPromotionBackupMoveMs = $row.ManagedLastPromotionBackupMoveMs
+                ManagedFirstPromotionBackupCleanupMs = $row.ManagedFirstPromotionBackupCleanupMs
+                ManagedLastPromotionBackupCleanupMs = $row.ManagedLastPromotionBackupCleanupMs
+                ManagedFirstPromotionOverwriteCount = $row.ManagedFirstPromotionOverwriteCount
+                ManagedLastPromotionOverwriteCount = $row.ManagedLastPromotionOverwriteCount
                 ManagedFirstDownloadBytes = $row.ManagedFirstDownloadBytes
                 ManagedLastDownloadBytes = $row.ManagedLastDownloadBytes
                 ManagedFirstCacheHits = $row.ManagedFirstCacheHits
@@ -631,6 +639,10 @@ function Add-SummaryRows {
                 ManagedLastSlowestMaterializedPackagePromotionMs = $row.ManagedLastSlowestMaterializedPackagePromotionMs
                 ManagedLastSlowestMaterializedPackagePromotionLockWaitMs = $row.ManagedLastSlowestMaterializedPackagePromotionLockWaitMs
                 ManagedLastSlowestMaterializedPackagePromotionMoveMs = $row.ManagedLastSlowestMaterializedPackagePromotionMoveMs
+                ManagedLastSlowestMaterializedPackagePromotionFinalMoveMs = $row.ManagedLastSlowestMaterializedPackagePromotionFinalMoveMs
+                ManagedLastSlowestMaterializedPackagePromotionBackupMoveMs = $row.ManagedLastSlowestMaterializedPackagePromotionBackupMoveMs
+                ManagedLastSlowestMaterializedPackagePromotionBackupCleanupMs = $row.ManagedLastSlowestMaterializedPackagePromotionBackupCleanupMs
+                ManagedLastSlowestMaterializedPackagePromotionHadExistingTarget = $row.ManagedLastSlowestMaterializedPackagePromotionHadExistingTarget
                 ManagedLastCriticalDependencyBranchName = $row.ManagedLastCriticalDependencyBranchName
                 ManagedLastCriticalDependencyBranchParent = $row.ManagedLastCriticalDependencyBranchParent
                 ManagedLastCriticalDependencyBranchMs = $row.ManagedLastCriticalDependencyBranchMs

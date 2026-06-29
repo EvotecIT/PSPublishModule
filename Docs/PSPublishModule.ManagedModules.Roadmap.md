@@ -554,6 +554,10 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Repair scope mismatch.
 - [x] Detect loaded-module conflict.
 
+### Current Benchmark Evidence
+
+- [x] 2026-06-29: Managed promotion timing now splits the old `PromotionMoveElapsed` bucket into final staged-directory move, existing-target backup move, rollback-backup cleanup, and overwrite count. A PowerShell 7 `Microsoft.Graph.Authentication` managed save smoke measured `895.72 ms` overall with `0.79 ms` final promotion move and no overwrite work. A PowerShell 7 forced save smoke measured `272.67 ms` overall with zero repository requests, one package/extraction cache hit, and `15.09 ms` total promotion move split into `0.88 ms` final move, `2.20 ms` backup move, and `12.01 ms` backup cleanup. A Windows PowerShell 5.1 no-op detail row serialized the same fields with zero promotion work. The full Graph warm-cache gate was attempted but stopped after it produced no detail artifacts for several minutes; retry it separately after this instrumentation commit so heavy-family timing is not mixed with a wedged harness run.
+
 ## Phase 11: Transition And Cleanup
 
 - [x] Remove unreleased private install/update wrappers and make managed commands the only module lifecycle surface.

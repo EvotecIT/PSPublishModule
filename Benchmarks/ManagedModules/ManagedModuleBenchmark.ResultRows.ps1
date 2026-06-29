@@ -49,6 +49,10 @@ function New-SkippedRow {
         ManagedTotalPromotionMilliseconds = 0
         ManagedTotalPromotionLockWaitMilliseconds = 0
         ManagedTotalPromotionMoveMilliseconds = 0
+        ManagedTotalPromotionBackupMoveMilliseconds = 0
+        ManagedTotalPromotionFinalMoveMilliseconds = 0
+        ManagedTotalPromotionBackupCleanupMilliseconds = 0
+        ManagedPromotionOverwriteCount = 0
         ManagedRepositoryRequestCount = 0
         ManagedPackageRepositoryRequestCount = 0
         ManagedPackageRepositoryRedirectCount = 0
@@ -75,6 +79,10 @@ function New-SkippedRow {
         ManagedSlowestMaterializedPackagePromotionMilliseconds = 0
         ManagedSlowestMaterializedPackagePromotionLockWaitMilliseconds = 0
         ManagedSlowestMaterializedPackagePromotionMoveMilliseconds = 0
+        ManagedSlowestMaterializedPackagePromotionBackupMoveMilliseconds = 0
+        ManagedSlowestMaterializedPackagePromotionFinalMoveMilliseconds = 0
+        ManagedSlowestMaterializedPackagePromotionBackupCleanupMilliseconds = 0
+        ManagedSlowestMaterializedPackagePromotionHadExistingTarget = $false
         ManagedMaintenanceActionCount = 0
         ManagedMaintenanceFindingCount = 0
         ImportStatus = ''

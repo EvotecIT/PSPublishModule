@@ -490,6 +490,10 @@ function Invoke-TimedOperation {
         ManagedTotalPromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionMilliseconds')
         ManagedTotalPromotionLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionLockWaitMilliseconds')
         ManagedTotalPromotionMoveMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionMoveMilliseconds')
+        ManagedTotalPromotionBackupMoveMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionBackupMoveMilliseconds')
+        ManagedTotalPromotionFinalMoveMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionFinalMoveMilliseconds')
+        ManagedTotalPromotionBackupCleanupMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionBackupCleanupMilliseconds')
+        ManagedPromotionOverwriteCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'PromotionOverwriteCount')
         ManagedRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalRepositoryRequestCount')
         ManagedPackageRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPackageRepositoryRequestCount')
         ManagedPackageRepositoryRedirectCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPackageRepositoryRedirectCount')
@@ -516,6 +520,10 @@ function Invoke-TimedOperation {
         ManagedSlowestMaterializedPackagePromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionMilliseconds')
         ManagedSlowestMaterializedPackagePromotionLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionLockWaitMilliseconds')
         ManagedSlowestMaterializedPackagePromotionMoveMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionMoveMilliseconds')
+        ManagedSlowestMaterializedPackagePromotionBackupMoveMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionBackupMoveMilliseconds')
+        ManagedSlowestMaterializedPackagePromotionFinalMoveMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionFinalMoveMilliseconds')
+        ManagedSlowestMaterializedPackagePromotionBackupCleanupMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionBackupCleanupMilliseconds')
+        ManagedSlowestMaterializedPackagePromotionHadExistingTarget = [bool] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionHadExistingTarget')
         ManagedCriticalDependencyBranchName = Get-DetailText -InputObject $detailSummary -Name 'CriticalDependencyBranchName'
         ManagedCriticalDependencyBranchParent = Get-DetailText -InputObject $detailSummary -Name 'CriticalDependencyBranchParent'
         ManagedCriticalDependencyBranchMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'CriticalDependencyBranchMilliseconds')

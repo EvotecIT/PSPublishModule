@@ -444,6 +444,10 @@ public sealed partial class ManagedModuleInstallService
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var promotionLockWaitElapsed = TimeSpan.Zero;
             var promotionMoveElapsed = TimeSpan.Zero;
+            var promotionBackupMoveElapsed = TimeSpan.Zero;
+            var promotionFinalMoveElapsed = TimeSpan.Zero;
+            var promotionBackupCleanupElapsed = TimeSpan.Zero;
+            var promotionHadExistingTarget = false;
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedPromotionLockWaitElapsed))
             {
                 promotionLockWaitElapsed = resolvedPromotionLockWaitElapsed;
@@ -463,10 +467,12 @@ public sealed partial class ManagedModuleInstallService
                         installLockWaitElapsed);
                 }
 
-                var promotionMoveStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                PromoteStagedModule(stageModulePath, modulePath);
-                promotionMoveStopwatch.Stop();
-                promotionMoveElapsed = promotionMoveStopwatch.Elapsed;
+                var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
+                promotionMoveElapsed = promotionResult.Elapsed;
+                promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
+                promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
+                promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
+                promotionHadExistingTarget = promotionResult.HadExistingTarget;
             }
 
             CleanupEmptyStage(stageRoot);
@@ -503,6 +509,10 @@ public sealed partial class ManagedModuleInstallService
                 PromotionElapsed = promotionStopwatch.Elapsed,
                 PromotionLockWaitElapsed = promotionLockWaitElapsed,
                 PromotionMoveElapsed = promotionMoveElapsed,
+                PromotionHadExistingTarget = promotionHadExistingTarget,
+                PromotionBackupMoveElapsed = promotionBackupMoveElapsed,
+                PromotionFinalMoveElapsed = promotionFinalMoveElapsed,
+                PromotionBackupCleanupElapsed = promotionBackupCleanupElapsed,
                 RepositoryRequestCount = requestScope.Count,
                 PackageRepositoryRequestCount = packageRepositoryRequestCount,
                 PackageRepositoryRedirectCount = packageRepositoryRedirectCount,
@@ -699,53 +709,4 @@ public sealed partial class ManagedModuleInstallService
 #endif
     }
 
-    private static void CleanupEmptyStage(string stageRoot)
-    {
-        if (!Directory.Exists(stageRoot))
-            return;
-
-        foreach (var directory in Directory.EnumerateDirectories(stageRoot, "*", SearchOption.AllDirectories)
-                     .OrderByDescending(static path => path.Length))
-        {
-            if (!Directory.EnumerateFileSystemEntries(directory).Any())
-                Directory.Delete(directory);
-        }
-    }
-
-    private static void PromoteStagedModule(string stageModulePath, string modulePath)
-    {
-        var backupPath = default(string);
-        try
-        {
-            if (Directory.Exists(modulePath))
-            {
-                backupPath = Path.Combine(Path.GetTempPath(), "PFMM.B", NewShortId());
-                Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
-                Directory.Move(modulePath, backupPath);
-            }
-
-            Directory.Move(stageModulePath, modulePath);
-            if (backupPath is not null && Directory.Exists(backupPath))
-                Directory.Delete(backupPath, recursive: true);
-        }
-        catch
-        {
-            RestoreBackup(modulePath, backupPath);
-            throw;
-        }
-    }
-
-    private static void RestoreBackup(string modulePath, string? backupPath)
-    {
-        if (backupPath is null || !Directory.Exists(backupPath))
-            return;
-
-        if (Directory.Exists(modulePath))
-            Directory.Delete(modulePath, recursive: true);
-
-        Directory.Move(backupPath, modulePath);
-    }
-
-    private static string NewShortId()
-        => Guid.NewGuid().ToString("N").Substring(0, 16);
 }

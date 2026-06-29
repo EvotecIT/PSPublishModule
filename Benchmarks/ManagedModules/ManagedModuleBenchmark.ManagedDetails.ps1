@@ -107,6 +107,26 @@ function Add-ManagedInstallDetail {
     } else {
         0
     }
+    $promotionBackupMoveMilliseconds = if ($null -ne $Result.PSObject.Properties['PromotionBackupMoveElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.PromotionBackupMoveElapsed
+    } else {
+        0
+    }
+    $promotionFinalMoveMilliseconds = if ($null -ne $Result.PSObject.Properties['PromotionFinalMoveElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.PromotionFinalMoveElapsed
+    } else {
+        $promotionMoveMilliseconds
+    }
+    $promotionBackupCleanupMilliseconds = if ($null -ne $Result.PSObject.Properties['PromotionBackupCleanupElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.PromotionBackupCleanupElapsed
+    } else {
+        0
+    }
+    $promotionHadExistingTarget = if ($null -ne $Result.PSObject.Properties['PromotionHadExistingTarget']) {
+        [bool] $Result.PromotionHadExistingTarget
+    } else {
+        $false
+    }
     $installLockWaitMilliseconds = if ($null -ne $Result.PSObject.Properties['InstallLockWaitElapsed']) {
         ConvertTo-Milliseconds -TimeSpan $Result.InstallLockWaitElapsed
     } else {
@@ -150,6 +170,10 @@ function Add-ManagedInstallDetail {
         PromotionMilliseconds = $promotionMilliseconds
         PromotionLockWaitMilliseconds = $promotionLockWaitMilliseconds
         PromotionMoveMilliseconds = $promotionMoveMilliseconds
+        PromotionBackupMoveMilliseconds = $promotionBackupMoveMilliseconds
+        PromotionFinalMoveMilliseconds = $promotionFinalMoveMilliseconds
+        PromotionBackupCleanupMilliseconds = $promotionBackupCleanupMilliseconds
+        PromotionHadExistingTarget = $promotionHadExistingTarget
         InstallLockWaitMilliseconds = $installLockWaitMilliseconds
         CoalescedWaitMilliseconds = $coalescedWaitMilliseconds
         RepositoryRequestCount = [long] $Result.RepositoryRequestCount
@@ -208,6 +232,12 @@ function Write-ManagedInstallDetail {
         $packages |
             Where-Object {
                 [double] $_.InstallLockWaitMilliseconds -gt 0
+            }
+    )
+    $promotionOverwrites = @(
+        $packages |
+            Where-Object {
+                [bool] $_.PromotionHadExistingTarget
             }
     )
     $slowestCoalescedWait = @(
@@ -312,6 +342,10 @@ function Write-ManagedInstallDetail {
         TotalPromotionMilliseconds = [math]::Round((($packages | Measure-Object PromotionMilliseconds -Sum).Sum), 2)
         TotalPromotionLockWaitMilliseconds = [math]::Round((($packages | Measure-Object PromotionLockWaitMilliseconds -Sum).Sum), 2)
         TotalPromotionMoveMilliseconds = [math]::Round((($packages | Measure-Object PromotionMoveMilliseconds -Sum).Sum), 2)
+        TotalPromotionBackupMoveMilliseconds = [math]::Round((($packages | Measure-Object PromotionBackupMoveMilliseconds -Sum).Sum), 2)
+        TotalPromotionFinalMoveMilliseconds = [math]::Round((($packages | Measure-Object PromotionFinalMoveMilliseconds -Sum).Sum), 2)
+        TotalPromotionBackupCleanupMilliseconds = [math]::Round((($packages | Measure-Object PromotionBackupCleanupMilliseconds -Sum).Sum), 2)
+        PromotionOverwriteCount = $promotionOverwrites.Count
         TotalRepositoryRequestCount = [long] $Result.RepositoryRequestCount
         TotalPackageRepositoryRequestCount = [long] (($packages | Measure-Object PackageRepositoryRequestCount -Sum).Sum)
         TotalPackageRepositoryRedirectCount = [long] (($packages | Measure-Object PackageRepositoryRedirectCount -Sum).Sum)
@@ -341,6 +375,10 @@ function Write-ManagedInstallDetail {
         SlowestMaterializedPackagePromotionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionMilliseconds } else { 0.0 }
         SlowestMaterializedPackagePromotionLockWaitMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionLockWaitMilliseconds } else { 0.0 }
         SlowestMaterializedPackagePromotionMoveMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionMoveMilliseconds } else { 0.0 }
+        SlowestMaterializedPackagePromotionBackupMoveMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionBackupMoveMilliseconds } else { 0.0 }
+        SlowestMaterializedPackagePromotionFinalMoveMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionFinalMoveMilliseconds } else { 0.0 }
+        SlowestMaterializedPackagePromotionBackupCleanupMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionBackupCleanupMilliseconds } else { 0.0 }
+        SlowestMaterializedPackagePromotionHadExistingTarget = if ($slowestMaterializedPackage.Count) { [bool] $slowestMaterializedPackage[0].PromotionHadExistingTarget } else { $false }
         CriticalDependencyBranchName = if ($criticalDependencyBranch.Count) { [string] $criticalDependencyBranch[0].Name } else { '' }
         CriticalDependencyBranchParent = if ($criticalDependencyBranch.Count) { [string] $criticalDependencyBranch[0].Parent } else { '' }
         CriticalDependencyBranchMilliseconds = $criticalDependencyBranchMilliseconds
