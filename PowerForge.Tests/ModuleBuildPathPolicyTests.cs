@@ -70,6 +70,16 @@ public sealed class ModuleBuildPathPolicyTests
         Assert.Equal(expected, matched);
     }
 
+    [Fact]
+    public void SamePathSegment_uses_platform_path_case_semantics()
+    {
+        var expected = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
+        var matched = ModuleBuildPathPolicy.SamePathSegment("Module", "module");
+
+        Assert.Equal(expected, matched);
+    }
+
     private static string NormalizeForJson(string path)
         => path.Replace('\\', '/');
 }

@@ -184,6 +184,9 @@ internal static class ModuleBuildPathPolicy
         return candidateWithSeparator.StartsWith(rootWithSeparator, PathStringComparison);
     }
 
+    internal static bool SamePathSegment(string left, string right)
+        => string.Equals(left, right, PathStringComparison);
+
     private static StringComparison PathStringComparison
         => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? StringComparison.OrdinalIgnoreCase

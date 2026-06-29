@@ -61,6 +61,8 @@ public sealed class ModuleBuildPreparationServiceTests
         {
             var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
             var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            MarkRepositoryRoot(root.FullName);
+            File.WriteAllText(Path.Combine(scriptRoot.FullName, "Build-Module.ps1"), string.Empty);
             Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
             Directory.CreateDirectory(Path.Combine(root.FullName, "Build", "Templates"));
             Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Examples"));
@@ -79,7 +81,7 @@ $projectOptions = [System.Collections.Generic.Dictionary[string,object]]::new()
 $projectOptions['OutputPath'] = 'Artefacts/ProjectBuild/options'
 $projectOptions['PlanOutputPath'] = 'Build/project-options-plan.json'
 $packageOptions = [System.Collections.Generic.Dictionary[string,object]]::new()
-$packageOptions['OutputPath'] = 'Artefacts/PackageBuild/options'
+$packageOptions['outputPath'] = 'Module/Artefacts/PackageBuild/options'
 $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 [PowerForge.ConfigurationBuildLibrariesSegment]@{
     BuildLibraries = [PowerForge.BuildLibrariesConfiguration]@{
@@ -317,7 +319,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal("Build/nuget.key", packageBuild.Configuration.PublishApiKeyFilePath);
                 Assert.Equal("Build/nuget.secret", packageBuild.Configuration.NugetCredentialSecretFilePath);
                 Assert.Equal("Build/github.token", packageBuild.Configuration.GitHubAccessTokenFilePath);
-                Assert.Equal("Artefacts/PackageBuild/options", packageBuild.Configuration.Options!["OutputPath"]);
+                Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "PackageBuild", "options"), packageBuild.Configuration.Options!["outputPath"]);
                 Assert.Equal("Build/package-options-plan.json", packageBuild.Configuration.Options["PlanOutputPath"]);
 
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed", "RequiredModules"), artefact.Configuration.RequiredModules.Path);
@@ -386,6 +388,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         {
             var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
             var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            MarkRepositoryRoot(root.FullName);
+            File.WriteAllText(Path.Combine(scriptRoot.FullName, "Build-Module.ps1"), string.Empty);
             var moduleProject = Path.Combine(moduleRoot.FullName, "Sources", "Foo", "Foo.csproj");
             Directory.CreateDirectory(Path.GetDirectoryName(moduleProject)!);
             File.WriteAllText(moduleProject, "<Project />");
@@ -421,6 +425,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         {
             var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
             var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            MarkRepositoryRoot(root.FullName);
+            File.WriteAllText(Path.Combine(scriptRoot.FullName, "Build-Module.ps1"), string.Empty);
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "SampleModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
             var resolvedJsonPath = Path.Combine(root.FullName, "ResolvedFromPSDrive", "powerforge.json");
 
@@ -441,6 +447,45 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             });
 
             Assert.Equal(resolvedJsonPath, prepared.JsonOutputPath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_from_standalone_module_folder_keeps_workspace_paths_under_module()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-standalone-module-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            File.WriteAllText(Path.Combine(scriptRoot.FullName, "Build-Module.ps1"), string.Empty);
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "SampleModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Modern",
+                ModuleName = "SampleModule",
+                CurrentPath = moduleRoot.FullName,
+                ScriptRoot = scriptRoot.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(moduleRoot.FullName, path)),
+                StagingPath = "Artefacts/Staging",
+                DiagnosticsBinaryConflictSearchRoot = new[] { "Modules" },
+                InstallRootsWasBound = true,
+                InstallRoots = new[] { "Artefacts/Modules" },
+                DotNetFramework = Array.Empty<string>(),
+                ExcludeDirectories = Array.Empty<string>(),
+                ExcludeFiles = Array.Empty<string>()
+            });
+
+            Assert.Equal(moduleRoot.FullName, prepared.ProjectRoot);
+            Assert.Equal(Path.Combine(moduleRoot.FullName, "Artefacts", "Staging"), prepared.PipelineSpec.Build.StagingPath);
+            Assert.Equal(new[] { Path.Combine(moduleRoot.FullName, "Modules") }, prepared.PipelineSpec.Build.BinaryConflictSearchRoots);
+            Assert.Equal(new[] { Path.Combine(moduleRoot.FullName, "Artefacts", "Modules") }, prepared.PipelineSpec.Install.Roots);
         }
         finally
         {
@@ -642,6 +687,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         {
             var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
             var buildRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            MarkRepositoryRoot(root.FullName);
             File.WriteAllText(Path.Combine(buildRoot.FullName, "Build-Module.ps1"), string.Empty);
             var jsonPath = Path.Combine(root.FullName, "Build", "powerforge.json");
             var externalRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "External-" + Guid.NewGuid().ToString("N"));
@@ -693,6 +739,13 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                             FilePath = Path.Combine(root.FullName, "Build", "Test-ReleaseReady.ps1"),
                             WorkingDirectory = Path.Combine(root.FullName, "Build")
                         }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            StageRoot = Path.Combine(root.FullName, "Artefacts", "UploadReady", "<ModuleVersion>")
+                        }
                     }
                 }
             };
@@ -709,6 +762,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains($"\"ApiKeyFilePath\": \"{externalPublishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"FilePath\": \"../Build/Test-ReleaseReady.ps1\"", json, StringComparison.Ordinal);
             Assert.Contains("\"WorkingDirectory\": \"../Build\"", json, StringComparison.Ordinal);
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            var release = Assert.IsType<ConfigurationReleaseSegment>(Assert.Single(jsonSpec!.Segments.OfType<ConfigurationReleaseSegment>()));
+            Assert.Equal("../Artefacts/UploadReady/<ModuleVersion>", release.Configuration.StageRoot);
         }
         finally
         {
@@ -1057,7 +1113,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                             GitHubAccessTokenFilePath = packageGitHubToken,
                             Options = new Dictionary<string, object?>
                             {
-                                ["OutputPath"] = packageOptionsOutputPath,
+                                ["outputPath"] = packageOptionsOutputPath,
                                 ["PlanOutputPath"] = externalPackageOutputPath,
                                 ["PublishApiKeyFilePath"] = packageOptionsCredentialPath
                             }
@@ -1199,7 +1255,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"PlanOutputPath\": \"Artifacts/Packages/plan.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputPath\": \"../Artifacts/ProjectBuild/options\"", json, StringComparison.Ordinal);
             Assert.Contains("\"PlanOutputPath\": \"project-options-plan.json\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"OutputPath\": \"Artifacts/PackageBuild/options\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"outputPath\": \"Artifacts/PackageBuild/options\"", json, StringComparison.Ordinal);
             Assert.Contains($"\"PlanOutputPath\": \"{externalPackageOutputPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains($"\"PublishApiKeyFilePath\": \"{packagePublishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains($"\"NugetCredentialSecretFilePath\": \"{packageCredentialSecret.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
@@ -1259,7 +1315,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal(packagePublishKey, packageBuild.Configuration.PublishApiKeyFilePath);
             Assert.Equal(packageCredentialSecret, packageBuild.Configuration.NugetCredentialSecretFilePath);
             Assert.Equal(packageGitHubToken, packageBuild.Configuration.GitHubAccessTokenFilePath);
-            Assert.Equal(packageOptionsOutputPath, packageBuild.Configuration.Options!["OutputPath"]);
+            Assert.Equal(packageOptionsOutputPath, packageBuild.Configuration.Options!["outputPath"]);
             Assert.Equal(externalPackageOutputPath.Replace('\\', '/'), packageBuild.Configuration.Options["PlanOutputPath"]);
             Assert.Equal(packageOptionsCredentialPath.Replace('\\', '/'), packageBuild.Configuration.Options["PublishApiKeyFilePath"]);
             Assert.Equal(artefactRoot, artefact.Configuration.Path);
@@ -1706,6 +1762,9 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         options.Converters.Add(new ConfigurationSegmentJsonConverter());
         return options;
     }
+
+    private static void MarkRepositoryRoot(string rootPath)
+        => Directory.CreateDirectory(Path.Combine(rootPath, ".git"));
 
     private static void ResolvePipelineSpecPathsLikeCli(ModulePipelineSpec spec, string configFullPath)
     {

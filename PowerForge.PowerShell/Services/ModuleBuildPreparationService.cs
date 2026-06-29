@@ -394,14 +394,10 @@ internal sealed class ModuleBuildPreparationService
 
         var scriptDirectory = new DirectoryInfo(Path.GetFullPath(scriptRoot!));
         var moduleDirectory = new DirectoryInfo(Path.GetFullPath(projectRoot));
-        if (!string.Equals(scriptDirectory.Name, "Build", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(moduleDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) ||
-            moduleDirectory.Parent is null)
-        {
-            return projectRoot;
-        }
-
-        return moduleDirectory.Parent.FullName;
+        return string.Equals(scriptDirectory.Name, "Build", StringComparison.OrdinalIgnoreCase) &&
+               UsesRepositoryModuleLayout(moduleDirectory)
+            ? moduleDirectory.Parent!.FullName
+            : projectRoot;
     }
 
     private static void ResolveWorkspaceRelativeSegmentPaths(
@@ -494,9 +490,8 @@ internal sealed class ModuleBuildPreparationService
             return false;
 
         var projectDirectory = new DirectoryInfo(Path.GetFullPath(projectRoot));
-        return string.Equals(projectDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) &&
-               projectDirectory.Parent is not null &&
-               SamePath(workspaceRoot, projectDirectory.Parent.FullName);
+        return UsesRepositoryModuleLayout(projectDirectory) &&
+               SamePath(workspaceRoot, projectDirectory.Parent!.FullName);
     }
 
     private static void ResolveWorkspaceRelativeArtefactPaths(ArtefactConfiguration configuration, string workspaceRoot, string projectRoot)
@@ -627,7 +622,7 @@ internal sealed class ModuleBuildPreparationService
         if (options is null || options.Count == 0)
             return;
 
-        foreach (var optionName in PackageBuildOptionPathNames)
+        foreach (var optionName in GetPackageBuildOptionPathKeys(options))
         {
             if (!options.TryGetValue(optionName, out var value))
                 continue;
@@ -649,7 +644,7 @@ internal sealed class ModuleBuildPreparationService
         if (options is null || options.Count == 0)
             return;
 
-        foreach (var optionName in PackageBuildOptionPathNames)
+        foreach (var optionName in GetPackageBuildOptionPathKeys(options))
         {
             if (!options.TryGetValue(optionName, out var value))
                 continue;
@@ -710,7 +705,7 @@ internal sealed class ModuleBuildPreparationService
             return false;
 
         var firstSegment = GetFirstPathSegment(path);
-        return string.Equals(firstSegment, segment, StringComparison.OrdinalIgnoreCase);
+        return ModuleBuildPathPolicy.SamePathSegment(firstSegment, segment);
     }
 
     private static string GetFirstPathSegment(string path)
@@ -894,7 +889,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null || string.IsNullOrWhiteSpace(cfg.StageRoot)) continue;
-            cfg.StageRoot = MakeReleaseStageRootPathForJson(projectRoot, cfg.StageRoot!);
+            cfg.StageRoot = MakeReleaseStageRootPathForJson(projectRoot, workspaceRoot, cfg.StageRoot!);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationPublishSegment>() ?? Enumerable.Empty<ConfigurationPublishSegment>())
@@ -935,7 +930,12 @@ internal sealed class ModuleBuildPreparationService
     private static bool UsesRepositoryModuleLayout(DirectoryInfo projectDirectory)
         => string.Equals(projectDirectory.Name, "Module", StringComparison.OrdinalIgnoreCase) &&
            projectDirectory.Parent is not null &&
+           HasRepositoryRootMarker(projectDirectory.Parent.FullName) &&
            File.Exists(Path.Combine(projectDirectory.FullName, "Build", "Build-Module.ps1"));
+
+    private static bool HasRepositoryRootMarker(string directory)
+        => File.Exists(Path.Combine(directory, ".git")) ||
+           Directory.Exists(Path.Combine(directory, ".git"));
 
     private static string? MakeArtefactLayoutPathForJson(string projectRoot, string workspaceRoot, string? artefactPath, string? layoutPath)
     {
@@ -955,9 +955,9 @@ internal sealed class ModuleBuildPreparationService
             : NormalizePathSeparators(layoutPath!);
     }
 
-    private static string MakeReleaseStageRootPathForJson(string projectRoot, string stageRoot)
+    private static string MakeReleaseStageRootPathForJson(string projectRoot, string workspaceRoot, string stageRoot)
         => ContainsPathToken(stageRoot)
-            ? MakeRelativeForProjectRoot(projectRoot, stageRoot) ?? NormalizePathSeparators(stageRoot)
+            ? MakeRelativeForProjectRoot(projectRoot, stageRoot, preserveExternalRooted: true, workspaceRoot) ?? NormalizePathSeparators(stageRoot)
             : MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, stageRoot));
 
     private static void MakeCopyMappingSourcesRelative(ArtefactCopyMapping[]? mappings, string projectRoot, string workspaceRoot)
@@ -988,7 +988,7 @@ internal sealed class ModuleBuildPreparationService
         if (options is null || options.Count == 0)
             return;
 
-        foreach (var optionName in PackageBuildOptionPathNames)
+        foreach (var optionName in GetPackageBuildOptionPathKeys(options))
         {
             if (!options.TryGetValue(optionName, out var value))
                 continue;
@@ -1000,6 +1000,11 @@ internal sealed class ModuleBuildPreparationService
             options[optionName] = MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted: true, workspaceRoot);
         }
     }
+
+    private static string[] GetPackageBuildOptionPathKeys(Dictionary<string, object?> options)
+        => options.Keys
+            .Where(key => PackageBuildOptionPathNames.Contains(key))
+            .ToArray();
 
     private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths, bool preserveExternalRooted = false)
         => ModuleBuildPathPolicy.MakePathsRelativeForProjectRoot(projectRoot, paths, preserveExternalRooted);
