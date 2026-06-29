@@ -18,6 +18,8 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedMs = '1000'
                     ManagedRank = '1'
                     ManagedVsFastest = '1x'
+                    ManagedOutputBytes = '10485760'
+                    ManagedOutputFileCount = '20'
                     ManagedRootElapsedMs = '900'
                     ManagedHarnessOverheadMs = '100'
                     ManagedRootDependencyMs = '0'
@@ -67,6 +69,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastDownloadMs = '0'
                     ManagedLastExtractionMs = '300'
                     ManagedLastPromotionMs = '40'
+                    ManagedLastPromotionMoveMs = '25'
                 }
             )
 
@@ -120,6 +123,14 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(0.0, NumericProperty(row, "LastDownloadMs"));
         Assert.Equal(300.0, NumericProperty(row, "LastExtractionMs"));
         Assert.Equal(40.0, NumericProperty(row, "LastPromotionMs"));
+        Assert.Equal(25.0, NumericProperty(row, "LastPromotionMoveMs"));
+        Assert.Equal(325.0, NumericProperty(row, "LastMaterializationMs"));
+        Assert.Equal(30.77, NumericProperty(row, "LastMaterializationMBPerSecond"));
+        Assert.Equal(61.54, NumericProperty(row, "LastMaterializationFilesPerSecond"));
+        Assert.Equal("Extraction", Property(row, "LastMaterializationDominantPhase"));
+        Assert.Equal("Materialization", Property(row, "LastWarmOptimizationLane"));
+        Assert.Equal(325.0, NumericProperty(row, "LastWarmOptimizationLaneMs"));
+        Assert.Contains("materialization", Property(row, "LastWarmOptimizationQuestion"), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Extraction", Property(row, "LastBottleneck"));
         Assert.Equal(300.0, NumericProperty(row, "LastBottleneckMs"));
         Assert.Equal("60%", Property(row, "LastBottleneckShare"));
@@ -141,6 +152,8 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedMs = '4000'
                     ManagedRank = '1'
                     ManagedVsFastest = '1x'
+                    ManagedOutputBytes = '623902720'
+                    ManagedOutputFileCount = '2800'
                     ManagedRootElapsedMs = '3900'
                     ManagedHarnessOverheadMs = '100'
                     ManagedRootDependencyMs = '3500'
@@ -161,6 +174,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastDownloadMs = '0'
                     ManagedLastExtractionMs = '600'
                     ManagedLastPromotionMs = '100'
+                    ManagedLastPromotionMoveMs = '75'
                     ManagedSlowestDependencyPackageMs = '900'
                     ManagedLastSlowestDependencyPackageName = 'Az.Advisor'
                     ManagedLastSlowestDependencyPackageParent = 'Az'
@@ -179,6 +193,11 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal("Dependency", Property(row, "LastBottleneck"));
         Assert.Equal(4600.0, NumericProperty(row, "DependencyMs"));
         Assert.Equal(4200.0, NumericProperty(row, "LastDependencyMs"));
+        Assert.Equal(675.0, NumericProperty(row, "LastMaterializationMs"));
+        Assert.Equal("Extraction", Property(row, "LastMaterializationDominantPhase"));
+        Assert.Equal("Dependency", Property(row, "LastWarmOptimizationLane"));
+        Assert.Equal(4200.0, NumericProperty(row, "LastWarmOptimizationLaneMs"));
+        Assert.Contains("dependency", Property(row, "LastWarmOptimizationQuestion"), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Az.Advisor", Property(row, "LastSlowestDependencyPackage"));
         Assert.Equal("Az", Property(row, "LastSlowestDependencyPackageParent"));
         Assert.Equal(800.0, NumericProperty(row, "LastSlowestDependencyPackageMs"));

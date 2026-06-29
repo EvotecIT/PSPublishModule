@@ -93,6 +93,12 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastMs = '4815.85'
                     LastBottleneck = 'RootDependency'
                     LastBottleneckMs = '3966.4'
+                    LastWarmOptimizationLane = 'Dependency'
+                    LastWarmOptimizationLaneMs = '1400'
+                    LastMaterializationMs = '700'
+                    LastMaterializationMBPerSecond = '120'
+                    LastMaterializationDominantPhase = 'Extraction'
+                    LastWarmOptimizationQuestion = 'Can shared dependency pre-warming, fan-out ordering, or dependency graph planning shrink nested dependency waits?'
                     LastDependencyMs = '1400'
                     LastSlowestDependencyPackage = 'Microsoft.Graph.Authentication'
                     LastSlowestDependencyPackageParent = 'Microsoft.Graph.Users'
@@ -116,6 +122,12 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastMs = '1944.07'
                     LastBottleneck = 'Extraction'
                     LastBottleneckMs = '1100'
+                    LastWarmOptimizationLane = 'Materialization'
+                    LastWarmOptimizationLaneMs = '1250'
+                    LastMaterializationMs = '1250'
+                    LastMaterializationMBPerSecond = '340'
+                    LastMaterializationDominantPhase = 'PromotionMove'
+                    LastWarmOptimizationQuestion = 'Can warm-cache materialization reduce extraction-cache copy, path creation, or promotion moves?'
                     LastDependencyMs = '250'
                     LastSlowestDependencyPackage = 'Microsoft.Graph.Authentication'
                     LastSlowestDependencyPackageParent = 'Microsoft.Graph.Teams'
@@ -149,11 +161,14 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("1.67x", markdown, StringComparison.Ordinal);
         Assert.Contains("## Optimization Targets", markdown, StringComparison.Ordinal);
         Assert.Contains("Use these rows to decide where the next managed-engine optimization should start.", markdown, StringComparison.Ordinal);
+        Assert.Contains("LastWarmOptimizationLane", markdown, StringComparison.Ordinal);
+        Assert.Contains("LastMaterializationMs", markdown, StringComparison.Ordinal);
+        Assert.Contains("PromotionMove", markdown, StringComparison.Ordinal);
         Assert.Contains("LastSlowestDependencyPackage", markdown, StringComparison.Ordinal);
         Assert.Contains("Microsoft.Graph.Authentication", markdown, StringComparison.Ordinal);
         Assert.Contains("LastCoalescedWaitMs", markdown, StringComparison.Ordinal);
         Assert.Contains("Microsoft.Graph.Teams", markdown, StringComparison.Ordinal);
-        Assert.Contains("Can archive extraction, path creation, or file writes be reduced safely?", markdown, StringComparison.Ordinal);
+        Assert.Contains("Can warm-cache materialization reduce extraction-cache copy, path creation, or promotion moves?", markdown, StringComparison.Ordinal);
     }
 
     [Fact]

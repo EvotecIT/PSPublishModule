@@ -36,7 +36,9 @@ function Get-ManagedPhaseQuestion {
         'Dependency' { 'Can shared dependency pre-warming, fan-out ordering, or dependency graph planning shrink nested dependency waits?' }
         'Download' { 'Can package download throughput, source selection, caching, or request coalescing improve this lane?' }
         'Extraction' { 'Can archive extraction, path creation, or file writes be reduced safely?' }
+        'Materialization' { 'Can warm-cache materialization reduce extraction-cache copy, path creation, or promotion moves?' }
         'Promotion' { 'Can final move, overwrite, or receipt writes be reduced without weakening rollback?' }
+        'PromotionMove' { 'Can final filesystem moves be shortened without weakening rollback or receipts?' }
         'InstallLock' { 'Can per-module lock serialization or duplicate dependency scheduling be reduced without weakening concurrent install safety?' }
         'HarnessOverhead' { 'Is the benchmark dominated by child-host startup, module import, or measurement wrapper work?' }
         default { 'Add managed detail instrumentation before optimizing this row.' }
@@ -73,6 +75,43 @@ function Get-ManagedBenchmarkBottleneck {
     }
 }
 
+function Get-ManagedWarmOptimizationLane {
+    param(
+        [double] $DependencyMilliseconds,
+        [double] $DownloadMilliseconds,
+        [double] $ExtractionMilliseconds,
+        [double] $PromotionMoveMilliseconds,
+        [double] $InstallLockWaitMilliseconds
+    )
+
+    $materializationMilliseconds = $ExtractionMilliseconds + $PromotionMoveMilliseconds
+    $materializationDominantPhase = if ($PromotionMoveMilliseconds -gt $ExtractionMilliseconds) {
+        'PromotionMove'
+    } elseif ($ExtractionMilliseconds -gt 0) {
+        'Extraction'
+    } else {
+        ''
+    }
+
+    $phases = @(
+        [pscustomobject]@{ Name = 'Dependency'; Milliseconds = $DependencyMilliseconds }
+        [pscustomobject]@{ Name = 'Materialization'; Milliseconds = $materializationMilliseconds }
+        [pscustomobject]@{ Name = 'Download'; Milliseconds = $DownloadMilliseconds }
+        [pscustomobject]@{ Name = 'InstallLock'; Milliseconds = $InstallLockWaitMilliseconds }
+    )
+    $lane = @($phases | Sort-Object Milliseconds -Descending | Select-Object -First 1)
+    $laneName = if ($lane.Count -and [double] $lane[0].Milliseconds -gt 0) { [string] $lane[0].Name } else { 'Uninstrumented' }
+    $laneMs = if ($lane.Count) { [double] $lane[0].Milliseconds } else { 0.0 }
+
+    [pscustomobject]@{
+        Name = $laneName
+        Milliseconds = $laneMs
+        Question = Get-ManagedPhaseQuestion -Name $laneName
+        MaterializationMilliseconds = $materializationMilliseconds
+        MaterializationDominantPhase = $materializationDominantPhase
+    }
+}
+
 function New-ManagedOptimizationTarget {
     param([object[]] $Rows)
 
@@ -98,6 +137,17 @@ function New-ManagedOptimizationTarget {
             [pscustomobject]@{ Name = 'InstallLock'; Milliseconds = if ($row.PSObject.Properties['ManagedLastInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastInstallLockWaitMs } else { 0.0 } }
         )
         $lastBottleneck = Get-ManagedBenchmarkBottleneck -ManagedMilliseconds $lastMs -Phases $lastPhases
+        $lastDependencyMs = if ($row.PSObject.Properties['ManagedLastDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyMs } else { 0.0 }
+        $lastDownloadMs = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 }
+        $lastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
+        $lastPromotionMoveMs = if ($row.PSObject.Properties['ManagedLastPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMoveMs } else { 0.0 }
+        $lastInstallLockWaitMs = if ($row.PSObject.Properties['ManagedLastInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastInstallLockWaitMs } else { 0.0 }
+        $lastWarmLane = Get-ManagedWarmOptimizationLane `
+            -DependencyMilliseconds $lastDependencyMs `
+            -DownloadMilliseconds $lastDownloadMs `
+            -ExtractionMilliseconds $lastExtractionMs `
+            -PromotionMoveMilliseconds $lastPromotionMoveMs `
+            -InstallLockWaitMilliseconds $lastInstallLockWaitMs
         $rootElapsedMs = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootElapsedMs
         $repositoryRequests = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRepositoryRequests
         $packageRequests = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageRepositoryRequests
@@ -116,6 +166,17 @@ function New-ManagedOptimizationTarget {
         }
         $outputFilesPerSecond = if ($managedMs -gt 0 -and $outputFiles -gt 0) {
             [math]::Round($outputFiles / ($managedMs / 1000.0), 2)
+        } else {
+            0.0
+        }
+        $lastMaterializationMs = [double] $lastWarmLane.MaterializationMilliseconds
+        $lastMaterializationMbPerSecond = if ($lastMaterializationMs -gt 0 -and $outputBytes -gt 0) {
+            [math]::Round(($outputBytes / 1MB) / ($lastMaterializationMs / 1000.0), 2)
+        } else {
+            0.0
+        }
+        $lastMaterializationFilesPerSecond = if ($lastMaterializationMs -gt 0 -and $outputFiles -gt 0) {
+            [math]::Round($outputFiles / ($lastMaterializationMs / 1000.0), 2)
         } else {
             0.0
         }
@@ -188,14 +249,21 @@ function New-ManagedOptimizationTarget {
             LastSlowestMaterializedPackagePromotionLockWaitMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackagePromotionLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackagePromotionLockWaitMs } else { 0.0 }
             LastSlowestMaterializedPackagePromotionMoveMs = if ($row.PSObject.Properties['ManagedLastSlowestMaterializedPackagePromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastSlowestMaterializedPackagePromotionMoveMs } else { 0.0 }
             LastRootDependencyMs = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 }
-            LastDependencyMs = if ($row.PSObject.Properties['ManagedLastDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyMs } else { 0.0 }
-            LastDownloadMs = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 }
-            LastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
+            LastDependencyMs = $lastDependencyMs
+            LastDownloadMs = $lastDownloadMs
+            LastExtractionMs = $lastExtractionMs
             LastPromotionMs = if ($row.PSObject.Properties['ManagedLastPromotionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMs } else { 0.0 }
             PromotionLockWaitMs = if ($row.PSObject.Properties['ManagedPromotionLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPromotionLockWaitMs } else { 0.0 }
             PromotionMoveMs = if ($row.PSObject.Properties['ManagedPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPromotionMoveMs } else { 0.0 }
             LastPromotionLockWaitMs = if ($row.PSObject.Properties['ManagedLastPromotionLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionLockWaitMs } else { 0.0 }
-            LastPromotionMoveMs = if ($row.PSObject.Properties['ManagedLastPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMoveMs } else { 0.0 }
+            LastPromotionMoveMs = $lastPromotionMoveMs
+            LastMaterializationMs = [math]::Round($lastMaterializationMs, 2)
+            LastMaterializationMBPerSecond = $lastMaterializationMbPerSecond
+            LastMaterializationFilesPerSecond = $lastMaterializationFilesPerSecond
+            LastMaterializationDominantPhase = [string] $lastWarmLane.MaterializationDominantPhase
+            LastWarmOptimizationLane = [string] $lastWarmLane.Name
+            LastWarmOptimizationLaneMs = [math]::Round([double] $lastWarmLane.Milliseconds, 2)
+            LastWarmOptimizationQuestion = [string] $lastWarmLane.Question
             Bottleneck = [string] $bottleneck.Name
             BottleneckMs = [math]::Round([double] $bottleneck.Milliseconds, 2)
             BottleneckShare = [string] $bottleneck.Share
