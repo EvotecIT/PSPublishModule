@@ -12,6 +12,7 @@ public sealed class ManagedModulePackageReader
     private const int MaxEntries = 5000;
     private const long MaxManifestBytes = 5L * 1024L * 1024L;
     private const long MaxPackageBytes = 1024L * 1024L * 1024L;
+    private const long MaxUncompressedPackageBytes = 2L * 1024L * 1024L * 1024L;
 
     /// <summary>
     /// Reads nuspec metadata from a NuGet package.
@@ -67,6 +68,10 @@ public sealed class ManagedModulePackageReader
         var packageId = ReadElement(metadata, "id") ?? string.Empty;
         var nuspecDependencies = ReadDependencies(metadata);
         var manifest = ReadManifestMetadata(archive, packageId, fullPath);
+        var uncompressedBytes = CountUncompressedBytes(archive);
+        if (uncompressedBytes > MaxUncompressedPackageBytes)
+            throw new InvalidOperationException($"Package '{fullPath}' exceeds the managed module uncompressed size limit.");
+
         var result = new ManagedModulePackageMetadata
         {
             Id = packageId,
@@ -79,7 +84,7 @@ public sealed class ManagedModulePackageReader
             Tags = ReadTags(ReadElement(metadata, "tags")),
             FileCount = CountFiles(archive),
             PackageBytes = info.Length,
-            UncompressedBytes = CountUncompressedBytes(archive),
+            UncompressedBytes = uncompressedBytes,
             Dependencies = SelectInstallableDependencies(nuspecDependencies, manifest.Dependencies, manifest.ExternalModuleDependencies),
             ModuleManifestPath = manifest.Path,
             ModuleManifestVersion = manifest.Version,

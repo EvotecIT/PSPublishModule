@@ -288,13 +288,14 @@ public sealed class InitializeManagedModuleRepositoryCommand : PSCmdlet
         if (ParameterSetName == ParameterSetRepository)
         {
             ValidateRepositoryProfile();
+            var azureArtifactsFeed = ResolveAzureArtifactsFeed();
             var profile = ModuleRepositoryProfileStore.Normalize(new ModuleRepositoryProfile
             {
                 Name = ProfileName!,
                 Provider = Provider,
                 AzureDevOpsOrganization = AzureDevOpsOrganization,
                 AzureDevOpsProject = AzureDevOpsProject,
-                AzureArtifactsFeed = AzureArtifactsFeed,
+                AzureArtifactsFeed = azureArtifactsFeed,
                 Repository = Repository ?? string.Empty,
                 RepositoryName = RepositoryName ?? ProfileName ?? string.Empty,
                 RepositoryUri = RepositoryUri ?? string.Empty,
@@ -362,9 +363,9 @@ public sealed class InitializeManagedModuleRepositoryCommand : PSCmdlet
     private void ValidateRepositoryProfile()
     {
         if (Provider == PrivateGalleryProvider.AzureArtifacts &&
-            (string.IsNullOrWhiteSpace(AzureDevOpsOrganization) || string.IsNullOrWhiteSpace(AzureArtifactsFeed)))
+            (string.IsNullOrWhiteSpace(AzureDevOpsOrganization) || string.IsNullOrWhiteSpace(ResolveAzureArtifactsFeed())))
         {
-            throw new ArgumentException("Azure Artifacts managed module repositories require AzureDevOpsOrganization and AzureArtifactsFeed.");
+            throw new ArgumentException("Azure Artifacts managed module repositories require AzureDevOpsOrganization and AzureArtifactsFeed or Repository.");
         }
 
         if (Provider == PrivateGalleryProvider.JFrog &&
@@ -388,6 +389,11 @@ public sealed class InitializeManagedModuleRepositoryCommand : PSCmdlet
             throw new ArgumentException("GitHub Packages managed module repositories require GitHubOwner or Repository owner metadata.");
         }
     }
+
+    private string ResolveAzureArtifactsFeed()
+        => !string.IsNullOrWhiteSpace(AzureArtifactsFeed)
+            ? AzureArtifactsFeed
+            : Repository ?? string.Empty;
 
     private void WriteBootstrapPackageIfRequested(ProfileWriteState[] profileWriteState)
     {

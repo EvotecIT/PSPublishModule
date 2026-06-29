@@ -387,6 +387,24 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task DownloadPackageAsync_rejects_package_identity_mismatch()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repositoryClient.DownloadPackageAsync(repository, "Mismatch.Tools", "1.0.0", temp.Path));
+
+        Assert.Contains("not requested package", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Mismatch.Tools", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Other.Tools", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(requests, request => request.Url == "https://example.test/packages/mismatch.tools/1.0.0/mismatch.tools.1.0.0.nupkg");
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_writes_exact_package_from_nuget_v2_feed()
     {
         var requests = new List<RecordedRequest>();
@@ -880,6 +898,15 @@ public sealed class ManagedModuleRepositoryClientTests
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg")
             {
                 var bytes = TestPackageFactory.CreateBytes("Company.Tools", "1.1.0");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(bytes)
+                });
+            }
+
+            if (uri.AbsoluteUri == "https://example.test/packages/mismatch.tools/1.0.0/mismatch.tools.1.0.0.nupkg")
+            {
+                var bytes = TestPackageFactory.CreateBytes("Other.Tools", "1.0.0");
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)

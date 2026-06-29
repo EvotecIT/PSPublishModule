@@ -122,6 +122,90 @@ public sealed class ManagedModulePackServiceTests
         Assert.EndsWith("Company.Tools.1.0.0.nupkg", result.PackagePath, StringComparison.OrdinalIgnoreCase);
         var metadata = new ManagedModulePackageReader().ReadMetadata(result.PackagePath);
         Assert.Equal("Company.Tools", metadata.Id);
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        Assert.Contains(archive.Entries, entry => entry.FullName.Equals("bin/Company.Tools.Engine.dll", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Pack_excludes_output_and_managed_metadata_without_dropping_manifest_references()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "bin"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "obj"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, ".powerforge"));
+        var output = Path.Combine(moduleRoot.Path, "packages");
+        Directory.CreateDirectory(output);
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "bin", "scratch.dll"), "scratch");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "obj", "scratch.txt"), "scratch");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, ".powerforge", "receipt.json"), "{}");
+        File.WriteAllText(Path.Combine(output, "old.nupkg"), "old");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output
+        });
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        var names = archive.Entries.Select(static entry => entry.FullName).ToArray();
+        Assert.Contains("Company.Tools.psd1", names);
+        Assert.Contains("Company.Tools.psm1", names);
+        Assert.DoesNotContain(names, name => name.StartsWith("bin/", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(names, name => name.StartsWith("obj/", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(names, name => name.StartsWith(".powerforge/", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(names, name => name.StartsWith("packages/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Pack_preserves_manifest_license_acceptance()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        Directory.CreateDirectory(moduleRoot.Path);
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.psm1"), "function Get-CompanyTool { 'ok' }");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.psd1"), """
+@{
+    RootModule = 'Company.Tools.psm1'
+    ModuleVersion = '1.0.0'
+    Author = 'Evotec'
+    Description = 'Company tools module.'
+    PrivateData = @{
+        PSData = @{
+            RequireLicenseAcceptance = $true
+        }
+    }
+}
+""");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(result.PackagePath);
+        Assert.True(metadata.RequireLicenseAcceptance);
+    }
+
+    [Fact]
+    public void Pack_rejects_version_that_disagrees_with_manifest()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        var service = new ManagedModulePackService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path,
+            Version = "2.0.0"
+        }));
+
+        Assert.Contains("does not match module manifest version", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

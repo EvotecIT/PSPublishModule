@@ -73,7 +73,7 @@ public sealed partial class ManagedModuleInstallService
             if (Directory.Exists(modulePath))
             {
                 hadExistingTarget = true;
-                backupPath = Path.Combine(Path.GetTempPath(), "PFMM.B", NewShortId());
+                backupPath = CreateBackupPath(modulePath);
                 Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
 
                 var backupMoveStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -118,6 +118,13 @@ public sealed partial class ManagedModuleInstallService
             Directory.Delete(modulePath, recursive: true);
 
         Directory.Move(backupPath, modulePath);
+    }
+
+    private static string CreateBackupPath(string modulePath)
+    {
+        var parent = Path.GetDirectoryName(Path.GetFullPath(modulePath))
+                     ?? throw new InvalidOperationException($"Unable to resolve module parent for '{modulePath}'.");
+        return Path.Combine(parent, ".pfmm-backup-" + NewShortId());
     }
 
     private static string NewShortId()

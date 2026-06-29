@@ -124,7 +124,7 @@ internal sealed class ManagedModuleVersionRange
         var includeMaximum = false;
         var parsedAny = false;
 
-        foreach (var rawToken in value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var rawToken in value.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
             var token = rawToken.Trim();
             if (token.StartsWith(">=", StringComparison.Ordinal))

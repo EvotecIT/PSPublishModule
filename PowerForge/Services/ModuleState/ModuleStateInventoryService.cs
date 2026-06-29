@@ -275,8 +275,29 @@ internal sealed class ModuleStateInventoryService
 
     private static string? TryReadSourceRepository(string? manifestText, DirectoryInfo? moduleDirectory)
         => TryReadManifestSourceRepository(manifestText)
+           ?? TryReadManagedReceiptRepository(moduleDirectory)
            ?? TryReadPSGetModuleInfoRepository(moduleDirectory)
            ?? TryReadNuspecRepository(moduleDirectory);
+
+    private static string? TryReadManagedReceiptRepository(DirectoryInfo? moduleDirectory)
+    {
+        if (moduleDirectory is null)
+            return null;
+
+        var receiptPath = ManagedModuleReceiptStore.GetReceiptPath(moduleDirectory.FullName);
+        if (!File.Exists(receiptPath))
+            return null;
+
+        try
+        {
+            var receipt = System.Text.Json.JsonSerializer.Deserialize<ManagedModuleReceipt>(File.ReadAllText(receiptPath));
+            return FirstNonEmpty(receipt?.RepositoryName, receipt?.RepositorySource);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static string? TryReadManifestSourceRepository(string? manifestText)
     {
@@ -286,6 +307,9 @@ internal sealed class ModuleStateInventoryService
         var match = SourceRepositoryPattern.Match(manifestText!);
         return match.Success ? match.Groups["repository"].Value.Trim() : null;
     }
+
+    private static string? FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
     private static string? TryReadPSGetModuleInfoRepository(DirectoryInfo? moduleDirectory)
     {

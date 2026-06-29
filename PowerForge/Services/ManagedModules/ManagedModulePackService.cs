@@ -26,6 +26,8 @@ public sealed class ManagedModulePackService
         var outputDirectory = Path.GetFullPath(request.OutputDirectory.Trim().Trim('"'));
         Directory.CreateDirectory(outputDirectory);
         var packagePath = Path.Combine(outputDirectory, $"{name}.{version}.nupkg");
+        var manifestReferences = ResolveManifestFileReferences(manifestPath);
+        var moduleFiles = EnumerateModuleFiles(modulePath, outputDirectory, packagePath, manifestReferences).ToArray();
 
         if (File.Exists(packagePath))
         {
@@ -45,7 +47,7 @@ public sealed class ManagedModulePackService
             AddTextEntry(archive, "_rels/.rels", CreateRelationships(name, corePropertiesPath));
             AddTextEntry(archive, corePropertiesPath, CreateCoreProperties(name, version, request, manifestPath, manifestText).ToString(SaveOptions.DisableFormatting));
 
-            foreach (var file in EnumerateModuleFiles(modulePath))
+            foreach (var file in moduleFiles)
             {
                 var relativePath = NormalizeRelativePath(modulePath, file);
                 var entry = archive.CreateEntry(relativePath, CompressionLevel.Optimal);
@@ -117,16 +119,20 @@ public sealed class ManagedModulePackService
 
     private static string ResolveVersion(string? requestedVersion, string manifestPath)
     {
-        if (!string.IsNullOrWhiteSpace(requestedVersion))
-            return requestedVersion!.Trim();
-
         var version = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ModuleVersion");
         if (string.IsNullOrWhiteSpace(version))
             throw new InvalidOperationException("Module manifest does not declare ModuleVersion.");
 
         var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArray(manifestPath, "Prerelease").FirstOrDefault();
         if (!string.IsNullOrWhiteSpace(prerelease))
-            return version + "-" + prerelease;
+            version += "-" + prerelease;
+
+        if (!string.IsNullOrWhiteSpace(requestedVersion) &&
+            ManagedModuleVersionComparer.Instance.Compare(requestedVersion!.Trim(), version) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Requested package version '{requestedVersion.Trim()}' does not match module manifest version '{version}'. Update the module manifest before packing.");
+        }
 
         return version!;
     }
@@ -149,7 +155,7 @@ public sealed class ManagedModulePackService
             new XElement(ns + "version", version),
             new XElement(ns + "authors", authors),
             new XElement(ns + "owners", authors),
-            new XElement(ns + "requireLicenseAcceptance", "false"),
+            new XElement(ns + "requireLicenseAcceptance", ReadManifestLicenseAcceptance(manifestPath).ToString().ToLowerInvariant()),
             new XElement(ns + "description", description));
 
         if (!string.IsNullOrWhiteSpace(request.ProjectUrl))
@@ -254,18 +260,99 @@ public sealed class ManagedModulePackService
         return normalized;
     }
 
-    private static IEnumerable<string> EnumerateModuleFiles(string modulePath)
+    private static bool ReadManifestLicenseAcceptance(string manifestPath)
+        => ModuleManifestValueReader.ReadPsDataBoolean(manifestPath, "RequireLicenseAcceptance");
+
+    private static IReadOnlySet<string> ResolveManifestFileReferences(string manifestPath)
+    {
+        var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddReference(references, ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule"));
+        AddReferences(references, ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "NestedModules"));
+        AddReferences(references, ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "RequiredAssemblies"));
+        AddReferences(references, ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "FileList"));
+        return references;
+    }
+
+    private static void AddReferences(HashSet<string> references, IEnumerable<string> values)
+    {
+        foreach (var value in values)
+            AddReference(references, value);
+    }
+
+    private static void AddReference(HashSet<string> references, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        var normalized = value.Trim().Trim('"', '\'')
+            .Replace('\\', '/')
+            .TrimStart('.', '/');
+        if (!string.IsNullOrWhiteSpace(normalized))
+            references.Add(normalized);
+    }
+
+    private static IEnumerable<string> EnumerateModuleFiles(
+        string modulePath,
+        string outputDirectory,
+        string packagePath,
+        IReadOnlySet<string> manifestReferences)
         => Directory.EnumerateFiles(modulePath, "*", SearchOption.AllDirectories)
-            .Where(static file => !IsIgnoredPath(file))
+            .Where(file => !IsIgnoredPath(modulePath, file, outputDirectory, packagePath, manifestReferences))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase);
 
-    private static bool IsIgnoredPath(string file)
+    private static bool IsIgnoredPath(
+        string modulePath,
+        string file,
+        string outputDirectory,
+        string packagePath,
+        IReadOnlySet<string> manifestReferences)
     {
-        var parts = file.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return parts.Any(static part =>
-            part.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
-            part.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
-            part.Equals(".git", StringComparison.OrdinalIgnoreCase));
+        var fullPath = Path.GetFullPath(file);
+        if (fullPath.Equals(Path.GetFullPath(packagePath), StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (IsUnderDirectory(Path.GetFullPath(outputDirectory), modulePath) &&
+            IsUnderDirectory(fullPath, outputDirectory))
+        {
+            return true;
+        }
+
+        var relativePath = NormalizeRelativePath(modulePath, fullPath);
+        var parts = relativePath.Split('/');
+        if (parts.Any(static part =>
+                part.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals(".powerforge", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (parts.Any(static part => part.Equals("bin", StringComparison.OrdinalIgnoreCase)) &&
+            !IsManifestReferenced(relativePath, manifestReferences))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsUnderDirectory(string fullPath, string directory)
+    {
+        var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsManifestReferenced(string relativePath, IReadOnlySet<string> manifestReferences)
+    {
+        foreach (var reference in manifestReferences)
+        {
+            if (relativePath.Equals(reference, StringComparison.OrdinalIgnoreCase) ||
+                relativePath.StartsWith(reference.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string NormalizeRelativePath(string modulePath, string file)

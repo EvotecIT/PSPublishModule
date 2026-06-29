@@ -226,6 +226,31 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void FindManagedModule_wildcard_all_versions_expands_each_match()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"), "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"), "Company.Tools", "1.1.0");
+        TestPackageFactory.Create(Path.Combine(feed.Path, "Company.Core.2.0.0.nupkg"), "Company.Core", "2.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.*")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("AllVersions");
+
+        var result = ps.Invoke()
+            .Select(static item => Assert.IsType<ManagedModuleVersionInfo>(item.BaseObject))
+            .OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static item => item.Version, ManagedModuleVersionComparer.Instance)
+            .ToArray();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(new[] { "Company.Core:2.0.0", "Company.Tools:1.0.0", "Company.Tools:1.1.0" },
+            result.Select(static item => item.Name + ":" + item.Version));
+    }
+
+    [Fact]
     public void InstallManagedModule_requires_trusted_repository_profile_when_requested()
     {
         using var feed = new TemporaryDirectory();

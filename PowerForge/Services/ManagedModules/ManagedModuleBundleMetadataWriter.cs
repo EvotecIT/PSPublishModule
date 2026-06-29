@@ -69,7 +69,7 @@ public sealed class ManagedModuleBundleMetadataWriter
             RepositoryName = result.RepositoryName,
             RepositorySource = result.RepositorySource,
             ModulePath = result.ModulePath,
-            PackagePath = result.Download?.PackagePath,
+            PackagePath = ResolveExistingPackagePath(result.Download?.PackagePath),
             PackageSha256 = result.Download?.PackageSha256,
             DependencyOf = dependencyOf
         };
@@ -80,4 +80,9 @@ public sealed class ManagedModuleBundleMetadataWriter
                 yield return entry;
         }
     }
+
+    private static string? ResolveExistingPackagePath(string? packagePath)
+        => !string.IsNullOrWhiteSpace(packagePath) && File.Exists(packagePath)
+            ? packagePath
+            : null;
 }

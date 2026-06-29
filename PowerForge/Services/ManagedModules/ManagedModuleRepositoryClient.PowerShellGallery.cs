@@ -63,7 +63,7 @@ public sealed partial class ManagedModuleRepositoryClient
             PackagePath = destinationPath,
             BytesWritten = packageCopy.BytesWritten,
             PackageSha256 = packageCopy.Sha256,
-            Metadata = _packageReader.ReadMetadata(destinationPath)
+            Metadata = ReadDownloadedPackageMetadata(packageId, version, destinationPath)
         };
     }
 

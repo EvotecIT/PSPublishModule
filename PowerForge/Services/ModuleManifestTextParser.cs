@@ -162,6 +162,33 @@ internal static class ModuleManifestTextParser
         return true;
     }
 
+    internal static bool TryParseBooleanExpression(string expression, out bool value)
+    {
+        value = false;
+        if (string.IsNullOrWhiteSpace(expression))
+            return false;
+
+        var trimmed = expression.Trim();
+        if (trimmed.Equals("$true", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("true", StringComparison.OrdinalIgnoreCase))
+        {
+            value = true;
+            return true;
+        }
+
+        if (trimmed.Equals("$false", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("false", StringComparison.OrdinalIgnoreCase))
+        {
+            value = false;
+            return true;
+        }
+
+        if (TryUnquote(trimmed, out var unquoted) && bool.TryParse(unquoted, out value))
+            return true;
+
+        return false;
+    }
+
     private static IEnumerable<RequiredModuleReference?> ParseRequiredModules(string expression)
     {
         var trimmed = expression.Trim();

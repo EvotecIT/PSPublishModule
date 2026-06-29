@@ -79,6 +79,25 @@ internal static class ModuleManifestValueReader
         return Array.Empty<string>();
     }
 
+    internal static bool ReadPsDataBoolean(string manifestPath, string key)
+    {
+        if (!TryReadManifestText(manifestPath, out var manifestText))
+            return false;
+
+        return ReadPsDataBooleanFromText(manifestText, key);
+    }
+
+    internal static bool ReadPsDataBooleanFromText(string manifestText, string key)
+    {
+        if (!ModuleManifestTextParser.TryReadPsDataAssignedExpression(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+        {
+            return false;
+        }
+
+        return ModuleManifestTextParser.TryParseBooleanExpression(expression!, out var value) && value;
+    }
+
     internal static RequiredModuleReference[] ReadRequiredModules(string manifestPath)
     {
         if (!TryReadManifestText(manifestPath, out var manifestText))

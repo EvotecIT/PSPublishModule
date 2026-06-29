@@ -497,6 +497,41 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_reports_updated_when_only_family_member_changes()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Users.2.0.0.nupkg"),
+            "Company.Cloud.Users",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Users", "2.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Groups.2.0.0.nupkg"),
+            "Company.Cloud.Groups",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Groups", "2.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "2.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "1.5.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path, "Company.Cloud.Users");
+        request.FamilyPolicy = new ManagedModuleFamilyPolicy
+        {
+            Name = "CompanyCloud",
+            ModuleNamePrefix = "Company.Cloud."
+        };
+
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.Null(result.InstallResult);
+        var familyResult = Assert.Single(result.FamilyResults);
+        Assert.Equal("Company.Cloud.Groups", familyResult.Name);
+        Assert.Equal(ManagedModuleFamilyUpdatePlanAction.Update, familyResult.Action);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "2.0.0", "Company.Cloud.Groups.psd1")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_blocks_family_update_before_writing_when_target_version_is_missing_for_member()
     {
         using var feed = new TemporaryDirectory();

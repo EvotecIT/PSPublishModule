@@ -25,7 +25,6 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         if (actions.Length == 0)
             return;
 
-        var repository = ResolveRepository(actions, options);
         var logger = new CmdletLogger(_cmdlet, _cmdlet.MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var installService = new ManagedModuleInstallService(logger);
         var updateService = new ManagedModuleUpdateService(logger);
@@ -34,6 +33,7 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         {
             try
             {
+                var repository = ResolveRepository(action, options);
                 if (string.Equals(action.Kind, "Update", StringComparison.OrdinalIgnoreCase))
                 {
                     var updatePlan = updateService.PlanUpdateAsync(CreateUpdateRequest(repository, action, options)).GetAwaiter().GetResult();
@@ -111,9 +111,15 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
     }
 
     private ManagedModuleRepository ResolveRepository(
-        ModuleStatePlanActionResult[] actions,
+        ModuleStatePlanActionResult action,
         ModuleStateManagedDeliveryOptions options)
     {
+        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+            return ManagedModuleCommandSupport.CreateRepository(
+                _cmdlet,
+                ManagedModuleCommandSupport.DefaultRepositoryName,
+                action.TargetRepository!);
+
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
             return ManagedModuleCommandSupport.CreateRepository(
                 _cmdlet,
@@ -127,15 +133,6 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
                 _cmdlet,
                 ManagedModuleCommandSupport.DefaultRepositoryName,
                 options.Repository!);
-
-        var actionRepository = actions
-            .Select(static action => action.TargetRepository)
-            .FirstOrDefault(static repository => !string.IsNullOrWhiteSpace(repository));
-        if (!string.IsNullOrWhiteSpace(actionRepository))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                actionRepository!);
 
         throw new InvalidOperationException("Managed module license preflight requires Repository, ProfileName, or action target repository.");
     }

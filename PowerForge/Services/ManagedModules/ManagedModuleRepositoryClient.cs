@@ -208,6 +208,8 @@ public sealed partial class ManagedModuleRepositoryClient
         if (string.IsNullOrWhiteSpace(destinationDirectory))
             throw new ArgumentException("Destination directory is required.", nameof(destinationDirectory));
 
+        packageId = ManagedModulePackageIdentity.RequireSafeId(packageId, nameof(packageId));
+        version = ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
         Directory.CreateDirectory(destinationDirectory);
         var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
         var packageLock = _packageDownloadLocks.GetOrAdd(destinationPath, static _ => new SemaphoreSlim(1, 1));
@@ -298,40 +300,42 @@ public sealed partial class ManagedModuleRepositoryClient
         string version,
         string destinationDirectory)
     {
-        var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
-        if (!File.Exists(destinationPath))
-            return null;
-
-        try
+        foreach (var destinationPath in EnumerateCachedPackageCandidates(destinationDirectory, repository, packageId, version))
         {
-            var metadata = _packageReader.ReadMetadata(destinationPath);
-            if (!metadata.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase) ||
-                ManagedModuleVersionComparer.Instance.Compare(metadata.Version, version) != 0)
+            if (!File.Exists(destinationPath))
+                continue;
+
+            try
             {
-                return null;
+                var metadata = _packageReader.ReadMetadata(destinationPath);
+                if (!metadata.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase) ||
+                    ManagedModuleVersionComparer.Instance.Compare(metadata.Version, version) != 0)
+                {
+                    continue;
+                }
+
+                return new ManagedModuleDownloadResult
+                {
+                    Name = packageId,
+                    Version = version,
+                    RepositoryName = repository.Name,
+                    Source = destinationPath,
+                    PackagePath = destinationPath,
+                    BytesWritten = 0,
+                    FromCache = true,
+                    PackageSha256 = ComputeSha256(destinationPath),
+                    Metadata = metadata
+                };
             }
-
-            return new ManagedModuleDownloadResult
+            catch (InvalidDataException)
             {
-                Name = packageId,
-                Version = version,
-                RepositoryName = repository.Name,
-                Source = destinationPath,
-                PackagePath = destinationPath,
-                BytesWritten = 0,
-                FromCache = true,
-                PackageSha256 = ComputeSha256(destinationPath),
-                Metadata = metadata
-            };
+            }
+            catch (InvalidOperationException)
+            {
+            }
         }
-        catch (InvalidDataException)
-        {
-            return null;
-        }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
+
+        return null;
     }
 
     private async Task<IReadOnlyList<ManagedModuleVersionInfo>> GetNuGetVersionsAsync(
@@ -511,7 +515,7 @@ public sealed partial class ManagedModuleRepositoryClient
             PackagePath = destinationPath,
             BytesWritten = packageCopy.BytesWritten,
             PackageSha256 = packageCopy.Sha256,
-            Metadata = _packageReader.ReadMetadata(destinationPath)
+            Metadata = ReadDownloadedPackageMetadata(packageId, version, destinationPath)
         };
     }
 
@@ -543,8 +547,21 @@ public sealed partial class ManagedModuleRepositoryClient
             PackagePath = destinationPath,
             BytesWritten = packageCopy.BytesWritten,
             PackageSha256 = packageCopy.Sha256,
-            Metadata = _packageReader.ReadMetadata(destinationPath)
+            Metadata = ReadDownloadedPackageMetadata(packageId, version, destinationPath)
         };
+    }
+
+    private ManagedModulePackageMetadata ReadDownloadedPackageMetadata(string packageId, string version, string packagePath)
+    {
+        var metadata = _packageReader.ReadMetadata(packagePath);
+        if (!metadata.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase) ||
+            ManagedModuleVersionComparer.Instance.Compare(metadata.Version, version) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Downloaded package '{packagePath}' contains '{metadata.Id}' version '{metadata.Version}', not requested package '{packageId}' version '{version}'.");
+        }
+
+        return metadata;
     }
 
     private async Task<string> ResolvePackageBaseAddressAsync(
@@ -831,10 +848,29 @@ public sealed partial class ManagedModuleRepositoryClient
         ManagedModuleRepository repository,
         string packageId,
         string version)
-        => Path.Combine(
+    {
+        var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageId, nameof(packageId));
+        var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
+        return Path.Combine(
             Path.GetFullPath(destinationDirectory),
             GetRepositoryCacheKey(repository),
-            $"{packageId.Trim().ToLowerInvariant()}.{version.Trim().ToLowerInvariant()}.nupkg");
+            $"{safePackageId.ToLowerInvariant()}.{safeVersion.ToLowerInvariant()}.nupkg");
+    }
+
+    private static IEnumerable<string> EnumerateCachedPackageCandidates(
+        string destinationDirectory,
+        ManagedModuleRepository repository,
+        string packageId,
+        string version)
+    {
+        yield return BuildDestinationPath(destinationDirectory, repository, packageId, version);
+
+        var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageId, nameof(packageId));
+        var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
+        yield return Path.Combine(
+            Path.GetFullPath(destinationDirectory),
+            $"{safePackageId}.{safeVersion}.nupkg");
+    }
 
     private static string GetRepositoryCacheKey(ManagedModuleRepository repository)
     {

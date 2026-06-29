@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -109,9 +110,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         foreach (var moduleName in Name)
         {
             var output = ManagedModuleCommandSupport.HasWildcard(moduleName)
-                ? client.SearchPackagesAsync(repository, moduleName, Prerelease.IsPresent, credential, First)
-                    .GetAwaiter()
-                    .GetResult()
+                ? FindWildcardPackageVersions(client, repository, moduleName, credential)
                 : FindExactPackageVersions(client, repository, moduleName, credential);
 
             foreach (var version in output)
@@ -136,6 +135,32 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             .GetAwaiter()
             .GetResult();
         return latest is null ? Array.Empty<ManagedModuleVersionInfo>() : new[] { latest };
+    }
+
+    private IReadOnlyList<ManagedModuleVersionInfo> FindWildcardPackageVersions(
+        ManagedModuleRepositoryClient client,
+        ManagedModuleRepository repository,
+        string moduleName,
+        RepositoryCredential? credential)
+    {
+        var matches = client.SearchPackagesAsync(repository, moduleName, Prerelease.IsPresent, credential, First)
+            .GetAwaiter()
+            .GetResult();
+        if (!AllVersions.IsPresent || matches.Count == 0)
+            return matches;
+
+        var versions = new List<ManagedModuleVersionInfo>();
+        foreach (var match in matches)
+        {
+            versions.AddRange(client.GetVersionsAsync(repository, match.Name, Prerelease.IsPresent, credential)
+                .GetAwaiter()
+                .GetResult());
+        }
+
+        return versions
+            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
+            .ToArray();
     }
 
 }

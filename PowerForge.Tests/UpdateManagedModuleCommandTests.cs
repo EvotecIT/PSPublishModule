@@ -154,7 +154,7 @@ public sealed class UpdateManagedModuleCommandTests
 
         AssertNoPowerShellErrors(ps);
         var result = Assert.IsType<ManagedModuleUpdateResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(ManagedModuleUpdateStatus.UpToDate, result.Status);
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
         var family = Assert.Single(result.FamilyResults);
         Assert.Equal("Microsoft.Graph.Authentication", family.Name);
         Assert.Equal("MicrosoftGraph", family.FamilyName);

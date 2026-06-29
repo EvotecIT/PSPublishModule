@@ -179,6 +179,42 @@ public sealed partial class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_supports_comma_separated_comparator_version_policy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.5.0.nupkg"),
+            "Company.Tools",
+            "1.5.0",
+            files: CreateModuleFiles("1.5.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.0.0.nupkg"),
+            "Company.Tools",
+            "2.0.0",
+            files: CreateModuleFiles("2.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            VersionPolicy = ">=1.0.0,<2.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.5.0", result.Version);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.5.0", "Company.Tools.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0")));
+    }
+
+    [Fact]
     public async Task InstallAsync_infers_prerelease_from_version_policy()
     {
         using var feed = new TemporaryDirectory();
@@ -247,6 +283,51 @@ public sealed partial class ManagedModuleInstallServiceTests
             Scope = ManagedModuleInstallScope.Custom,
             ModuleRoot = moduleRoot.Path
         }));
+    }
+
+    [Fact]
+    public async Task PlanInstallAsync_rejects_missing_exact_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "2.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("2.0.0", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_rejects_unsafe_module_name()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "..\\Escape",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("Unsafe package id", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -447,6 +528,33 @@ public sealed partial class ManagedModuleInstallServiceTests
         Assert.Equal("PackageAuthorNotAllowed", exception.Reason);
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_rejects_unsafe_dependency_id_before_creating_path()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("../Escape", "[1.0.0]", null) },
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("Unsafe package id", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Escape")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "..", "Escape")));
     }
 
     [Fact]

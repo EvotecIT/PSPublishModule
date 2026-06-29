@@ -102,7 +102,7 @@ public sealed class ManagedModuleUpdateService
             Name = request.Name.Trim(),
             TargetVersion = targetVersion,
             PreviousVersion = currentVersion,
-            Status = ResolveUpdateStatus(action),
+            Status = ResolveUpdateStatus(action, familyActions),
             RepositoryName = request.Repository.Name,
             RepositorySource = request.Repository.Source,
             RequestedVersion = request.Version,
@@ -436,14 +436,24 @@ public sealed class ManagedModuleUpdateService
             or ManagedModuleUpdatePlanAction.Reinstall
             or ManagedModuleUpdatePlanAction.RepairSource;
 
-    private static ManagedModuleUpdateStatus ResolveUpdateStatus(ManagedModuleUpdatePlanAction action)
-        => action switch
+    private static ManagedModuleUpdateStatus ResolveUpdateStatus(
+        ManagedModuleUpdatePlanAction action,
+        IReadOnlyList<ManagedModuleFamilyUpdatePlanItem>? familyActions = null)
+    {
+        if (familyActions?.Any(static familyAction => familyAction.WouldWriteFiles) == true &&
+            action == ManagedModuleUpdatePlanAction.SkipUpToDate)
+        {
+            return ManagedModuleUpdateStatus.Updated;
+        }
+
+        return action switch
         {
             ManagedModuleUpdatePlanAction.InstallMissing => ManagedModuleUpdateStatus.InstalledMissing,
             ManagedModuleUpdatePlanAction.RepairSource => ManagedModuleUpdateStatus.SourceRepaired,
             ManagedModuleUpdatePlanAction.SkipUpToDate => ManagedModuleUpdateStatus.UpToDate,
             _ => ManagedModuleUpdateStatus.Updated
         };
+    }
 
     private static void ThrowIfSourcePolicyBlocked(
         ManagedModuleUpdatePlanAction action,

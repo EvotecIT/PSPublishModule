@@ -476,13 +476,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
     {
         if (!string.IsNullOrWhiteSpace(Repository))
             return Repository;
-        if (string.IsNullOrWhiteSpace(ProfileName))
-            return null;
-
-        var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName!);
-        return string.IsNullOrWhiteSpace(profile.RepositoryName)
-            ? ProfileName
-            : profile.RepositoryName;
+        return null;
     }
 
     private static ModuleStateCleanupMode ParseCleanupMode(string? cleanup)

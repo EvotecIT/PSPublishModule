@@ -66,6 +66,21 @@ public sealed partial class ManagedModuleInstallService
                 exists: true);
         }
 
+        if (request.Force &&
+            !string.IsNullOrWhiteSpace(request.Version) &&
+            GetInstalledVersions(moduleRoot, request.Name, context: null)
+                .Any(version => ManagedModuleVersionComparer.Instance.Compare(version, request.Version!.Trim()) == 0))
+        {
+            var requestedVersion = request.Version!.Trim();
+            var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), requestedVersion);
+            return CreateInstallPlan(
+                request,
+                requestedVersion,
+                moduleRoot,
+                installedModulePath,
+                exists: true);
+        }
+
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken, resolveExactMetadata: true).ConfigureAwait(false);
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), versionInfo.Version);
         return CreateInstallPlan(
@@ -457,9 +472,6 @@ public sealed partial class ManagedModuleInstallService
                 : await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
             dependencyStopwatch.Stop();
 
-            if (!request.AllowClobber)
-                ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), validationModulePath);
-
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var promotionLockWaitElapsed = TimeSpan.Zero;
             var promotionMoveElapsed = TimeSpan.Zero;
@@ -469,49 +481,67 @@ public sealed partial class ManagedModuleInstallService
             var promotionHadExistingTarget = false;
             var promotionMaterializedDirectly = false;
             var promotionDirectMaterializationElapsed = TimeSpan.Zero;
-            using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedPromotionLockWaitElapsed))
+            using (AcquireInstallLock(moduleRoot, ".promotion", cancellationToken, out var promotionGateWaitElapsed))
             {
-                promotionLockWaitElapsed = resolvedPromotionLockWaitElapsed;
-                installLockWaitElapsed += resolvedPromotionLockWaitElapsed;
-                if (Directory.Exists(modulePath) && !request.Force)
-                {
-                    _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
-                    context.RecordInstalledVersion(moduleRoot, request.Name, version);
-                    return CreateAlreadyInstalledResult(
-                        request,
-                        version,
-                        moduleRoot,
-                        modulePath,
-                        stopwatch.Elapsed,
-                        versionResolutionElapsed,
-                        requestScope.Count,
-                        installLockWaitElapsed);
-                }
+                promotionLockWaitElapsed += promotionGateWaitElapsed;
+                installLockWaitElapsed += promotionGateWaitElapsed;
 
-                if (directPayloadLease is not null)
+                if (!request.AllowClobber)
+                    ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), validationModulePath);
+
+                using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedPromotionLockWaitElapsed))
                 {
-                    try
+                    promotionLockWaitElapsed += resolvedPromotionLockWaitElapsed;
+                    installLockWaitElapsed += resolvedPromotionLockWaitElapsed;
+                    if (Directory.Exists(modulePath) && !request.Force)
                     {
-                        extraction = _extractedPackageCache.MaterializePackage(directPayloadLease, modulePath, cancellationToken);
-                        promotionMaterializedDirectly = true;
-                        promotionDirectMaterializationElapsed = extraction.Elapsed;
+                        _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
+                        context.RecordInstalledVersion(moduleRoot, request.Name, version);
+                        return CreateAlreadyInstalledResult(
+                            request,
+                            version,
+                            moduleRoot,
+                            modulePath,
+                            stopwatch.Elapsed,
+                            versionResolutionElapsed,
+                            requestScope.Count,
+                            installLockWaitElapsed);
                     }
-                    catch (Exception ex) when (IsRecoverableCacheMaterializationException(ex))
-                    {
-                        directPayloadLease.Dispose();
-                        directPayloadLease = null;
-                        extraction = _extractedPackageCache.MaterializePackage(
-                            download.PackagePath,
-                            download.PackageSha256,
-                            cacheDirectory,
-                            stageModulePath,
-                            _extractor,
-                            cancellationToken);
-                        if (request.AuthenticodeCheck)
-                            authenticode = _authenticodeVerifier.VerifyDirectory(stageModulePath);
-                        if (!request.AllowClobber)
-                            ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
 
+                    if (directPayloadLease is not null)
+                    {
+                        try
+                        {
+                            extraction = _extractedPackageCache.MaterializePackage(directPayloadLease, modulePath, cancellationToken);
+                            promotionMaterializedDirectly = true;
+                            promotionDirectMaterializationElapsed = extraction.Elapsed;
+                        }
+                        catch (Exception ex) when (IsRecoverableCacheMaterializationException(ex))
+                        {
+                            directPayloadLease.Dispose();
+                            directPayloadLease = null;
+                            extraction = _extractedPackageCache.MaterializePackage(
+                                download.PackagePath,
+                                download.PackageSha256,
+                                cacheDirectory,
+                                stageModulePath,
+                                _extractor,
+                                cancellationToken);
+                            if (request.AuthenticodeCheck)
+                                authenticode = _authenticodeVerifier.VerifyDirectory(stageModulePath);
+                            if (!request.AllowClobber)
+                                ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
+
+                            var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
+                            promotionMoveElapsed = promotionResult.Elapsed;
+                            promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
+                            promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
+                            promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
+                            promotionHadExistingTarget = promotionResult.HadExistingTarget;
+                        }
+                    }
+                    else
+                    {
                         var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
                         promotionMoveElapsed = promotionResult.Elapsed;
                         promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
@@ -519,15 +549,6 @@ public sealed partial class ManagedModuleInstallService
                         promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
                         promotionHadExistingTarget = promotionResult.HadExistingTarget;
                     }
-                }
-                else
-                {
-                    var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
-                    promotionMoveElapsed = promotionResult.Elapsed;
-                    promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
-                    promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
-                    promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
-                    promotionHadExistingTarget = promotionResult.HadExistingTarget;
                 }
             }
 
@@ -603,6 +624,9 @@ public sealed partial class ManagedModuleInstallService
                 var exactMatch = await TryResolveExactVersionInfoAsync(request, exactVersion, cancellationToken).ConfigureAwait(false);
                 if (exactMatch is not null)
                     return exactMatch;
+
+                throw new InvalidOperationException(
+                    $"Version '{exactVersion}' of '{request.Name}' was not found in repository '{request.Repository.Name}'.");
             }
 
             return CreateRequestedVersionInfo(request, exactVersion);
@@ -718,6 +742,9 @@ public sealed partial class ManagedModuleInstallService
             throw new ArgumentException("Repository is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Module name is required.", nameof(request));
+        _ = ManagedModulePackageIdentity.RequireSafeId(request.Name, nameof(request));
+        if (!string.IsNullOrWhiteSpace(request.Version))
+            _ = ManagedModulePackageIdentity.RequireSafeVersion(request.Version!, nameof(request));
         if (!string.IsNullOrWhiteSpace(request.Version) &&
             (!string.IsNullOrWhiteSpace(request.MinimumVersion) ||
              !string.IsNullOrWhiteSpace(request.MaximumVersion) ||
@@ -772,7 +799,7 @@ public sealed partial class ManagedModuleInstallService
 
     private static string CreateStageModulePath(string stageRoot, string moduleName, string version)
     {
-        return Path.Combine(stageRoot, version);
+        return Path.Combine(stageRoot, ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version)));
     }
 
 }

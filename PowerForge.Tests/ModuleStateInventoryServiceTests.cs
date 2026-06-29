@@ -327,6 +327,39 @@ public sealed class ModuleStateInventoryServiceTests
         }
     }
 
+    [Fact]
+    public void Collect_ReadsRepositoryMetadataFromManagedReceipt()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleDirectory = Path.Combine(root.FullName, "Company.Tools", "1.2.3");
+            WriteManifest(moduleDirectory, "Company.Tools", "1.2.3");
+            var receiptPath = ManagedModuleReceiptStore.GetReceiptPath(moduleDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(receiptPath)!);
+            File.WriteAllText(receiptPath, System.Text.Json.JsonSerializer.Serialize(new ManagedModuleReceipt
+            {
+                Operation = "Install",
+                Name = "Company.Tools",
+                Version = "1.2.3",
+                RepositoryName = "ManagedFeed",
+                RepositorySource = "https://feed.example.test/v3/index.json"
+            }));
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            var module = Assert.Single(inventory.InstalledModules);
+            Assert.Equal("ManagedFeed", module.SourceRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteManifest(
         string directoryPath,
         string moduleName,

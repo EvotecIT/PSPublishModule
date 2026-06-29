@@ -47,4 +47,29 @@ public sealed class ManagedModuleBundleMetadataWriterTests
             entry.DependencyOf == "Company.Tools" &&
             entry.PackageSha256 == new string('a', 64));
     }
+
+    [Fact]
+    public void Create_omits_package_path_when_download_cache_was_removed()
+    {
+        var result = new ManagedModuleInstallResult
+        {
+            Name = "Company.Tools",
+            Version = "2.0.0",
+            Status = ManagedModuleInstallStatus.Installed,
+            RepositoryName = "Local",
+            RepositorySource = "C:\\Feed",
+            ModulePath = Path.Combine("C:\\Bundle", "Company.Tools", "2.0.0"),
+            Download = new ManagedModuleDownloadResult
+            {
+                PackagePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "company.tools.2.0.0.nupkg"),
+                PackageSha256 = new string('b', 64)
+            }
+        };
+
+        var metadata = new ManagedModuleBundleMetadataWriter().Create(new[] { result });
+
+        var entry = Assert.Single(metadata.Modules);
+        Assert.Null(entry.PackagePath);
+        Assert.Equal(new string('b', 64), entry.PackageSha256);
+    }
 }

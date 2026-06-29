@@ -18,16 +18,28 @@ public sealed class PowerShellRepositorySourceResolver
     /// <param name="source">Resolved source URI or path when available.</param>
     /// <returns>True when a registered repository source was found.</returns>
     public bool TryResolveSource(PSCmdlet cmdlet, string? repositoryName, out string? source)
+        => TryResolveSource(cmdlet, repositoryName, out source, out _);
+
+    /// <summary>
+    /// Attempts to resolve a registered repository name to a source URI or local feed path and trust state.
+    /// </summary>
+    /// <param name="cmdlet">Cmdlet whose current runspace should be inspected.</param>
+    /// <param name="repositoryName">Repository name to resolve.</param>
+    /// <param name="source">Resolved source URI or path when available.</param>
+    /// <param name="trusted">Registered trust state when available.</param>
+    /// <returns>True when a registered repository source was found.</returns>
+    public bool TryResolveSource(PSCmdlet cmdlet, string? repositoryName, out string? source, out bool trusted)
     {
         source = null;
+        trusted = false;
         if (cmdlet is null)
             throw new ArgumentNullException(nameof(cmdlet));
         if (string.IsNullOrWhiteSpace(repositoryName))
             return false;
 
         var name = repositoryName!.Trim();
-        return TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source) ||
-               TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "SourceLocation" }, out source);
+        return TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted) ||
+               TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "SourceLocation" }, out source, out trusted);
     }
 
     private static bool TryResolveWithCommand(
@@ -35,9 +47,11 @@ public sealed class PowerShellRepositorySourceResolver
         string commandName,
         string repositoryName,
         string[] sourcePropertyNames,
-        out string? source)
+        out string? source,
+        out bool trusted)
     {
         source = null;
+        trusted = false;
         if (cmdlet.InvokeCommand.GetCommand(commandName, CommandTypes.All) is null)
             return false;
 
@@ -56,7 +70,10 @@ public sealed class PowerShellRepositorySourceResolver
 
             source = ResolveFirstNonEmptyProperty(result, sourcePropertyNames);
             if (!string.IsNullOrWhiteSpace(source))
+            {
+                trusted = ResolveTrust(result);
                 return true;
+            }
         }
 
         return false;
@@ -79,5 +96,17 @@ public sealed class PowerShellRepositorySourceResolver
         }
 
         return null;
+    }
+
+    private static bool ResolveTrust(PSObject result)
+    {
+        var trusted = result.Properties["Trusted"]?.Value;
+        if (trusted is bool trustedValue)
+            return trustedValue;
+        if (bool.TryParse(trusted?.ToString(), out var parsedTrusted))
+            return parsedTrusted;
+
+        var installationPolicy = result.Properties["InstallationPolicy"]?.Value?.ToString();
+        return string.Equals(installationPolicy, "Trusted", StringComparison.OrdinalIgnoreCase);
     }
 }

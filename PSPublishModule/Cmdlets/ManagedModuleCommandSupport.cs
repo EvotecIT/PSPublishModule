@@ -14,13 +14,13 @@ internal static class ManagedModuleCommandSupport
 
     internal static ManagedModuleRepository CreateRepository(PSCmdlet cmdlet, string repositoryName, string repository)
     {
-        var source = ResolveRepositorySource(cmdlet, repository, out var resolvedRegisteredRepositoryName);
+        var source = ResolveRepositorySource(cmdlet, repository, out var resolvedRegisteredRepositoryName, out var resolvedRegisteredRepositoryTrusted);
         var name = !string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase)
             ? repositoryName
             : !string.IsNullOrWhiteSpace(resolvedRegisteredRepositoryName)
                 ? resolvedRegisteredRepositoryName!
                 : ResolveRepositoryName(repositoryName, source);
-        return new ManagedModuleRepository(name, source);
+        return new ManagedModuleRepository(name, source, ManagedModuleRepositoryKind.Auto, resolvedRegisteredRepositoryName is null || resolvedRegisteredRepositoryTrusted);
     }
 
     internal static ManagedModuleRepository CreateRepository(
@@ -91,8 +91,16 @@ internal static class ManagedModuleCommandSupport
         => ResolveRepositorySource(cmdlet, repository, out _);
 
     internal static string ResolveRepositorySource(PSCmdlet cmdlet, string repository, out string? resolvedRegisteredRepositoryName)
+        => ResolveRepositorySource(cmdlet, repository, out resolvedRegisteredRepositoryName, out _);
+
+    internal static string ResolveRepositorySource(
+        PSCmdlet cmdlet,
+        string repository,
+        out string? resolvedRegisteredRepositoryName,
+        out bool resolvedRegisteredRepositoryTrusted)
     {
         resolvedRegisteredRepositoryName = null;
+        resolvedRegisteredRepositoryTrusted = false;
         if (string.IsNullOrWhiteSpace(repository))
             return repository;
 
@@ -107,10 +115,11 @@ internal static class ManagedModuleCommandSupport
         if (Path.IsPathRooted(trimmed) || trimmed.StartsWith(".", StringComparison.Ordinal))
             return providerPath ?? trimmed;
 
-        if (new PowerShellRepositorySourceResolver().TryResolveSource(cmdlet, trimmed, out var registeredSource) &&
+        if (new PowerShellRepositorySourceResolver().TryResolveSource(cmdlet, trimmed, out var registeredSource, out var registeredTrusted) &&
             !string.IsNullOrWhiteSpace(registeredSource))
         {
             resolvedRegisteredRepositoryName = trimmed;
+            resolvedRegisteredRepositoryTrusted = registeredTrusted;
             return registeredSource!;
         }
 
