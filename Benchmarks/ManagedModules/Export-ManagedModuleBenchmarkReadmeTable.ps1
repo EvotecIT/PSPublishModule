@@ -109,7 +109,7 @@ function Format-ReadmeBenchmarkCell {
 
     if ($status -eq 'Skipped') {
         $notEquivalent =
-            ($Engine -eq 'ModuleFast' -and $operationName -ne 'Install') -or
+            ($Engine -eq 'ModuleFast' -and $operationName -notlike 'Install*') -or
             ($Engine -eq 'PSResourceGet' -and $operationName -eq 'SaveForce')
         if ($notEquivalent) {
             return 'Not equivalent'

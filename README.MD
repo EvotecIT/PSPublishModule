@@ -346,7 +346,22 @@ parentheses.
 | `Az.Full.Save` | Windows PowerShell 5.1 | Save | 1.00x (5.80s) | Not equivalent | Failed | Skipped | SaveCapableProviders |
 | `Graph.Full.Save` | PowerShell 7 | Save | 1.00x (4.10s) | Not equivalent | 31.11x (127.68s) | 22.26x (91.33s) | SaveCapableProviders |
 | `Graph.Full.Save` | Windows PowerShell 5.1 | Save | 1.00x (5.81s) | Not equivalent | 9.53x (55.42s) | Skipped | SaveCapableProviders |
-| `Az.Accounts.ProviderMatrix` | PowerShell 7 | Install | 1.00x (1.56s) | 1.34x (2.09s) | 3.98x (6.22s) | 7.90x (12.34s) | InstallProviderMatrix |
+| `Az.Accounts.InstallExact.NoOpForce` | PowerShell 7 | InstallForce | 1.00x (0.73s) | 1.11x (0.81s) | 2.87x (2.10s) | Not in this gate | InstallWithModuleFast |
+| `Az.Accounts.InstallExact.NoOpForce` | PowerShell 7 | InstallNoOp | 1.00x (0.62s) | 1.25x (0.78s) | 1.39x (0.86s) | Not in this gate | InstallWithModuleFast |
+| `Az.Accounts.InstallExact.NoOpForce` | Windows PowerShell 5.1 | InstallForce | 1.00x (0.88s) | Skipped | 2.54x (2.23s) | Not in this gate | InstallWithModuleFast |
+| `Az.Accounts.InstallExact.NoOpForce` | Windows PowerShell 5.1 | InstallNoOp | 1.00x (0.60s) | Skipped | 1.56x (0.95s) | Not in this gate | InstallWithModuleFast |
+| `Az.Accounts.SaveExact.NoOpForce` | PowerShell 7 | SaveForce | 1.00x (0.08s) | Not equivalent | Not equivalent | 42.54x (3.51s) | SaveCapableProviders |
+| `Az.Accounts.SaveExact.NoOpForce` | PowerShell 7 | SaveNoOp | 1.00x (0.03s) | Not equivalent | 62.96x (1.76s) | 179.00x (5.02s) | SaveCapableProviders |
+| `Az.Accounts.SaveExact.NoOpForce` | Windows PowerShell 5.1 | SaveForce | 1.00x (0.15s) | Not equivalent | Not equivalent | Skipped | SaveCapableProviders |
+| `Az.Accounts.SaveExact.NoOpForce` | Windows PowerShell 5.1 | SaveNoOp | 1.00x (0.04s) | Not equivalent | 44.11x (1.64s) | Skipped | SaveCapableProviders |
+| `Graph.Authentication.InstallExact.NoOpForce` | PowerShell 7 | InstallForce | 1.00x (0.76s) | 1.03x (0.78s) | 2.48x (1.89s) | Not in this gate | InstallWithModuleFast |
+| `Graph.Authentication.InstallExact.NoOpForce` | PowerShell 7 | InstallNoOp | 1.00x (0.64s) | 1.20x (0.77s) | 1.51x (0.98s) | Not in this gate | InstallWithModuleFast |
+| `Graph.Authentication.InstallExact.NoOpForce` | Windows PowerShell 5.1 | InstallForce | 1.00x (0.83s) | Skipped | 2.75x (2.27s) | Not in this gate | InstallWithModuleFast |
+| `Graph.Authentication.InstallExact.NoOpForce` | Windows PowerShell 5.1 | InstallNoOp | 1.00x (0.61s) | Skipped | 1.59x (0.97s) | Not in this gate | InstallWithModuleFast |
+| `Graph.Authentication.SaveExact.NoOpForce` | PowerShell 7 | SaveForce | 1.00x (0.07s) | Not equivalent | Not equivalent | 40.96x (3.05s) | SaveCapableProviders |
+| `Graph.Authentication.SaveExact.NoOpForce` | PowerShell 7 | SaveNoOp | 1.00x (0.03s) | Not equivalent | 56.50x (1.57s) | 105.53x (2.94s) | SaveCapableProviders |
+| `Graph.Authentication.SaveExact.NoOpForce` | Windows PowerShell 5.1 | SaveForce | 1.00x (0.11s) | Not equivalent | Not equivalent | Skipped | SaveCapableProviders |
+| `Graph.Authentication.SaveExact.NoOpForce` | Windows PowerShell 5.1 | SaveNoOp | 1.00x (0.03s) | Not equivalent | 54.58x (1.79s) | Skipped | SaveCapableProviders |
 | `Graph.Full.SameSource` | PowerShell 7 | Install | 1.00x (5.65s) | 1.34x (7.59s) | Not in this gate | Not in this gate | InstallSameSource |
 <!-- managed-module-benchmark-table:end -->
 

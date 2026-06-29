@@ -23,6 +23,7 @@ public sealed class ManagedModuleBenchmarkReadmeTableScriptTests
         AssertNoErrors(ps);
         var table = Assert.Single(results).BaseObject.ToString() ?? string.Empty;
         Assert.Contains("| `Graph.Full.SameSource` | PowerShell 7 | Install | 1.00x (4.00s) | 1.50x (6.00s) | Not in this gate | Not in this gate | InstallSameSource |", table, StringComparison.Ordinal);
+        Assert.Contains("| `Graph.Authentication.InstallExact.NoOpForce` | Windows PowerShell 5.1 | InstallNoOp | 1.00x (0.60s) | Skipped | 1.50x (0.90s) | Not in this gate | InstallWithModuleFast |", table, StringComparison.Ordinal);
         Assert.Contains("| `Az.Full.Save` | Windows PowerShell 5.1 | Save | 1.00x (5.80s) | Not equivalent | Failed | Skipped | SaveCapableProviders |", table, StringComparison.Ordinal);
     }
 
@@ -30,6 +31,7 @@ public sealed class ManagedModuleBenchmarkReadmeTableScriptTests
         => string.Join(Environment.NewLine,
             "BenchmarkRole,Suite,Scenario,ComparisonScope,BenchmarkInterpretation,Host,Operation,ManagedStatus,ManagedMs,ModuleFastStatus,ModuleFastMs,PSResourceGetStatus,PSResourceGetMs,PowerShellGetStatus,PowerShellGetMs",
             "Scoreboard,SpeedGate,Graph.Full.SameSource,InstallSameSource,Install scoreboard,PowerShell7,Install,Succeeded,4000.00,Succeeded,6000.00,,,,",
+            "Scoreboard,LifecycleGate,Graph.Authentication.InstallExact.NoOpForce,InstallWithModuleFast,Install scoreboard,WindowsPowerShell,InstallNoOp,Succeeded,600.00,Skipped,,Succeeded,900.00,,",
             "Scoreboard,HeavySaveGate,Az.Full.Save,SaveCapableProviders,Save scoreboard: compare save-capable providers only; ModuleFast has no equivalent save command.,WindowsPowerShell,Save,Succeeded,5801.61,Skipped,,Failed,,Skipped,");
 
     private static void AssertNoErrors(PowerShell ps)
