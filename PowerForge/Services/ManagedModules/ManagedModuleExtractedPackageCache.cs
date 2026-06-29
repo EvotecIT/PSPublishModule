@@ -6,7 +6,11 @@ internal sealed class ManagedModuleExtractedPackageCache
     private const string CacheVersion = "1";
     private const string PayloadDirectoryName = "p";
     private const string MetadataFileName = "m.txt";
-    private const int CopyBufferSize = 1024 * 1024;
+    private const int SmallCopyFileThreshold = 8;
+    private const int MaxCopyConcurrency = 4;
+#if NET472
+    private const int NetFrameworkParallelCopyFileThreshold = 1000;
+#endif
 
     private readonly ILogger _logger;
 
@@ -50,7 +54,7 @@ internal sealed class ManagedModuleExtractedPackageCache
 
                 _logger.Verbose($"Discarded extracted package cache for SHA256 {normalizedSha256} because materialized file counts did not match metadata.");
             }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException)
+            catch (Exception ex) when (IsRecoverableCacheMaterializationException(ex))
             {
                 _logger.Verbose($"Discarded extracted package cache for SHA256 {normalizedSha256} because materialization failed: {ex.Message}");
             }
@@ -158,18 +162,60 @@ internal sealed class ManagedModuleExtractedPackageCache
             CreateDirectoryOnce(targetDirectory, createdDirectories);
         }
 
-        foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        var files = Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories).ToArray();
+        var copyDegree = ResolveCopyDegree(files.Length);
+        if (copyDegree <= 1)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var targetFile = Path.Combine(destinationRoot, file.Substring(sourceRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            CreateDirectoryOnce(Path.GetDirectoryName(targetFile)!, createdDirectories);
-            var sourceInfo = new FileInfo(file);
-            File.Copy(file, targetFile, overwrite: false);
-            fileCount++;
-            bytesWritten += sourceInfo.Length;
+            foreach (var file in files)
+            {
+                var copied = CopyFile(sourceRoot, destinationRoot, file, cancellationToken);
+                fileCount++;
+                bytesWritten += copied;
+            }
+
+            return new DirectoryCopyResult(fileCount, bytesWritten);
         }
 
+        var options = new System.Threading.Tasks.ParallelOptions
+        {
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = copyDegree
+        };
+        System.Threading.Tasks.Parallel.ForEach(files, options, file =>
+        {
+            var copied = CopyFile(sourceRoot, destinationRoot, file, cancellationToken);
+            Interlocked.Increment(ref fileCount);
+            Interlocked.Add(ref bytesWritten, copied);
+        });
+
         return new DirectoryCopyResult(fileCount, bytesWritten);
+    }
+
+    private static int ResolveCopyDegree(int fileCount)
+    {
+        if (fileCount < SmallCopyFileThreshold)
+            return 1;
+
+#if NET472
+        if (fileCount < NetFrameworkParallelCopyFileThreshold)
+            return 1;
+#endif
+
+        return Math.Min(MaxCopyConcurrency, Math.Max(1, Environment.ProcessorCount));
+    }
+
+    private static long CopyFile(
+        string sourceRoot,
+        string destinationRoot,
+        string file,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var targetFile = Path.Combine(destinationRoot, file.Substring(sourceRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+        var sourceInfo = new FileInfo(file);
+        File.Copy(file, targetFile, overwrite: false);
+        return sourceInfo.Length;
     }
 
     private static void CreateDirectoryOnce(string path, HashSet<string> createdDirectories)
@@ -177,6 +223,16 @@ internal sealed class ManagedModuleExtractedPackageCache
         var normalized = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (createdDirectories.Add(normalized))
             Directory.CreateDirectory(normalized);
+    }
+
+    private static bool IsRecoverableCacheMaterializationException(Exception ex)
+    {
+        if (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException)
+            return true;
+
+        return ex is AggregateException aggregate &&
+               aggregate.InnerExceptions.Count > 0 &&
+               aggregate.InnerExceptions.All(IsRecoverableCacheMaterializationException);
     }
 
     private static void DeleteDirectoryQuietly(string path)
