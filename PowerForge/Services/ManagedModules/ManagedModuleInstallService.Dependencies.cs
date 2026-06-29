@@ -68,12 +68,12 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallResult[] results,
         CancellationToken cancellationToken)
     {
-        var branchStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var gateWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         gateWaitStopwatch.Stop();
         try
         {
+            var branchStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var result = await InstallDependencyCoreAsync(
                 request,
                 dependency,
@@ -119,19 +119,26 @@ public sealed partial class ManagedModuleInstallService
     {
         var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
         var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
-        if (dependencyTrustPolicy is null &&
-            TryCreateSatisfiedDependencyResult(request, dependency.Id, range, context, out var satisfiedResult))
+        var satisfiedStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        ManagedModuleInstallResult satisfiedResult = null!;
+        var isSatisfied = dependencyTrustPolicy is null &&
+                          TryCreateSatisfiedDependencyResult(request, dependency.Id, range, context, out satisfiedResult);
+        satisfiedStopwatch.Stop();
+        if (isSatisfied)
         {
+            satisfiedResult.Elapsed = satisfiedStopwatch.Elapsed;
             return satisfiedResult;
         }
 
+        var dependencyVersionStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var dependencyVersion = await ResolveDependencyVersionAsync(
             request,
             dependency.Id,
             range,
             cancellationToken).ConfigureAwait(false);
+        dependencyVersionStopwatch.Stop();
 
-        return await InstallAsync(
+        var result = await InstallAsync(
             new ManagedModuleInstallRequest
             {
                 Repository = request.Repository,
@@ -154,6 +161,8 @@ public sealed partial class ManagedModuleInstallService
             },
             context,
             cancellationToken).ConfigureAwait(false);
+        result.VersionResolutionElapsed += dependencyVersionStopwatch.Elapsed;
+        return result;
     }
 
     private static bool TryCreateSatisfiedDependencyResult(

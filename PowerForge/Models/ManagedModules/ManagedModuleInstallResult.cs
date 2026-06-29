@@ -146,7 +146,7 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan DependencyQueueWaitElapsed { get; set; }
 
     /// <summary>
-    /// Wall-clock elapsed time spent by this dependency branch, including scheduler wait, dependency version resolution, and install execution.
+    /// Wall-clock elapsed time spent by this dependency branch after it enters the dependency scheduler.
     /// </summary>
     public TimeSpan DependencyBranchElapsed { get; set; }
 
