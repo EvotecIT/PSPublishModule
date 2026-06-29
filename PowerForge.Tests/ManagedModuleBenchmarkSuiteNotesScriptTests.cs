@@ -18,7 +18,7 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     BenchmarkRole = 'Scoreboard'
                     ComparisonScope = 'SaveCapableProviders'
                     Operations = @('Save')
-                    Engines = @('Managed', 'PSResourceGet', 'PowerShellGet')
+                    Engines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
                     BenchmarkInterpretation = 'Save scoreboard: compare save-capable providers only; ModuleFast has no equivalent save command.'
                 },
                 [pscustomobject]@{

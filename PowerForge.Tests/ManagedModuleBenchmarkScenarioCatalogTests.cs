@@ -66,7 +66,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Property(row, "BenchmarkRole") == "Scoreboard" &&
             Property(row, "ComparisonScope") == "SaveCapableProviders" &&
             Property(row, "BenchmarkInterpretation").Contains("ModuleFast has no equivalent save command", StringComparison.OrdinalIgnoreCase) &&
-            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1 &&
             DoubleProperty(row, "ManagedMaxVsFastest") == 0);
         Assert.Contains(rows, row =>
@@ -111,7 +111,14 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Property(row, "Name") == "Graph.Full.Save" &&
             Property(row, "BenchmarkRole") == "Scoreboard" &&
             Property(row, "ComparisonScope") == "SaveCapableProviders" &&
-            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet", "PowerShellGet" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "HeavySaveGate" &&
+            Property(row, "Name") == "Az.Full.Save" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "SaveCapableProviders" &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1);
         Assert.Contains(rows, row =>
             Property(row, "Suite") == "SecurityGate" &&
